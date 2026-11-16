@@ -2081,5 +2081,17 @@
 "LIVE SYNC": "SINCRONIZACIÓN EN DIRECTO",
 "CONNECTED": "CONECTADO",
 "waiting for a phone or browser": "a la espera de un teléfono o un navegador",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Los faders, los silencios, los solos y los nombres se muestran en los teléfonos y navegadores conectados a esta consola, y cualquier acción que se realice aquí les llega al instante. Cuando se mueve un fader desde un teléfono, se ilumina aquí."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Los faders, los silencios, los solos y los nombres se muestran en los teléfonos y navegadores conectados a esta consola, y cualquier acción que se realice aquí les llega al instante. Cuando se mueve un fader desde un teléfono, se ilumina aquí.",
+"CONNECTED PHONES": "TELÉFONOS CONECTADOS",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Los teléfonos y los navegadores están conectados en este momento. La opción «DESCONECTAR» desconecta uno de ellos (puede que vuelva a conectarse en 2 minutos); la opción «OLVIDAR» elimina el emparejamiento, por lo que habrá que introducir el PIN de nuevo.",
+"OWNER": "PROPIETARIO",
+"DISCONNECT": "DESCONECTAR",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Aún no hay ningún teléfono vinculado. Abre AmF X1 en el teléfono: detectará este ordenador en la red Wi-Fi automáticamente.",
+"Windows volume": "Volumen de Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "El control deslizante de salida de Windows (las teclas de volumen del teclado también lo mueven)",
+"GAIN MODE: Windows volume trims the master": "MODO DE GANANCIA: El volumen de Windows ajusta el volumen maestro",
+"It had already gone.": "Ya se había ido.",
+"The Windows volume is not available on this computer.": "El volumen de Windows no está disponible en este ordenador.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "MODO DE GANANCIA desactivado: el volumen de Windows no modifica el nivel de la consola.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Esta salida se reproduce a través del mezclador propio de Windows, que ya ajusta su nivel con este control deslizante: sin ajuste adicional (sin doble corte)."
 }

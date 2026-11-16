@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QFileInfo>
 #include <QNetworkInterface>
 #include <QNetworkReply>
@@ -19,6 +20,7 @@
 #include "qr/qrcodegen.hpp"
 
 Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
+  linkTimer_.setInterval(2000); connect(&linkTimer_, &QTimer::timeout, this, &Remote::refreshLinks);   // CONNECTED PHONES: every 2 s while the remote runs
   sync_.setInterval(60);   // LIVE SYNC: a remote's fader reaches this console within a frame or two
   connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
   proc_.setProcessChannelMode(QProcess::MergedChannels);
@@ -39,7 +41,18 @@ void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
   QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}}).toJson(QJsonDocument::Compact));
+  baseSet_ = consoleSettings();   // the service starts with the console's settings too
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}}).toJson(QJsonDocument::Compact));
+}
+QVariantMap Remote::consoleSettings() const {
+  return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")},
+          {"autoLevel", engine_->autoLevelOn()}, {"autoTarget", engine_->autoLevelTarget()}, {"autoMax", engine_->autoLevelMax()}, {"winGain", engine_->windowsGainMode()}, {"winMuteSync", engine_->windowsMuteSync()}};
+}
+void Remote::applySetting(const QString& k, const QVariant& v) {
+  if (k == "width") engine_->setWidth(v.toDouble()); else if (k == "outputBits") engine_->setOutputBits(v.toInt()); else if (k == "dcBlock") engine_->setDcBlock(v.toBool());
+  else if (k == "analog") engine_->setDspMode(v.toBool() ? QStringLiteral("analog") : QStringLiteral("digital"));
+  else if (k == "autoLevel") engine_->setAutoLevelOn(v.toBool()); else if (k == "autoTarget") engine_->setAutoLevelTarget(v.toDouble()); else if (k == "autoMax") engine_->setAutoLevelMax(v.toDouble());
+  else if (k == "winGain") engine_->setWindowsGainMode(v.toBool()); else if (k == "winMuteSync") engine_->setWindowsMuteSync(v.toBool());
 }
 void Remote::post(const QVariantMap& cmd) {
   QNetworkRequest q(QUrl(QStringLiteral("http://127.0.0.1:%1/api/control").arg(port()))); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", token_);
@@ -62,6 +75,10 @@ void Remote::syncTick() {
     if (x.solo != b.solo) { post({{"op", "solo"}, {"strip", i}, {"on", x.solo}}); b.solo = x.solo; }
     if (x.name != b.name) { post({{"op", "name"}, {"strip", i}, {"name", x.name}}); b.name = x.name; } }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
+  { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
+    for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
+      const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(it.value().toDouble() - b.toDouble()) > 0.005 : it.value() != b;
+      if (diff) { baseSet_[it.key()] = it.value(); post({{"op", "setting"}, {"key", it.key()}, {"value", it.value()}}); } } }
   // 2. what moved on the remotes comes in (only when nothing of ours is on the way, so an older answer never undoes a newer move here)
   if (getting_ || posting_ > 0) return;
   getting_ = true; stale_ = false; ++dGets_;
@@ -71,6 +88,10 @@ void Remote::syncTick() {
     const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
     if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
     if (o.value("same").toBool() || !o.contains("strips")) return;
+    { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
+      for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
+        const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());
+        if (diff) { it.value() = it.value().typeId() == QMetaType::Double ? QVariant(r.toDouble()) : it.value().typeId() == QMetaType::Bool ? QVariant(r.toBool()) : QVariant(r.toInt()); applySetting(it.key(), it.value()); } } }
     v_ = o.value("v").toULongLong(); const QVariantList l = o.value("strips").toList(); int n = 0;
     for (int i = 0; i < l.size() && i < base_.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip& b = base_[i];
       const double db = m.value("db").toDouble(), pan = m.value("pan").toDouble(); const bool mu = m.value("mute").toBool(), so = m.value("solo").toBool(); const QString nm = m.value("name").toString();
@@ -118,6 +139,15 @@ QVariantList Remote::qr(const QString& text) const {
 }
 int Remote::pairSecondsLeft() const { return 60 - static_cast<int>(QDateTime::currentSecsSinceEpoch() % 60); }
 void Remote::refreshTokens() {
+  if (running()) { ensureToken(); if (!token_.isEmpty()) {   // the running service answers itself (also when only its extension is installed)
+    QNetworkReply* r = net_.get(api(QStringLiteral("/api/tokens")));
+    connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); if (r->error() != QNetworkReply::NoError) return;
+      const qint64 now = QDateTime::currentSecsSinceEpoch(); QVariantList l;
+      for (const QVariant& v : QJsonDocument::fromJson(r->readAll()).toVariant().toMap().value("tokens").toList()) { const QVariantMap e = v.toMap(); QVariantMap m;
+        const qint64 ex = e.value("expires").toLongLong(); m["id"] = e.value("id"); m["role"] = e.value("role"); m["name"] = e.value("name");
+        m["state"] = e.value("revoked").toBool() ? QStringLiteral("revoked") : (ex && ex < now ? QStringLiteral("ended") : QStringLiteral("active")); l << m; }
+      tokens_ = l; emit changed(); });
+    return; } }
   tokens_.clear(); if (!available()) { emit changed(); return; }
   bool ok = false; const QString out = runTool({"--list-tokens"}, &ok);
   if (ok) for (const QString& line : out.split('\n', Qt::SkipEmptyParts)) {   // id  role  state  name
@@ -136,8 +166,44 @@ QString Remote::newToken(const QString& name, const QString& role, int days) {
   refreshTokens(); if (!tok.isEmpty()) restartIfRunning(); return tok;   // the token itself is returned to the page only: never stored or logged here
 }
 bool Remote::revokeToken(const QString& id) {
+  if (running()) { forgetLink(id); return true; }   // the running service revokes it and closes its links: the other phones stay connected
   bool ok = false; const QString out = runTool({"--revoke-token", id}, &ok); tokenNote_ = ok ? QStringLiteral("Revoked: that phone is out.") : out.trimmed().left(160);
-  refreshTokens(); if (ok) restartIfRunning(); return ok;
+  refreshTokens(); return ok;
+}
+// ---- CONNECTED PHONES: the service's live links, asked with the master token (it never leaves this computer: 127.0.0.1)
+void Remote::ensureToken() { if (token_.isEmpty()) { QFile f(tokenFile()); if (f.open(QIODevice::ReadOnly)) token_ = f.readLine().trimmed(); } }
+QNetworkRequest Remote::api(const QString& path) const {
+  QNetworkRequest q(QUrl(QStringLiteral("http://127.0.0.1:%1%2").arg(port()).arg(path))); q.setRawHeader("X-Amix-Token", token_); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+  q.setTransferTimeout(3000); return q;
+}
+void Remote::refreshLinks() {
+  if (!running()) { linkTimer_.stop(); if (!links_.isEmpty()) { links_.clear(); emit linksChanged(); } return; }
+  if (!linkTimer_.isActive()) linkTimer_.start();
+  ensureToken(); if (token_.isEmpty() || linksGetting_) return; linksGetting_ = true;
+  QNetworkReply* r = net_.get(api(QStringLiteral("/api/links")));
+  connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); linksGetting_ = false; if (r->error() != QNetworkReply::NoError) return;
+    QVariantList l = QJsonDocument::fromJson(r->readAll()).toVariant().toMap().value("links").toList();
+    for (QVariant& v : l) { QVariantMap m = v.toMap(); m["age"] = linkAge(m.value("seconds").toInt()); m["phone"] = m.value("tokenId").toString() != QLatin1String("master"); v = m; }
+    if (l != links_) { links_ = l; emit linksChanged(); } });
+}
+void Remote::disconnectLink(int id) {
+  ensureToken(); if (!running() || token_.isEmpty()) return;
+  QNetworkReply* r = net_.post(api(QStringLiteral("/api/links/kick")), QJsonDocument(QJsonObject{{"id", id}}).toJson(QJsonDocument::Compact));
+  connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater();
+    linkNote_ = r->error() == QNetworkReply::NoError ? QStringLiteral("Disconnected. That phone can connect again in 2 minutes; FORGET it to need the PIN again.") : QStringLiteral("It had already gone.");
+    emit linksChanged(); refreshLinks(); });
+}
+void Remote::forgetLink(const QString& tokenId) {
+  ensureToken(); if (tokenId.isEmpty() || tokenId == QLatin1String("master")) return;
+  if (!running() || token_.isEmpty()) { bool ok = false; runTool({"--revoke-token", tokenId}, &ok); linkNote_ = ok ? QStringLiteral("Forgotten: that phone needs the PIN again.") : QStringLiteral("Could not forget it."); refreshTokens(); emit linksChanged(); return; }
+  QNetworkReply* r = net_.post(api(QStringLiteral("/api/tokens/revoke")), QJsonDocument(QJsonObject{{"id", tokenId}}).toJson(QJsonDocument::Compact));
+  connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); const bool ok = r->error() == QNetworkReply::NoError;
+    linkNote_ = ok ? QStringLiteral("Forgotten: that phone is out and needs the PIN again.") : QStringLiteral("Could not forget it: ") + r->errorString();
+    tokenNote_ = linkNote_; refreshTokens(); emit linksChanged(); refreshLinks(); });
+}
+QString Remote::linkAge(int s) {
+  if (s < 60) return QStringLiteral("%1 s").arg(qMax(0, s)); if (s < 3600) return QStringLiteral("%1 min").arg(s / 60);
+  return QStringLiteral("%1 h %2 min").arg(s / 3600).arg((s % 3600) / 60, 2, 10, QLatin1Char('0'));
 }
 bool Remote::available() const { return ext_.available() || QFileInfo::exists(program()); }
 QString Remote::tokenFile() const { return QString::fromStdString(am::paths::file("daemon.token")); }
@@ -177,13 +243,13 @@ bool Remote::start(bool wifi) {
   if (wifi) args << "--allow-lan";   // phones on this network may connect (local policy stays on: private addresses only). This sat inside the comment above and was never passed: every phone was refused
   if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);
-    if (rc == 0 && ext_.running()) { sync_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
+    if (rc == 0 && ext_.running()) { sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
     status_ = QStringLiteral("the network extension did not start (%1): %2").arg(rc).arg(ext_.takeOutput().trimmed().section('\n', -1).left(160)); emit changed();   // then the program next to it, if there is one
   }
   proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("the remote service did not start"); emit changed(); return false; }
-  sync_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
+  sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
 }
-void Remote::stop() { sync_.stop(); if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
+void Remote::stop() { sync_.stop(); linkTimer_.stop(); if (!links_.isEmpty()) { links_.clear(); emit linksChanged(); } if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
 
 // remote-console.json: read-only for the phone (served by the service at /api/console-info). Names and states only: no plug-in state data.
 void Remote::writeConsoleInfo() const {

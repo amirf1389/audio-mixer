@@ -28,6 +28,9 @@ input[type=range].f{writing-mode:vertical-lr;direction:rtl;width:30px;height:100
 input[type=range].h{width:100%;padding:0;letter-spacing:0;accent-color:var(--accent);height:30px}
 .mt{width:8px;background:#05080c;border-radius:3px;position:relative;overflow:hidden}.mt i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,#16a34a,#16a34a 70%,#eab308 85%,#ef4444)}
 body.nometers .mt{display:none}
+#bridge{display:flex;align-items:stretch;gap:10px;padding:2px 12px 8px;cursor:pointer;user-select:none;box-sizing:border-box;max-width:100%}#bridge[hidden]{display:none!important}
+#bridge canvas{flex:1;height:34px;min-width:0;border-radius:6px;background:rgba(127,127,127,.14)}
+#bridge .bm{display:flex;flex-direction:column;justify-content:center;flex:none;min-width:86px;font:600 10px ui-monospace,monospace;color:var(--dim);text-align:right}#bridge .bm b{font-size:13px;color:var(--text,#e2e8f0)}#bridge .bm b.clip{color:#ef4444}
 .db{font:11px ui-monospace,monospace;color:var(--cyan)}.ms{display:flex;gap:4px;width:100%}.ms button{flex:1;padding:6px 0;min-height:34px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.row:first-of-type{border-top:0}.row>span:first-child{flex:1}.row small{display:block;color:var(--dim);font-size:11px}
@@ -58,7 +61,8 @@ table.dv{width:100%;border-collapse:collapse;font-size:12px}table.dv td,table.dv
 kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 </style></head><body>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav></header>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
 <p>On the computer: <b>NETWORK → PHONE REMOTE</b> shows a six-digit PIN that changes every minute, and a QR code. Scan the code with this device's camera, or type the PIN here.</p>
@@ -124,12 +128,30 @@ kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:
 <div class="card"><h2>CONSOLE</h2><div class="kv" id="sKv"></div></div>
 <div class="card"><h2>THIS CONNECTION</h2><div class="kv" id="cKv"></div></div></div></section>
 <section id="set" class="page"><div class="grid">
+<div class="card"><h2>CONSOLE SOUND<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">applies to the computer, as on its own SETTINGS page</small></h2>
+<div class="row"><span>Stereo width<small>0 mono · 100% as mixed · 200% wide</small></span><span style="flex:1;max-width:55%;display:flex;gap:8px;align-items:center"><input id="cWidth" class="h" type="range" min="0" max="200" step="5"><b id="cWidthV" style="min-width:48px;text-align:right">—</b></span></div>
+<div class="row"><span>DSP MODE<small>ANALOG: console-style colour on every channel</small></span><span class="seg" id="cDsp"></span></div>
+<div class="row"><span>Output word length<small>16 / 24 add dither; FLOAT sends it untouched</small></span><span class="seg" id="cBits"></span></div>
+<div class="row"><span>DC blocker<small>removes a DC offset before the output</small></span><button id="cDc"></button></div>
+<div class="row"><span>AUTO LEVEL<small>keeps the master near a loudness target</small></span><button id="cAuto"></button></div>
+<div class="row"><span>Target<small>LUFS</small></span><span class="seg" id="cAutoT"></span></div>
+<div class="row"><span>Lift at most</span><span class="seg" id="cAutoM"></span></div>
+<div class="row"><span>Clip lamp at<small>the meters' clip point</small></span><span class="seg" id="cClip"></span></div>
+<div class="row"><span>Meter peak hold<small>on the console's meters</small></span><span class="seg" id="cHold"></span></div></div>
+<div class="card"><h2>WINDOWS<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">the computer's own output volume</small></h2>
+<div class="row" id="cWinRow"><span>Windows volume<small>moves the Windows slider; its volume keys move this</small></span><span style="flex:1;max-width:55%;display:flex;gap:8px;align-items:center"><input id="cWin" class="h" type="range" min="0" max="100" step="1"><b id="cWinV" style="min-width:48px;text-align:right">—</b></span></div>
+<div class="row"><span>GAIN MODE<small>the Windows volume is an extra gain after the master (the fader stays put): 100% = 0 dB, 50% = −9 dB, 0% = off</small></span><button id="cGain"></button></div>
+<div class="row"><span>Trim now</span><b id="cTrim">—</b></div>
+<p class="note" id="cTrimN"></p>
+<div class="row"><span>Fader at −∞ mutes Windows<small>no sound from any program with the master at the bottom</small></span><button id="cWinMute"></button></div></div>
 <div class="card"><h2>MIXER</h2>
 <div class="row"><span>Strips per page</span><span class="seg" id="oPer"></span></div>
 <div class="row"><span>Fader size</span><span class="seg" id="oFh"></span></div>
 <div class="row"><span>Strip width</span><span class="seg" id="oCw"></span></div>
 <div class="row"><span>Level meters<small>off saves battery and data on a slow network</small></span><button id="oMet"></button></div>
 <div class="row"><span>Channel numbers<small>"3 · VOCAL" on the strips</small></span><button id="oNum"></button></div>
+<div class="row"><span>Meter bridge on every page<small>all channels and the master at the top; tap it to reset peaks and clips</small></span><button id="oBridge"></button></div>
+<div class="row"><span>Peak hold<small>how long the peak line stays on the bridge</small></span><span class="seg" id="oHold"></span></div>
 <div class="row"><span>Faders locked at start<small>no accidental moves; LOCK FADERS on MIXER unlocks</small></span><button id="oLock"></button></div></div>
 <div class="card"><h2>LOOK</h2>
 <div class="row"><span>Theme</span><span class="seg" id="oTheme"></span></div>
@@ -153,7 +175,7 @@ const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,po
 addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});
 const ls={get(k,d){try{const v=localStorage.getItem("amfx1."+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem("amfx1."+k,JSON.stringify(v))}catch(e){}}};
 try{token=localStorage.getItem("amfx1.token")}catch(e){}
-const DEF={per:16,fh:220,cw:84,meters:true,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
+const DEF={per:16,fh:220,cw:84,meters:true,bridge:true,hold:2,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
 const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
 const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
 const fmt=d=>d<=-119?"-∞":(d>0?"+":"")+d.toFixed(1);const lin=v=>v>1e-6?20*Math.log10(v):-120;const mpos=v=>Math.max(0,Math.min(1,(lin(v)+60)/60));
@@ -184,7 +206,23 @@ function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.str
   if(free(e.f)){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
   if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo)}}
  state=s;synced=Date.now();panels();setSt("connected · live sync")}
-function meters(o){if(!o||!o.strips)return;lastMeters=o;if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
+// ---- METER BRIDGE: every channel (peak bar, RMS under it, a peak-hold line, a clip light that stays until reset) and the master L / R
+const BR={hold:[],holdT:[],clip:[],mHold:-120,mHoldT:0,mClip:false};
+function bridgeShow(){$("#bridge").hidden=!(opt.bridge&&token);if(!opt.bridge)return;const c=$("#brC");c.width=Math.round(c.clientWidth*devicePixelRatio)||600;c.height=Math.round(34*devicePixelRatio)}
+function bridgeReset(send){BR.hold=[];BR.holdT=[];BR.clip=[];BR.mHold=-120;BR.mClip=false;$("#brPk").textContent="—";$("#brPk").classList.remove("clip");$("#brClip").textContent="";if(send)api("/api/control",{op:"clearClips"}).catch(()=>{})}
+function bridge(o){if(!opt.bridge||$("#bridge").hidden)return;const c=$("#brC"),g=c.getContext("2d"),W=c.width,H=c.height,now=Date.now(),hold=opt.hold?opt.hold*1000:1e12;
+ const n=(state&&state.strips?state.strips.length:o.strips.length)||o.strips.length,gap=Math.max(1,Math.round(W/600)),mw=Math.round(W*.06),cw=Math.max(2,(W-2*mw-gap*(n+3))/n);
+ const css=getComputedStyle(document.body),ok=css.getPropertyValue("--acc").trim()||"#22d3ee";g.clearRect(0,0,W,H);
+ const col=v=>v>-3?"#ef4444":v>-12?"#fbbf24":ok;
+ const dp=d=>Math.max(0,Math.min(1,(d+60)/60));   // the frames carry linear levels; the bridge works in dB (lin)
+ const draw=(x,w,pk,rms,i,clipNow)=>{const hpk=dp(pk)*H,hr=dp(rms)*H;g.fillStyle="rgba(127,127,127,.12)";g.fillRect(x,0,w,H);g.fillStyle=col(pk);g.globalAlpha=.45;g.fillRect(x,H-hpk,w,hpk);g.globalAlpha=1;g.fillRect(x,H-hr,w,hr);
+  if(i!==null){if(!(BR.hold[i]>pk)||now-BR.holdT[i]>hold){BR.hold[i]=pk;BR.holdT[i]=now}if(clipNow)BR.clip[i]=true;const y=H-dp(BR.hold[i])*H;g.fillStyle=col(BR.hold[i]);g.fillRect(x,Math.min(H-2,y),w,2);if(BR.clip[i]){g.fillStyle="#ef4444";g.fillRect(x,0,w,Math.max(3,H*.12))}}};
+ for(let i=0;i<n;i++){const m=o.strips[i]||{};draw(gap+i*(cw+gap),cw,lin(m.pk||0),lin(m.rms||0),i,!!m.clip)}
+ const M=o.master||{},x0=W-2*mw-gap,ml=lin(M.l||0),mr=lin(M.r||0),mrms=lin(M.rms||0);draw(x0,mw-gap,ml,mrms,null,false);draw(x0+mw,mw-gap,mr,mrms,null,false);
+ const mp=Math.max(ml,mr);if(mp>BR.mHold||now-BR.mHoldT>hold){BR.mHold=mp;BR.mHoldT=now}if(M.clip)BR.mClip=true;
+ const pk=$("#brPk");pk.textContent=BR.mHold>-90?BR.mHold.toFixed(1)+" dB":"—";pk.classList.toggle("clip",BR.mClip);
+ const nc=BR.clip.filter(Boolean).length+(BR.mClip?1:0);$("#brClip").textContent=nc?nc+" CLIP"+(nc>1?"S":""):""}
+function meters(o){if(!o||!o.strips)return;lastMeters=o;bridge(o);if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
  if(tab==="rec"){const L=o.loudness||{},f=v=>typeof v==="number"&&v>-70?v.toFixed(1):"—";$("#lM").textContent=f(L.m);$("#lS").textContent=f(L.s);$("#lI").textContent=f(L.i);$("#lR").textContent=typeof L.lra==="number"&&L.lra>0?L.lra.toFixed(1):"—";$("#lT").textContent=f(L.tp);$("#lC").textContent=typeof o.correlation==="number"?o.correlation.toFixed(2):"—"}}
 // ---- BUSES, MONITOR, LIMITER: drawn from the state, kept up to date by the same push
 function hslider(id,lab,db,onV){const f=typeof id==="string"?$(id):id,t=typeof lab==="string"?$(lab):lab;if(free(f)){f.value=Math.round(dbToPos(db)*1000);t.textContent=fmt(db)}f.oninput=()=>{const v=posToDb(f.value/1000);t.textContent=fmt(v);onV(v)};f.onpointerdown=()=>{drag=f}}
@@ -206,7 +244,21 @@ function monitor(){if(!state||!state.monitor)return;const m=state.monitor,sel=$(
  const sendLim=()=>send("lim",{op:"limiter",on:M.limiter,ceilingDb:M.ceilingDb});lo.onclick=()=>{buzz();M.limiter=!M.limiter;lo.classList.toggle("on",M.limiter);lo.textContent=M.limiter?"ON":"OFF";sendLim()};
  if(free(ce)){ce.value=Math.round((M.ceilingDb??-.5)*10);$("#lCeT").textContent=(M.ceilingDb??-.5).toFixed(1)+" dBTP"}ce.oninput=()=>{M.ceilingDb=ce.value/10;$("#lCeT").textContent=M.ceilingDb.toFixed(1)+" dBTP";sendLim()};ce.onpointerdown=()=>{drag=ce};
  hslider("#mMa","#mMaT",M.db,v=>{M.db=v;send("master",{op:"master",db:v});const e=els.find(x=>x.i<0);if(e){e.f.value=Math.round(dbToPos(v)*1000);e.d.textContent=fmt(v)}})}
-function panels(){if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
+// ---- CONSOLE SOUND and WINDOWS: the console's settings from the live state; a change goes to the computer at once (op "setting")
+function setting(key,value){buzz();return api("/api/control",{op:"setting",key,value}).catch(e=>setSt(e.message,true))}
+function segOf(id,list,cur,key,fmt){const h=$(id);if(h.dataset.cur===String(cur))return;h.dataset.cur=String(cur);h.innerHTML="";for(const v of list){const b=document.createElement("button");b.textContent=fmt?fmt(v):String(v);b.className=v===cur?"on acc":"";b.onclick=()=>{setting(key,v);h.dataset.cur=""}; h.appendChild(b)}}
+function onOff(id,on,key){const b=$(id);b.className="acc"+(on?" on":"");b.textContent=on?"ON":"OFF";b.onclick=()=>setting(key,!on)}
+function consoleSettings(){const S=state&&state.settings;if(!S)return;
+ const w=$("#cWidth");if(free(w)){w.value=Math.round(S.width*100);$("#cWidthV").textContent=Math.round(S.width*100)+"%"}w.oninput=()=>{$("#cWidthV").textContent=w.value+"%"};w.onchange=()=>setting("width",w.value/100);w.onpointerdown=()=>{drag=w};
+ segOf("#cDsp",[false,true],S.analog,"analog",v=>v?"ANALOG":"DIGITAL");segOf("#cBits",[0,16,24],S.outputBits<0?0:S.outputBits,"outputBits",v=>v?v+"-BIT":"FLOAT");
+ onOff("#cDc",S.dcBlock,"dcBlock");onOff("#cAuto",S.autoLevel,"autoLevel");segOf("#cAutoT",[-23,-18,-16,-14],Math.round(S.autoTarget),"autoTarget");segOf("#cAutoM",[6,12,18],Math.round(S.autoMax),"autoMax",v=>"+"+v+" dB");
+ segOf("#cClip",[-3,-1,-0.1,0],Math.round(S.clipDb*10)/10,"clipDb",v=>v+" dB");segOf("#cHold",[0,1500,3000,10000],Math.round(S.peakHoldMs),"peakHoldMs",v=>v?v/1000+" s":"OFF");
+ const has=S.winVolume>=0;$("#cWinRow").style.display=has?"":"none";const wv=$("#cWin");if(has&&free(wv)){wv.value=S.winVolume;$("#cWinV").textContent=S.winVolume+"%"}
+ wv.oninput=()=>{$("#cWinV").textContent=wv.value+"%"};wv.onchange=()=>setting("winVolume",+wv.value);wv.onpointerdown=()=>{drag=wv};
+ onOff("#cGain",S.winGain,"winGain");onOff("#cWinMute",S.winMuteSync,"winMuteSync");
+ $("#cTrim").textContent=!S.winGain?"—":S.winTrimDb<=-119?"OFF":S.winTrimDb===0?"0 dB":S.winTrimDb.toFixed(1)+" dB";
+ $("#cTrimN").textContent=!has?"This computer has no Windows volume the console can reach.":S.winGain&&S.winSetsLevel?"The console plays through Windows' own mixer here, which already sets the level with this slider: no extra trim (no double cut).":""}
+function panels(){consoleSettings();if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
 // ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
 const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
 const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
@@ -224,7 +276,8 @@ function applyOpts(){document.body.style.setProperty("--fh",opt.fh+"px");documen
  const seg=(id,vals,key,lab)=>{const box=$(id);box.textContent="";for(const v of vals){const b=document.createElement("button");b.textContent=lab(v);b.className=opt[key]===v?"on acc":"";b.onclick=()=>{buzz();opt[key]=v;page=0;save();build()};box.appendChild(b)}};
  seg("#oPer",[8,16,32],"per",v=>String(v));seg("#oFh",[160,220,300],"fh",v=>v===160?"S":v===220?"M":"L");seg("#oCw",[72,84,104],"cw",v=>v===72?"NARROW":v===84?"NORMAL":"WIDE");
  const tog=(id,key,after)=>{const b=$(id);b.className="acc"+(opt[key]?" on":"");b.textContent=opt[key]?"ON":"OFF";b.onclick=()=>{opt[key]=!opt[key];buzz();save();if(after)after()}};
- tog("#oMet","meters",()=>{if(!opt.meters)for(const e of els)e.bar.style.height="0"});tog("#oSync","sync",()=>{if(opt.sync)load()});tog("#oVib","vib");tog("#oWake","wake",wake);tog("#oAsk","ask");tog("#oNum","num",()=>build());tog("#oLock","lockStart");tog("#oKeys","keys");
+ tog("#oMet","meters",()=>{if(!opt.meters)for(const e of els)e.bar.style.height="0"});tog("#oBridge","bridge",bridgeShow);
+ {const h=$("#oHold");h.innerHTML="";for(const [v,l] of [[1,"1 s"],[2,"2 s"],[5,"5 s"],[0,"HOLD"]]){const b=document.createElement("button");b.textContent=l;b.className=opt.hold===v?"on acc":"";b.onclick=()=>{opt.hold=v;ls.set("opts",opt);bridgeReset(false);applyOpts()};h.appendChild(b)}}tog("#oSync","sync",()=>{if(opt.sync)load()});tog("#oVib","vib");tog("#oWake","wake",wake);tog("#oAsk","ask");tog("#oNum","num",()=>build());tog("#oLock","lockStart");tog("#oKeys","keys");
  const th=$("#oTheme");th.textContent="";for(const [v,l] of [["auto","AUTO"],["dark","DARK"],["light","LIGHT"]]){const b=document.createElement("button");b.textContent=l;b.className=opt.theme===v?"on acc":"";b.onclick=()=>{opt.theme=v;buzz();save()};th.appendChild(b)}
  const light=opt.theme==="light"||(opt.theme==="auto"&&matchMedia("(prefers-color-scheme: light)").matches);document.body.classList.toggle("light",light);
  const st=$("#oStart");st.value=opt.start||"";st.onchange=()=>{opt.start=st.value;save()};
@@ -367,15 +420,19 @@ function go(p){tab=p;for(const s of document.querySelectorAll(".page"))s.style.d
  if(p==="scn")drawScenes();if(p==="dev"&&!devs.length)loadDevices();if(p==="ch")drawEq()}
 for(const b of document.querySelectorAll("#nav button"))b.onclick=()=>go(b.dataset.p);
 $("#bAux").onclick=()=>{busSet=0;$("#bAux").classList.add("on");$("#bFx").classList.remove("on");buses()};$("#bFx").onclick=()=>{busSet=1;$("#bFx").classList.add("on","acc");$("#bAux").classList.remove("on");buses()};
-function stream(){if(ws)ws.close();const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token);
- try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.error){setSt(o.error,true);return}if(o.state){if(opt.sync||!state)apply(o.state);return}meters(o)}catch(e){}};
- ws.onopen=()=>setSt(opt.sync?"connected · live sync":"connected");ws.onclose=()=>{if(token){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
+// DISCONNECTED BY THE CONSOLE (CONNECTED PHONES → DISCONNECT / FORGET): no reconnecting while the console holds this device out
+let heldUntil=0;function kicked(sec){heldUntil=Date.now()+sec*1000;const w=ws;ws=null;try{w&&w.close()}catch(e){}setSt(sec?"the console disconnected this device · it can connect again in "+Math.ceil(sec/60)+" min":"the console disconnected this device",true);if(sec)setTimeout(()=>{if(token&&!ws)stream()},sec*1000+500)}
+function stream(){if(Date.now()<heldUntil)return;if(ws)ws.close();bridgeShow();const who=ls.get("who","")||(/Android|iPhone|iPad/.test(navigator.userAgent)?"Browser on phone":"Browser");
+ const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token)+"&client="+encodeURIComponent(who.slice(0,40));
+ try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.kicked){kicked(o.holdSeconds||0);return}if(o.error){setSt(o.error,true);return}if(o.state){if(opt.sync||!state)apply(o.state);return}meters(o)}catch(e){}};
+ ws.onopen=()=>setSt(opt.sync?"connected · live sync":"connected");ws.onclose=ev=>{if(ev.target!==ws)return;if(token&&Date.now()>=heldUntil){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
 async function load(){try{const s=await api("/api/state");state=null;apply(s);stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden||!opt.sync||(ws&&ws.readyState===1))return;try{apply(await api("/api/state"))}catch(e){}},5000)}catch(e){setSt(e.message,true)}}   // the push is the sync; this only covers a stream that is down
 function show(){$("#pair").style.display=token?"none":"";$("#nav").style.display=token?"flex":"none";if(token){go(opt.start||ls.get("tab","mix"));load()}else for(const s of document.querySelectorAll(".page"))s.style.display="none"}
 function forget(why){token=null;try{localStorage.removeItem("amfx1.token")}catch(e){}if(ws)ws.close();if(poll)clearInterval(poll);clearInterval(statusT);setSt(why||"not paired",!!why);show()}
 $("#go").onclick=async()=>{$("#perr").textContent="";const pin=$("#pin").value.replace(/\D/g,"");if(pin.length!==6){$("#perr").textContent="The PIN has six digits.";return}
  try{const who=$("#who").value.trim()||"Browser";const j=await api("/api/pair",{pin,name:who});token=j.token;try{localStorage.setItem("amfx1.token",token)}catch(e){}ls.set("who",who);$("#pin").value="";applyOpts();show()}catch(e){$("#perr").textContent=e.message}};
 $("#pin").onkeydown=e=>{if(e.key==="Enter")$("#go").click()};
+$("#bridge").onclick=()=>{buzz();bridgeReset(true)};addEventListener("resize",()=>{if(opt.bridge)bridgeShow()});
 $("#out").onclick=()=>{if(confirm("Forget this device? It will need a new PIN from the computer."))forget()};$("#clip").onclick=()=>{buzz();api("/api/control",{op:"clearClips"}).catch(e=>setSt(e.message,true))};
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){if(token&&(!ws||ws.readyState>1))stream();wake()}});
 // OPENED FROM THE QR CODE (…/remote#pin=123456): take the PIN, wipe it from the address bar and history, and pair straight away.

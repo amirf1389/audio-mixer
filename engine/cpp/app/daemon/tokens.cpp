@@ -73,6 +73,12 @@ bool TokenStore::revoke(const std::string& id, std::string& err) {
 }
 
 std::vector<TokenStore::Entry> TokenStore::list() const { std::lock_guard<std::mutex> g(m_); return e_; }
+bool TokenStore::find(const std::string& token, Entry& out) const {
+  if (token.size() != 68 || token.compare(0, 4, "amx_") != 0) return false;
+  const std::string h = hashOf(token); std::lock_guard<std::mutex> g(m_);
+  for (const Entry& e : e_) if (same(e.hash, h)) { out = e; return true; }
+  return false;
+}
 
 std::string TokenStore::roleOf(const std::string& token, long long now) const {
   if (token.size() != 68 || token.compare(0, 4, "amx_") != 0) return "";

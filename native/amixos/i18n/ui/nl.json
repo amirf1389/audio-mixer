@@ -2052,5 +2052,17 @@
 "MY ACCOUNT ONLINE": "MIJN ONLINE ACCOUNT",
 "CONNECTED": "VERBONDEN",
 "waiting for a phone or browser": "in afwachting van een telefoon of browser",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Faders, mute-functies, solo’s en namen worden weergegeven op de telefoons en browsers die op deze console zijn aangesloten, en elke handeling hier wordt direct naar hen doorgestuurd. Als een fader op een telefoon wordt verschoven, licht deze hier op."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Faders, mute-functies, solo’s en namen worden weergegeven op de telefoons en browsers die op deze console zijn aangesloten, en elke handeling hier wordt direct naar hen doorgestuurd. Als een fader op een telefoon wordt verschoven, licht deze hier op.",
+"CONNECTED PHONES": "AANGESLOTEN TELEFOONS",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Telefoons en browsers zijn momenteel gekoppeld. Met ‘VERBINDING VERBREKEN’ wordt één apparaat losgekoppeld (het kan binnen 2 minuten weer terugkomen); met ‘VERGETEN’ wordt de koppeling verwijderd, waardoor de pincode opnieuw moet worden ingevoerd.",
+"OWNER": "EIGENAAR",
+"DISCONNECT": "VERBINDING VERBREKEN",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Er is nog geen telefoon gekoppeld. Open AmF X1 op de telefoon: de app vindt deze computer vanzelf via het wifi-netwerk.",
+"Windows volume": "Windows-volume",
+"The Windows output slider (the keyboard's volume keys move it too)": "De Windows-uitvoerschuifbalk (de volumetoetsen op het toetsenbord kunnen deze ook verstellen)",
+"GAIN MODE: Windows volume trims the master": "GAIN-MODUS: Het Windows-volume regelt het hoofdvolume",
+"It had already gone.": "Het was al weg.",
+"The Windows volume is not available on this computer.": "Het Windows-volume is op deze computer niet beschikbaar.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "GAIN MODE uitgeschakeld: het Windows-volume heeft geen invloed op het geluidsniveau van de console.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Dit geluid wordt afgespeeld via de ingebouwde mixer van Windows, die het volume al via deze schuifregelaar instelt: geen extra trim (geen dubbele regeling)."
 }

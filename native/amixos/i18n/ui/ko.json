@@ -2102,5 +2102,18 @@
 "LIVE SYNC": "라이브 싱크",
 "CONNECTED": "연결됨",
 "waiting for a phone or browser": "휴대폰이나 브라우저를 기다리고 있습니다",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "페이더, 뮤트, 솔로 및 이름은 이 콘솔에 연결된 휴대폰과 브라우저에 연동되며, 여기서 이루어지는 모든 조작이 해당 기기에 즉시 반영됩니다. 휴대폰에서 페이더를 조작하면 이곳에 해당 페이더가 점등됩니다."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "페이더, 뮤트, 솔로 및 이름은 이 콘솔에 연결된 휴대폰과 브라우저에 연동되며, 여기서 이루어지는 모든 조작이 해당 기기에 즉시 반영됩니다. 휴대폰에서 페이더를 조작하면 이곳에 해당 페이더가 점등됩니다.",
+"CONNECTED PHONES": "연동된 휴대폰",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "현재 휴대폰과 브라우저가 연결되어 있습니다. ‘연결 끊기’를 선택하면 연결이 일시적으로 끊어집니다(2분 후에 다시 연결될 수 있음). ‘삭제’를 선택하면 페어링이 해제되므로 PIN 번호를 다시 입력해야 합니다.",
+"OWNER": "소유자",
+"DISCONNECT": "연결 해제",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "아직 휴대폰이 연결되어 있지 않습니다. 휴대폰에서 AmF X1을 실행하세요. 그러면 Wi-Fi를 통해 이 컴퓨터를 자동으로 찾아냅니다.",
+"Windows volume": "Windows 볼륨",
+"The Windows output slider (the keyboard's volume keys move it too)": "Windows 출력 슬라이더(키보드의 볼륨 키를 눌러도 조절할 수 있음)",
+"GAIN MODE: Windows volume trims the master": "게인 모드: Windows 볼륨이 마스터 볼륨을 조절합니다.",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Windows 슬라이더는 마스터 이후의 추가 게인 역할을 합니다(페이더는 원래 위치에 그대로 유지됨): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = 꺼짐. Windows 자체 볼륨 조절로는 도달할 수 없는 ASIO 또는 USB 인터페이스를 사용할 때 유용합니다.",
+"It had already gone.": "이미 사라진 뒤였다.",
+"The Windows volume is not available on this computer.": "이 컴퓨터에서 Windows 볼륨을 사용할 수 없습니다.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "게인 모드 끄기: Windows의 볼륨을 조절해도 콘솔의 레벨은 변하지 않습니다.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "이 출력은 Windows 자체 믹서를 통해 재생되며, 이 슬라이더로 이미 레벨이 설정되어 있습니다. 별도의 트림(이중 감쇄)은 없습니다."
 }

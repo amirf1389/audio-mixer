@@ -2140,5 +2140,18 @@
 "LIVE SYNC": "براہِ راست ہم آہنگی",
 "CONNECTED": "منسلک",
 "waiting for a phone or browser": "فون یا براؤزر کا انتظار",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "فیڈرز، مِیوٹز، سولو اور نام اس کنسول سے منسلک فونز اور براؤزرز کے ساتھ منسلک ہیں، اور یہاں کی ہر حرکت فوراً ان تک پہنچ جاتی ہے۔ فون سے فیڈر کو حرکت دینے پر یہاں روشنی ہو جاتی ہے۔"
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "فیڈرز، مِیوٹز، سولو اور نام اس کنسول سے منسلک فونز اور براؤزرز کے ساتھ منسلک ہیں، اور یہاں کی ہر حرکت فوراً ان تک پہنچ جاتی ہے۔ فون سے فیڈر کو حرکت دینے پر یہاں روشنی ہو جاتی ہے۔",
+"CONNECTED PHONES": "منسلک فونز",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "فونز اور براؤزرز اس وقت منسلک ہیں۔ DISCONNECT ایک کو منقطع کر دیتا ہے (یہ دو منٹ میں دوبارہ آ سکتا ہے)؛ FORGET اس کی جوڑی ختم کر دیتا ہے، لہٰذا اسے دوبارہ پن کوڈ درکار ہوگا۔",
+"OWNER": "مالک",
+"DISCONNECT": "قطع رابطہ",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "ابھی تک فون منسلک نہیں ہوا۔ فون پر AmF X1 کھولیں: یہ خود بخود وائی فائی پر اس کمپیوٹر کو تلاش کر لیتا ہے۔",
+"Windows volume": "ونڈوز والیوم",
+"The Windows output slider (the keyboard's volume keys move it too)": "ونڈوز آؤٹ پٹ سلائیڈر (کی بورڈ کے والیوم بٹن بھی اسے حرکت دیتے ہیں)",
+"GAIN MODE: Windows volume trims the master": "گین موڈ: ونڈوز والیوم ماسٹر کو کٹوتی کرتا ہے",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "ونڈوز سلائیڈر ماسٹر کے بعد اضافی گین بن جاتا ہے (فیڈر جہاں ہے وہیں رہتا ہے): 100% = 0 dB، 50% = -9 dB، 25% = -18 dB، 0% = بند۔ ASIO یا USB انٹرفیس کے لیے مفید، جس تک ونڈوز کا اپنا والیوم نہیں پہنچتا۔",
+"It had already gone.": "وہ پہلے ہی چلا گیا تھا۔",
+"The Windows volume is not available on this computer.": "اس کمپیوٹر پر ونڈوز والیوم دستیاب نہیں ہے۔",
+"GAIN MODE off: the Windows volume does not change the console's level.": "گین موڈ بند: ونڈوز والیوم کنسول کی سطح کو تبدیل نہیں کرتا۔",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "یہ آؤٹ پٹ ونڈوز کے اپنے مکسر کے ذریعے چلتا ہے، جو پہلے ہی اس سلائیڈر سے اپنا لیول سیٹ کرتا ہے: کوئی اضافی ٹرم نہیں (کوئی ڈبل کٹ نہیں)۔"
 }

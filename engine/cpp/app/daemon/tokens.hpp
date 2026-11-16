@@ -21,6 +21,7 @@ class TokenStore {
   std::string issue(const std::string& name, const std::string& role, int days, std::string& id, std::string& err);
   bool revoke(const std::string& id, std::string& err);
   std::vector<Entry> list() const;
+  bool find(const std::string& token, Entry& out) const;   // the entry a named token belongs to (revoked or not); false for an unknown one
   std::string roleOf(const std::string& token, long long now = 0) const;   // "control", "view" or "" (unknown, revoked, ended)
   // SAME ADDRESS ONLY: the first address that shows the token owns it (saved); the token from any other address is refused
   std::string roleFor(const std::string& token, const std::string& ip, long long now = 0);

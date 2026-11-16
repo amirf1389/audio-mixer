@@ -5,6 +5,8 @@
 #include "paths/paths.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <chrono>
 #include <cstdlib>
 #include <iterator>
@@ -76,11 +78,23 @@ bool Daemon::start(std::string& err) {
   if (!opt_.seed.empty()) { std::string e; if (!loadSeed(opt_.seed, e)) std::fprintf(stderr, "amixos-daemon: %s (the mixer starts flat)\n", e.c_str()); }
   http_.route([this](const httpd::Request& r) { return handle(r); });
   http_.websocket("/ws/meters", [this](const httpd::Request& r, httpd::WebSocket& ws) {
-    if (roleOf(r).empty()) { ws.send("{\"error\":\"unauthorised\"}"); ws.close(); return; }   // any valid token may watch the meters
+    const std::string role = roleOf(r); if (role == "held") { ws.send("{\"error\":\"held\",\"kicked\":true,\"holdSeconds\":" + std::to_string(kHoldSeconds) + "}"); ws.close(); return; }
+    if (role.empty()) { ws.send("{\"error\":\"unauthorised\"}"); ws.close(); return; }   // any valid token may watch the meters
     struct Count { std::atomic<int>& n; explicit Count(std::atomic<int>& c) : n(c) { ++n; } ~Count() { --n; } } watching(watchers_);   // how many remotes are live
-    std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} });   // drains pings / close from the phone
+    // CONNECTED PHONES: this link in the list (the pairing's name; a master-token client may say what it is with ?client=)
+    auto link = std::make_shared<Link>(); { std::string t = r.header("x-amix-token"); if (t.empty()) t = r.param("token"); TokenStore::Entry e;
+      if (role == "admin") { link->tokenId = "master"; std::string c; const std::string raw = r.param("client");
+        for (std::size_t i = 0; i < raw.size() && c.size() < 40; ++i) { char ch = raw[i];   // %XX and + decoded; printable characters only
+          if (ch == '+') ch = ' '; else if (ch == '%' && i + 2 < raw.size() && std::isxdigit(static_cast<unsigned char>(raw[i + 1])) && std::isxdigit(static_cast<unsigned char>(raw[i + 2]))) { ch = static_cast<char>(std::stoi(raw.substr(i + 1, 2), nullptr, 16)); i += 2; }
+          if (static_cast<unsigned char>(ch) >= 32 && ch != '"' && ch != 127) c += ch; } link->name = c.empty() ? "master token" : c; }
+      else if (tokens_.find(t, e)) { link->tokenId = e.id; link->name = e.name; }
+      link->role = role; link->ip = r.peer; link->since = static_cast<long long>(std::time(nullptr));
+      std::lock_guard<std::mutex> g(linksM_); link->id = nextLink_++; links_[link->id] = link; }
+    struct Drop { Daemon* d; int id; ~Drop() { std::lock_guard<std::mutex> g(d->linksM_); d->links_.erase(id); } } drop{this, link->id};
+    std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} ws.close(); });   // drains pings / close from the phone; the phone hung up: the link ends now, not at the next failed send
     unsigned long long sent = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
     while (running_ && ws.open()) {
+      if (link->kick) { ws.send("{\"kicked\":true,\"holdSeconds\":" + std::to_string(link->tokenId == "master" ? 0 : kHoldSeconds) + "}"); break; }   // DISCONNECT from the console
       const unsigned long long v = version_.load();
       if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); if (!ws.send(m.dump())) break; sent = v; }
       if (!ws.send(meters().dump())) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
@@ -89,11 +103,15 @@ bool Daemon::start(std::string& err) {
   http_.setLocalOnly(opt_.localOnly);
   if (!http_.listen(opt_.bind, opt_.port, err)) return false;
   running_ = true; http_.start();
+  // WINDOWS VOLUME: this computer's output slider, watched twice a second (only where there is one: the first read must work)
+  if (!volGet_) volGet_ = [](float& f) { return systemVolumeGet(f); }; if (!volSet_) volSet_ = [](float f) { return systemVolumeSet(f); };
+  { float f = 0; if (volGet_(f)) { pollVolume(); volWatch_ = std::thread([this] { while (running_) { for (int i = 0; i < 10 && running_; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50)); if (running_) pollVolume(); } }); } }
   return true;
 }
 
 void Daemon::stop() {
   if (!running_.exchange(false)) return;
+  if (volWatch_.joinable()) volWatch_.join();
   http_.stop();
   std::lock_guard<std::mutex> g(m_);
   if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
@@ -113,7 +131,30 @@ bool Daemon::noteRefused() {
 std::string Daemon::roleOf(const httpd::Request& r, bool allowQuery) const {
   std::string t = r.header("x-amix-token"); if (t.empty() && allowQuery) t = r.param("token"); if (t.empty()) return "";
   if (TokenStore::same(t, opt_.token)) return "admin";
-  return tokens_.roleFor(t, r.peer);   // a named token works from the address that used it first, and from no other
+  std::string role = tokens_.roleFor(t, r.peer);   // a named token works from the address that used it first, and from no other
+  if (!role.empty()) { TokenStore::Entry e; if (tokens_.find(t, e) && held(e.id)) return "held"; }   // disconnected by the console a moment ago: refused for a while
+  return role;
+}
+bool Daemon::held(const std::string& tokenId) const {
+  std::lock_guard<std::mutex> g(linksM_); const auto it = held_.find(tokenId);
+  return it != held_.end() && static_cast<long long>(std::time(nullptr)) < it->second;
+}
+json::Value Daemon::links() const {
+  const long long now = static_cast<long long>(std::time(nullptr)); json::Value a = json::Value::array(); std::lock_guard<std::mutex> g(linksM_);
+  for (const auto& [id, l] : links_) { json::Value o = json::Value::object(); o.set("id", id); o.set("tokenId", l->tokenId); o.set("name", l->name); o.set("role", l->role);
+    o.set("ip", l->ip); o.set("since", static_cast<double>(l->since)); o.set("seconds", static_cast<double>(now - l->since)); a.push(o); }
+  return a;
+}
+bool Daemon::kick(int id) {
+  std::lock_guard<std::mutex> g(linksM_); const auto it = links_.find(id); if (it == links_.end()) return false;
+  it->second->kick = true; if (it->second->tokenId != "master" && !it->second->tokenId.empty()) held_[it->second->tokenId] = static_cast<long long>(std::time(nullptr)) + kHoldSeconds;
+  return true;
+}
+int Daemon::kickToken(const std::string& tokenId, bool hold) {
+  std::lock_guard<std::mutex> g(linksM_); int n = 0;
+  for (auto& [id, l] : links_) if (l->tokenId == tokenId) { l->kick = true; ++n; }
+  if (hold && tokenId != "master") held_[tokenId] = static_cast<long long>(std::time(nullptr)) + kHoldSeconds;
+  return n;
 }
 bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r, false); return role == "admin" || role == "control"; }
 
@@ -145,7 +186,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
   if (r.method == "GET" && (r.path == "/api/bluetooth" || r.path.rfind("/api/bluetooth?", 0) == 0)) {   // ?scan=SECONDS also listens for devices in range
-    if (!authorised(r)) { res.status = roleOf(r, false) == "view" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }   // device names and a radio scan: control only
+    if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }   // device names and a radio scan: control only
     int scan = 0; const auto q = r.path.find("scan="); if (q != std::string::npos) scan = std::clamp(std::atoi(r.path.c_str() + q + 5), 0, 20);
     std::string note; json::Value o = json::Value::object(), a = json::Value::array();
     const BluetoothRadio radio = bluetoothRadio();
@@ -175,6 +216,14 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     tokens_.roleFor(t, r.peer);   // it belongs to this phone's address from the start
     pairFails_ = 5;               // one pairing per PIN: the next phone waits for the next PIN
     json::Value out = json::Value::object(); out.set("ok", true); out.set("id", id); out.set("token", t); out.set("role", "control"); out.set("days", 30); res.body = out.dump(); return res; }
+  if (r.path == "/api/links" || r.path == "/api/links/kick") {   // CONNECTED PHONES: only the master token (the console) sees and drops them
+    if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed\"}"; return res; }
+    json::Value out = json::Value::object();
+    if (r.method == "GET" && r.path == "/api/links") { out.set("ok", true); out.set("links", links()); out.set("holdSeconds", kHoldSeconds); res.body = out.dump(); return res; }
+    bool ok = false; const json::Value b = json::Value::parse(r.body, ok);
+    if (r.method != "POST" || !ok || !b.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
+    if (!kick(b["id"].asInt())) { res.status = 404; res.body = "{\"ok\":false,\"error\":\"no such link (it may have closed already)\"}"; return res; }
+    out.set("ok", true); res.body = out.dump(); return res; }
   if (r.path == "/api/tokens" || r.path == "/api/tokens/revoke") {   // the named tokens: only the master token manages them
     if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed to manage tokens\"}"; return res; }
     if (opt_.tokenStore.empty()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"this daemon was started without a token file\"}"; return res; }
@@ -186,11 +235,11 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     bool ok = false; const json::Value b = json::Value::parse(r.body, ok);
     if (r.method != "POST" || !ok || !b.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
     if (r.path == "/api/tokens") { std::string id; const std::string t = tokens_.issue(b["name"].asString(), b["role"].asString("control"), b["days"].asInt(0), id, terr); if (!t.empty()) { out.set("ok", true); out.set("id", id); out.set("token", t); } }
-    else if (tokens_.revoke(b["id"].asString(), terr)) out.set("ok", true);
+    else if (tokens_.revoke(b["id"].asString(), terr)) { out.set("ok", true); out.set("closed", kickToken(b["id"].asString(), false)); }   // FORGET: its live links close too
     if (!terr.empty()) { res.status = 400; out.set("ok", false); out.set("error", terr); }
     res.body = out.dump(); return res; }
   if (r.method == "POST" && r.path == "/api/control") {
-    if (!authorised(r)) { res.status = roleOf(r, false) == "view" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     bool ok = false; const json::Value cmd = json::Value::parse(r.body, ok);
     if (!ok || !cmd.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
     std::string err; json::Value out = control(cmd, err);
@@ -198,7 +247,8 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     res.body = out.dump(); return res;
   }
   if (r.method == "GET" && r.path == "/api/console-info") {   // the console's plug-ins, racks and extensions as it saved them when the service started (read-only)
-    if (roleOf(r).empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    { const std::string rr = roleOf(r); if (rr == "held") { res.status = 403; res.body = "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}"; return res; }
+      if (rr.empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; } }
     std::ifstream f(opt_.consoleInfo, std::ios::binary); std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     bool ok = false; json::Value::parse(s, ok);   // only well-formed JSON goes out
     res.body = ok && !s.empty() && s.size() < 4 * 1024 * 1024 ? s : std::string("{\"available\":false}"); return res;
@@ -217,11 +267,21 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     res.body = kPage; return res;
   }
   if (r.method == "GET" && (r.path == "/" || r.path == "/api")) {
-    res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"WS /ws/meters?token=\"]}"; return res;
+    res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"GET /api/links\",\"POST /api/links/kick\",\"WS /ws/meters?token=\"]}"; return res;
   }
   res.status = 404; res.body = "{\"ok\":false,\"error\":\"not found\"}"; return res;
 }
 
+std::string Daemon::computerName() {
+  char buf[256] = {0};
+#ifdef _WIN32
+  DWORD n = sizeof(buf); if (!GetComputerNameA(buf, &n)) buf[0] = 0;
+#else
+  if (gethostname(buf, sizeof(buf) - 1) != 0) buf[0] = 0;
+#endif
+  std::string s; for (const char* p = buf; *p && s.size() < 40; ++p) if (static_cast<unsigned char>(*p) >= 32 && *p != '"' && *p != 127) s += *p;   // printable, short
+  return s;
+}
 json::Value Daemon::status() const {
   std::lock_guard<std::mutex> g(m_);
   json::Value o = json::Value::object();
@@ -229,6 +289,7 @@ json::Value Daemon::status() const {
   // consoleId: a stable name for this console that phones use to find it again after its address changes; a one-way hash of the
   // master token with its own prefix (12 hex characters): it says nothing about the token and changes only if the token does
   o.set("consoleId", TokenStore::hashOf("amfx1-console-id:" + opt_.token).substr(0, 12));
+  o.set("computer", computerName());   // this PC's name: phones tell several consoles apart by it (STUDIO-PC, STAGE-PC)
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
@@ -252,6 +313,28 @@ json::Value Daemon::devices() const {
   return a;
 }
 
+double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
+bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
+double Daemon::outMaster() const {   // the same rule as the console (Engine::outMasterDb): audible down to -59.9, off only with the fader off or Windows at 0
+  const int v = winVol_.load(); const double t = (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0;
+  if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t);
+}
+void Daemon::pushSettings(Runtime& rt) const {
+  rt.setWidth(set_.width); rt.setOutputBits(set_.outputBits < 0 ? 0 : set_.outputBits); rt.setDcBlock(set_.dcBlock); rt.setAnalogChannels(set_.analog);
+  rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); rt.setMasterDb(outMaster());
+}
+json::Value Daemon::settingsJson() const {
+  json::Value s = json::Value::object(); s.set("width", set_.width); s.set("outputBits", set_.outputBits); s.set("dcBlock", set_.dcBlock); s.set("analog", set_.analog);
+  s.set("autoLevel", set_.autoLevel); s.set("autoTarget", set_.autoTarget); s.set("autoMax", set_.autoMax); s.set("clipDb", set_.clipDb); s.set("peakHoldMs", set_.peakHoldMs);
+  s.set("winGain", set_.winGain); s.set("winMuteSync", set_.winMuteSync); s.set("winVolume", winVol_.load());
+  const int v = winVol_.load(); s.set("winTrimDb", (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0); s.set("winSetsLevel", windowsSetsLevel());
+  return s;
+}
+void Daemon::pollVolume() {
+  if (!volGet_) return; float f = 0; const int v = volGet_(f) ? static_cast<int>(std::lround(std::max(0.0f, std::min(1.0f, f)) * 100.0f)) : -1;
+  if (v == winVol_.load()) return;
+  std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) rt_->setMasterDb(outMaster()); ++version_;   // a move of the Windows slider reaches every remote
+}
 json::Value Daemon::state() const {
   std::lock_guard<std::mutex> g(m_);
   json::Value o = json::Value::object();
@@ -266,6 +349,7 @@ json::Value Daemon::state() const {
   for (int k = 0; k < kMaxBuses; ++k) { json::Value v = json::Value::object(); v.set("id", k); v.set("db", buses_[k].db); v.set("returnDb", buses_[k].returnDb); v.set("mute", buses_[k].mute); buses.push(v); }
   o.set("buses", buses);
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
+  o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load());
   return o;
@@ -309,6 +393,12 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
     s.name = v["name"].asString(s.name).substr(0, 24); s.db = std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db))); s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));
     s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); }
   if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
+  if (o["settings"].isObject()) { const json::Value& c = o["settings"];   // the console's settings: the service starts sounding like the console
+    set_.width = std::max(0.0, std::min(2.0, c["width"].asNumber(set_.width))); { const int b = c["outputBits"].asInt(set_.outputBits); if (b == 0 || b == 16 || b == 24 || b == -1) set_.outputBits = b; }
+    set_.dcBlock = c["dcBlock"].asBool(set_.dcBlock); set_.analog = c["analog"].asBool(set_.analog); set_.autoLevel = c["autoLevel"].asBool(set_.autoLevel);
+    set_.autoTarget = std::max(-30.0, std::min(-6.0, c["autoTarget"].asNumber(set_.autoTarget))); set_.autoMax = std::max(0.0, std::min(24.0, c["autoMax"].asNumber(set_.autoMax)));
+    set_.clipDb = std::max(-12.0, std::min(0.0, c["clipDb"].asNumber(set_.clipDb))); set_.peakHoldMs = std::max(0.0, std::min(10000.0, c["peakHoldMs"].asNumber(set_.peakHoldMs)));
+    set_.winGain = c["winGain"].asBool(set_.winGain); set_.winMuteSync = c["winMuteSync"].asBool(set_.winMuteSync); }
   ++version_; return true;
 }
 
@@ -339,8 +429,8 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     // replay the console onto the fresh runtime so that what the phone shows is what sounds
     for (int i = 0; i < opt_.strips; ++i) { const Strip& st = strips_[static_cast<std::size_t>(i)]; rt->setGainDb(i, st.db); rt->setPan(i, st.pan); rt->setMute(i, st.mute); rt->setSolo(i, st.solo); }
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
-    rt->setMasterDb(masterDb_); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-    rt_ = std::move(rt); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;
+    pushSettings(*rt); rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+    rt_ = std::move(rt); rt_->setMasterDb(outMaster()); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
   if (op == "stop") { if (rt_) { rt_->setTap(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); } backend_.clear(); return ok; }
@@ -349,7 +439,25 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "mute") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].mute = on; if (rt_) rt_->setMute(s, on); return ok; }
   if (op == "solo") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].solo = on; if (rt_) rt_->setSolo(s, on); return ok; }
   if (op == "name") { if (!strip(s)) return {}; std::string n = cmd["name"].asString(); if (n.size() > 24) n.resize(24); if (n.empty()) { err = "empty name"; return {}; } strips_[static_cast<std::size_t>(s)].name = n; return ok; }
-  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setMasterDb(masterDb_); return ok; }
+  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setMasterDb(outMaster()); return ok; }
+  if (op == "setting") {   // a console setting from a remote (see daemon.hpp); every value is checked here
+    const std::string k = cmd["key"].asString(); const json::Value& v = cmd["value"];
+    if (k == "width") { set_.width = std::max(0.0, std::min(2.0, v.asNumber(1))); if (rt_) rt_->setWidth(set_.width); }
+    else if (k == "outputBits") { const int b = v.asInt(0); if (b != 0 && b != 16 && b != 24 && b != -1) { err = "outputBits: 0, 16, 24 or -1"; return {}; } set_.outputBits = b; if (rt_) rt_->setOutputBits(b < 0 ? 0 : b); }
+    else if (k == "dcBlock") { set_.dcBlock = v.asBool(true); if (rt_) rt_->setDcBlock(set_.dcBlock); }
+    else if (k == "analog") { set_.analog = v.asBool(false); if (rt_) rt_->setAnalogChannels(set_.analog); }
+    else if (k == "autoLevel" || k == "autoTarget" || k == "autoMax") {
+      if (k == "autoLevel") set_.autoLevel = v.asBool(false); else if (k == "autoTarget") set_.autoTarget = std::max(-30.0, std::min(-6.0, v.asNumber(-16))); else set_.autoMax = std::max(0.0, std::min(24.0, v.asNumber(12)));
+      if (rt_) rt_->setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); }
+    else if (k == "clipDb") { set_.clipDb = std::max(-12.0, std::min(0.0, v.asNumber(-0.1))); if (rt_) rt_->setClipDb(set_.clipDb); }
+    else if (k == "peakHoldMs") { set_.peakHoldMs = std::max(0.0, std::min(10000.0, v.asNumber(1500))); if (rt_) rt_->setPeakHoldMs(set_.peakHoldMs); }
+    else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) rt_->setMasterDb(outMaster()); }
+    else if (k == "winMuteSync") set_.winMuteSync = v.asBool(true);   // the console applies this rule (it watches the master)
+    else if (k == "winVolume") { const int lv = std::max(0, std::min(100, v.asInt(-1)));
+      if (!volSet_ || v.asInt(-1) < 0 || !volSet_(static_cast<float>(lv / 100.0))) { err = "the Windows volume is not available on this computer"; return {}; }
+      winVol_ = lv; if (rt_) rt_->setMasterDb(outMaster()); }
+    else { err = "unknown setting " + k; return {}; }
+    return ok; }
   if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }
   if (op == "send") { if (!strip(s) || !bus(b)) return {}; if (!need()) return {}; rt_->setSend(s, b, clampDb(cmd["db"].asNumber(-120)), cmd["pre"].asBool(false)); return ok; }
   if (op == "busLevel") { if (!bus(b)) return {}; buses_[b].db = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setBusLevel(b, buses_[b].db); return ok; }

@@ -99,6 +99,20 @@ Item {
                                 Repeater { model: remote.addresses; delegate: Btn { label: modelData.replace("http://", "").replace(/:\d+$/, ""); on: qrRow.pick === index; onColor: Theme.cyan; onClicked: { qrRow.pick = index; qrRow.redraw() } } } }
                             Note { visible: remote.addresses.length > 1; text: i18n.t("More than one network: pick the address of the Wi-Fi the phone is on.", i18n.lang) } } }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
+                    // CONNECTED PHONES: who is linked right now (live streams), with DISCONNECT (now, 2 minutes' hold) and FORGET (the PIN again)
+                    RowLayout { spacing: 8
+                        Head { text: i18n.t("CONNECTED PHONES", i18n.lang) + "  " + remote.links.length }
+                        Note { text: i18n.t("Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.", i18n.lang) } }
+                    Repeater { model: remote.links; objectName: "linksList"
+                        delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                            Rectangle { width: 7; height: 7; radius: 3.5; color: Theme.emerald }
+                            Text { Layout.preferredWidth: 170; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight }
+                            Text { Layout.fillWidth: true; text: modelData.ip + " · " + (modelData.role === "admin" ? i18n.t("OWNER", i18n.lang) : modelData.role.toUpperCase()) + " · " + i18n.t("linked", i18n.lang) + " " + modelData.age; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                            Btn { label: i18n.t("DISCONNECT", i18n.lang); on: true; onColor: Theme.amber; onClicked: remote.disconnectLink(modelData.id) }
+                            Btn { visible: modelData.phone; label: i18n.t("FORGET", i18n.lang); on: true; onColor: Theme.danger; onClicked: remote.forgetLink(modelData.tokenId) } } }
+                    Text { visible: remote.links.length === 0; text: remote.running ? i18n.t("No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.", i18n.lang) : i18n.t("Start the phone remote to see the phones linked to it.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                    Text { visible: remote.linkNote !== ""; text: i18n.t(remote.linkNote, i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     RowLayout { spacing: 8
                         Head { text: i18n.t("AMF X1 NETWORK · TOKENS", i18n.lang) }
                         Note { text: i18n.t("One token per phone or operator. CONTROL may change the console, VIEW only watches the meters. Revoke one and the others keep working.", i18n.lang) } }

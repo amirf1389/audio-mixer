@@ -2,6 +2,20 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit on the website's manage.html (Release manager) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.0",
+      "date": "2026-11-16",
+      "title": "Release 1.24.0.0",
+      "items": [
+        "Phone app finds the console on the Wi-Fi by itself and follows it to a new address; LINK TIMELINE shows how it got there",
+        "Several consoles: a console bar on the phone shows each one (linked, on this Wi-Fi, away, new) and switches in one tap",
+        "CONNECTED PHONES on the NETWORK page: who is linked now, with DISCONNECT and FORGET; revoking no longer drops the other phones",
+        "Offline scenes on the phone: make and edit scenes without a console, recall one when it is linked (asked first)",
+        "Web remote: a meter bridge on every page (peak hold, clip lights, tap to reset) and the console's sound settings: width, DSP MODE, word length, DC blocker, AUTO LEVEL, clip point, peak hold",
+        "WINDOWS VOLUME on the console, the phone and the web remote; GAIN MODE makes the Windows slider a trim after the master (no double cut through Windows' own mixer)",
+        "Engine: much less CPU, most of all on older AMD / Intel processors (about -35% with every channel playing, -87% with most channels silent); the sound is unchanged"
+      ]
+    },
+    {
       "version": "1.23.0.1",
       "date": "2026-11-10",
       "title": "Release 1.23.0.1 stable",

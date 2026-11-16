@@ -283,13 +283,16 @@ int main(int argc, char* argv[]) {
   // network as the button does, the MIXER page is on screen, and every 100 ms the console's own state goes to the file (the pairing PIN,
   // strips 1-4, master, remotes connected). Every 4 s the console moves strip 4 itself (-12 / -24 dB) so the phone's side can be checked.
   if (qEnvironmentVariableIsSet("AMIX_REMOTE_HOLD")) {
-    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); if (win) win->setProperty("current", "mixer");
+    // AMIX_REMOTE_PAGE: the page on screen (default MIXER); AMIX_REMOTE_SHOT=<png>: one picture of it at AMIX_REMOTE_SHOT_AT seconds (tests)
+    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); if (win) win->setProperty("current", qEnvironmentVariable("AMIX_REMOTE_PAGE", "mixer"));
+    const QString shotFile = qEnvironmentVariable("AMIX_REMOTE_SHOT"); const qint64 shotAt = qEnvironmentVariableIsSet("AMIX_REMOTE_SHOT_AT") ? qEnvironmentVariableIntValue("AMIX_REMOTE_SHOT_AT") * 1000LL : -1; bool shotDone = false;
     if (!remote.start(true)) { std::fprintf(stderr, "amixos: remote hold: the remote did not start: %s\n", qPrintable(remote.status())); return 3; }
     const int secs = qEnvironmentVariableIntValue("AMIX_REMOTE_HOLD"); const QString dump = qEnvironmentVariable("AMIX_REMOTE_DUMP");
     QElapsedTimer t; t.start(); qint64 lastMove = 0; int k = 0;
     while (t.elapsed() < secs * 1000LL) {
       QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(10);
       if (t.elapsed() - lastMove > 4000) { lastMove = t.elapsed(); engine.setGain(3, (k++ % 2) ? -24.0 : -12.0); }
+      if (!shotDone && win && !shotFile.isEmpty() && shotAt >= 0 && t.elapsed() >= shotAt) { shotDone = true; remote.refreshLinks(); QElapsedTimer w; w.start(); while (w.elapsed() < 600) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(10); } win->grabWindow().save(shotFile); }
       static qint64 lastDump = -1000; if (t.elapsed() - lastDump < 100 || dump.isEmpty()) continue; lastDump = t.elapsed();
       QJsonArray st; for (int i = 0; i < 4; ++i) { const QVariantMap m = engine.stripAt(i); st.append(QJsonObject{{"db", m["db"].toDouble()}, {"mute", m["mute"].toBool()}, {"name", m["name"].toString()}}); }
       QFile f(dump + ".tmp"); if (f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(QJsonObject{{"t", t.elapsed()}, {"pin", remote.pairPin()}, {"port", remote.port()}, {"running", remote.running()},
@@ -397,6 +400,22 @@ int main(int argc, char* argv[]) {
       engine.setWindowsMuteSync(false); engine.setMaster(-60); if (sysMute) { std::fprintf(stderr, "amixos --smoke: sync off still muted the system sound\n"); return 81; }
       engine.setWindowsMuteSync(true); if (!sysMute) { std::fprintf(stderr, "amixos --smoke: switching sync on at -inf did not mute\n"); return 82; } engine.restoreSystemSound(); if (sysMute) { std::fprintf(stderr, "amixos --smoke: exit did not take the mute back\n"); return 83; }
       engine.setMaster(keep); engine.setSystemMuteBackend([](bool&) { return false; }, [](bool) { return false; }); engine.syncSystemSound(); }
+    { // WINDOWS VOLUME and GAIN MODE (a stand-in for the Windows slider): both ways, the trim curve, and never a double cut through Windows' own mixer
+      float winLevel = 0.5f; int sets = 0; const bool keepMode = engine.windowsGainMode(); const double keepMaster = engine.masterDb();
+      engine.setSystemVolumeBackend([&](float& f) { f = winLevel; return true; }, [&](float f) { winLevel = f; ++sets; return true; });
+      engine.setWindowsGainMode(false); engine.syncSystemVolume(); const bool offOk = engine.windowsVolume() == 50 && engine.windowsTrimDb() == 0.0;
+      engine.setWindowsGainMode(true); engine.setMaster(-6); const double t50 = engine.windowsTrimDb();
+      winLevel = 1.0f; engine.syncSystemVolume(); const double t100 = engine.windowsTrimDb();          // the keyboard's volume-up in Windows
+      engine.setWindowsVolume(25); const double t25 = engine.windowsTrimDb(); const bool wrote = sets == 1 && std::abs(winLevel - 0.25f) < 1e-6;   // the console's own fader moves Windows
+      winLevel = 0.0f; engine.syncSystemVolume(); const double t0 = engine.windowsTrimDb();
+      const bool fader = std::abs(engine.masterDb() + 6) < 1e-9;                                        // the master fader never moves for it
+      const bool curve = std::abs(Engine::trimForLevel(0.5) + 9.03) < 0.01 && std::abs(Engine::trimForLevel(0.1) + 30) < 1e-9 && Engine::trimForLevel(0) <= -119;
+      const bool shared = !engine.windowsSetsLevel();                                                   // the null device: not Windows' mixer, so the trim applies
+      std::printf("amixos --smoke: WINDOWS VOLUME gain mode trims 50%% %.1f, 100%% %.1f, 25%% %.1f, 0%% %.0f dB; console->Windows %d; master stays %d\n", t50, t100, t25, t0, wrote, fader);
+      engine.setSystemVolumeBackend([](float&) { return false; }, [](float) { return false; }); engine.syncSystemVolume(); const bool gone = engine.windowsVolume() == -1 && engine.windowsTrimDb() == 0.0;
+      engine.setWindowsGainMode(keepMode); engine.setMaster(keepMaster);
+      if (!(offOk && std::abs(t50 + 9.03) < 0.01 && t100 == 0.0 && std::abs(t25 + 18.06) < 0.01 && t0 <= -119 && wrote && fader && curve && shared && gone)) {
+        std::fprintf(stderr, "amixos --smoke: WINDOWS VOLUME failed (off %d, 50 %.2f, 100 %.2f, 25 %.2f, 0 %.0f, wrote %d, fader %d, curve %d, shared %d, gone %d)\n", offOk, t50, t100, t25, t0, wrote, fader, curve, shared, gone); return 288; } }
     { // the ten effects in the rack of any channel: listed, loaded into a slot, a knob moves, bypass, cleared; a late channel too
       { // 2 IN / 2 OUT at least on every driver: asking for none opens the first pair all the same (a device that reported 0 channels is not left silent)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
@@ -746,6 +765,7 @@ int main(int argc, char* argv[]) {
         const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();
         const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+        engine.setGain(1, 0); engine.setMute(2, false); engine.setGain(3, 0);   // a known start: a run stopped half-way never leaves its moves behind for the next one
         engine.setGain(0, -9); if (!remote.start(false)) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC: the remote did not start: %s\n", qPrintable(remote.status())); return 284; }
         wait(1500); QNetworkAccessManager nam; QString lastHttpErr; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
           QNetworkReply* r = body.isEmpty() ? nam.get(q) : nam.post(q, body); QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
@@ -763,10 +783,36 @@ int main(int argc, char* argv[]) {
         if (sw && qEnvironmentVariableIsSet("AMIX_SYNC_SHOT")) { http("/api/control", "{\"op\":\"gain\",\"strip\":1,\"db\":-16}"); wait(140); sw->grabWindow().save(qEnvironmentVariable("AMIX_SYNC_SHOT")); }
         engine.setGain(3, -21); QElapsedTimer t2; t2.start(); double out = 0; while (t2.elapsed() < 2000) { wait(40); out = http("/api/state", {})["strips"].toList().value(3).toMap()["db"].toDouble(); if (std::abs(out + 21) < 0.05) break; } const qint64 outMs = t2.elapsed();
         const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + (qEnvironmentVariableIsSet("AMIX_SYNC_SHOT") ? 16 : 14)) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05 && lit && remotesSeen >= 1;
+        // SETTINGS SYNC: a remote changes the stereo width and GAIN MODE: the console follows; the console changes the width: the service follows
+        const double keepW = engine.width(); const bool keepG = engine.windowsGainMode(); bool setOk = false; qint64 setIn = -1, setOut = -1;
+        { http("/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":0.5}"); http("/api/control", "{\"op\":\"setting\",\"key\":\"winGain\",\"value\":" + QByteArray(keepG ? "false" : "true") + "}");
+          QElapsedTimer ts; ts.start(); while (ts.elapsed() < 3000 && !(std::abs(engine.width() - 0.5) < 1e-6 && engine.windowsGainMode() != keepG)) wait(20);
+          if (std::abs(engine.width() - 0.5) < 1e-6 && engine.windowsGainMode() != keepG) setIn = ts.elapsed();
+          engine.setWidth(1.25); ts.restart(); while (ts.elapsed() < 3000 && std::abs(http("/api/state", {})["settings"].toMap()["width"].toDouble() - 1.25) > 1e-6) wait(40);
+          if (std::abs(http("/api/state", {})["settings"].toMap()["width"].toDouble() - 1.25) < 1e-6) setOut = ts.elapsed();
+          setOk = setIn >= 0 && setOut >= 0; engine.setWidth(keepW); engine.setWindowsGainMode(keepG); wait(300); }
+        std::printf("amixos --smoke: SETTINGS SYNC remote->console %lld ms, console->remote %lld ms\n", static_cast<long long>(setIn), static_cast<long long>(setOut));
+        if (!setOk) { std::fprintf(stderr, "amixos --smoke: SETTINGS SYNC failed (width %.2f, gain mode %d)\n", engine.width(), engine.windowsGainMode()); remote.stop(); return 289; }
+        // CONNECTED PHONES: a phone pairs with the PIN and links up: the NETWORK page lists it under its name; DISCONNECT drops it; FORGET revokes it
+        int linkStep = 0; qint64 listedMs = -1, droppedMs = -1;
+        { QNetworkRequest q(QUrl("http://127.0.0.1:8765/api/pair")); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+          QNetworkReply* r = nam.post(q, QJsonDocument(QJsonObject{{"pin", remote.pairPin()}, {"name", "Smoke Phone"}}).toJson(QJsonDocument::Compact)); QElapsedTimer tp; tp.start(); while (!r->isFinished() && tp.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
+          const QVariantMap pr = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); const QString ptok = pr.value("token").toString(), pid = pr.value("id").toString();
+          if (!ptok.isEmpty()) { linkStep = 1; QTcpSocket ph; ph.connectToHost("127.0.0.1", 8765);
+            if (ph.waitForConnected(2000)) { ph.write(("GET /ws/meters?token=" + QUrl::toPercentEncoding(ptok) + " HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").constData()); ph.flush();
+              QElapsedTimer tl; tl.start(); int linkId = -1; remote.refreshLinks();
+              while (tl.elapsed() < 6000 && linkId < 0) { wait(50); ph.readAll(); for (const QVariant& v : remote.links()) { const QVariantMap m = v.toMap(); if (m["name"].toString() == "Smoke Phone" && m["tokenId"].toString() == pid && m["phone"].toBool()) linkId = m["id"].toInt(); } }
+              if (linkId >= 0) { linkStep = 2; listedMs = tl.elapsed(); remote.disconnectLink(linkId); QElapsedTimer td; td.start(); bool gone = false;
+                while (td.elapsed() < 6000 && !gone) { wait(50); ph.readAll(); gone = true; for (const QVariant& v : remote.links()) if (v.toMap()["id"].toInt() == linkId) gone = false; }
+                if (gone) { linkStep = 3; droppedMs = td.elapsed(); } } }
+            ph.abort(); remote.forgetLink(pid); wait(1200);
+            for (const QVariant& v : remote.tokens()) { const QVariantMap m = v.toMap(); if (m["id"].toString() == pid && m["state"].toString() == "revoked") linkStep = linkStep == 3 ? 4 : linkStep; } } }
+        std::fprintf(stdout, "amixos --smoke: CONNECTED PHONES paired %d, listed in %lld ms, disconnected in %lld ms, forgotten %d\n", linkStep >= 1, static_cast<long long>(listedMs), static_cast<long long>(droppedMs), linkStep == 4);
+        if (linkStep != 4) { std::fprintf(stderr, "amixos --smoke: CONNECTED PHONES failed at step %d (%s)\n", linkStep, qPrintable(remote.linkNote())); remote.stop(); return 287; }
         phone.abort();
         std::fprintf(stdout, "amixos --smoke: LIVE SYNC seed %.1f, phone->console %lld ms, console->phone %lld ms, changes %d, fader lit %d, remotes %d\n", seeded, static_cast<long long>(inMs), static_cast<long long>(outMs), remote.syncedChanges(), lit, remotesSeen);
         const bool remoteWasRunning = remote.running(); const QString remoteStatus = remote.status() + " | " + remote.syncDebug();
-        remote.stop(); wait(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); wait(300); engine.setGain(0, g0); engine.setGain(1, g1); engine.setGain(3, 0); engine.setMute(2, false);
+        remote.stop(); wait(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); wait(300); engine.setGain(0, g0); engine.setGain(1, std::abs(g1 + 14) < 0.05 || std::abs(g1 + 16) < 0.05 ? 0.0 : g1); engine.setGain(3, 0); engine.setMute(2, false);   // never put back a value this check itself left
         if (!ok) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC failed (seed %.1f, strip 2 %.1f, mute %d, out %.1f; remote running %d, status %s; http %s)\n", seeded, engine.stripAt(1)["db"].toDouble(), engine.stripAt(2)["mute"].toBool(), out, remoteWasRunning, qPrintable(remoteStatus), qPrintable(lastHttpErr)); return 285; } }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();

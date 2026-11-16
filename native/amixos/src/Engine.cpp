@@ -44,13 +44,14 @@ static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 
 Engine::Engine(QObject* parent) : QObject(parent) {
   am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
+  winGain_ = QSettings().value("mixer/windowsGainMode", false).toBool(); volGet_ = [](float& f) { return am::systemVolumeGet(f); }; volSet_ = [](float f) { return am::systemVolumeSet(f); }; volSync_ = false;
   // A WINDOWS MUTE LEFT BEHIND: the fader at -inf mutes Windows too; if the console then crashed, was killed or the computer went off,
   // Windows stayed muted for every program (no sound anywhere) and the console no longer knew. The mute is written down when it is set
   // and given back here, at the next start.
   if (QSettings().value("mixer/weMutedWindows", false).toBool()) { const bool before = QSettings().value("mixer/winBefore", false).toBool(); const auto set = sysSet_; svcPost([set, before] { set(before); }); QSettings().remove("mixer/weMutedWindows"); }
   connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
   for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
-  sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); sysTimer_.start();
+  sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemVolume); sysTimer_.start();
 #ifdef _WIN32
   { static std::once_flag once; std::call_once(once, [] { std::thread([] { CoInitializeEx(nullptr, COINIT_MULTITHREADED); for (;;) std::this_thread::sleep_for(std::chrono::hours(1)); }).detach(); }); }   // keeps the multithreaded COM apartment alive: the sound-card objects are made on short-lived worker threads
 #endif
@@ -255,7 +256,7 @@ void Engine::pushAll() {
     rt_->setDelayMs(i, p.delayMs); rt_->setPolarity(i, p.polarityInvert); rt_->setCrossover(i, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(i, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs);
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
-  rt_->setMasterDb(masterDb_); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
+  rt_->setMasterDb(outMasterDb()); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
   rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
   scope_.setSampleRate(rt_->sampleRate()); rt_->setTap(&taps_);
   for (int k = 0; k < kBuses; ++k) makeBusFx(k);
@@ -472,7 +473,7 @@ void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) retur
 void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
 void Engine::setMaster(double db) {
   startNote_.clear();
-  const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(masterDb_);
+  const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setMasterDb(outMasterDb());
   if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
   emit stripsChanged(); syncSystemSound();
 }
@@ -496,6 +497,34 @@ void Engine::applySystemSound(bool ok, bool now, const std::function<bool(bool)>
   if (weMuted_ != had) { QSettings q; if (weMuted_) { q.setValue("mixer/weMutedWindows", true); q.setValue("mixer/winBefore", winBefore_); } else q.remove("mixer/weMutedWindows"); q.sync(); }
   if (ok && now != winMuted_) { winMuted_ = now; changed = true; }
   if (changed) emit systemSoundChanged();
+}
+// ---- WINDOWS VOLUME and GAIN MODE
+double Engine::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::clamp(30.0 * std::log10(l), -120.0, 0.0); }
+bool Engine::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
+double Engine::windowsTrimDb() const { return (winGain_ && winVol_ >= 0 && !windowsSetsLevel()) ? trimForLevel(winVol_ / 100.0) : 0.0; }
+QString Engine::windowsTrimNote() const {
+  if (winVol_ < 0) return QStringLiteral("The Windows volume is not available on this computer.");
+  if (!winGain_) return QStringLiteral("GAIN MODE off: the Windows volume does not change the console's level.");
+  if (windowsSetsLevel()) return QStringLiteral("This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).");
+  return QStringLiteral("GAIN MODE: the Windows volume is a trim after the master (%1 dB now).").arg(windowsTrimDb() <= -119 ? QStringLiteral("off") : QString::number(windowsTrimDb(), 'f', 1));
+}
+// the level the engine gets: the fader plus the GAIN MODE trim. The mixer takes -60 dB and below as off, so a trimmed fader stays audible
+// down to -59.9 dB; it is off only when the fader is off or the Windows slider is at 0
+double Engine::outMasterDb() const { const double t = windowsTrimDb(); if (t == 0.0 || masterDb_ <= -60.0) return masterDb_; if (t <= -119.0) return -120.0; return std::max(-59.9, masterDb_ + t); }
+void Engine::pushMasterLevel() { if (rt_) rt_->setMasterDb(outMasterDb()); }
+void Engine::setWindowsGainMode(bool on) { if (winGain_ == on) return; winGain_ = on; QSettings().setValue("mixer/windowsGainMode", on); pushMasterLevel(); emit systemSoundChanged(); }
+void Engine::setWindowsVolume(int v) {
+  v = std::clamp(v, 0, 100); if (!volSet_ || v == winVol_) return; const double was = windowsTrimDb(); winVol_ = v;
+  if (volSync_) volSet_(static_cast<float>(v / 100.0)); else { const auto set = volSet_; svcPost([set, v] { set(static_cast<float>(v / 100.0)); }); }
+  if (windowsTrimDb() != was) pushMasterLevel(); emit systemSoundChanged();
+}
+void Engine::syncSystemVolume() {
+  if (!volGet_) return;
+  const auto take = [this](bool ok, float f) { const int v = ok ? static_cast<int>(std::lround(std::clamp(f, 0.0f, 1.0f) * 100.0f)) : -1; if (v == winVol_) return;
+    const double was = windowsTrimDb(); winVol_ = v; if (windowsTrimDb() != was) pushMasterLevel(); emit systemSoundChanged(); };
+  if (volSync_) { float f = 0; const bool ok = volGet_(f); take(ok, f); return; }
+  if (volBusy_) return; volBusy_ = true; const auto get = volGet_;
+  svcPost([this, get, take] { float f = 0; const bool ok = get(f); QMetaObject::invokeMethod(this, [this, ok, f, take] { volBusy_ = false; take(ok, f); }, Qt::QueuedConnection); });
 }
 void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; QSettings().remove("mixer/weMutedWindows"); } }
 bool Engine::inputMutedBySystem() const { return rt_ && running() && rt_->inputSilentSeconds() > 2.0; }
@@ -788,7 +817,7 @@ void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
   if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); if (rt_) rt_->setMasterDb(masterDb_); emit stripsChanged(); syncSystemSound(); }
+  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); if (rt_) rt_->setMasterDb(outMasterDb()); emit stripsChanged(); syncSystemSound(); }
   emit monitorChanged();
 }
 void Engine::setMonitorSync(bool on) { mon_.sync = on; emit monitorChanged(); }
@@ -1035,7 +1064,7 @@ void Engine::toggleMuteAll() {
   emit stripsChanged();
 }
 void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
-void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(0); emit stripsChanged(); }
+void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; if (rt_) rt_->setMasterDb(outMasterDb()); emit stripsChanged(); }
 void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};

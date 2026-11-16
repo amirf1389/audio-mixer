@@ -12,11 +12,13 @@ data class Endpoint(val host: String, val port: Int, val token: String, val secu
 }
 class DaemonException(message: String, val status: Int) : IOException(message)
 
-data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "")
+data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "", val computer: String = "")
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 data class StripState(val id: Int, val name: String, val db: Double, val pan: Double, val mute: Boolean, val solo: Boolean)
 data class BusState(val id: Int, val db: Double, val returnDb: Double, val mute: Boolean)
-data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0)   // v: the console's change counter (LIVE SYNC)
+/** the console's Windows output: its volume slider (-1: none here), GAIN MODE (the slider trims the master) and the trim it adds now */
+data class WindowsSound(val volume: Int = -1, val gainMode: Boolean = false, val trimDb: Double = 0.0, val windowsSetsLevel: Boolean = false)
+data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound())   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
 data class Meters(val running: Boolean, val strips: List<StripMeter>, val masterL: Double, val masterR: Double, val masterRms: Double, val masterClip: Boolean)
 
@@ -34,7 +36,7 @@ class DaemonClient(val ep: Endpoint) {
     @Suppress("UNCHECKED_CAST") private fun getObj(path: String): Map<String, Any?> = MiniJson.parse(request("GET", path)) as Map<String, Any?>
     @Suppress("UNCHECKED_CAST") private fun getList(path: String): List<Map<String, Any?>> = (MiniJson.parse(request("GET", path)) as List<Any?>).map { it as Map<String, Any?> }
 
-    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId")) }
+    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId"), o.str("computer")) }
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
     fun state(): ConsoleState = parseState(getObj("/api/state"))
     /** LIVE SYNC check: null while the console is still at change v (a few bytes), else the new state */
@@ -46,7 +48,10 @@ class DaemonClient(val ep: Endpoint) {
         /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).
          *  Returns "address  name version" for each console that answers; nothing is sent but a GET of the public status. */
         /** A console found on the Wi-Fi: its address, its stable id (consoleId: the same after its address changes), name and version. */
-        data class Found(val host: String, val port: Int, val id: String, val name: String, val version: String) { val label: String get() = "$name $version".trim() }
+        data class Found(val host: String, val port: Int, val id: String, val name: String, val version: String, val computer: String = "") {
+            val label: String get() = "$name $version".trim()
+            val title: String get() = computer.ifBlank { name }   // what a console is called on the phone: its computer's name (STAGE-PC), else the product
+        }
         /** FIND: every console on this phone's /24 network that answers /api/status as amixos-daemon. [first] are asked first (the
          *  addresses this phone knew), so a console that kept its address is found at once; the whole network takes about a second. */
         fun discoverConsoles(localIp: String, port: Int = 8765, timeoutMs: Int = 350, first: List<String> = emptyList()): List<Found> {
@@ -65,7 +70,7 @@ class DaemonClient(val ep: Endpoint) {
             val c = URL("http://$host:$port/api/status").openConnection() as HttpURLConnection
             c.connectTimeout = timeoutMs; c.readTimeout = 800
             if (c.responseCode != 200) null else { @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(c.inputStream.bufferedReader().use { it.readText() }) as Map<String, Any?>
-                if (o["daemon"] == "amixos-daemon") Found(host, port, o["consoleId"]?.toString().orEmpty(), o["name"]?.toString().orEmpty(), o["version"]?.toString().orEmpty()) else null }
+                if (o["daemon"] == "amixos-daemon") Found(host, port, o["consoleId"]?.toString().orEmpty(), o["name"]?.toString().orEmpty(), o["version"]?.toString().orEmpty(), o["computer"]?.toString().orEmpty()) else null }
         }.getOrNull()
         fun discover(localIp: String, port: Int = 8765, timeoutMs: Int = 350): List<Pair<String, String>> = discoverConsoles(localIp, port, timeoutMs).map { it.host to it.label }
         /** PAIRING: trade the six-digit PIN the console shows this minute (NETWORK → PHONE REMOTE) for a token of this phone's own.
@@ -81,7 +86,7 @@ class DaemonClient(val ep: Endpoint) {
             return o["token"]?.toString()?.takeIf { it.isNotEmpty() } ?: throw DaemonException("the console sent no token", code)
         }
         fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
-            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong())
+            return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo")) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) })
         }
         fun parseMeters(o: Map<String, Any?>): Meters { val m = o.obj("master")
             return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0) }
@@ -100,6 +105,8 @@ class DaemonClient(val ep: Endpoint) {
     fun solo(strip: Int, on: Boolean) = control(mapOf("op" to "solo", "strip" to strip, "on" to on))
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
     fun master(db: Double) = control(mapOf("op" to "master", "db" to db))
+    /** a console setting (the service checks each): "winVolume" 0..100, "winGain" true/false, "width" 0..2 ... */
+    fun setting(key: String, value: Any) = control(mapOf("op" to "setting", "key" to key, "value" to value))
     fun trim(strip: Int, db: Double) = control(mapOf("op" to "trim", "strip" to strip, "db" to db))
     fun polarity(strip: Int, on: Boolean) = control(mapOf("op" to "polarity", "strip" to strip, "on" to on))
     fun delay(strip: Int, ms: Double) = control(mapOf("op" to "delay", "strip" to strip, "ms" to ms))
@@ -121,15 +128,20 @@ class DaemonClient(val ep: Endpoint) {
 
     /** The meter stream on a worker thread: onFrame about 20 times a second; reconnects after a drop until the returned handle is stopped.
      *  LIVE SYNC: onConsole gets the console state once on connect and again the moment any remote (or the console) changes it. */
-    fun meterStream(onFrame: (Meters) -> Unit, onState: ((Boolean, String?) -> Unit)? = null, onConsole: ((ConsoleState) -> Unit)? = null): MeterStream {
+    /** [onKicked]: the console disconnected this phone (CONNECTED PHONES → DISCONNECT or FORGET); the argument is how many seconds the
+     *  console keeps this pairing out (0: none). The stream stops and does not reconnect by itself. */
+    /** the name this phone shows in the console's CONNECTED PHONES (used when it links with the owner's token; a paired phone shows its pairing's name) */
+    var clientName: String = ""
+    fun meterStream(onFrame: (Meters) -> Unit, onState: ((Boolean, String?) -> Unit)? = null, onConsole: ((ConsoleState) -> Unit)? = null, onKicked: ((Int) -> Unit)? = null): MeterStream {
         val h = MeterStream()
         h.worker = thread(name = "amix-meters", isDaemon = true) {
             while (!h.stopped) {
-                val ws = MiniWebSocket(ep.host, ep.port, "/ws/meters?token=" + URLEncoder.encode(ep.token, "UTF-8"), ep.secure); h.socket = ws
+                val ws = MiniWebSocket(ep.host, ep.port, "/ws/meters?token=" + URLEncoder.encode(ep.token, "UTF-8") + (if (clientName.isEmpty()) "" else "&client=" + URLEncoder.encode(clientName, "UTF-8")), ep.secure); h.socket = ws
                 try {
                     ws.connect(); onState?.invoke(true, null)
                     while (!h.stopped) { val text = ws.receiveText() ?: break
                         @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(text) as Map<String, Any?>
+                        if (o["kicked"] == true) { h.stopped = true; onKicked?.invoke((o["holdSeconds"] as? Number)?.toInt() ?: 0); break }
                         if (o.containsKey("error")) { onState?.invoke(false, o.str("error")); h.stopped = true; break }
                         if (o.containsKey("state")) { onConsole?.invoke(parseState(o.obj("state"))); continue }
                         onFrame(parseMeters(o)) }

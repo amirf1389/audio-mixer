@@ -2066,5 +2066,15 @@
 "LIVE SYNC": "СИНХРОНИЗАЦИЯ В РЕЖИМЕ РЕАЛЬНОГО ВРЕМЕНИ",
 "CONNECTED": "ПОДКЛЮЧЕНО",
 "waiting for a phone or browser": "ожидание ответа от телефона или браузера",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Регуляторы громкости, функции отключения звука, соло и имена отображаются на телефонах и в браузерах, подключенных к этой консоли, и любое действие, выполняемое здесь, сразу же отображается на них. Если регулятор громкости перемещается с телефона, он загорается здесь."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Регуляторы громкости, функции отключения звука, соло и имена отображаются на телефонах и в браузерах, подключенных к этой консоли, и любое действие, выполняемое здесь, сразу же отображается на них. Если регулятор громкости перемещается с телефона, он загорается здесь.",
+"CONNECTED PHONES": "ПОДКЛЮЧЕННЫЕ ТЕЛЕФОНЫ",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Телефоны и браузеры в данный момент подключены. Команда DISCONNECT отключает одно из устройств (оно может подключиться снова через 2 минуты); команда FORGET удаляет сопряжение, после чего потребуется ввести PIN-код заново.",
+"DISCONNECT": "ОТКЛЮЧИТЬСЯ",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Телефон пока не подключен. Запустите приложение AmF X1 на телефоне: оно само найдет этот компьютер в сети Wi-Fi.",
+"The Windows output slider (the keyboard's volume keys move it too)": "Ползунок регулировки громкости в Windows (его положение также можно изменять с помощью клавиш регулировки громкости на клавиатуре)",
+"GAIN MODE: Windows volume trims the master": "РЕЖИМ УСИЛЕНИЯ: Громкость Windows регулирует общий уровень",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Ползунок в Windows становится дополнительным регулятором усиления после мастер-регулятора (фейдер остается на прежнем месте): 100 % = 0 дБ, 50 % = -9 дБ, 25 % = -18 дБ, 0 % = выключено. Это удобно при использовании ASIO или USB-интерфейса, где стандартный регулятор громкости Windows не работает.",
+"It had already gone.": "Оно уже исчезло.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "Режим GAIN выключен: регулировка громкости в Windows не влияет на уровень сигнала на консоли.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Этот сигнал воспроизводится через встроенный микшер Windows, уровень которого уже регулируется с помощью этого ползунка: никакой дополнительной регулировки (без двойной регулировки)."
 }

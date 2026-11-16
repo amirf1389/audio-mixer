@@ -56,7 +56,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   if (name == "auto") name = availableBackends().front();
   backend_ = createBackend(name);
   if (!backend_) { err = "the backend \"" + name + "\" is not built into this binary"; return false; }
-  backendName_ = name; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
+  backendName_ = name; exclusive_ = cfg.exclusive; outDevice_ = cfg.outDevice; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
   silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f); netBuf_.assign(kNetInputs, std::vector<float>(n, 0.0f));

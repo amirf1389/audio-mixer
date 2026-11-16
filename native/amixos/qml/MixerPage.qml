@@ -605,6 +605,9 @@ Item {
                     Column { anchors.centerIn: parent; spacing: 0
                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: (masterMod.lufs <= -119 ? "—" : masterMod.lufs.toFixed(1)); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 18; font.bold: true }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("LUFS SHORT-TERM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 } } }
+                // GAIN MODE on: the Windows volume trims the master; shown here so the level heard is never a surprise
+                Text { objectName: "winTrimLine"; visible: engine.windowsGainMode && engine.windowsVolume >= 0; Layout.alignment: Qt.AlignHCenter
+                    text: "WIN " + engine.windowsVolume + "% · " + (engine.windowsTrimDb <= -119 ? "OFF" : engine.windowsTrimDb === 0 ? "0 dB" : engine.windowsTrimDb.toFixed(1) + " dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 110; Layout.preferredHeight: 58; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 5; rowSpacing: 5
                     ModKey { objectName: "masterEqBtn"; Layout.fillWidth: true; label: "RTA EQ"; tint: Theme.orange; lit: engine.mastering().eqOn; onClicked: page.go("rtaeq") }                       // RTA EQ: the main (master) equaliser

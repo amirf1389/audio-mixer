@@ -2140,5 +2140,18 @@
 "LIVE SYNC": "लाइव सिंक",
 "CONNECTED": "जुड़ा हुआ",
 "waiting for a phone or browser": "फ़ोन या ब्राउज़र की प्रतीक्षा",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "फेडर्स, म्यूट्स, सोलो और नाम इस कंसोल से जुड़े फोन और ब्राउज़रों के साथ होते हैं, और यहाँ की हर क्रिया तुरंत उन तक पहुँच जाती है। फोन से फेडर को हिलाने पर यहाँ वह रोशन हो जाता है।"
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "फेडर्स, म्यूट्स, सोलो और नाम इस कंसोल से जुड़े फोन और ब्राउज़रों के साथ होते हैं, और यहाँ की हर क्रिया तुरंत उन तक पहुँच जाती है। फोन से फेडर को हिलाने पर यहाँ वह रोशन हो जाता है।",
+"CONNECTED PHONES": "जुड़े हुए फोन",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "फ़ोन और ब्राउज़र अभी जुड़े हुए हैं। DISCONNECT एक कनेक्शन ड्रॉप करता है (यह 2 मिनट में वापस आ सकता है); FORGET इसकी पेयरिंग हटा देता है, इसलिए इसे फिर से PIN की आवश्यकता होती है।",
+"OWNER": "मालिक",
+"DISCONNECT": "अनप्लग करें",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "अभी तक कोई फोन लिंक नहीं हुआ है। फोन पर AmF X1 खोलें: यह वाई-फाई पर अपने आप इस कंप्यूटर को ढूंढ लेता है।",
+"Windows volume": "विंडोज वॉल्यूम",
+"The Windows output slider (the keyboard's volume keys move it too)": "विंडोज आउटपुट स्लाइडर (कीबोर्ड की वॉल्यूम कुंजियाँ भी इसे चलाती हैं)",
+"GAIN MODE: Windows volume trims the master": "गेन मोड: विंडोज वॉल्यूम मास्टर को ट्रिम करता है",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Windows स्लाइडर मास्टर के बाद एक अतिरिक्त गेन बन जाता है (फेडर वहीं रहता है): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = बंद। ASIO या USB इंटरफ़ेस के साथ यह सुविधाजनक है, जिसे Windows का अपना वॉल्यूम नहीं पहुँचता।",
+"It had already gone.": "यह पहले ही चला गया था।",
+"The Windows volume is not available on this computer.": "इस कंप्यूटर पर विंडोज वॉल्यूम उपलब्ध नहीं है।",
+"GAIN MODE off: the Windows volume does not change the console's level.": "गेन मोड बंद: विंडोज वॉल्यूम कंसोल के स्तर को नहीं बदलता।",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "यह आउटपुट Windows के अपने मिक्सर के माध्यम से चलाया जाता है, जो पहले से ही इस स्लाइडर से अपना स्तर निर्धारित करता है: कोई अतिरिक्त समायोजन नहीं (कोई दोहरा कट नहीं)।"
 }

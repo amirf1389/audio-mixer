@@ -2060,5 +2060,18 @@
 "MY ACCOUNT ONLINE": "IL MIO ACCOUNT ONLINE",
 "LIVE SYNC": "SINCRONIZZAZIONE IN DIRETTA",
 "CONNECTED": "CONNESSO",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "I fader, i mute, i solo e i nomi seguono i telefoni e i browser collegati a questa console, e ogni azione qui effettuata viene trasmessa immediatamente a tutti loro. Quando si sposta un fader da un telefono, qui si accende una spia."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "I fader, i mute, i solo e i nomi seguono i telefoni e i browser collegati a questa console, e ogni azione qui effettuata viene trasmessa immediatamente a tutti loro. Quando si sposta un fader da un telefono, qui si accende una spia.",
+"CONNECTED PHONES": "TELEFONI COLLEGATI",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Telefoni e browser sono attualmente collegati. DISCONNECT interrompe la connessione con uno dei due (potrebbe riconnettersi entro 2 minuti); FORGET elimina l'accoppiamento, quindi sarà necessario inserire nuovamente il PIN.",
+"OWNER": "PROPRIETARIO",
+"DISCONNECT": "DISCONNETTI",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Non è ancora stato associato alcun telefono. Apri AmF X1 sul telefono: il programma individuerà automaticamente questo computer tramite Wi-Fi.",
+"Windows volume": "Volume di Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "Il cursore del volume di Windows (si regola anche con i tasti del volume della tastiera)",
+"GAIN MODE: Windows volume trims the master": "MODALITÀ GAIN: il volume di Windows regola il volume master",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Il cursore di Windows diventa un guadagno aggiuntivo dopo il master (il fader rimane nella posizione in cui si trova): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = disattivato. Utile con ASIO o un'interfaccia USB, che il volume di Windows non riesce a raggiungere.",
+"It had already gone.": "Era già sparito.",
+"The Windows volume is not available on this computer.": "Il volume di Windows non è disponibile su questo computer.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "MODALITÀ GAIN disattivata: il volume di Windows non modifica il livello della console.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Questo segnale viene riprodotto tramite il mixer integrato di Windows, che ne regola già il livello tramite questo cursore: nessuna regolazione aggiuntiva (nessun doppio taglio)."
 }

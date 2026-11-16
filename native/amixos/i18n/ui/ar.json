@@ -2071,5 +2071,16 @@
 "LIVE SYNC": "المزامنة المباشرة",
 "CONNECTED": "متصل",
 "waiting for a phone or browser": "في انتظار الهاتف أو المتصفح",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "تتبع أزرار التحكم في مستوى الصوت وأزرار كتم الصوت وأزرار العزف المنفرد والأسماء الهواتف والمتصفحات المتصلة بهذه وحدة التحكم، وتصلها كل حركة تتم هنا على الفور. وعندما يتم تحريك زر التحكم في مستوى الصوت من أحد الهواتف، يضيء هنا."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "تتبع أزرار التحكم في مستوى الصوت وأزرار كتم الصوت وأزرار العزف المنفرد والأسماء الهواتف والمتصفحات المتصلة بهذه وحدة التحكم، وتصلها كل حركة تتم هنا على الفور. وعندما يتم تحريك زر التحكم في مستوى الصوت من أحد الهواتف، يضيء هنا.",
+"CONNECTED PHONES": "الهواتف المتصلة",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "الهواتف والمتصفحات متصلة حاليًا. تؤدي خيار «قطع الاتصال» إلى قطع الاتصال بأحد الأجهزة (قد يعود الاتصال خلال دقيقتين)؛ أما خيار «نسيان» فيؤدي إلى إلغاء الاقتران، وبالتالي سيتطلب إدخال رقم التعريف الشخصي (PIN) مرة أخرى.",
+"OWNER": "المالك",
+"DISCONNECT": "قطع الاتصال",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "لم يتم ربط أي هاتف بعد. افتح تطبيق AmF X1 على الهاتف: سيكتشف التطبيق هذا الكمبيوتر تلقائيًا عبر شبكة الواي فاي.",
+"Windows volume": "مستوى الصوت في نظام ويندوز",
+"The Windows output slider (the keyboard's volume keys move it too)": "شريط تمرير الصوت في نظام ويندوز (يمكن أيضًا تحريكه باستخدام مفاتيح الصوت في لوحة المفاتيح)",
+"GAIN MODE: Windows volume trims the master": "وضع GAIN: مستوى الصوت في Windows يخفض مستوى الصوت الرئيسي",
+"It had already gone.": "لقد كان قد اختفى بالفعل.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "وضع GAIN معطّل: لا يؤثر مستوى الصوت في Windows على مستوى الصوت في وحدة التحكم.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "يتم تشغيل هذا الإخراج عبر وحدة المزج الخاصة بنظام ويندوز، والتي تقوم بالفعل بضبط مستواه باستخدام شريط التمرير هذا: دون أي تعديل إضافي (دون قطع مزدوج)."
 }

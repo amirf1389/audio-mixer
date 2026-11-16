@@ -33,6 +33,7 @@ import java.util.concurrent.Executors
  *  arrives over the WebSocket. The token stays in SharedPreferences on this phone; nothing leaves it except to the daemon. */
 class RemoteActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor()
+    private val scanIo = Executors.newSingleThreadExecutor()   // network searches: never on the fader thread (a search takes up to a second)
     private val live = com.amfb.amixos.remote.LatestSender(io)   // REAL-TIME FADERS: only the newest move of each fader is sent, never a queue
     private val ui = Handler(Looper.getMainLooper())
     private var client: DaemonClient? = null
@@ -67,6 +68,9 @@ class RemoteActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0F141C")); setPadding(24, 24, 24, 24) }
         val title = TextView(this).apply { text = getString(R.string.home_mixer).uppercase(); setTextColor(Color.parseColor("#EA580C")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
         root.addView(title)
+        // THE CONSOLE BAR: every paired console (and new ones on this Wi-Fi): tap one to switch to it
+        consoleBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        root.addView(HorizontalScrollView(this).apply { addView(consoleBar); isHorizontalScrollBarEnabled = false; setPadding(0, 6, 0, 6) })
         val host = EditText(this).apply { hint = "console address (192.168.1.20)"; setText(prefs.getString("host", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
         val port = EditText(this).apply { hint = "port"; setText(prefs.getString("port", Prefs.defaultPort(this@RemoteActivity).toString())); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
         val token = EditText(this).apply { hint = "token (~/.amixos/daemon.token on the console)"; setText(prefs.getString("token", "")); setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
@@ -97,7 +101,7 @@ class RemoteActivity : AppCompatActivity() {
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
             val ip = localIp(); if (ip == null) { status.text = getString(R.string.no_wifi); return@setOnClickListener }
             status.text = getString(R.string.searching)
-            io.execute { val paired = consoles(); val found = DaemonClient.discoverConsoles(ip, port.text.toString().trim().toIntOrNull() ?: 8765, first = PairedConsoles.hints(paired))
+            scanIo.execute { val paired = consoles(); val found = DaemonClient.discoverConsoles(ip, port.text.toString().trim().toIntOrNull() ?: 8765, first = PairedConsoles.hints(paired))
                 ui.post { if (found.isEmpty()) status.text = getString(R.string.none_found)
                     else AlertDialog.Builder(this).setTitle(R.string.find).setItems(found.map { it.host + "   " + it.label }.toTypedArray()) { _, w -> host.setText(found[w].host)
                         val known = (PairedConsoles.match(paired, listOf(found[w])) as? PairedConsoles.Match.Known)?.console   // by its consoleId: also after a new address
@@ -128,6 +132,8 @@ class RemoteActivity : AppCompatActivity() {
         desk.addView(master); root.addView(desk)
         setContentView(Nav.wrap(this, root, Nav.Tab.MIXER))
         pendingOpen = intent.getStringExtra("open")
+        ui.postDelayed(presence, 30_000)   // who is on the Wi-Fi: the console bar's dots stay true while a console is linked
+        renderBar()
 
         connect.setOnClickListener {
             val ep = Endpoint(host.text.toString().trim(), port.text.toString().trim().toIntOrNull() ?: Prefs.defaultPort(this), token.text.toString().trim())
@@ -136,7 +142,7 @@ class RemoteActivity : AppCompatActivity() {
             io.execute {
                 try {
                     val c = DaemonClient(ep); val st = c.status(); val s = c.state()
-                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); connBox?.visibility = View.GONE; rememberConsole(ep, st.name, st.consoleId); consoleId = st.consoleId; autoMode = false; searchRound = 0; note(st.name + " " + ep.host + " · " + getString(R.string.auto_connected)); lastOk = System.currentTimeMillis(); retries = 0; Prefs.remote(this).edit().putString("lastName", st.name + " " + st.version).putString("lastPlan", st.plan).putInt("lastStrips", st.strips).apply(); if (pendingOpen == "scenes") { pendingOpen = null; showScenes() }; planBadge.text = (if (st.plan.isEmpty()) "" else st.plan + "\n") + st.strips + " CH"; status.text = st.name + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c) }
+                    ui.post { client = c; state = s; devices.isEnabled = true; connected.forEach { it.isEnabled = true }; if (Prefs.keepScreenOn(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); startSync(c); connBox?.visibility = View.GONE; rememberConsole(ep, st.computer.ifBlank { st.name }, st.consoleId); val shown = consoleName(ep, st); consoleId = st.consoleId; linkedKey = ep.host + ":" + ep.port; autoMode = false; searchRound = 0; renderBar(); note(shown + " " + ep.host + " · " + getString(R.string.auto_connected)); lastOk = System.currentTimeMillis(); retries = 0; Prefs.remote(this).edit().putString("lastName", shown + " " + st.version).putString("lastPlan", st.plan).putInt("lastStrips", st.strips).apply(); if (pendingOpen == "scenes") { pendingOpen = null; showScenes() }; planBadge.text = (if (st.plan.isEmpty()) "" else st.plan + "\n") + st.strips + " CH"; status.text = shown + " " + st.version + " · " + (if (st.running) st.backend else "engine stopped") + " · " + st.strips + " strips"; status.setTextColor(Color.parseColor("#10B981")); masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); buildStrips(s); startMeters(c); Prefs.remote(this).edit().putString("lastState", OfflineScenes.stateJson(s)).apply(); offerPendingScene(c) }
                 } catch (e: Exception) { ui.post { status.text = getString(R.string.failed, e.message ?: e.javaClass.simpleName); status.setTextColor(Color.parseColor("#FF2A5F"))
                     if (autoMode) { autoMode = false; note(getString(R.string.auto_lost, e.message ?: e.javaClass.simpleName)); if ((e as? com.amfb.amixos.remote.DaemonException)?.status == 401) { pinAsked = true; pairBtn?.performClick() } else nextSearch() } } }   // not there: search the Wi-Fi; token refused: the PIN
             }
@@ -209,15 +215,22 @@ class RemoteActivity : AppCompatActivity() {
     }
 
     private fun startMeters(c: DaemonClient) {
-        stream?.stop()
+        stream?.stop(); c.clientName = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() } + " " + android.os.Build.MODEL
         stream = c.meterStream({ m -> ui.post { lastOk = System.currentTimeMillis(); showMeters(m) } }, { ok, err -> ui.post { if (ok) { retries = 0; showLink() } else if (!closing) scheduleReconnect(err) } },
-            { s -> ui.post { if (closing || client !== c || Prefs.syncSeconds(this) == 0) return@post; lastPush = System.currentTimeMillis(); applyState(s); if (retries == 0) showLink() } })   // LIVE SYNC: pushed by the console
+            { s -> ui.post { if (closing || client !== c || Prefs.syncSeconds(this) == 0) return@post; lastPush = System.currentTimeMillis(); applyState(s); if (retries == 0) showLink() } },   // LIVE SYNC: pushed by the console
+            { hold -> ui.post { if (closing || client !== c) return@post; kicked(hold) } })   // DISCONNECT / FORGET on the console
     }
     // ---- the link: remembered consoles, reconnect, its state on the status line
     private var pairBtn: Button? = null; @Volatile private var closing = false; private var retries = 0; private var lastOk = 0L; private var pingMs = -1L
     private fun consoles() = PairedConsoles.parse(getSharedPreferences("consoles", MODE_PRIVATE).getString("list", "[]"))
     private fun saveConsoles(l: List<PairedConsoles.Console>) = getSharedPreferences("consoles", MODE_PRIVATE).edit().putString("list", PairedConsoles.format(l)).apply()
-    private fun rememberConsole(ep: Endpoint, name: String, id: String = "") { val now = System.currentTimeMillis(); saveConsoles(PairedConsoles.upsert(consoles(), PairedConsoles.Console(ep.host, ep.port, ep.token, name, now, now, id))) }
+    /** after a connect: the console is saved with this address and pairing; the name the phone already has for it stays (a new one is named after its computer) */
+    private fun rememberConsole(ep: Endpoint, name: String, id: String = "") { val now = System.currentTimeMillis(); val l = consoles()
+        val known = l.firstOrNull { it.key == "${ep.host}:${ep.port}" && (id.isEmpty() || it.id.isEmpty() || it.id == id) } ?: l.firstOrNull { id.isNotEmpty() && it.id == id }
+        saveConsoles(PairedConsoles.upsert(l, PairedConsoles.Console(ep.host, ep.port, ep.token, known?.name?.takeIf { it.isNotBlank() && it != "A mix OS" } ?: name, now, now, id))) }   // "A mix OS": the name 1.23 gave every console
+    /** what this console is called here: the name the phone keeps for it (renamed, or its computer's name), else its computer, else the product */
+    private fun consoleName(ep: Endpoint, st: com.amfb.amixos.remote.Status): String =
+        consoles().firstOrNull { it.key == "${ep.host}:${ep.port}" }?.name?.takeIf { it.isNotBlank() && it != "A mix OS" } ?: st.computer.ifBlank { st.name }
     // ---- AUTO-DETECT: find the console on the Wi-Fi by itself (the console's /api/status carries a stable consoleId)
     private lateinit var hostBox: EditText; private lateinit var portBox: EditText; private lateinit var tokenBox: EditText; private lateinit var timelineView: TextView
     private val timeline = LinkTimeline(); private var autoMode = false; private var searchRound = 0; private var searching = false; private var pinAsked = false; private var consoleId = ""
@@ -228,29 +241,68 @@ class RemoteActivity : AppCompatActivity() {
      *  nothing: search again in 3, 6, 12, then every 20 s while this screen is open and not connected (the computer may start its remote later) */
     internal fun autoFind(net: String? = null) {   // net: the address to search from (tests); else this phone's Wi-Fi address
         if (closing || client != null || searching || !Prefs.autoFind(this) || !resumed()) return
+        val held = heldUntil - System.currentTimeMillis(); if (held > 0) { ui.postDelayed({ autoFind(net) }, held + 500); return }   // the console disconnected this phone: wait out its hold
         val ip = net ?: localIp(); searchRound++
         if (ip == null) { status.text = getString(R.string.no_wifi); note(getString(R.string.no_wifi)); nextSearch(); return }
         searching = true; val pt = portBox.text.toString().trim().toIntOrNull() ?: Prefs.defaultPort(this); val paired = consoles()
         note(getString(R.string.auto_searching, ip.substringBeforeLast('.'))); status.text = getString(R.string.searching); status.setTextColor(Color.parseColor("#FBBF24"))
-        io.execute {
+        scanIo.execute {
             val found = runCatching { DaemonClient.discoverConsoles(ip, pt, first = PairedConsoles.hints(paired)) }.getOrDefault(emptyList())
-            ui.post { searching = false; if (closing || client != null) return@post
+            ui.post { searching = false; lastFound = found; renderBar(); if (closing || client != null) return@post
                 when (val m = PairedConsoles.match(paired, found)) {
-                    is PairedConsoles.Match.Known -> { val c = m.console; val label = c.name.ifBlank { found.firstOrNull { it.host == c.host }?.label ?: c.host }
+                    is PairedConsoles.Match.Known -> { val c = m.console; val label = c.name.ifBlank { found.firstOrNull { it.host == c.host }?.title ?: c.host }
                         note(if (m.moved) getString(R.string.auto_moved, label, c.host) else getString(R.string.auto_found, label, c.host))
                         if (m.moved) saveConsoles(PairedConsoles.upsert(consoles(), c))   // remember the new address
                         hostBox.setText(c.host); portBox.setText(c.port.toString()); tokenBox.setText(c.token); autoMode = true; connectBtn?.performClick() }
-                    is PairedConsoles.Match.New -> { val f = m.found.first(); note(getString(R.string.auto_found, f.label, f.host)); note(getString(R.string.auto_new, f.label))
+                    is PairedConsoles.Match.New -> { val f = m.found.first(); note(getString(R.string.auto_found, f.title, f.host)); note(getString(R.string.auto_new, f.title))
                         hostBox.setText(f.host); portBox.setText(f.port.toString()); status.text = getString(R.string.found_pair)
                         if (!pinAsked) { pinAsked = true; pairBtn?.performClick() }; nextSearch() }
                     PairedConsoles.Match.None -> { val wait = PairedConsoles.searchDelayMs(searchRound); note(getString(R.string.auto_none, (wait / 1000).toInt())); status.text = getString(R.string.none_found); nextSearch() }
                 } } }
     }
+    // ---- SEVERAL CONSOLES: the bar, switching, and who is on the Wi-Fi (a quiet search every 30 s while this screen is open)
+    private lateinit var consoleBar: LinearLayout; private var lastFound: List<DaemonClient.Companion.Found> = emptyList(); private var linkedKey = ""; private var heldUntil = 0L
+    private val presence = object : Runnable { override fun run() { if (closing) return; ui.postDelayed(this, 30_000); if (!resumed() || searching) return; presenceScan() } }
+    internal fun presenceScan(net: String? = null) {   // net: the address to search from (tests)
+        val ip = net ?: localIp() ?: return; val paired = consoles(); val pt = portBox.text.toString().trim().toIntOrNull() ?: Prefs.defaultPort(this)
+        scanIo.execute { val f = runCatching { DaemonClient.discoverConsoles(ip, pt, first = PairedConsoles.hints(paired)) }.getOrDefault(emptyList()); ui.post { lastFound = f; renderBar() } }
+    }
+    internal fun barChips() = PairedConsoles.chips(consoles(), lastFound, if (client != null) consoleId else "", if (client != null) linkedKey else "")
+    internal fun renderBar() {
+        if (!::consoleBar.isInitialized) return; consoleBar.removeAllViews()
+        val chips = barChips()
+        for (ch in chips) {
+            val (dot, ink) = when (ch.presence) { PairedConsoles.Presence.LINKED -> "#34D399" to "#FFFFFF"; PairedConsoles.Presence.ONLINE -> "#22D3EE" to "#E2E8F0"; PairedConsoles.Presence.AWAY -> "#475569" to "#8B98A8"; PairedConsoles.Presence.NEW -> "#FBBF24" to "#FBBF24" }
+            val tag = when (ch.presence) { PairedConsoles.Presence.LINKED -> getString(R.string.bar_linked); PairedConsoles.Presence.ONLINE -> getString(R.string.bar_online); PairedConsoles.Presence.AWAY -> getString(R.string.bar_away); PairedConsoles.Presence.NEW -> getString(R.string.bar_new) }
+            consoleBar.addView(TextView(this).apply {
+                text = android.text.SpannableStringBuilder().apply { append("● ", android.text.style.ForegroundColorSpan(Color.parseColor(dot)), 0); append(ch.label); append("  "); append(tag, android.text.style.RelativeSizeSpan(0.8f), 0) }
+                setTextColor(Color.parseColor(ink)); textSize = 12f; typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(26, 14, 26, 14)
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 40f; setColor(Color.parseColor(if (ch.presence == PairedConsoles.Presence.LINKED) "#123B30" else "#1A2230")); setStroke(2, Color.parseColor(dot)) }
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 14, 0) }
+                setOnClickListener { buzz(it); switchTo(ch) } })
+        }
+        consoleBar.visibility = if (chips.isEmpty()) View.GONE else View.VISIBLE
+    }
+    /** one tap on the bar: the linked console stays; a paired one is linked instead of the current one (at its address as last found); a new one asks for its PIN */
+    internal fun switchTo(ch: PairedConsoles.Chip) {
+        if (ch.presence == PairedConsoles.Presence.LINKED) return
+        if (ch.presence == PairedConsoles.Presence.NEW) { hostBox.setText(ch.console.host); portBox.setText(ch.console.port.toString()); pinAsked = true; pairBtn?.performClick(); return }
+        note(getString(R.string.bar_switch, ch.label)); dropLink()
+        hostBox.setText(ch.console.host); portBox.setText(ch.console.port.toString()); tokenBox.setText(ch.console.token); autoMode = Prefs.autoFind(this); connectBtn?.performClick()
+    }
+    /** leaves the current console (its stream stops; nothing is changed on it) */
+    private fun dropLink() { stream?.stop(); stream = null; client = null; state = null; linkedKey = ""; retries = 0; connected.forEach { it.isEnabled = false } }
+    /** the console disconnected this phone: no reconnecting by itself while the console holds it out */
+    private fun kicked(holdSeconds: Int) {
+        dropLink(); heldUntil = System.currentTimeMillis() + holdSeconds * 1000L; connBox?.visibility = View.VISIBLE
+        status.text = if (holdSeconds > 0) getString(R.string.kicked_hold, (holdSeconds + 59) / 60) else getString(R.string.kicked); status.setTextColor(Color.parseColor("#FF2A5F"))
+        note(status.text.toString()); renderBar(); if (holdSeconds > 0) ui.postDelayed({ autoFind() }, holdSeconds * 1000L + 500)
+    }
     private fun nextSearch() { ui.postDelayed({ autoFind() }, PairedConsoles.searchDelayMs(searchRound)) }
     /** the link is down for a while: is the same console up at another address (the router gave the PC a new IP)? Then follow it. */
     private fun followMove(c: DaemonClient) {
         val ip = localIp() ?: return; val me = consoles().firstOrNull { consoleId.isNotEmpty() && it.id == consoleId } ?: return
-        io.execute { val found = runCatching { DaemonClient.discoverConsoles(ip, me.port, first = listOf(me.host)) }.getOrDefault(emptyList())
+        scanIo.execute { val found = runCatching { DaemonClient.discoverConsoles(ip, me.port, first = listOf(me.host)) }.getOrDefault(emptyList())
             val m = PairedConsoles.match(listOf(me), found) as? PairedConsoles.Match.Known ?: return@execute
             if (!m.moved) return@execute
             ui.post { if (closing || client !== c) return@post; note(getString(R.string.auto_moved, m.console.name.ifBlank { m.console.host }, m.console.host)); saveConsoles(PairedConsoles.upsert(consoles(), m.console))
@@ -415,20 +467,26 @@ class RemoteActivity : AppCompatActivity() {
     /** SCENES on the phone: SAVE takes the console's mix as it is now (levels, pan, mute, solo, names, master, buses); RECALL sends it back.
      *  Kept on this phone (SharedPreferences "scenes", one JSON per scene). */
     private fun showScenes() {
-        val c = client; if (c == null) { status.text = getString(R.string.not_connected); return }
-        val dlg = AlertDialog.Builder(this).setTitle(R.string.scenes).setPositiveButton(android.R.string.ok, null).create()
+        val c = client   // null: OFFLINE SCENES (make and edit them here; recall when a console is linked)
+        val dlg = AlertDialog.Builder(this).setTitle(if (c == null) getString(R.string.scenes_offline) else getString(R.string.scenes)).setPositiveButton(android.R.string.ok, null).create()
         dlg.setView(ScrollView(this).apply { addView(scenesPanel(c) { dlg.dismiss() }) }); dlg.show()
     }
-    internal fun scenesPanel(c: DaemonClient, done: () -> Unit = {}): View {
+    internal fun scenesPanel(c: DaemonClient?, done: () -> Unit = {}): View {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
         val store = getSharedPreferences("scenes", MODE_PRIVATE)
         fun refresh() {
             box.removeAllViews()
-            box.addView(Button(this).apply { text = getString(R.string.scene_save); setOnClickListener {
+            val pending = Prefs.remote(this).getString("recallOnConnect", "").orEmpty()
+            if (c == null) box.addView(TextView(this).apply { text = getString(R.string.scenes_offline_note); setTextColor(Color.parseColor("#FBBF24")); textSize = 12f; setPadding(0, 0, 0, 10) })
+            box.addView(Button(this).apply { text = getString(if (c == null) R.string.scene_new_offline else R.string.scene_save); setOnClickListener {
                 val e = EditText(this@RemoteActivity).apply { setText(String.format("Scene %d", store.all.size + 1)); setSingleLine() }
+                if (c == null) { AlertDialog.Builder(this@RemoteActivity).setTitle(R.string.scene_new_offline).setView(e).setPositiveButton(android.R.string.ok) { _, _ ->
+                        val name = e.text.toString().trim().ifEmpty { "Scene" }
+                        store.edit().putString(name, OfflineScenes.stringify(OfflineScenes.blank(Prefs.remote(this@RemoteActivity).getString("lastState", null), Prefs.stripCount(this@RemoteActivity), System.currentTimeMillis()))).apply()
+                        refresh(); editScene(name) { refresh() } }.setNegativeButton(android.R.string.cancel, null).show(); return@setOnClickListener }
                 AlertDialog.Builder(this@RemoteActivity).setTitle(R.string.scene_save).setView(e).setPositiveButton(android.R.string.ok) { _, _ ->
                     val name = e.text.toString().trim().ifEmpty { "Scene" }
-                    io.execute { runCatching { val st = c.state(); val o = mapOf("t" to System.currentTimeMillis(), "master" to st.masterDb,
+                    io.execute { runCatching { val st = c!!.state(); val o = mapOf("t" to System.currentTimeMillis(), "master" to st.masterDb,
                             "strips" to st.strips.map { mapOf("id" to it.id, "name" to it.name, "db" to it.db, "pan" to it.pan, "mute" to it.mute, "solo" to it.solo) },
                             "buses" to st.buses.map { mapOf("id" to it.id, "db" to it.db, "mute" to it.mute) })
                         store.edit().putString(name, com.amfb.amixos.remote.MiniJson.stringify(o)).apply() }
@@ -442,25 +500,73 @@ class RemoteActivity : AppCompatActivity() {
                 val strips = (o["strips"] as? List<*>).orEmpty(); val muted = strips.count { (it as? Map<*, *>)?.get("mute") == true }
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 12, 0, 0) }
                 val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
-                t.addView(TextView(this).apply { text = n; setTextColor(Color.WHITE); textSize = 16f })
+                t.addView(TextView(this).apply { text = n + (if (o["offline"] == true) "  · " + getString(R.string.scene_offline_tag) else "") + (if (n == pending) "  · " + getString(R.string.scene_pending_tag) else ""); setTextColor(if (n == pending) Color.parseColor("#FBBF24") else Color.WHITE); textSize = 16f })
                 t.addView(TextView(this).apply { text = getString(R.string.scene_info, when_, strips.size, muted); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
                 row.addView(t)
-                row.addView(Button(this).apply { text = getString(R.string.scene_recall); setOnClickListener {
-                    AlertDialog.Builder(this@RemoteActivity).setMessage(getString(R.string.scene_recall_q, n)).setPositiveButton(R.string.scene_recall) { _, _ ->
-                        io.execute { runCatching {
-                            for (x in strips.mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); if (id >= (state?.strips?.size ?: 0)) continue   // a scene from a bigger plan: the extra channels are skipped
-                                c.gain(id, (x["db"] as Number).toDouble()); c.pan(id, (x["pan"] as Number).toDouble()); c.mute(id, x["mute"] == true); c.solo(id, x["solo"] == true); c.name(id, x["name"].toString()) }
-                            for (x in (o["buses"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); c.busLevel(id, (x["db"] as Number).toDouble()); c.busMute(id, x["mute"] == true) }
-                            c.master((o["master"] as? Number)?.toDouble() ?: 0.0); c.state() }
-                            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); done() } }
-                            .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }.setNegativeButton(android.R.string.cancel, null).show() } })
-                row.addView(Button(this).apply { text = "✕"; setOnClickListener { store.edit().remove(n).apply(); refresh() } })
+                if (c != null) row.addView(Button(this).apply { text = getString(R.string.scene_recall); setOnClickListener {
+                    AlertDialog.Builder(this@RemoteActivity).setMessage(getString(R.string.scene_recall_q, n)).setPositiveButton(R.string.scene_recall) { _, _ -> recallScene(c, n, o, done) }.setNegativeButton(android.R.string.cancel, null).show() } })
+                else row.addView(Button(this).apply { text = getString(if (n == pending) R.string.scene_pending_off else R.string.scene_pending_on); setOnClickListener {   // RECALL WHEN CONNECTED (asks first)
+                    Prefs.remote(this@RemoteActivity).edit().putString("recallOnConnect", if (n == pending) "" else n).apply(); refresh() } })
+                row.addView(Button(this).apply { text = getString(R.string.scene_edit); setOnClickListener { editScene(n) { refresh() } } })
+                row.addView(Button(this).apply { text = "✕"; setOnClickListener { store.edit().remove(n).apply(); if (n == pending) Prefs.remote(this@RemoteActivity).edit().putString("recallOnConnect", "").apply(); refresh() } })
                 box.addView(row)
             }
         }
         refresh(); return box
     }
 
+    /** a saved scene onto the console: every channel this console has, the buses, the master */
+    private fun recallScene(c: DaemonClient, n: String, o: Map<String, Any?>, done: () -> Unit = {}) {
+        io.execute { runCatching {
+            for (x in OfflineScenes.forConsole(o, state?.strips?.size ?: 0)) { val id = (x["id"] as Number).toInt()   // a scene from a bigger plan: the extra channels are skipped
+                c.gain(id, (x["db"] as Number).toDouble()); c.pan(id, (x["pan"] as? Number)?.toDouble() ?: 0.0); c.mute(id, x["mute"] == true); c.solo(id, x["solo"] == true); c.name(id, x["name"].toString()) }
+            for (x in (o["buses"] as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }) { val id = (x["id"] as Number).toInt(); c.busLevel(id, (x["db"] as Number).toDouble()); c.busMute(id, x["mute"] == true) }
+            c.master((o["master"] as? Number)?.toDouble() ?: 0.0); c.state() }
+            .onSuccess { st -> ui.post { state = st; buildStrips(st); status.text = getString(R.string.scene_recalled, n); note(getString(R.string.scene_recalled, n)); done() } }
+            .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
+    }
+    /** SCENE EDITOR (works offline): each channel's name, level and mute, and the master; saved on the phone at once */
+    private fun editScene(name: String, saved: () -> Unit) {
+        val store = getSharedPreferences("scenes", MODE_PRIVATE); val scene = OfflineScenes.parse(store.getString(name, null)) ?: return
+        val dlg = AlertDialog.Builder(this).setTitle(getString(R.string.scene_edit_title, name)).setPositiveButton(android.R.string.ok) { _, _ -> saved() }.create()
+        dlg.setView(ScrollView(this).apply { addView(sceneEditor(name, scene) { store.edit().putString(name, OfflineScenes.stringify(it)).apply() }) }); dlg.show()
+    }
+    @Suppress("UNCHECKED_CAST")
+    internal fun sceneEditor(name: String, scene: MutableMap<String, Any?>, save: (Map<String, Any?>) -> Unit): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12); setBackgroundColor(Color.parseColor("#141B26")) }
+        fun pos(db: Double) = ((db + 60) * 10).toInt().coerceIn(0, 700)
+        fun row(label: View, db: Double, mute: Boolean?, onDb: (Double) -> Unit, onMute: ((Boolean) -> Unit)?) {
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 4) }
+            val v = TextView(this).apply { text = DaemonClient.fmtDb(db); setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f; layoutParams = LinearLayout.LayoutParams(150, LinearLayout.LayoutParams.WRAP_CONTENT) }
+            r.addView(label.apply { layoutParams = LinearLayout.LayoutParams(260, LinearLayout.LayoutParams.WRAP_CONTENT) })
+            r.addView(SeekBar(this).apply { max = 700; progress = pos(db); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener { override fun onProgressChanged(s: SeekBar, p: Int, u: Boolean) { if (!u) return; val d = p / 10.0 - 60; v.text = DaemonClient.fmtDb(d); onDb(d) }
+                    override fun onStartTrackingTouch(s: SeekBar) {}; override fun onStopTrackingTouch(s: SeekBar) {} }) })
+            r.addView(v)
+            if (mute != null && onMute != null) r.addView(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = mute; minWidth = 0; minimumWidth = 0; layoutParams = LinearLayout.LayoutParams(110, 96)
+                setTextColor(if (mute) Color.parseColor("#EF4444") else Color.WHITE); ConsoleUi.styleToggle(this, ConsoleUi.RED); setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); onMute(on) } })
+            box.addView(r)
+        }
+        box.addView(TextView(this).apply { text = getString(R.string.scene_edit_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f; setPadding(0, 0, 0, 8) })
+        row(TextView(this).apply { text = "MASTER"; setTextColor(Color.parseColor("#EA580C")); typeface = android.graphics.Typeface.DEFAULT_BOLD }, (scene["master"] as? Number)?.toDouble() ?: 0.0, null,
+            { d -> save(OfflineScenes.setMaster(scene, d, System.currentTimeMillis())) }, null)
+        for (st in (scene["strips"] as? List<Map<String, Any?>>).orEmpty().take(Prefs.stripCount(this))) { val id = (st["id"] as Number).toInt()
+            val nameBox = EditText(this).apply { setText(st["name"]?.toString().orEmpty()); setSingleLine(); setTextColor(Color.WHITE); textSize = 13f
+                setOnFocusChangeListener { _, f -> if (!f) save(OfflineScenes.setStrip(scene, id, System.currentTimeMillis(), name = text.toString())) } }
+            row(nameBox, (st["db"] as? Number)?.toDouble() ?: 0.0, st["mute"] == true,
+                { d -> save(OfflineScenes.setStrip(scene, id, System.currentTimeMillis(), db = d)) }, { m -> save(OfflineScenes.setStrip(scene, id, System.currentTimeMillis(), mute = m)) })
+        }
+        return box
+    }
+    /** after a connect: a scene chosen offline to recall now (asked first: a live console is never changed without a tap) */
+    private fun offerPendingScene(c: DaemonClient) {
+        val n = Prefs.remote(this).getString("recallOnConnect", "").orEmpty(); if (n.isEmpty()) return
+        val o = OfflineScenes.parse(getSharedPreferences("scenes", MODE_PRIVATE).getString(n, null)) ?: run { Prefs.remote(this).edit().putString("recallOnConnect", "").apply(); return }
+        AlertDialog.Builder(this).setTitle(R.string.scene_pending_title).setMessage(getString(R.string.scene_pending_q, n))
+            .setPositiveButton(R.string.scene_recall) { _, _ -> Prefs.remote(this).edit().putString("recallOnConnect", "").apply(); recallScene(c, n, o) }
+            .setNeutralButton(R.string.scene_pending_later, null)
+            .setNegativeButton(R.string.scene_pending_off) { _, _ -> Prefs.remote(this).edit().putString("recallOnConnect", "").apply() }.show()
+    }
     /** MASTER: the limiter (on / off, ceiling). */
     private fun showMaster() {
         val c = client ?: return
@@ -475,6 +581,23 @@ class RemoteActivity : AppCompatActivity() {
         box.addView(SeekBar(this).apply { max = 200; progress = ((ceil + 20) * 10).toInt().coerceIn(0, 200)
             setOnSeekBarChangeListener(change { p -> ceil = p / 10.0 - 20; ui.post { t.text = String.format("CEILING  %.1f dBFS", ceil) }; c.limiter(on, ceil) }) })
         box.addView(TextView(this).apply { text = "The limiter keeps the master under the ceiling (no clipping on the output)."; setTextColor(Color.parseColor("#8B98A8")) })
+        // WINDOWS: the computer's own output slider, and GAIN MODE (that slider as a trim after the master)
+        val w = st?.windows ?: com.amfb.amixos.remote.WindowsSound()
+        box.addView(TextView(this).apply { text = getString(R.string.win_title); setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(0, 28, 0, 6) })
+        val trim = TextView(this).apply { setTextColor(Color.parseColor("#FBBF24")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f }
+        fun showTrim(on: Boolean, vol: Int) { trim.text = if (!on) getString(R.string.win_gain_off) else if (w.windowsSetsLevel) getString(R.string.win_sets_level) else { val t = if (vol <= 0) -120.0 else 30 * Math.log10(vol / 100.0); if (t <= -119) getString(R.string.win_trim_off) else getString(R.string.win_trim, String.format("%.1f", t)) } }
+        var vol = w.volume; var gain = w.gainMode
+        if (w.volume >= 0) {
+            val vt = TextView(this).apply { text = getString(R.string.win_volume, vol); setTextColor(Color.WHITE) }
+            box.addView(vt)
+            box.addView(SeekBar(this).apply { max = 100; progress = vol; setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar, p: Int, u: Boolean) { if (!u) return; vol = p; vt.text = getString(R.string.win_volume, p); showTrim(gain, p); live.submit("winVolume") { c.setting("winVolume", p) } }
+                override fun onStartTrackingTouch(s: SeekBar) {}; override fun onStopTrackingTouch(s: SeekBar) {} }) })
+        } else box.addView(TextView(this).apply { text = getString(R.string.win_none); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f })
+        box.addView(ToggleButton(this).apply { textOn = getString(R.string.win_gain_on_btn); textOff = getString(R.string.win_gain_off_btn); isChecked = gain
+            setOnCheckedChangeListener { b, v -> buzz(b); gain = v; showTrim(v, vol); io.execute { runCatching { c.setting("winGain", v) } } } })
+        box.addView(trim); showTrim(gain, vol)
+        box.addView(TextView(this).apply { text = getString(R.string.win_gain_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
         return box
     }
 
@@ -547,5 +670,5 @@ class RemoteActivity : AppCompatActivity() {
             .filterIsInstance<java.net.Inet4Address>().map { it.hostAddress }.firstOrNull { it.startsWith("192.168.") || it.startsWith("10.") || Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(it) }
     }.getOrNull()
 
-    override fun onDestroy() { closing = true; syncing = false; stream?.stop(); io.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { closing = true; syncing = false; ui.removeCallbacks(presence); stream?.stop(); io.shutdownNow(); scanIo.shutdownNow(); super.onDestroy() }
 }

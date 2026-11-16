@@ -2051,5 +2051,18 @@
 "LIVE SYNC": "SINKRONISASI LANGSUNG",
 "CONNECTED": "TERHUBUNG",
 "waiting for a phone or browser": "menunggu telepon atau browser",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, mute, solo, dan nama-nama perangkat mengikuti ponsel dan browser yang terhubung ke konsol ini, dan setiap perubahan di sini langsung tersinkronisasi ke perangkat-perangkat tersebut. Fader yang digeser dari ponsel akan menyala di sini."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Fader, mute, solo, dan nama-nama perangkat mengikuti ponsel dan browser yang terhubung ke konsol ini, dan setiap perubahan di sini langsung tersinkronisasi ke perangkat-perangkat tersebut. Fader yang digeser dari ponsel akan menyala di sini.",
+"CONNECTED PHONES": "PONSEL YANG TERHUBUNG",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Ponsel dan peramban sedang terhubung saat ini. DISCONNECT akan memutuskan salah satunya (mungkin akan terhubung kembali dalam 2 menit); FORGET akan menghapus pasangan perangkat tersebut, sehingga PIN harus dimasukkan kembali.",
+"OWNER": "PEMILIK",
+"DISCONNECT": "PUTUSKAN KONEKSI",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Belum ada ponsel yang terhubung. Buka aplikasi AmF X1 di ponsel: aplikasi tersebut akan mendeteksi komputer ini secara otomatis melalui jaringan Wi-Fi.",
+"Windows volume": "Volume Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "Penggeser volume Windows (tombol volume pada keyboard juga dapat menggesernya)",
+"GAIN MODE: Windows volume trims the master": "MODUS GAIN: Volume Windows mengurangi volume master",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Penggeser (slider) Windows berfungsi sebagai pengatur gain tambahan setelah master (fader tetap pada posisinya): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = mati. Berguna saat menggunakan ASIO atau antarmuka USB, yang tidak dapat dijangkau oleh pengaturan volume bawaan Windows.",
+"It had already gone.": "Itu sudah hilang.",
+"The Windows volume is not available on this computer.": "Volume Windows tidak tersedia di komputer ini.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "MODE GAIN mati: volume Windows tidak memengaruhi tingkat volume konsol.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Output ini diputar melalui mixer bawaan Windows, yang sudah mengatur levelnya melalui penggeser ini: tanpa penyesuaian tambahan (tanpa pemotongan ganda)."
 }

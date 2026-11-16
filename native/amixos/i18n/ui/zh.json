@@ -2042,5 +2042,15 @@
 "MY ACCOUNT ONLINE": "我的在线账户",
 "LIVE SYNC": "实时同步",
 "waiting for a phone or browser": "等待手机或浏览器",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "推子、静音、独奏和名称会同步显示在连接到该调音台的手机和浏览器上，这里的所有操作都会立即同步到这些设备上。当手机上的推子被移动时，此处会亮起相应指示灯。"
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "推子、静音、独奏和名称会同步显示在连接到该调音台的手机和浏览器上，这里的所有操作都会立即同步到这些设备上。当手机上的推子被移动时，此处会亮起相应指示灯。",
+"CONNECTED PHONES": "已连接的手机",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "手机和浏览器当前已配对。选择“断开连接”会断开其中一个设备（该设备可能在2分钟后重新连接）；选择“忘记”将解除配对，因此需要再次输入PIN码。",
+"OWNER": "所有者",
+"DISCONNECT": "断开连接",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "尚未连接手机。在手机上打开 AmF X1：它会自动通过 Wi-Fi 找到这台电脑。",
+"The Windows output slider (the keyboard's volume keys move it too)": "Windows 音量滑块（键盘上的音量键也可以调节它）",
+"GAIN MODE: Windows volume trims the master": "增益模式：Windows 音量会调节主音量",
+"It had already gone.": "它已经不见了。",
+"GAIN MODE off: the Windows volume does not change the console's level.": "增益模式关闭：Windows 音量不会改变调音台的电平。",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "该输出通过 Windows 自带的混音器播放，其音量已通过此滑块进行调节：无需额外调整（避免双重衰减）。"
 }

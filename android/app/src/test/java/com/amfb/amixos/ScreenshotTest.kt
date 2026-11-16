@@ -134,6 +134,36 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals("the paired console follows the new address", "127.0.0.1", moved[0].host); org.junit.Assert.assertEquals(1, moved.size)
         org.junit.Assert.assertEquals("127.0.0.1", Prefs.remote(ctx).getString("host", ""))
     }
+    @Test fun severalConsoles() {   // TWO REAL CONSOLES (AMFX_MULTI=port,tokenA,tokenB: A on 127.0.0.1, B on 127.0.0.2): the bar, a switch, then B disconnects the phone
+        val multi = (System.getenv("AMFX_MULTI") ?: "").split(","); if (multi.size != 3) return
+        val port = multi[0].toInt(); val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        val idA = com.amfb.amixos.remote.DaemonClient.probe("127.0.0.1", port)!!.id; val idB = com.amfb.amixos.remote.DaemonClient.probe("127.0.0.2", port)!!.id
+        org.junit.Assert.assertNotEquals("two consoles, two ids", idA, idB)
+        Prefs.remote(ctx).edit().clear().putString("host", "127.0.0.1").putString("port", port.toString()).putString("token", multi[1]).putBoolean("autoConnect", true).putBoolean("autoFind", false).commit()
+        ctx.getSharedPreferences("consoles", 0).edit().putString("list", PairedConsoles.format(listOf(
+            PairedConsoles.Console("127.0.0.1", port, multi[1], "Studio PC", 3, 3, idA), PairedConsoles.Console("127.0.0.2", port, multi[2], "Stage PC", 2, 2, idB),
+            PairedConsoles.Console("127.0.0.9", port, "amx_x", "Home PC", 1, 1, "home00000000")))).commit()
+        val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get(); idle(2500)
+        a.presenceScan("127.0.0.50"); idle(2500)
+        val chips = a.barChips(); println("CONSOLE BAR: " + chips.map { it.label + " " + it.presence + " " + it.console.host })
+        org.junit.Assert.assertEquals(listOf(PairedConsoles.Presence.LINKED, PairedConsoles.Presence.ONLINE, PairedConsoles.Presence.AWAY), chips.map { it.presence })
+        shot(a.window.decorView.rootView, "remote-consoles")
+        a.switchTo(chips[1]); idle(3000)
+        org.junit.Assert.assertEquals("127.0.0.2", Prefs.remote(ctx).getString("host", ""))
+        org.junit.Assert.assertEquals("Stage PC", a.barChips().first { it.presence == PairedConsoles.Presence.LINKED }.label)
+        shot(a.window.decorView.rootView, "remote-console-switched")
+        // the stage console's owner presses DISCONNECT on this phone
+        val b = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.2", port, multi[2]))
+        @Suppress("UNCHECKED_CAST") val links = (com.amfb.amixos.remote.MiniJson.parse(java.net.URL("http://127.0.0.2:$port/api/links").openConnection().let { it.setRequestProperty("X-Amix-Token", multi[2]); it.getInputStream().bufferedReader().readText() }) as Map<String, Any?>)["links"] as List<Map<String, Any?>>
+        println("CONNECTED PHONES on the stage console: " + links.map { it["name"].toString() + " " + it["ip"] })
+        org.junit.Assert.assertEquals(1, links.size)
+        val c = java.net.URL("http://127.0.0.2:$port/api/links/kick").openConnection() as java.net.HttpURLConnection
+        c.requestMethod = "POST"; c.doOutput = true; c.setRequestProperty("X-Amix-Token", multi[2]); c.setRequestProperty("Content-Type", "application/json")
+        c.outputStream.use { it.write("{\"id\":${(links[0]["id"] as Number).toInt()}}".toByteArray()) }; org.junit.Assert.assertEquals(200, c.responseCode)
+        idle(1500)
+        org.junit.Assert.assertTrue(a.barChips().none { it.presence == PairedConsoles.Presence.LINKED })
+        shot(a.window.decorView.rootView, "remote-kicked")
+    }
     @Test fun remote() {
         val port = System.getProperty("amfx.daemon").orEmpty()
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()

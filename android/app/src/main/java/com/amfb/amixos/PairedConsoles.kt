@@ -37,6 +37,22 @@ object PairedConsoles {
         }
         return Match.New(found)
     }
+    /** THE CONSOLE BAR: every paired console with where it is now. LINKED: the one this phone is connected to; ONLINE: it answered the
+     *  last search (its address as found, so a moved PC is reached at its new address); AWAY: not seen; NEW: a console on this Wi-Fi this
+     *  phone never paired with (tap: the PIN). Order: linked, online, away (most recently used first in each), then new. */
+    enum class Presence { LINKED, ONLINE, AWAY, NEW }
+    data class Chip(val console: Console, val presence: Presence, val label: String)
+    fun chips(paired: List<Console>, found: List<com.amfb.amixos.remote.DaemonClient.Companion.Found>, linkedId: String, linkedKey: String): List<Chip> {
+        val used = HashSet<com.amfb.amixos.remote.DaemonClient.Companion.Found>()
+        val known = paired.map { c ->
+            val hit = (if (c.id.isNotEmpty()) found.firstOrNull { it.id == c.id } else null) ?: found.firstOrNull { it.host == c.host && it.port == c.port && (c.id.isEmpty() || it.id.isEmpty()) }
+            if (hit != null) used.add(hit)
+            val linked = (linkedId.isNotEmpty() && c.id == linkedId) || c.key == linkedKey
+            val now = if (hit != null) c.copy(host = hit.host, port = hit.port) else c
+            Chip(now, if (linked) Presence.LINKED else if (hit != null) Presence.ONLINE else Presence.AWAY, c.name.takeIf { it.isNotBlank() && it != "A mix OS" } ?: hit?.title?.ifBlank { null } ?: c.name.ifBlank { c.host }) }
+        val fresh = found.filter { it !in used && (it.id.isEmpty() || paired.none { p -> p.id == it.id }) }.map { Chip(Console(it.host, it.port, "", it.title, 0, 0, it.id), Presence.NEW, it.title.ifBlank { it.host }) }
+        return known.sortedBy { it.presence.ordinal } + fresh   // sortedBy is stable: recency kept inside each group
+    }
     /** the hosts to ask first when searching: the addresses of the paired consoles, most recent first */
     fun hints(paired: List<Console>): List<String> = paired.map { it.host }.distinct()
     /** the delay before the next search while no console answers: 3 s, 6 s, 12 s, then every 20 s (cheap: one status call per address) */

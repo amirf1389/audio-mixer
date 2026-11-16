@@ -76,6 +76,10 @@ struct DeviceInfo {
 // read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.
 bool systemMuteGet(bool& muted);
 bool systemMuteSet(bool muted);
+// WINDOWS VOLUME: the default output's own volume slider (0..1, the scalar Windows shows as 0..100), through the same documented endpoint
+// interface as the mute. false where there is no such thing (not Windows, no output device)
+bool systemVolumeGet(float& level);
+bool systemVolumeSet(float level);
 // WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
 // 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
@@ -113,6 +117,8 @@ class Runtime {
   void stop();
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
+  bool exclusive() const { return exclusive_; }              // WASAPI opened exclusively (Windows' mixer and its volume are bypassed)
+  const std::string& outDevice() const { return outDevice_; } // the output as asked ("" = the system's default)
   std::string sampleFormat() const;
   std::vector<std::string> outputNames() const;   // see Backend::outputNames
   double inputSilentSeconds() const;   // see Backend::inputSilentSeconds; 0 when nothing is open
@@ -212,7 +218,7 @@ class Runtime {
   void post(const Cmd& c);
   void publish();
 
-  Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_;
+  Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_, outDevice_; bool exclusive_ = false;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   AmpChannel amp_[64]; AmpParams ampUi_[64]; std::vector<float> mono_;   // the audio thread's stage, and the UI's copy of what was set
   std::vector<float> silence_, left_, right_;

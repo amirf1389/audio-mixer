@@ -2053,5 +2053,17 @@
 "MY ACCOUNT ONLINE": "MOJE KONTO ONLINE",
 "LIVE SYNC": "SYNCHRONIZACJA NA ŻYWO",
 "CONNECTED": "POŁĄCZONE",
-"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Suwaki, wyciszenia, tryby solo i nazwy są powiązane z telefonami i przeglądarkami podłączonymi do tej konsoli, a każda operacja wykonywana tutaj jest natychmiast przekazywana do tych urządzeń. Suwak przesunięty na telefonie świeci się tutaj."
+"Faders, mutes, solos and names follow the phones and browsers connected to this console, and every move here reaches them at once. A fader moved from a phone lights up here.": "Suwaki, wyciszenia, tryby solo i nazwy są powiązane z telefonami i przeglądarkami podłączonymi do tej konsoli, a każda operacja wykonywana tutaj jest natychmiast przekazywana do tych urządzeń. Suwak przesunięty na telefonie świeci się tutaj.",
+"CONNECTED PHONES": "POŁĄCZONE TELEFONY",
+"Phones and browsers linked right now. DISCONNECT drops one (it may come back in 2 minutes); FORGET removes its pairing, so it needs the PIN again.": "Telefony i przeglądarki są obecnie połączone. Opcja „ROZŁĄCZ” powoduje rozłączenie jednego z nich (może się ponownie połączyć za 2 minuty); opcja „USUŃ” usuwa sparowanie, więc konieczne będzie ponowne wprowadzenie kodu PIN.",
+"OWNER": "WŁAŚCICIEL",
+"DISCONNECT": "ODŁĄCZ",
+"No phone linked yet. Open AmF X1 on the phone: it finds this computer on the Wi-Fi by itself.": "Telefon nie został jeszcze połączony. Uruchom aplikację AmF X1 na telefonie: aplikacja sama wykryje ten komputer w sieci Wi-Fi.",
+"Windows volume": "Głośność systemu Windows",
+"The Windows output slider (the keyboard's volume keys move it too)": "Suwak regulacji głośności w systemie Windows (można go również przesuwać za pomocą klawiszy głośności na klawiaturze)",
+"GAIN MODE: Windows volume trims the master": "TRYB WZMOCNIENIA: Głośność systemu Windows reguluje poziom sygnału głównego",
+"The Windows slider becomes an extra gain after the master (the fader stays where it is): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = off. Handy with ASIO or a USB interface, which Windows' own volume does not reach.": "Suwak w systemie Windows pełni funkcję dodatkowego wzmocnienia za regulatorem głównym (suwak pozostaje w tej samej pozycji): 100% = 0 dB, 50% = -9 dB, 25% = -18 dB, 0% = wyłączone. Przydaje się to w przypadku interfejsów ASIO lub USB, których poziom głośności nie może być regulowany za pomocą standardowego suwaka głośności systemu Windows.",
+"It had already gone.": "Już zniknęło.",
+"GAIN MODE off: the Windows volume does not change the console's level.": "Tryb GAIN wyłączony: poziom głośności systemu Windows nie wpływa na poziom sygnału w konsoli.",
+"This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).": "Sygnał ten jest odtwarzany przez wbudowany mikser systemu Windows, który już reguluje jego poziom za pomocą tego suwaka: bez dodatkowej regulacji (bez podwójnej regulacji)."
 }
