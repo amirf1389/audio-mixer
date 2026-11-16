@@ -6,7 +6,7 @@ classes). The Content-Security-Policy still lets no other script run: each serve
 
 | Folder | What | Where it runs | Who |
 | --- | --- | --- | --- |
-| `vendor/` | **AmF X1 MANAGER**: overview, licence keys (issue, revoke / restore, free a computer, new product key), customers (CRM), releases (channels, history, files, verify), key requests from the app, activity of both servers | `node management/vendor/server.js` on the vendor's own computer, `http://127.0.0.1:8790/` only | staff |
+| `vendor/` | **AmF X1 MANAGER**: overview, licence keys (issue, revoke / restore, free a computer, new product key), customers (CRM), releases (channels, history, files, verify), key requests from the app, activity of both servers | `node management/vendor/server.js` on the vendor's own computer, `http://127.0.0.1:8765/` only | staff |
 | `customer/` | **MY ACCOUNT**: a licence key shows its plan, end date and computers; free a computer; trade a product key for the licence key; the downloads of the published version | the licence server serves it at `/account/` (nginx: `deploy/license/nginx-license.conf`) | customers |
 | `windows/` | `AmF X1 Manager.cmd` (starts the manager and opens it; vendor only), `AmF X1 My Account.url` (ships with the Windows app), `AmF X1 Portal.url` | Windows | |
 
@@ -18,12 +18,12 @@ same on both). The token is kept in the tab (`sessionStorage`) and sent as `Auth
 
 The manager is a small proxy plus the page:
 
-- `/lic/admin/*`, `/lic/health` → `LICENSE_SERVER` (default `http://127.0.0.1:8787`)
-- `/ota/admin/*`, `/ota/healthz` → `OTA_SERVER` (default `http://127.0.0.1:8780`)
+- `/lic/admin/*`, `/lic/health` → `LICENSE_SERVER` (default `http://127.0.0.1:8765`)
+- `/ota/admin/*`, `/ota/healthz` → `OTA_SERVER` (default `http://127.0.0.1:8765`)
 - nothing else passes: the public routes of the servers are not reachable through it
 
 It listens on `127.0.0.1` only, answers only its own `Host` (a made-up name pointed at 127.0.0.1 gets 421), and takes a change only from
-its own page (`Origin`). For servers elsewhere, use an SSH tunnel to their 127.0.0.1 (`ssh -L 8787:127.0.0.1:8787 -L 8780:127.0.0.1:8780 you@server`):
+its own page (`Origin`). For servers elsewhere, use an SSH tunnel to their 127.0.0.1 (`ssh -L 8787:127.0.0.1:8765 -L 8780:127.0.0.1:8765 you@server`):
 the admin routes are not on the public nginx sites.
 
 Release files are still signed on the vendor's computer and uploaded with `scripts/ota.js`; the manager shows and checks them. The
