@@ -101,6 +101,10 @@ class DaemonClient(val ep: Endpoint) {
     fun open(backend: String, inDevice: String, outDevice: String, rate: Double, frames: Int, inChannels: Int, outChannels: Int) = control(mapOf("op" to "open", "backend" to backend, "in" to inDevice, "out" to outDevice, "rate" to rate, "frames" to frames, "inChannels" to inChannels, "outChannels" to outChannels))
     fun stop() = control(mapOf("op" to "stop"))
     fun clearClips() = control(mapOf("op" to "clearClips"))
+    /** RECORD on the console: the master to its recordings folder; format "flac" (24-bit), "wav24" or "wavf32". Returns the file's path there. */
+    fun record(on: Boolean, format: String = "flac"): String = control(mapOf("op" to "record", "on" to on, "format" to format))["file"]?.toString().orEmpty()
+    /** (recording, seconds so far, file) from the console's status */
+    fun recordState(): Triple<Boolean, Double, String> { val o = getObj("/api/status"); return Triple(o["recording"] == true, (o["recordSeconds"] as? Number)?.toDouble() ?: 0.0, o["recordFile"]?.toString().orEmpty()) }
 
     /** The meter stream on a worker thread: onFrame about 20 times a second; reconnects after a drop until the returned handle is stopped. */
     fun meterStream(onFrame: (Meters) -> Unit, onState: ((Boolean, String?) -> Unit)? = null): MeterStream {

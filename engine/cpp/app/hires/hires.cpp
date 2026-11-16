@@ -179,6 +179,28 @@ std::vector<float> resampleMono(const std::vector<float>& x, double from, double
 }
 
 // ---- reading
+// the header only: rate, channels, length and word length without decoding the audio (a file list)
+bool probe(const std::string& path, AudioInfo& info, std::string& err) {
+  std::string ext = path.substr(path.find_last_of('.') + 1); for (char& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  if (ext == "flac") {
+#ifdef _WIN32
+    drflac* f = drflac_open_file_w(wide(path).c_str(), nullptr);
+#else
+    drflac* f = drflac_open_file(path.c_str(), nullptr);
+#endif
+    if (!f) { err = "not a FLAC file that can be read: " + path; return false; }
+    info = {static_cast<double>(f->sampleRate), f->channels, static_cast<std::int64_t>(f->totalPCMFrameCount), f->bitsPerSample, false, "flac"}; drflac_close(f); return true;
+  }
+  drwav w;
+#ifdef _WIN32
+  const bool ok = drwav_init_file_w(&w, wide(path).c_str(), nullptr);
+#else
+  const bool ok = drwav_init_file(&w, path.c_str(), nullptr);
+#endif
+  if (!ok) { err = "not a WAV / RF64 / Wave64 file that can be read: " + path; return false; }
+  info = {static_cast<double>(w.sampleRate), w.channels, static_cast<std::int64_t>(w.totalPCMFrameCount), w.bitsPerSample, w.translatedFormatTag == DR_WAVE_FORMAT_IEEE_FLOAT, w.container == drwav_container_rf64 ? "rf64" : w.container == drwav_container_w64 ? "w64" : "wav"};
+  drwav_uninit(&w); return true;
+}
 bool read(const std::string& path, Audio& out, std::string& err) {
   out = Audio{};
   std::string ext = path.substr(path.find_last_of('.') + 1); for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));

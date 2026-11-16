@@ -53,6 +53,11 @@ int amix_hr_resample(const double* x, int64_t frames, int ch, double src, double
   std::copy(o.begin(), o.end(), *out); *outFrames = static_cast<int64_t>(o.size() / static_cast<std::size_t>(ch)); return 0;
 }
 
+int amix_hr_probe(const char* path, amix_hr_info* info, char* err, size_t len) {
+  if (!path || !info) { fail(err, len, "amix_hr_probe: bad arguments"); return -1; }
+  am::hr::AudioInfo a; std::string e; if (!am::hr::probe(path, a, e)) { fail(err, len, e); return -2; }
+  info->rate = a.rate; info->channels = a.channels; info->frames = a.frames; info->bits = a.bits; info->is_float = a.isFloat ? 1 : 0; std::memset(info->container, 0, sizeof info->container); std::strncpy(info->container, a.container.c_str(), sizeof info->container - 1); return 0;
+}
 double* amix_hr_read(const char* path, amix_hr_info* info, char* err, size_t len) {
   if (!path) { fail(err, len, "amix_hr_read: no path"); return nullptr; }
   am::hr::Audio a; std::string e; if (!am::hr::read(path, a, e)) { fail(err, len, e); return nullptr; }

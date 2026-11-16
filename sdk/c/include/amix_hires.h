@@ -39,6 +39,7 @@ AMIX_API int  amix_hr_resampler_pending(const amix_hr_resampler*);   /* frames r
 AMIX_API int amix_hr_resample(const double* interleaved, int64_t frames, int channels, double src_rate, double dst_rate, const char* engine, int quality, double** out, int64_t* out_frames, char* err, size_t err_len);
 
 typedef struct amix_hr_info { double rate; int channels; int64_t frames; int bits; int is_float; char container[8]; } amix_hr_info;
+AMIX_API int amix_hr_probe(const char* path_utf8, amix_hr_info* info, char* err, size_t err_len);   /* the header only: nothing is decoded */
 /* returns the interleaved samples (free with amix_free) or NULL */
 AMIX_API double* amix_hr_read(const char* path_utf8, amix_hr_info* info, char* err, size_t err_len);
 /* format: "wav16" "wav24" "wav32" "wavf32" "wavf64" "flac16" "flac24" "flac32"; dither: "none" "tpdf" "shaped" */
