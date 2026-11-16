@@ -340,4 +340,21 @@
     <string name="io_signal">LIVE · %1$s dBFS</string>
     <string name="io_clip">CLIPPING · lower the level</string>
     <string name="io_using">"  ·  now: %1$s"</string>
+    <string name="eq_rta_on">RTA ON</string>
+    <string name="eq_rta_off">RTA OFF</string>
+    <string name="rta_title">RTA EQ · MASTER</string>
+    <string name="rta_auto">AUTO EQ</string>
+    <string name="rta_measure">MEASURE</string>
+    <string name="rta_apply">APPLY</string>
+    <string name="rta_cancel">CANCEL</string>
+    <string name="rta_applied">Applied to the master program EQ.</string>
+    <string name="rta_measuring">Measuring for 6 s… keep the sound playing</string>
+    <string name="rta_no_sound">Not enough sound to measure: is the source playing?</string>
+    <string name="rta_proposal">Proposal (%1$s):</string>
+    <string name="rta_eq_on">EQ ON</string>
+    <string name="rta_eq_off">EQ OFF</string>
+    <string name="rta_src_master">MASTER</string>
+    <string name="rta_help">The cyan spectrum is the live sound of the source you pick. Drag an orange dot up or down to shape the master program EQ (10 octave bands). AUTO EQ measures for 6 seconds and proposes a correction towards the target; nothing changes until you press APPLY.</string>
+    <string name="home_rta">RTA EQ</string>
+    <string name="home_rta_sub">Master EQ on the live spectrum, AUTO EQ</string>
 </resources>

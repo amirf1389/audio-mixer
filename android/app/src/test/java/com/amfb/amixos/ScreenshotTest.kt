@@ -95,6 +95,25 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "settings")
     }
 
+    @Test fun rtaEq() {   // RTA EQ against a real service: the RTA and the program EQ go through it; the test device is silent, so a
+        // programme-like spectrum is put on the graph for the picture, and AUTO EQ's proposal is drawn from it
+        val port = System.getProperty("amfx.daemon").orEmpty(); if (port.isEmpty()) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).commit()
+        val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok))
+        c.programEq(listOf(0.0, 0.0, 0.0, -2.0, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0), true)
+        val a = Robolectric.buildActivity(RtaEqActivity::class.java).setup().resume().get(); idle(2500)
+        val r = c.rtaNow(); println("RTA from the service: " + (r?.f?.size ?: 0) + " bands, source " + r?.src)
+        org.junit.Assert.assertEquals("the phone asked for the master's RTA", -1, r?.src); org.junit.Assert.assertEquals(60, r!!.f.size)
+        org.junit.Assert.assertEquals("the program EQ came from the service", -2.0, a.graph.gains[3], 1e-9)
+        val db = r.f.map { f -> -38 - 4 * kotlin.math.log2(f / 1000) * (if (f > 1000) 1.6 else 0.4) + (if (kotlin.math.abs(kotlin.math.log2(f / 250)) < 0.6) 7 else 0) }
+        a.graph.spectrum = com.amfb.amixos.remote.Rta(-1, r.f, db); a.graph.proposal = RtaEq.autoEq(RtaEq.octaves(r.f, db), RtaEq.Target.FLAT)
+        println("AUTO EQ (FLAT): " + a.graph.proposal!!.joinToString())
+        shot(a.window.decorView.rootView, "rta-eq")
+        c.programEq(a.graph.proposal!!.toList(), true)
+        org.junit.Assert.assertEquals(a.graph.proposal!!.toList(), c.programEqNow().gains)
+        c.programEq(List(10) { 0.0 }, false); c.rta(null)
+    }
     @Test fun eq() {
         val i = android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), EqActivity::class.java).putExtra("strip", 0).putExtra("name", "VOCAL")
         val a = Robolectric.buildActivity(EqActivity::class.java, i).setup().get()

@@ -27,6 +27,7 @@ class HomeActivity : AppCompatActivity() {
             Tile("RemoteActivity", "☰", R.string.home_mixer, R.string.home_mixer_sub, o) { Nav.go(this, RemoteActivity::class.java) },
             Tile("LocalMixerActivity", "🎙", R.string.home_phone, R.string.home_phone_sub, c) { Nav.go(this, LocalMixerActivity::class.java) },
             Tile("EqActivity", "∿", R.string.home_eq, R.string.home_eq_sub, v) { pickEqChannel() },
+            Tile("RtaEqActivity", "▥", R.string.home_rta, R.string.home_rta_sub, c) { Nav.go(this, RtaEqActivity::class.java) },
             Tile("Scenes", "▤", R.string.home_scenes, R.string.home_scenes_sub, g) { Nav.go(this, RemoteActivity::class.java) { it.putExtra("open", "scenes") } },
             Tile("ToolsActivity", "♪", R.string.home_tools, R.string.home_tools_sub, y) { Nav.go(this, ToolsActivity::class.java) },
             Tile("RecorderActivity", "●", R.string.home_recorder, R.string.home_recorder_sub, Color.parseColor("#EF4444")) { Nav.go(this, RecorderActivity::class.java) },
