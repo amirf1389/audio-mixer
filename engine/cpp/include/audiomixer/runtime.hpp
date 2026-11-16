@@ -55,6 +55,8 @@ class Backend {
   // how long the input has been EXACT digital silence from the system, in seconds (0 = it carries something). A real microphone always
   // has some noise: seconds of exact zeros mean the system mutes it (the mute key, Windows' mute, microphone privacy for desktop apps)
   virtual double inputSilentSeconds() const { return 0.0; }
+  // the driver's own name for each output channel ("Out 1", "S/PDIF Out L" ...), when it tells (ASIO); empty when it does not
+  virtual std::vector<std::string> outputNames() const { return {}; }
 };
 std::vector<std::string> availableBackends();                 // the ones built into this binary, "null" last
 std::unique_ptr<Backend> createBackend(const std::string& name);   // nullptr when it is not built in
@@ -77,6 +79,9 @@ bool systemMuteSet(bool muted);
 // WHAT A DEVICE IS, from the system's own form factor when it has one (WASAPI: 1 speakers, 2 line, 3 headphones, 4 microphone, 5 headset,
 // 6 handset, 8 S/PDIF, 9 display audio; -1 = not known) and otherwise from the name. capture: the entry is an input.
 std::string classifyDevice(const std::string& backend, const std::string& name, int formFactor, bool capture);
+// SPEAKERS ON A DIGITAL CABLE: the first output pair (0-based, from 2 up: 1-2 already carry the mix) whose channel names say S/PDIF,
+// optical (TOSLINK), coaxial or AES/EBU; -1 when there is none. ADAT (eight channels to a converter) is not a speaker pair.
+int digitalOutputPair(const std::vector<std::string>& outputNames);
 // EVERY AUDIO ENDPOINT of the system, whatever its state: what listDevices leaves out because it cannot be opened now (headphones on an
 // empty jack, a microphone switched off in Windows' Sound settings) is listed here with the reason, for DIAGNOSTICS. Windows: WASAPI
 // active + unplugged + disabled (not-present ghosts are left out); other systems: the active devices of listDevices().
@@ -109,6 +114,7 @@ class Runtime {
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
   std::string sampleFormat() const;
+  std::vector<std::string> outputNames() const;   // see Backend::outputNames
   double inputSilentSeconds() const;   // see Backend::inputSilentSeconds; 0 when nothing is open
   // the integer word length the device takes on its output: 16 or 24 (dither at that depth), 0 for 32-bit integer / float (no dither:
   // a 32-bit converter's LSB is far below its own noise). From sampleFormat(): ASIO / WASAPI exclusive report the driver's own type.
