@@ -107,14 +107,13 @@ class RemoteActivity : AppCompatActivity() {
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         strips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         desk.addView(android.widget.HorizontalScrollView(this).apply { addView(strips); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
-        val master = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(10, 10, 10, 10); setBackgroundColor(Color.parseColor("#1A1410"))
-            layoutParams = LinearLayout.LayoutParams(190, LinearLayout.LayoutParams.MATCH_PARENT).apply { leftMargin = 8 } }
+        val master = ConsoleUi.strip(this, Color.parseColor("#EA580C"), 200, master = true)
         masterLabel = TextView(this).apply { setOnClickListener { showMaster() }; text = "MASTER"; setTextColor(Color.parseColor("#EA580C")); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
         planBadge = TextView(this).apply { text = ""; setTextColor(Color.parseColor("#FBBF24")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
         masterFader = FaderView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1) }
             onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); masterDb.text = DaemonClient.fmtDb(v); io.execute { runCatching { client?.master(v) } } } }
-        masterDb = TextView(this).apply { text = "0.0"; setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
+        masterDb = ConsoleUi.dbReadout(this).apply { text = "0.0" }
         master.addView(masterLabel); master.addView(planBadge); master.addView(masterFader); master.addView(masterDb)
         desk.addView(master); root.addView(desk)
         setContentView(Nav.wrap(this, root, Nav.Tab.MIXER))
@@ -173,20 +172,22 @@ class RemoteActivity : AppCompatActivity() {
         strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear()
         val colors = intArrayOf(0xFFEA580C.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         for (st in s.strips.take(Prefs.stripCount(this))) {
-            val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(6, 8, 6, 8); setBackgroundColor(Color.parseColor("#141B26"))
-                layoutParams = LinearLayout.LayoutParams(170, LinearLayout.LayoutParams.MATCH_PARENT).apply { rightMargin = 6 } }
-            val name = TextView(this).apply { text = String.format("CH %02d\n%s", st.id + 1, st.name); setTextColor(Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; maxLines = 2
+            val tint = colors[(st.id / 8) % colors.size]
+            val col = ConsoleUi.strip(this, tint, 176)
+            val name = TextView(this).apply { text = ConsoleUi.title(st.id, st.name); setTextColor(Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD
                 setOnClickListener { showChannel(st.id, st.name) }; setOnLongClickListener { rename(st.id, this); true } }
-            col.addView(View(this).apply { setBackgroundColor(colors[(st.id / 8) % colors.size]); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 6) })
             col.addView(name)
-            if (Prefs.showPan(this)) col.addView(SeekBar(this).apply { max = 200; progress = ((st.pan + 1) * 100).toInt(); setOnSeekBarChangeListener(change { p -> client?.pan(st.id, (p - 100) / 100.0) }) })
+            if (Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
+                onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1) }
+                onChange = { v -> io.execute { runCatching { client?.pan(st.id, v.toDouble()) } } } })
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
             val mute = small(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } })
             val solo = small(ToggleButton(this).apply { textOn = "S"; textOff = "S"; isChecked = st.solo; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#FBBF24") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.solo(st.id, on) } } } } })
             mute.setTextColor(if (st.mute) Color.parseColor("#EF4444") else Color.WHITE); solo.setTextColor(if (st.solo) Color.parseColor("#FBBF24") else Color.WHITE)
+            ConsoleUi.styleToggle(mute, ConsoleUi.RED); ConsoleUi.styleToggle(solo, ConsoleUi.AMBER)
             ms.addView(mute); ms.addView(solo); col.addView(ms)
-            val db = TextView(this).apply { text = DaemonClient.fmtDb(st.db); setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER; textSize = 12f }
+            val db = ConsoleUi.dbReadout(this).apply { text = DaemonClient.fmtDb(st.db) }
             val fader = FaderView(this, colors[(st.id / 8) % colors.size]).apply { progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1) }
                 onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); db.text = DaemonClient.fmtDb(v); io.execute { runCatching { client?.gain(st.id, v) } } } }
@@ -402,7 +403,7 @@ class RemoteActivity : AppCompatActivity() {
             val pos = (DaemonClient.dbToPos(st.db) * 1000).toInt(); if (Math.abs(faders[i].progress - pos) > 2) { faders[i].progress = pos; dbLabels[i].text = DaemonClient.fmtDb(st.db) }
             if (mutes[i].isChecked != st.mute) { mutes[i].tag = "sync"; mutes[i].isChecked = st.mute; mutes[i].tag = null }
             if (solos[i].isChecked != st.solo) { solos[i].tag = "sync"; solos[i].isChecked = st.solo; solos[i].tag = null }
-            val label = String.format("CH %02d  %s", i + 1, st.name); if (nameLabels[i].text.toString() != label) nameLabels[i].text = label.replace("  ", "\n") }
+            val label = ConsoleUi.title(i, st.name); if (nameLabels[i].text.toString() != label) nameLabels[i].text = label }
         run { val p = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); if (Math.abs(masterFader.progress - p) > 2) { masterFader.progress = p; masterDb.text = DaemonClient.fmtDb(s.masterDb) } }
         state = s
     }
