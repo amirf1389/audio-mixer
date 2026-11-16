@@ -12,6 +12,10 @@ import android.widget.TextView
 /** The bar along the bottom of every main screen: HOME · MIXER · TOOLS · SETTINGS. Going to a screen brings the open one to the front
  *  (the remote keeps its connection) instead of stacking a new copy. */
 object Nav {
+    /** pages switch without the system's slide (Android 14+ has its own call for it; the old one is kept for older phones) */
+    @Suppress("DEPRECATION")
+    private fun noAnimation(a: android.app.Activity) {
+        if (android.os.Build.VERSION.SDK_INT >= 34) a.overrideActivityTransition(android.app.Activity.OVERRIDE_TRANSITION_OPEN, 0, 0) else a.overridePendingTransition(0, 0) }
     enum class Tab(val label: Int, val glyph: String, val target: Class<out Activity>) {
         HOME(R.string.nav_home, "⌂", HomeActivity::class.java), MIXER(R.string.nav_mixer, "☰", RemoteActivity::class.java),
         TOOLS(R.string.nav_tools, "♪", ToolsActivity::class.java), SETTINGS(R.string.nav_settings, "⚙", SettingsActivity::class.java)
@@ -19,7 +23,7 @@ object Nav {
     fun go(a: Activity, target: Class<out Activity>, extras: (Intent) -> Unit = {}) {
         if (a.javaClass == target) return
         Home.noteRecent(a, target.simpleName)   // RECENT on HOME
-        a.startActivity(Intent(a, target).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT).also(extras)); a.overridePendingTransition(0, 0)
+        a.startActivity(Intent(a, target).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT).also(extras)); noAnimation(a)
     }
     /** content above, the bar below; current = the tab of this screen (null: a sub-screen such as the calculator, nothing lit). */
     fun wrap(a: Activity, content: View, current: Tab?): View {

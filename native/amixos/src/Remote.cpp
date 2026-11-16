@@ -53,8 +53,8 @@ void Remote::writeSeed() {
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
   for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
-  racksV_ = 0; masterV_ = 0; baseMast_ = mastNow(); baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}}).toJson(QJsonDocument::Compact));
+  racksV_ = 0; masterV_ = 0; baseMast_ = mastNow(); baseIn_ = engine_->inputRoutes(); baseOut_ = engine_->outputRoutes(); baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}, {"routes", QVariantMap{{"in", baseIn_}, {"out", baseOut_}}}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
   return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")},
@@ -106,6 +106,11 @@ void Remote::syncTick() {
   { const QVariantMap mn = mastNow(); QVariantMap diff;   // MASTERING moved on the console: out to the service and the remotes
     for (auto it = mn.cbegin(); it != mn.cend(); ++it) { const QVariant b = baseMast_.value(it.key()); if (it.value().typeId() == QMetaType::Bool ? it.value().toBool() != b.toBool() : std::abs(it.value().toDouble() - b.toDouble()) > 0.005) diff[it.key()] = it.value(); }
     if (!diff.isEmpty()) { baseMast_ = mn; diff["op"] = "mastering"; post(diff); } }
+  {   // ROUTING moved on the console: out to the service (and so to the phones)
+    const QVariantList in = engine_->inputRoutes(), out = engine_->outputRoutes();
+    for (int i = 0; i < in.size(); ++i) if (i >= baseIn_.size() || in[i].toInt() != baseIn_[i].toInt()) post({{"op", "inRoute"}, {"strip", i}, {"input", in[i].toInt()}});
+    for (int k = 0; k < out.size() && k < 32; ++k) if (k >= baseOut_.size() || out[k].toInt() != baseOut_[k].toInt()) post({{"op", "outRoute"}, {"out", k}, {"source", out[k].toInt()}});
+    baseIn_ = in; baseOut_ = out; }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
     for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
@@ -129,6 +134,11 @@ void Remote::syncTick() {
       for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
         const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());
         if (diff) { it.value() = it.value().typeId() == QMetaType::Double ? QVariant(r.toDouble()) : it.value().typeId() == QMetaType::Bool ? QVariant(r.toBool()) : QVariant(r.toInt()); applySetting(it.key(), it.value()); } } }
+    { const QVariantMap rt = o.value("routing").toMap(); const QVariantList in = rt.value("in").toList(), out = rt.value("out").toList();   // a phone's ROUTING onto the console
+      bool moved = false;
+      for (int i = 0; i < in.size() && i < baseIn_.size(); ++i) if (in[i].toInt() != baseIn_[i].toInt()) { engine_->setInputRoute(i, in[i].toInt()); moved = true; }
+      for (int k = 0; k < out.size() && k < baseOut_.size(); ++k) if (out[k].toInt() != baseOut_[k].toInt()) { engine_->setOutputRoute(k, out[k].toInt()); moved = true; }
+      if (moved) { baseIn_ = engine_->inputRoutes(); baseOut_ = engine_->outputRoutes(); } }
     v_ = o.value("v").toULongLong(); const QVariantList l = o.value("strips").toList(); int n = 0;
     for (int i = 0; i < l.size() && i < base_.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip& b = base_[i];
       const double db = m.value("db").toDouble(), pan = m.value("pan").toDouble(); const bool mu = m.value("mute").toBool(), so = m.value("solo").toBool(); const QString nm = m.value("name").toString();

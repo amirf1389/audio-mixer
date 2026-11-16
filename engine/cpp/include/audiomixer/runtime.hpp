@@ -117,6 +117,8 @@ class Runtime {
   void stop();
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
+  int inputChannels() const { return nIn_; }    // the open device's inputs / outputs (0 while closed)
+  int outputChannels() const { return nOut_; }
   bool exclusive() const { return exclusive_; }              // WASAPI opened exclusively (Windows' mixer and its volume are bypassed)
   const std::string& outDevice() const { return outDevice_; } // the output as asked ("" = the system's default)
   std::string sampleFormat() const;

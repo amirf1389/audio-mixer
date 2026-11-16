@@ -136,7 +136,7 @@ class PluginsActivity : AppCompatActivity() {
         val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 16, 8) }
         val dlg = android.app.AlertDialog.Builder(this).setPositiveButton(android.R.string.ok, null).create()
         fun refresh(j: Map<String, Any?>) { holder.removeAllViews(); lastFace = faceView(c, strip, slot, j) { io.execute { @Suppress("UNCHECKED_CAST") val r = runCatching { c.racks(strip) }.getOrNull()
-            val nj = ((r?.get("racks") as? List<Map<String, Any?>>)?.firstOrNull()?.get("slots") as? List<Map<String, Any?>>)?.firstOrNull { (it["slot"] as? Number)?.toInt() == slot }
+            @Suppress("UNCHECKED_CAST") val nj = ((r?.get("racks") as? List<Map<String, Any?>>)?.firstOrNull()?.get("slots") as? List<Map<String, Any?>>)?.firstOrNull { (it["slot"] as? Number)?.toInt() == slot }
             if (nj != null) ui.post { refresh(nj) } } }; holder.addView(lastFace) }
         refresh(json); dlg.setView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(holder) }); dlg.setOnDismissListener { load() }; dlg.show()
     }

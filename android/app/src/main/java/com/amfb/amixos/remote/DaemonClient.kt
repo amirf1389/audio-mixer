@@ -13,7 +13,8 @@ data class Endpoint(val host: String, val port: Int, val token: String, val secu
 class DaemonException(message: String, val status: Int) : IOException(message)
 
 data class Status(val name: String, val version: String, val backend: String, val running: Boolean, val blocks: Long, val xruns: Long, val strips: Int, val buses: Int, val uptimeS: Double, val lastError: String, val backends: List<String>, val plan: String = "", val consoleId: String = "", val computer: String = "",
-                  val rate: Double = 0.0, val frames: Long = 0, val loadPct: Double = 0.0, val maxBlockUs: Double = 0.0, val remotes: Int = 0, val recording: Boolean = false)   // CONSOLE STATUS
+                  val rate: Double = 0.0, val frames: Long = 0, val loadPct: Double = 0.0, val maxBlockUs: Double = 0.0, val remotes: Int = 0, val recording: Boolean = false,
+                  val inDevice: String = "", val outDevice: String = "", val bufferFrames: Int = 0, val inChannels: Int = 2, val outChannels: Int = 2)   // CONSOLE STATUS (+ the device open, for ENGINE CONTROL)
 data class Device(val backend: String, val id: String, val name: String, val inputs: Int, val outputs: Int, val defaultRate: Double, val defaultIn: Boolean, val defaultOut: Boolean)
 /** the analog 3-band channel EQ of a strip: LOW shelf 100 Hz, MID bell [midHz] (100 Hz .. 8 kHz), HIGH shelf 10 kHz, ±15 dB each */
 data class Tone(val low: Double = 0.0, val mid: Double = 0.0, val midHz: Double = 1000.0, val high: Double = 0.0, val on: Boolean = true)
@@ -25,7 +26,12 @@ data class Rta(val src: Int, val f: List<Double>, val db: List<Double>)
 data class ProgramEq(val on: Boolean = false, val gains: List<Double> = List(10) { 0.0 })
 data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound())   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
-data class Meters(val running: Boolean, val strips: List<StripMeter>, val masterL: Double, val masterR: Double, val masterRms: Double, val masterClip: Boolean)
+/** loudness of the master (LUFS momentary / short-term / integrated, range LU, true peak dBTP) */
+data class Loudness(val m: Double = -120.0, val s: Double = -120.0, val i: Double = -120.0, val lra: Double = 0.0, val tp: Double = -120.0)
+data class Meters(val running: Boolean, val strips: List<StripMeter>, val masterL: Double, val masterR: Double, val masterRms: Double, val masterClip: Boolean,
+                  val loudness: Loudness = Loudness(), val correlation: Double = 1.0, val xruns: Long = 0)
+/** ROUTING: per strip the device input it reads (-1 none), per output its source id; the sources by name; the open device's channels */
+data class Routing(val inputs: List<Int>, val outputs: List<Int>, val sources: List<Pair<Int, String>>, val deviceIn: Int, val deviceOut: Int)
 
 /** The daemon client: plain HTTP (HttpURLConnection) and the meter WebSocket. The token travels in X-Amix-Token (control) and ?token= (meters). */
 class DaemonClient(val ep: Endpoint) {
@@ -41,7 +47,7 @@ class DaemonClient(val ep: Endpoint) {
     @Suppress("UNCHECKED_CAST") private fun getObj(path: String): Map<String, Any?> = MiniJson.parse(request("GET", path)) as Map<String, Any?>
     @Suppress("UNCHECKED_CAST") private fun getList(path: String): List<Map<String, Any?>> = (MiniJson.parse(request("GET", path)) as List<Any?>).map { it as Map<String, Any?> }
 
-    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId"), o.str("computer"), o.num("rate"), o.num("frames").toLong(), o.num("loadPct"), o.num("maxBlockUs"), o.int("remotes"), o.bool("recording")) }
+    fun status(): Status { val o = getObj("/api/status"); return Status(o.str("name"), o.str("version"), o.str("backend"), o.bool("running"), o.num("blocks").toLong(), o.num("xruns").toLong(), o.int("strips"), o.int("buses"), o.num("uptimeS"), o.str("lastError"), (o["backends"] as? List<*>)?.map { it.toString() } ?: emptyList(), o.str("plan"), o.str("consoleId"), o.str("computer"), o.num("rate"), o.num("frames").toLong(), o.num("loadPct"), o.num("maxBlockUs"), o.int("remotes"), o.bool("recording"), o.str("inDevice"), o.str("outDevice"), o.int("bufferFrames"), o.int("inChannels", 2), o.int("outChannels", 2)) }
     fun devices(): List<Device> = getList("/api/devices").map { Device(it.str("backend"), it.str("id"), it.str("name"), it.int("in"), it.int("out"), it.num("defaultRate", 48000.0), it.bool("defaultIn"), it.bool("defaultOut")) }
     fun state(): ConsoleState = parseState(getObj("/api/state"))
     /** LIVE SYNC check: null while the console is still at change v (a few bytes), else the new state */
@@ -97,7 +103,7 @@ class DaemonClient(val ep: Endpoint) {
         fun parseProgramEq(o: Map<String, Any?>): ProgramEq { val p = o.obj("programEq"); val g = nums(p["gains"])
             return ProgramEq(p["on"] == true, if (g.size == 10) g else List(10) { 0.0 }) }
         fun parseMeters(o: Map<String, Any?>): Meters { val m = o.obj("master")
-            return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0) }
+            return Meters(o.bool("running"), o.list("strips").map { StripMeter(it.num("pk"), it.num("rms"), it.num("hold"), it.num("clip") > 0, it.num("gr"), it.num("gate"), it.num("in")) }, m.num("l"), m.num("r"), m.num("rms"), m.num("clip") > 0, o.obj("loudness").let { l -> Loudness(l.num("m", -120.0), l.num("s", -120.0), l.num("i", -120.0), l.num("lra"), l.num("tp", -120.0)) }, o.num("correlation", 1.0), o.num("xruns").toLong()) }
         /** slider 0..1 <-> fader dB: the console's law (-inf at 0, -60 at 0.25, -20 at 0.5, 0 dB at 0.75, +10 at 1) */
         fun posToDb(p: Double): Double = when { p <= 0 -> -120.0; p >= 1 -> 10.0; p >= 0.75 -> (p - 0.75) * 40; p >= 0.5 -> -20 + (p - 0.5) * 80; p >= 0.25 -> -60 + (p - 0.25) * 160; else -> -120 + p * 240 }
         fun dbToPos(db: Double): Double = when { db <= -120 -> 0.0; db >= 10 -> 1.0; db >= 0 -> 0.75 + db / 40; db >= -20 -> 0.5 + (db + 20) / 80; db >= -60 -> 0.25 + (db + 60) / 160; else -> (db + 120) / 240 }
@@ -151,6 +157,13 @@ class DaemonClient(val ep: Endpoint) {
     fun monitor(source: Int, db: Double, dim: Boolean, mono: Boolean, mute: Boolean) = control(mapOf("op" to "monitor", "source" to source, "db" to db, "dim" to dim, "mono" to mono, "mute" to mute))
     fun open(backend: String, inDevice: String, outDevice: String, rate: Double, frames: Int, inChannels: Int, outChannels: Int) = control(mapOf("op" to "open", "backend" to backend, "in" to inDevice, "out" to outDevice, "rate" to rate, "frames" to frames, "inChannels" to inChannels, "outChannels" to outChannels))
     fun stop() = control(mapOf("op" to "stop"))
+    /** the console's AUTO LEVEL target (LUFS): the SOUND SCORE's loudness target, as on the console */
+    fun loudnessTarget(): Double = (getObj("/api/state").obj("settings")["autoTarget"] as? Number)?.toDouble() ?: -16.0
+    fun routing(): Routing { val o = getObj("/api/routing")
+        return Routing(nums(o["in"]).map { it.toInt() }, nums(o["out"]).map { it.toInt() },
+            (o["sources"] as? List<*>).orEmpty().mapNotNull { @Suppress("UNCHECKED_CAST") (it as? Map<String, Any?>)?.let { m -> m.int("id") to m.str("name") } }, o.int("inputs"), o.int("outputs")) }
+    fun inRoute(strip: Int, input: Int) = control(mapOf("op" to "inRoute", "strip" to strip, "input" to input))
+    fun outRoute(out: Int, source: Int) = control(mapOf("op" to "outRoute", "out" to out, "source" to source))
     fun clearClips() = control(mapOf("op" to "clearClips"))
     /** RECORD on the console: the master to its recordings folder; format "flac" (24-bit), "wav24" or "wavf32". Returns the file's path there. */
     fun record(on: Boolean, format: String = "flac"): String = control(mapOf("op" to "record", "on" to on, "format" to format))["file"]?.toString().orEmpty()

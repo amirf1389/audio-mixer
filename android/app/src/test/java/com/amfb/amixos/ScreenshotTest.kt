@@ -101,6 +101,33 @@ class ScreenshotTest {
         val ctx = org.robolectric.RuntimeEnvironment.getApplication(); val tok = System.getenv("AMFX_TOKEN") ?: ""
         Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", port).putString("token", tok).commit()
         return com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", port.toInt(), tok)) }
+    @Test fun metersAndScore() {   // the console's levels / loudness / phase, and its sound score with the console's own rules
+        liveClient() ?: return
+        val m = Robolectric.buildActivity(MetersActivity::class.java).setup().resume().get(); idle(1500)
+        println("METERS:\n" + m.loud.text); org.junit.Assert.assertTrue(m.loud.text.contains("LUFS")); org.junit.Assert.assertTrue(m.levels.levels.size >= 4)
+        shot(m.window.decorView.rootView, "phone-meters")
+        val s = Robolectric.buildActivity(SoundScoreActivity::class.java).setup().resume().get(); idle(1500)
+        println("SCORE: " + s.big.text + " valid=" + s.last?.valid); org.junit.Assert.assertNotNull("the score was computed from the console's meters", s.last)
+        shot(s.window.decorView.rootView, "phone-sound-score")
+    }
+    @Test fun routing() {   // the console's routing on the phone: a tap reaches the service (and so the console)
+        val c = liveClient() ?: return
+        c.inRoute(1, 1); c.outRoute(0, 3)
+        val a = Robolectric.buildActivity(RoutingActivity::class.java).setup().resume().get(); idle(1500)
+        org.junit.Assert.assertEquals(1, a.routing!!.inputs[1]); org.junit.Assert.assertEquals(3, a.routing!!.outputs[0])
+        shot(a.window.decorView.rootView, "phone-routing")
+        c.inRoute(1, 0); org.junit.Assert.assertEquals(0, c.routing().inputs[1]); c.inRoute(1, 1)
+    }
+    @Test fun engineControl() {   // ENGINE CONTROL: reopen the console's sound at another buffer, on the same device
+        val c = liveClient() ?: return
+        val a = Robolectric.buildActivity(ConsoleStatusActivity::class.java).setup().resume().get(); idle(1500)
+        org.junit.Assert.assertNotNull(a.last); val before = a.last!!.bufferFrames
+        a.reopen(null, 512); repeat(30) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idle() }
+        val after = c.status(); println("ENGINE: buffer $before -> ${after.bufferFrames}, running ${after.running}, backend ${after.backend}")
+        org.junit.Assert.assertEquals(512, after.bufferFrames); org.junit.Assert.assertTrue(after.running)
+        shot(a.window.decorView.rootView, "phone-engine-control")
+        a.reopen(null, if (before > 0) before else 256); repeat(20) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idle() }
+    }
     @Test fun samplePads() {   // the console's 100 pads on the phone; a tap plays one on the console
         val c = liveClient() ?: return
         val a = Robolectric.buildActivity(SamplePadsActivity::class.java).setup().resume().get(); idle(1500)

@@ -26,7 +26,7 @@ class MiniWebSocket(private val host: String, private val port: Int, private val
         while (true) { val l = readLine(inp); if (l.isEmpty()) break }
         socket = s; input = inp; output = s.getOutputStream()
     }
-    private fun readLine(inp: DataInputStream): String { val sb = StringBuilder(); while (true) { val c = inp.read(); if (c < 0) throw java.io.IOException("closed during handshake"); if (c == '\n'.toInt()) break; if (c != '\r'.toInt()) sb.append(c.toChar()) }; return sb.toString() }
+    private fun readLine(inp: DataInputStream): String { val sb = StringBuilder(); while (true) { val c = inp.read(); if (c < 0) throw java.io.IOException("closed during handshake"); if (c == '\n'.code) break; if (c != '\r'.code) sb.append(c.toChar()) }; return sb.toString() }
 
     /** Blocks until a text message arrives; null on a clean close. Pings are answered. */
     fun receiveText(): String? {
