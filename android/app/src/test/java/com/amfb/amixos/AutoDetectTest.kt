@@ -84,4 +84,16 @@ class AutoDetectTest {
         assertEquals(listOf("127.0.0.1"), hits.map { it.host }); assertTrue(Regex("^[0-9a-f]{12}$").matches(hits[0].id))
         assertEquals(hits[0].id, DaemonClient.probe("127.0.0.1", port)?.id)   // the same id each time
     }
+    @Test fun consoleBarShowsWhereEachConsoleIs() {
+        val studio = paired("192.168.1.20", "s", "studio000000", 3000); val stage = paired("192.168.1.30", "t", "stage0000000", 2000); val home = paired("192.168.1.40", "h", "home00000000", 1000)
+        val found = listOf(found("192.168.1.31", "stage0000000", "Stage PC"), found("192.168.1.20", "studio000000"), found("192.168.1.77", "fresh0000000", "Booth"))
+        val chips = PairedConsoles.chips(listOf(studio, stage, home), found, "studio000000", "192.168.1.20:8765")
+        assertEquals(listOf(PairedConsoles.Presence.LINKED, PairedConsoles.Presence.ONLINE, PairedConsoles.Presence.AWAY, PairedConsoles.Presence.NEW), chips.map { it.presence })
+        assertEquals("192.168.1.31", chips[1].console.host)   // the stage PC moved: switching goes to where it is now, with its own pairing
+        assertEquals("t", chips[1].console.token); assertEquals("", chips[3].console.token); assertEquals("Booth", chips[3].label)
+        // nothing linked: online ones first, still most recently used first inside a group
+        val idle = PairedConsoles.chips(listOf(studio, stage, home), found, "", "")
+        assertEquals(listOf("s", "t", "h"), idle.take(3).map { it.console.token }); assertEquals(PairedConsoles.Presence.ONLINE, idle[0].presence)
+        assertTrue(PairedConsoles.chips(emptyList(), emptyList(), "", "").isEmpty())
+    }
 }

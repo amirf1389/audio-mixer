@@ -51,6 +51,13 @@
     <string name="auto_connected">connected · live sync</string>
     <string name="auto_lost">link lost · %1$s</string>
     <string name="link_timeline">LINK TIMELINE</string>
+    <string name="bar_linked">LINKED</string>
+    <string name="bar_online">on Wi-Fi</string>
+    <string name="bar_away">away</string>
+    <string name="bar_new">NEW · PIN</string>
+    <string name="bar_switch">switching to %1$s</string>
+    <string name="kicked">The console disconnected this phone.</string>
+    <string name="kicked_hold">The console disconnected this phone · it can connect again in %1$d min</string>
     <string name="set_port">Port</string>
     <string name="set_saved_console">Saved console</string>
     <string name="set_none">none</string>

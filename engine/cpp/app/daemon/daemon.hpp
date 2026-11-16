@@ -75,6 +75,7 @@ class Daemon {
   static bool originAllowed(const std::string& origin);
   static bool hostAllowed(const std::string& host);
   static std::string randomToken();
+  static std::string computerName();   // this computer's name (GetComputerName / gethostname), printable, at most 40 characters
   static std::string loadOrCreateToken(const std::string& file, std::string& err);   // 0600; created when missing
 
  private:

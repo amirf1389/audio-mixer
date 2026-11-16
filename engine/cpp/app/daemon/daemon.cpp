@@ -267,6 +267,16 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   res.status = 404; res.body = "{\"ok\":false,\"error\":\"not found\"}"; return res;
 }
 
+std::string Daemon::computerName() {
+  char buf[256] = {0};
+#ifdef _WIN32
+  DWORD n = sizeof(buf); if (!GetComputerNameA(buf, &n)) buf[0] = 0;
+#else
+  if (gethostname(buf, sizeof(buf) - 1) != 0) buf[0] = 0;
+#endif
+  std::string s; for (const char* p = buf; *p && s.size() < 40; ++p) if (static_cast<unsigned char>(*p) >= 32 && *p != '"' && *p != 127) s += *p;   // printable, short
+  return s;
+}
 json::Value Daemon::status() const {
   std::lock_guard<std::mutex> g(m_);
   json::Value o = json::Value::object();
@@ -274,6 +284,7 @@ json::Value Daemon::status() const {
   // consoleId: a stable name for this console that phones use to find it again after its address changes; a one-way hash of the
   // master token with its own prefix (12 hex characters): it says nothing about the token and changes only if the token does
   o.set("consoleId", TokenStore::hashOf("amfx1-console-id:" + opt_.token).substr(0, 12));
+  o.set("computer", computerName());   // this PC's name: phones tell several consoles apart by it (STUDIO-PC, STAGE-PC)
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }

@@ -33,6 +33,7 @@ int main() {
   Value st = Value::parse(body, ok); CHECK(ok && st["name"].asString() == "A mix OS" && st["strips"].asInt() == 8 && !st["running"].asBool());
   // consoleId: 12 hex characters, stable, never the token itself
   CHECK(st["consoleId"].asString().size() == 12 && st["consoleId"].asString() == am::TokenStore::hashOf("amfx1-console-id:" + o.token).substr(0, 12) && body.find(o.token) == std::string::npos);
+  CHECK(st["computer"].asString() == am::Daemon::computerName() && !st["computer"].asString().empty());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/devices", "", {}, status, body) && status == 200);
   Value dv = Value::parse(body, ok); CHECK(ok && dv.isArray());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/bluetooth", "", {}, status, body) && status == 401);   // no token: no Bluetooth list
