@@ -63,7 +63,9 @@ Flickable {
                         Text { text: i18n.t("LICENCE SERVER", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                         Field { objectName: "licServer"; Layout.fillWidth: true; implicitHeight: 24; text: updater.licenseServer; placeholderText: "https://…"; font.family: Theme.mono; font.pixelSize: 8; selectByMouse: true; onEditingFinished: updater.licenseServer = text }
                         // MY ACCOUNT ONLINE: the customer page of the licence server (management/customer): plan, end date, computers, free one, downloads
-                        Btn { objectName: "accountBtn"; label: i18n.t("MY ACCOUNT ONLINE", i18n.lang); enabled: /^https:\/\//.test(updater.licenseServer); onClicked: Qt.openUrlExternally(updater.licenseServer.replace(/\/+$/, "") + "/account/") } }
+                        Rectangle { id: gbAcc; objectName: "accountBtn"; readonly property bool ok: /^https:\/\//.test(updater.licenseServer); implicitWidth: accT.implicitWidth + 22; implicitHeight: 24; radius: 7; color: "transparent"; border.color: Theme.cyan; opacity: ok ? 1 : 0.4
+                            Text { id: accT; anchors.centerIn: parent; text: i18n.t("MY ACCOUNT ONLINE", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; enabled: gbAcc.ok; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally(updater.licenseServer.replace(/\/+$/, "") + "/account/") } } }
                     Text { id: pkNote; visible: text !== "" || (updater.redeemState !== "" && updater.redeemState !== "asking" && updater.redeemState !== "done"); Layout.fillWidth: true; wrapMode: Text.WordWrap; text: ""; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9
                         Binding on text { when: updater.redeemState !== "" && updater.redeemState !== "asking" && updater.redeemState !== "done"; value: updater.redeemState } } } }
             RowLayout { spacing: 6
