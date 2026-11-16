@@ -746,6 +746,7 @@ int main(int argc, char* argv[]) {
         const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();
         const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+        engine.setGain(1, 0); engine.setMute(2, false); engine.setGain(3, 0);   // a known start: a run stopped half-way never leaves its moves behind for the next one
         engine.setGain(0, -9); if (!remote.start(false)) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC: the remote did not start: %s\n", qPrintable(remote.status())); return 284; }
         wait(1500); QNetworkAccessManager nam; QString lastHttpErr; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
           QNetworkReply* r = body.isEmpty() ? nam.get(q) : nam.post(q, body); QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
@@ -763,10 +764,26 @@ int main(int argc, char* argv[]) {
         if (sw && qEnvironmentVariableIsSet("AMIX_SYNC_SHOT")) { http("/api/control", "{\"op\":\"gain\",\"strip\":1,\"db\":-16}"); wait(140); sw->grabWindow().save(qEnvironmentVariable("AMIX_SYNC_SHOT")); }
         engine.setGain(3, -21); QElapsedTimer t2; t2.start(); double out = 0; while (t2.elapsed() < 2000) { wait(40); out = http("/api/state", {})["strips"].toList().value(3).toMap()["db"].toDouble(); if (std::abs(out + 21) < 0.05) break; } const qint64 outMs = t2.elapsed();
         const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + (qEnvironmentVariableIsSet("AMIX_SYNC_SHOT") ? 16 : 14)) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05 && lit && remotesSeen >= 1;
+        // CONNECTED PHONES: a phone pairs with the PIN and links up: the NETWORK page lists it under its name; DISCONNECT drops it; FORGET revokes it
+        int linkStep = 0; qint64 listedMs = -1, droppedMs = -1;
+        { QNetworkRequest q(QUrl("http://127.0.0.1:8765/api/pair")); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+          QNetworkReply* r = nam.post(q, QJsonDocument(QJsonObject{{"pin", remote.pairPin()}, {"name", "Smoke Phone"}}).toJson(QJsonDocument::Compact)); QElapsedTimer tp; tp.start(); while (!r->isFinished() && tp.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
+          const QVariantMap pr = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); const QString ptok = pr.value("token").toString(), pid = pr.value("id").toString();
+          if (!ptok.isEmpty()) { linkStep = 1; QTcpSocket ph; ph.connectToHost("127.0.0.1", 8765);
+            if (ph.waitForConnected(2000)) { ph.write(("GET /ws/meters?token=" + QUrl::toPercentEncoding(ptok) + " HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").constData()); ph.flush();
+              QElapsedTimer tl; tl.start(); int linkId = -1; remote.refreshLinks();
+              while (tl.elapsed() < 6000 && linkId < 0) { wait(50); ph.readAll(); for (const QVariant& v : remote.links()) { const QVariantMap m = v.toMap(); if (m["name"].toString() == "Smoke Phone" && m["tokenId"].toString() == pid && m["phone"].toBool()) linkId = m["id"].toInt(); } }
+              if (linkId >= 0) { linkStep = 2; listedMs = tl.elapsed(); remote.disconnectLink(linkId); QElapsedTimer td; td.start(); bool gone = false;
+                while (td.elapsed() < 6000 && !gone) { wait(50); ph.readAll(); gone = true; for (const QVariant& v : remote.links()) if (v.toMap()["id"].toInt() == linkId) gone = false; }
+                if (gone) { linkStep = 3; droppedMs = td.elapsed(); } } }
+            ph.abort(); remote.forgetLink(pid); wait(1200);
+            for (const QVariant& v : remote.tokens()) { const QVariantMap m = v.toMap(); if (m["id"].toString() == pid && m["state"].toString() == "revoked") linkStep = linkStep == 3 ? 4 : linkStep; } } }
+        std::fprintf(stdout, "amixos --smoke: CONNECTED PHONES paired %d, listed in %lld ms, disconnected in %lld ms, forgotten %d\n", linkStep >= 1, static_cast<long long>(listedMs), static_cast<long long>(droppedMs), linkStep == 4);
+        if (linkStep != 4) { std::fprintf(stderr, "amixos --smoke: CONNECTED PHONES failed at step %d (%s)\n", linkStep, qPrintable(remote.linkNote())); remote.stop(); return 287; }
         phone.abort();
         std::fprintf(stdout, "amixos --smoke: LIVE SYNC seed %.1f, phone->console %lld ms, console->phone %lld ms, changes %d, fader lit %d, remotes %d\n", seeded, static_cast<long long>(inMs), static_cast<long long>(outMs), remote.syncedChanges(), lit, remotesSeen);
         const bool remoteWasRunning = remote.running(); const QString remoteStatus = remote.status() + " | " + remote.syncDebug();
-        remote.stop(); wait(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); wait(300); engine.setGain(0, g0); engine.setGain(1, g1); engine.setGain(3, 0); engine.setMute(2, false);
+        remote.stop(); wait(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); wait(300); engine.setGain(0, g0); engine.setGain(1, std::abs(g1 + 14) < 0.05 || std::abs(g1 + 16) < 0.05 ? 0.0 : g1); engine.setGain(3, 0); engine.setMute(2, false);   // never put back a value this check itself left
         if (!ok) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC failed (seed %.1f, strip 2 %.1f, mute %d, out %.1f; remote running %d, status %s; http %s)\n", seeded, engine.stripAt(1)["db"].toDouble(), engine.stripAt(2)["mute"].toBool(), out, remoteWasRunning, qPrintable(remoteStatus), qPrintable(lastHttpErr)); return 285; } }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();

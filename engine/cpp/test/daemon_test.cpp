@@ -144,6 +144,37 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state?since=" + v, "", {}, status, body) && status == 200);
     Value st = Value::parse(body, ok); CHECK(ok && !st["same"].asBool() && st["strips"].at(2)["mute"].asBool()); }
 
+  { // CONNECTED PHONES: a paired phone's live link is listed under its pairing's name; DISCONNECT closes it and holds the pairing off a while;
+    // FORGET (revoke) closes the links of that pairing; nobody but the master token sees or drops links
+    { bool idle = false; for (int i = 0; i < 40 && !idle; ++i) { std::this_thread::sleep_for(std::chrono::milliseconds(25)); idle = d.links().size() == 0; } CHECK(idle); }   // the earlier stream has ended
+    std::string pid, e; const std::string pt = d.tokens().issue("Pixel 9 Pro", "control", 0, pid, e); CHECK(!pt.empty());
+    int pf = am::httpd::Client::connectWs("127.0.0.1", port, "/ws/meters?token=" + pt, {}); CHECK(pf >= 0);
+    am::httpd::WebSocket pws(pf); std::string t; int op = 0; CHECK(pws.read(t, op) && op == 1);   // the state on connect: the link is up
+    int mf = am::httpd::Client::connectWs("127.0.0.1", port, "/ws/meters?token=" + o.token + "&client=Browser%20remote", {}); CHECK(mf >= 0);
+    am::httpd::WebSocket mws(mf); CHECK(mws.read(t, op) && op == 1);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/links", "", {}, status, body) && (status == 401 || status == 429));   // no token (429 once the wrong tokens above passed 20 a minute)
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/links", "", {{"X-Amix-Token", pt}}, status, body) && status == 403);   // a phone may not
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/links", "", auth, status, body) && status == 200);
+    Value ls = Value::parse(body, ok)["links"]; CHECK(ok && ls.size() == 2 && d.remotes() == 2);
+    int phoneLink = 0; for (std::size_t i = 0; i < ls.size(); ++i) { const Value l = ls.at(i);
+      if (l["tokenId"].asString() == pid) { phoneLink = l["id"].asInt(); CHECK(l["name"].asString() == "Pixel 9 Pro" && l["ip"].asString() == "127.0.0.1" && l["role"].asString() == "control" && l["seconds"].asNumber() >= 0); }
+      else CHECK(l["tokenId"].asString() == "master" && l["name"].asString() == "Browser remote"); }
+    CHECK(phoneLink > 0);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/links/kick", "{\"id\":" + std::to_string(phoneLink) + "}", {{"X-Amix-Token", pt}}, status, body) && status == 403);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/links/kick", "{\"id\":" + std::to_string(phoneLink) + "}", auth, status, body) && status == 200);
+    bool kicked = false; for (int i = 0; i < 60 && !kicked; ++i) { if (!pws.read(t, op)) break; kicked = t.find("\"kicked\":true") != std::string::npos && t.find("\"holdSeconds\":120") != std::string::npos; }
+    CHECK(kicked); pws.close();
+    bool gone = false; for (int i = 0; i < 40 && !gone; ++i) { std::this_thread::sleep_for(std::chrono::milliseconds(25)); gone = d.links().size() == 1; } CHECK(gone);
+    // held: the phone cannot come straight back (control and the live link are refused) until the hold ends
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mute\",\"strip\":0,\"on\":false}", {{"X-Amix-Token", pt}}, status, body) && status == 403 && body.find("\"held\":true") != std::string::npos);
+    { int hf = am::httpd::Client::connectWs("127.0.0.1", port, "/ws/meters?token=" + pt, {}); CHECK(hf >= 0); am::httpd::WebSocket hws(hf); CHECK(hws.read(t, op) && t.find("\"held\"") != std::string::npos && t.find("\"kicked\":true") != std::string::npos); hws.close(); }
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/links/kick", "{\"id\":99999}", auth, status, body) && status == 404);
+    // FORGET: a second phone's pairing revoked while it is connected: its link closes at once (no restart of the service)
+    std::string qid; const std::string qt = d.tokens().issue("Galaxy Tab", "view", 0, qid, e); CHECK(!qt.empty());
+    int qf = am::httpd::Client::connectWs("127.0.0.1", port, "/ws/meters?token=" + qt, {}); CHECK(qf >= 0); am::httpd::WebSocket qws(qf); CHECK(qws.read(t, op) && op == 1);
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/tokens/revoke", "{\"id\":\"" + qid + "\"}", auth, status, body) && status == 200 && Value::parse(body, ok)["closed"].asInt() == 1);
+    bool closed = false; for (int i = 0; i < 60 && !closed; ++i) { if (!qws.read(t, op)) { closed = true; break; } closed = t.find("\"kicked\":true") != std::string::npos; } CHECK(closed); qws.close();
+    mws.close(); bool none = false; for (int i = 0; i < 40 && !none; ++i) { std::this_thread::sleep_for(std::chrono::milliseconds(25)); none = d.links().size() == 0 && d.remotes() == 0; } CHECK(none); }
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"stop\"}", auth, status, body) && status == 200);
   CHECK(!d.state()["running"].asBool());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/nothing", "", {}, status, body) && status == 404);
@@ -157,6 +188,6 @@ int main() {
     const Value st = sd.state(); CHECK(st["strips"].at(0)["name"].asString() == "Vocal" && st["strips"].at(0)["db"].asNumber() == -4 && st["strips"].at(0)["solo"].asBool());
     CHECK(st["strips"].at(1)["mute"].asBool() && st["strips"].at(1)["db"].asNumber() == -12 && st["master"]["db"].asNumber() == -2);
     sd.stop(); std::remove(sf.c_str()); }
-  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters OK on port %u\n", port);
+  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget) OK on port %u\n", port);
   return 0;
 }

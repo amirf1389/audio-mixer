@@ -28,6 +28,8 @@ class Remote : public QObject {
   Q_PROPERTY(int syncedChanges READ syncedChanges NOTIFY synced)   // LIVE SYNC: changes carried between the console and the remotes since start
   Q_PROPERTY(int remotes READ remotes NOTIFY synced)               // phones and browsers connected right now (their live streams)
   Q_PROPERTY(int pulse READ pulse NOTIFY pulseChanged)             // moves on while a remote's fader glow is lit: bind touched(strip, remote.pulse)
+  Q_PROPERTY(QVariantList links READ links NOTIFY linksChanged)    // CONNECTED PHONES: [{id, tokenId, name, role, ip, seconds}] (every 2 s while running)
+  Q_PROPERTY(QString linkNote READ linkNote NOTIFY linksChanged)
  public:
   explicit Remote(Engine* engine, QObject* parent = nullptr);
   ~Remote() override;
@@ -61,6 +63,11 @@ class Remote : public QObject {
   // the fader a phone or browser just moved (strip, or -1 for the MASTER): true for 0.8 s after its last remote move, so the mixer can
   // light it while the remote holds it (tick: any value that changes, to re-read it from a binding)
   Q_INVOKABLE bool touched(int strip, int tick = 0) const;
+  QVariantList links() const { return running() ? links_ : QVariantList(); } QString linkNote() const { return linkNote_; }
+  Q_INVOKABLE void refreshLinks();
+  Q_INVOKABLE void disconnectLink(int id);            // DISCONNECT: drops that phone now; its pairing is refused for 2 minutes
+  Q_INVOKABLE void forgetLink(const QString& tokenId); // FORGET: revokes the phone's pairing (it needs the PIN again); its link closes at once
+  static QString linkAge(int seconds);                // "12 s", "4 min", "2 h 05 min"
   // LIVE SYNC, the console side: the service starts from the console's mixer (remote-seed.json, --seed), and while it runs the console
   // follows it: a fader, mute, solo or name moved on a phone or in a browser moves here (about 150 ms), and one moved here goes out to
   // every phone and browser. Each side is compared with the last value both agreed on, so neither echoes the other back.
@@ -70,6 +77,7 @@ class Remote : public QObject {
  signals:
   void synced();
   void pulseChanged();
+  void linksChanged();
  private:
   void writeSeed();
   void syncTick();
@@ -78,4 +86,6 @@ class Remote : public QObject {
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
+  QVariantList links_; QString linkNote_; QTimer linkTimer_; bool linksGetting_ = false;
+  void ensureToken(); QNetworkRequest api(const QString& path) const;
 };

@@ -5,6 +5,7 @@
 #include "paths/paths.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <iterator>
@@ -76,11 +77,23 @@ bool Daemon::start(std::string& err) {
   if (!opt_.seed.empty()) { std::string e; if (!loadSeed(opt_.seed, e)) std::fprintf(stderr, "amixos-daemon: %s (the mixer starts flat)\n", e.c_str()); }
   http_.route([this](const httpd::Request& r) { return handle(r); });
   http_.websocket("/ws/meters", [this](const httpd::Request& r, httpd::WebSocket& ws) {
-    if (roleOf(r).empty()) { ws.send("{\"error\":\"unauthorised\"}"); ws.close(); return; }   // any valid token may watch the meters
+    const std::string role = roleOf(r); if (role == "held") { ws.send("{\"error\":\"held\",\"kicked\":true,\"holdSeconds\":" + std::to_string(kHoldSeconds) + "}"); ws.close(); return; }
+    if (role.empty()) { ws.send("{\"error\":\"unauthorised\"}"); ws.close(); return; }   // any valid token may watch the meters
     struct Count { std::atomic<int>& n; explicit Count(std::atomic<int>& c) : n(c) { ++n; } ~Count() { --n; } } watching(watchers_);   // how many remotes are live
-    std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} });   // drains pings / close from the phone
+    // CONNECTED PHONES: this link in the list (the pairing's name; a master-token client may say what it is with ?client=)
+    auto link = std::make_shared<Link>(); { std::string t = r.header("x-amix-token"); if (t.empty()) t = r.param("token"); TokenStore::Entry e;
+      if (role == "admin") { link->tokenId = "master"; std::string c; const std::string raw = r.param("client");
+        for (std::size_t i = 0; i < raw.size() && c.size() < 40; ++i) { char ch = raw[i];   // %XX and + decoded; printable characters only
+          if (ch == '+') ch = ' '; else if (ch == '%' && i + 2 < raw.size() && std::isxdigit(static_cast<unsigned char>(raw[i + 1])) && std::isxdigit(static_cast<unsigned char>(raw[i + 2]))) { ch = static_cast<char>(std::stoi(raw.substr(i + 1, 2), nullptr, 16)); i += 2; }
+          if (static_cast<unsigned char>(ch) >= 32 && ch != '"' && ch != 127) c += ch; } link->name = c.empty() ? "master token" : c; }
+      else if (tokens_.find(t, e)) { link->tokenId = e.id; link->name = e.name; }
+      link->role = role; link->ip = r.peer; link->since = static_cast<long long>(std::time(nullptr));
+      std::lock_guard<std::mutex> g(linksM_); link->id = nextLink_++; links_[link->id] = link; }
+    struct Drop { Daemon* d; int id; ~Drop() { std::lock_guard<std::mutex> g(d->linksM_); d->links_.erase(id); } } drop{this, link->id};
+    std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} ws.close(); });   // drains pings / close from the phone; the phone hung up: the link ends now, not at the next failed send
     unsigned long long sent = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
     while (running_ && ws.open()) {
+      if (link->kick) { ws.send("{\"kicked\":true,\"holdSeconds\":" + std::to_string(link->tokenId == "master" ? 0 : kHoldSeconds) + "}"); break; }   // DISCONNECT from the console
       const unsigned long long v = version_.load();
       if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); if (!ws.send(m.dump())) break; sent = v; }
       if (!ws.send(meters().dump())) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
@@ -113,7 +126,30 @@ bool Daemon::noteRefused() {
 std::string Daemon::roleOf(const httpd::Request& r, bool allowQuery) const {
   std::string t = r.header("x-amix-token"); if (t.empty() && allowQuery) t = r.param("token"); if (t.empty()) return "";
   if (TokenStore::same(t, opt_.token)) return "admin";
-  return tokens_.roleFor(t, r.peer);   // a named token works from the address that used it first, and from no other
+  std::string role = tokens_.roleFor(t, r.peer);   // a named token works from the address that used it first, and from no other
+  if (!role.empty()) { TokenStore::Entry e; if (tokens_.find(t, e) && held(e.id)) return "held"; }   // disconnected by the console a moment ago: refused for a while
+  return role;
+}
+bool Daemon::held(const std::string& tokenId) const {
+  std::lock_guard<std::mutex> g(linksM_); const auto it = held_.find(tokenId);
+  return it != held_.end() && static_cast<long long>(std::time(nullptr)) < it->second;
+}
+json::Value Daemon::links() const {
+  const long long now = static_cast<long long>(std::time(nullptr)); json::Value a = json::Value::array(); std::lock_guard<std::mutex> g(linksM_);
+  for (const auto& [id, l] : links_) { json::Value o = json::Value::object(); o.set("id", id); o.set("tokenId", l->tokenId); o.set("name", l->name); o.set("role", l->role);
+    o.set("ip", l->ip); o.set("since", static_cast<double>(l->since)); o.set("seconds", static_cast<double>(now - l->since)); a.push(o); }
+  return a;
+}
+bool Daemon::kick(int id) {
+  std::lock_guard<std::mutex> g(linksM_); const auto it = links_.find(id); if (it == links_.end()) return false;
+  it->second->kick = true; if (it->second->tokenId != "master" && !it->second->tokenId.empty()) held_[it->second->tokenId] = static_cast<long long>(std::time(nullptr)) + kHoldSeconds;
+  return true;
+}
+int Daemon::kickToken(const std::string& tokenId, bool hold) {
+  std::lock_guard<std::mutex> g(linksM_); int n = 0;
+  for (auto& [id, l] : links_) if (l->tokenId == tokenId) { l->kick = true; ++n; }
+  if (hold && tokenId != "master") held_[tokenId] = static_cast<long long>(std::time(nullptr)) + kHoldSeconds;
+  return n;
 }
 bool Daemon::authorised(const httpd::Request& r) const { const std::string role = roleOf(r, false); return role == "admin" || role == "control"; }
 
@@ -145,7 +181,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
   if (r.method == "GET" && (r.path == "/api/bluetooth" || r.path.rfind("/api/bluetooth?", 0) == 0)) {   // ?scan=SECONDS also listens for devices in range
-    if (!authorised(r)) { res.status = roleOf(r, false) == "view" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }   // device names and a radio scan: control only
+    if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }   // device names and a radio scan: control only
     int scan = 0; const auto q = r.path.find("scan="); if (q != std::string::npos) scan = std::clamp(std::atoi(r.path.c_str() + q + 5), 0, 20);
     std::string note; json::Value o = json::Value::object(), a = json::Value::array();
     const BluetoothRadio radio = bluetoothRadio();
@@ -175,6 +211,14 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     tokens_.roleFor(t, r.peer);   // it belongs to this phone's address from the start
     pairFails_ = 5;               // one pairing per PIN: the next phone waits for the next PIN
     json::Value out = json::Value::object(); out.set("ok", true); out.set("id", id); out.set("token", t); out.set("role", "control"); out.set("days", 30); res.body = out.dump(); return res; }
+  if (r.path == "/api/links" || r.path == "/api/links/kick") {   // CONNECTED PHONES: only the master token (the console) sees and drops them
+    if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed\"}"; return res; }
+    json::Value out = json::Value::object();
+    if (r.method == "GET" && r.path == "/api/links") { out.set("ok", true); out.set("links", links()); out.set("holdSeconds", kHoldSeconds); res.body = out.dump(); return res; }
+    bool ok = false; const json::Value b = json::Value::parse(r.body, ok);
+    if (r.method != "POST" || !ok || !b.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
+    if (!kick(b["id"].asInt())) { res.status = 404; res.body = "{\"ok\":false,\"error\":\"no such link (it may have closed already)\"}"; return res; }
+    out.set("ok", true); res.body = out.dump(); return res; }
   if (r.path == "/api/tokens" || r.path == "/api/tokens/revoke") {   // the named tokens: only the master token manages them
     if (roleOf(r, false) != "admin") { const bool known = !roleOf(r, false).empty(); res.status = known ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"the master token is needed to manage tokens\"}"; return res; }
     if (opt_.tokenStore.empty()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"this daemon was started without a token file\"}"; return res; }
@@ -186,11 +230,11 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     bool ok = false; const json::Value b = json::Value::parse(r.body, ok);
     if (r.method != "POST" || !ok || !b.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
     if (r.path == "/api/tokens") { std::string id; const std::string t = tokens_.issue(b["name"].asString(), b["role"].asString("control"), b["days"].asInt(0), id, terr); if (!t.empty()) { out.set("ok", true); out.set("id", id); out.set("token", t); } }
-    else if (tokens_.revoke(b["id"].asString(), terr)) out.set("ok", true);
+    else if (tokens_.revoke(b["id"].asString(), terr)) { out.set("ok", true); out.set("closed", kickToken(b["id"].asString(), false)); }   // FORGET: its live links close too
     if (!terr.empty()) { res.status = 400; out.set("ok", false); out.set("error", terr); }
     res.body = out.dump(); return res; }
   if (r.method == "POST" && r.path == "/api/control") {
-    if (!authorised(r)) { res.status = roleOf(r, false) == "view" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     bool ok = false; const json::Value cmd = json::Value::parse(r.body, ok);
     if (!ok || !cmd.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
     std::string err; json::Value out = control(cmd, err);
@@ -198,7 +242,8 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     res.body = out.dump(); return res;
   }
   if (r.method == "GET" && r.path == "/api/console-info") {   // the console's plug-ins, racks and extensions as it saved them when the service started (read-only)
-    if (roleOf(r).empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    { const std::string rr = roleOf(r); if (rr == "held") { res.status = 403; res.body = "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}"; return res; }
+      if (rr.empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; } }
     std::ifstream f(opt_.consoleInfo, std::ios::binary); std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     bool ok = false; json::Value::parse(s, ok);   // only well-formed JSON goes out
     res.body = ok && !s.empty() && s.size() < 4 * 1024 * 1024 ? s : std::string("{\"available\":false}"); return res;
@@ -217,7 +262,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     res.body = kPage; return res;
   }
   if (r.method == "GET" && (r.path == "/" || r.path == "/api")) {
-    res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"WS /ws/meters?token=\"]}"; return res;
+    res.body = "{\"name\":\"amixos-daemon\",\"api\":[\"GET /api/status\",\"GET /api/devices\",\"GET /api/state\",\"GET /api/meters\",\"POST /api/control (X-Amix-Token)\",\"POST /api/pair\",\"GET /api/tokens\",\"POST /api/tokens\",\"POST /api/tokens/revoke\",\"GET /api/links\",\"POST /api/links/kick\",\"WS /ws/meters?token=\"]}"; return res;
   }
   res.status = 404; res.body = "{\"ok\":false,\"error\":\"not found\"}"; return res;
 }

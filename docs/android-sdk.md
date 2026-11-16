@@ -7,7 +7,7 @@ uses the same module (`android/amix-sdk`).
 ## Use it
 ```kotlin
 // app/build.gradle.kts
-dependencies { implementation(files("libs/amfx1-sdk-1.23.0.1.aar")); implementation("androidx.core:core-ktx:1.13.1") }
+dependencies { implementation(files("libs/amfx1-sdk-1.24.0.0.aar")); implementation("androidx.core:core-ktx:1.13.1") }
 ```
 ```kotlin
 val hal = AudioHal.read(context)            // public APIs + a short AAudio probe (opens and closes a stream, plays nothing)

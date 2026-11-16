@@ -11,11 +11,15 @@
 //   POST /api/tokens              {"name":..,"role":"control"|"view","days":N} makes one and returns it once (master token)
 //   POST /api/tokens/revoke       {"id":..} (master token)
 //   POST /api/pair                {"pin":"123456","name":..} the minute's PIN for a control token of its own (no token needed)
+//   GET  /api/links               the phones and browsers connected now: [{id, tokenId, name, role, ip, since, seconds}] (master token)
+//   POST /api/links/kick          {"id":N} disconnect one (a named pairing is then refused for 2 minutes) (master token)
 //   WS   /ws/meters?token=...     a JSON frame 20 times a second: strips [{pk,rms,hold,clip,gr,gate,in}], master {l,r,rms,clip}, loudness, correlation, blocks, xruns
 // Token: <data>/daemon.token (am::paths: %APPDATA%\AMFB Audio\AmF X1 on Windows, the program's data folder on Linux, ...) (created on first start, 0600, 32 random bytes as hex); --token-file / --token override it.
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
 // encrypted on the wire; put the nginx TLS front (deploy/nginx) in front of it for anything beyond a trusted home / studio network.
 #pragma once
+#include <map>
+#include <memory>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -53,6 +57,13 @@ class Daemon {
   // watcher as soon as it moves (and once on connect), and GET /api/state?since=N answers {"v":N,"same":true} while nothing changed
   unsigned long long stateVersion() const { return version_.load(); }
   int remotes() const { return watchers_.load(); }   // phones and browsers watching now (open /ws/meters streams)
+  // CONNECTED PHONES: every open live link (/ws/meters) with the pairing it uses (tokenId, "master" for the master token), the device's
+  // name (the pairing's name: the phone's model when it paired with the PIN), its address and since when. GET /api/links (master token).
+  json::Value links() const;
+  // DISCONNECT (POST /api/links/kick {"id":N}, master token): the link closes within 50 ms with {"kicked":...}; a named pairing is then
+  // held for kHoldSeconds (its token is refused) so the phone does not come straight back. Revoking a pairing closes its links too.
+  bool kick(int id); int kickToken(const std::string& tokenId, bool hold);
+  static constexpr int kHoldSeconds = 120;
   bool loadSeed(const std::string& file, std::string& err);   // {"strips":[{name,db,pan,mute,solo}],"master":{"db"}}
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
@@ -73,6 +84,9 @@ class Daemon {
   httpd::Response handle(const httpd::Request& r);
   json::Value apply(const json::Value& cmd, std::string& err);
   std::atomic<unsigned long long> version_{1}; std::atomic<int> watchers_{0};
+  struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
+  mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
+  bool held(const std::string& tokenId) const;
   bool authorised(const httpd::Request& r) const;
   Options opt_; mutable TokenStore tokens_; httpd::Server http_;
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute

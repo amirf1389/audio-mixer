@@ -104,7 +104,9 @@ bool WebSocket::read(std::string& text, int& opcode) {
   if (opcode == 8) { close(); return false; }
   return true;
 }
-void WebSocket::close() { if (open_.exchange(false)) { const char f[2] = {static_cast<char>(0x88), 0}; std::lock_guard<std::mutex> g(w_); sendAll(fd_, f, 2); } }
+// close: the close frame, then the socket is shut both ways, so a reader thread blocked on this connection returns at once even when the
+// other side never answers the close (a phone that went to sleep, a dropped Wi-Fi): the handler can then join it and finish
+void WebSocket::close() { if (open_.exchange(false)) { const char f[2] = {static_cast<char>(0x88), 0}; std::lock_guard<std::mutex> g(w_); sendAll(fd_, f, 2); ::shutdown(fd_, SHUT_RDWR); } }
 
 // ── Server ──
 Server::Server() { initSockets(); }
