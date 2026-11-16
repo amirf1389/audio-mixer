@@ -43,84 +43,81 @@ class LocalMixerActivity : AppCompatActivity() {
     private var loop: AudioLoop? = null
     private val ui = Handler(Looper.getMainLooper())
     private val accent by lazy { getColor(R.color.accent) }; private val cyan by lazy { getColor(R.color.cyan) }; private val dim by lazy { getColor(R.color.dim) }
-    private lateinit var body: LinearLayout; private lateinit var status: TextView; private lateinit var startBtn: Button
-    private val meters = HashMap<String, ProgressBar>(); private val fxBtns = HashMap<Int, Button>()
+    private lateinit var body: LinearLayout; private lateinit var status: TextView; private lateinit var startBtn: PadButton
+    private val meters = HashMap<String, ProgressBar>(); private val fxBtns = HashMap<Int, PadButton>()
     private fun prefs() = Prefs.local(this)
     private fun inChannels() = prefs().getInt("inChannels", 1).coerceIn(1, 2)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         runCatching { Engine.setDirs(filesDir.absolutePath, cacheDir.absolutePath, cacheDir.absolutePath) }
-        body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(body) }, null))
+        body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 20, 20, 16); setBackgroundColor(Color.parseColor("#0B0F15")) }
+        setContentView(Nav.wrap(this, body, null))
         render()
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }
 
-    /** builds the whole screen from the saved choices (again after a change of input channels or devices) */
+    /** builds the whole screen from the saved choices (again after a change of input channels or devices): a header with the INPUT and
+     *  OUTPUT keys, then the desk: one strip per channel and the MASTER strip on the right, like the console's own mixer */
     fun render() {
-        body.removeAllViews(); meters.clear(); fxBtns.clear()
-        body.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD) })
-        status = TextView(this).apply { setTextColor(dim); textSize = 12f; typeface = Typeface.MONOSPACE; setPadding(0, 4, 0, 12) }; body.addView(status); showStatus()
-        // ---- INPUT / OUTPUT
-        val io = card(); body.addView(io)
-        io.addView(label(getString(R.string.lm_input)))
-        io.addView(Button(this).apply { text = deviceName(Prefs.localInDevice(this@LocalMixerActivity), false); isAllCaps = false; setOnClickListener { pickDevice(false) } })
-        val chRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear()
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        head.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
+        startBtn = PadButton(this, getString(if (loop == null) R.string.start else R.string.stop), ConsoleUi.GREEN, 14f).apply { on = loop != null; layoutParams = LinearLayout.LayoutParams(300, 96); setOnClickListener { if (loop == null) startAudio() else stopAudio() } }
+        head.addView(startBtn); body.addView(head)
+        status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }; body.addView(status); showStatus()
+        // ---- INPUT / OUTPUT: two keys that open the device lists, and MONO / STEREO
+        fun ioRow(tag: String, name: String, color: Int, click: () -> Unit) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; isClickable = true; setOnClickListener { click() }
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFF141B26.toInt()); cornerRadius = 16f; setStroke(2, 0xFF263041.toInt()) }; setPadding(22, 16, 22, 16)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 8) }
+            addView(TextView(this@LocalMixerActivity).apply { text = tag; setTextColor(color); textSize = 10f; letterSpacing = 0.15f; typeface = Typeface.DEFAULT_BOLD; layoutParams = LinearLayout.LayoutParams(200, LinearLayout.LayoutParams.WRAP_CONTENT) })
+            addView(TextView(this@LocalMixerActivity).apply { text = name; setTextColor(Color.WHITE); textSize = 13f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
+            addView(TextView(this@LocalMixerActivity).apply { text = "▾"; setTextColor(dim); textSize = 14f }) }
+        body.addView(ioRow(getString(R.string.lm_input), deviceName(Prefs.localInDevice(this), false), cyan) { pickDevice(false) })
+        body.addView(ioRow(getString(R.string.lm_output), deviceName(Prefs.localOutDevice(this), true), accent) { pickDevice(true) })
+        val chRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 10) }
         listOf(1 to getString(R.string.lm_mono), 2 to getString(R.string.lm_stereo)).forEach { (n, t) ->
-            chRow.addView(Button(this).apply { text = t; setTextColor(if (inChannels() == n) accent else Color.WHITE); setOnClickListener { setInChannels(n) } }) }
-        io.addView(chRow)
-        io.addView(label(getString(R.string.lm_output)))
-        io.addView(Button(this).apply { text = deviceName(Prefs.localOutDevice(this@LocalMixerActivity), true); isAllCaps = false; setOnClickListener { pickDevice(true) } })
-        startBtn = Button(this).apply { text = getString(if (loop == null) R.string.start else R.string.stop); textSize = 16f; setOnClickListener { if (loop == null) startAudio() else stopAudio() } }
-        io.addView(startBtn)
-        // ---- CHANNELS and MASTER
-        for (s in 0 until inChannels()) body.addView(stripCard(s))
-        body.addView(stripCard(-1))
-        body.addView(TextView(this).apply { text = getString(R.string.lm_note); setTextColor(dim); textSize = 12f; setPadding(0, 16, 0, 0) })
+            chRow.addView(PadButton(this, t, cyan, 11f).apply { on = inChannels() == n; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (n == 1) 8 else 0, 0) }; setOnClickListener { setInChannels(n) } }) }
+        body.addView(chRow)
+        // ---- THE DESK
+        val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+        for (s in 0 until inChannels()) desk.addView(stripView(s))
+        desk.addView(stripView(-1)); body.addView(desk)
+    }
+    private val faders = HashMap<Int, FaderView>()
+
+    /** one channel strip (0, 1) or the MASTER (-1), top to bottom: name, FX (the insert rack), pan knob or LIMIT, MUTE, the fader with
+     *  its LED meter, the level in dB */
+    private fun stripView(s: Int): View {
+        val p = prefs(); val master = s < 0; val two = inChannels() == 2
+        val color = if (master) accent else ConsoleUi.palette[(s + 1) % ConsoleUi.palette.size]
+        val col = ConsoleUi.strip(this, color, 0, master).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, if (master) 1.15f else 1f).apply { setMargins(4, 0, 4, 0) } }
+        col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_master) else getString(R.string.lm_channel, s + 1, if (two) (if (s == 0) "L" else "R") else "").trim(); setTextColor(if (master) accent else Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
+        col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_sub_master) else getString(if (two) R.string.lm_sub_in_n else R.string.lm_sub_in, s + 1); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        fun full(v: View, h: Int = 84) = v.apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { setMargins(6, 4, 6, 4) } }
+        col.addView(full(PadButton(this, fxLabel(s), ConsoleUi.VIOLET, 12f).apply { on = rack(s).any { it.isNotEmpty() }; setOnClickListener { showRack(s) } }.also { fxBtns[s] = it }))
+        if (master) {
+            col.addView(full(PadButton(this, getString(R.string.lm_limit), ConsoleUi.GREEN, 12f).apply { on = p.getBoolean("limiter", true)
+                setOnClickListener { val v = !p.getBoolean("limiter", true); p.edit().putBoolean("limiter", v).apply(); engine?.setLimiter(v, -0.5, 100.0); on = v } }))
+            col.addView(TextView(this).apply { text = getString(R.string.lm_limit_at); setTextColor(dim); textSize = 9f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 6) })
+        } else {
+            val defPan = if (two) (if (s == 0) -1f else 1f) else 0f
+            col.addView(KnobView(this, color).apply { value = p.getFloat("pan$s", defPan); layoutParams = LinearLayout.LayoutParams(150, LinearLayout.LayoutParams.WRAP_CONTENT)
+                onChange = { v -> p.edit().putFloat("pan$s", v).apply(); engine?.setPan(s, v.toDouble()) } })
+            col.addView(full(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("mute$s", false)
+                setOnClickListener { val v = !p.getBoolean("mute$s", false); p.edit().putBoolean("mute$s", v).apply(); engine?.setMute(s, v); on = v } }))
+        }
+        val key = if (master) "masterDb" else "db$s"; val readout = ConsoleUi.dbReadout(this)
+        fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
+        val db0 = p.getFloat(key, 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
+        col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (master) engine?.setMaster(set) else engine?.setGain(s, set) } }.also { faders[s] = it })
+        col.addView(readout)
+        return col
     }
     private fun card() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.card_bg); setPadding(28, 22, 28, 22)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 8, 0, 8) } }
-    private fun label(t: String) = TextView(this).apply { text = t; setTextColor(cyan); textSize = 11f; letterSpacing = 0.15f; typeface = Typeface.MONOSPACE; setPadding(0, 10, 0, 2) }
-    private fun bar() = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progressDrawable.setTint(Color.parseColor("#34D399"))
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 22) }
-
-    /** one channel (strip 0, 1) or the master (-1): fader, pan / limiter, mute, the insert rack, a meter */
-    private fun stripCard(s: Int): View {
-        val c = card(); val p = prefs(); val master = s < 0
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        head.addView(TextView(this).apply { text = if (master) getString(R.string.lm_master) else getString(R.string.lm_channel, s + 1, if (inChannels() == 2) (if (s == 0) "L" else "R") else ""); setTextColor(if (master) accent else Color.WHITE); textSize = 15f; setTypeface(null, Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
-        head.addView(Button(this).apply { text = fxLabel(s); setOnClickListener { showRack(s) } }.also { fxBtns[s] = it })
-        c.addView(head)
-        if (!master) { val mute = p.getBoolean("mute$s", false)
-            c.addView(Button(this).apply { text = getString(R.string.lm_mute); setTextColor(if (mute) Color.parseColor("#EF4444") else Color.WHITE)
-                setOnClickListener { val on = !p.getBoolean("mute$s", false); p.edit().putBoolean("mute$s", on).apply(); engine?.setMute(s, on); setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE) } }) }
-        val key = if (master) "masterDb" else "db$s"; val dbText = TextView(this).apply { setTextColor(Color.WHITE); typeface = Typeface.MONOSPACE }
-        fun showDb(db: Double) { dbText.text = getString(R.string.lm_level, if (db <= -60) "-∞" else String.format("%+.1f dB", db)) }
-        showDb(p.getFloat(key, 0f).toDouble()); c.addView(dbText)
-        c.addView(SeekBar(this).apply { max = 700; progress = ((p.getFloat(key, 0f) + 60) * 10).toInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(b: SeekBar, v: Int, u: Boolean) { if (!u) return; val db = -60.0 + v / 10.0; p.edit().putFloat(key, db.toFloat()).apply(); showDb(db); if (master) engine?.setMaster(db) else engine?.setGain(s, db) }
-                override fun onStartTrackingTouch(b: SeekBar) {}; override fun onStopTrackingTouch(b: SeekBar) {} }) })
-        if (master) {
-            val lim = p.getBoolean("limiter", true)
-            c.addView(Button(this).apply { text = getString(R.string.lm_limiter); setTextColor(if (lim) Color.parseColor("#34D399") else Color.WHITE)
-                setOnClickListener { val on = !p.getBoolean("limiter", true); p.edit().putBoolean("limiter", on).apply(); engine?.setLimiter(on, -0.5, 100.0); setTextColor(if (on) Color.parseColor("#34D399") else Color.WHITE) } })
-            c.addView(label("L")); c.addView(bar().also { meters["L"] = it }); c.addView(label("R")); c.addView(bar().also { meters["R"] = it })
-        } else {
-            val panText = TextView(this).apply { setTextColor(dim); typeface = Typeface.MONOSPACE }
-            fun showPan(v: Float) { panText.text = getString(R.string.lm_pan, if (Math.abs(v) < 0.01f) "C" else if (v < 0) "L" + (-v * 100).toInt() else "R" + (v * 100).toInt()) }
-            val defPan = if (inChannels() == 2) (if (s == 0) -1f else 1f) else 0f
-            showPan(p.getFloat("pan$s", defPan)); c.addView(panText)
-            c.addView(SeekBar(this).apply { max = 200; progress = ((p.getFloat("pan$s", defPan) + 1) * 100).toInt()
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(b: SeekBar, v: Int, u: Boolean) { if (!u) return; val pan = (v - 100) / 100f; p.edit().putFloat("pan$s", pan).apply(); showPan(pan); engine?.setPan(s, pan.toDouble()) }
-                    override fun onStartTrackingTouch(b: SeekBar) {}; override fun onStopTrackingTouch(b: SeekBar) {} }) })
-            c.addView(label(getString(R.string.lm_in_level))); c.addView(bar().also { meters["s$s"] = it })
-        }
-        return c
-    }
 
     // ---- INSERT RACK
     private fun rack(s: Int): MutableList<String> { val l = prefs().getString(rackKey(s), "").orEmpty().split('|').toMutableList(); while (l.size < Engine.MAX_INSERTS) l.add(""); return l.take(Engine.MAX_INSERTS).toMutableList() }
@@ -132,8 +129,8 @@ class LocalMixerActivity : AppCompatActivity() {
     private fun showRack(s: Int) {
         val dlg = AlertDialog.Builder(this).setTitle(if (s < 0) getString(R.string.lm_rack_master) else getString(R.string.lm_rack_ch, s + 1)).setPositiveButton(android.R.string.ok, null).create()
         val holder = ScrollView(this)
-        fun refresh() { holder.removeAllViews(); holder.addView(rackPanel(s, catalog, { slot -> engine?.insertJson(s, slot) ?: "null" }, { refresh() })); fxBtns[s]?.text = fxLabel(s) }
-        refresh(); dlg.setView(holder); dlg.setOnDismissListener { fxBtns[s]?.text = fxLabel(s) }; dlg.show()
+        fun refresh() { holder.removeAllViews(); holder.addView(rackPanel(s, catalog, { slot -> engine?.insertJson(s, slot) ?: "null" }, { refresh() })); fxBtns[s]?.apply { text = fxLabel(s); on = rack(s).any { it.isNotEmpty() } } }
+        refresh(); dlg.setView(holder); dlg.setOnDismissListener { fxBtns[s]?.apply { text = fxLabel(s); on = rack(s).any { it.isNotEmpty() } } }; dlg.show()
     }
     /** the rack of one strip: four slots, each empty (+ ADD) or an effect with BYPASS, REMOVE, MIX and its knobs. [slotJson] gives what the
      *  engine reports for a slot (a test passes made-up JSON); [changed] redraws. */
@@ -219,10 +216,10 @@ class LocalMixerActivity : AppCompatActivity() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
         val e = engine ?: run { status.text = getString(R.string.lm_no_engine); return }
         loop = AudioLoop(e, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts, inChannels()).also { it.start() }
-        if (::startBtn.isInitialized) startBtn.text = getString(R.string.stop)
+        if (::startBtn.isInitialized) { startBtn.text = getString(R.string.stop); startBtn.on = true }
         ui.postDelayed({ showStatus() }, 400)
     }
-    private fun stopAudio() { loop?.stop(); loop = null; if (::startBtn.isInitialized) startBtn.text = getString(R.string.start); showStatus() }
+    private fun stopAudio() { loop?.stop(); loop = null; if (::startBtn.isInitialized) { startBtn.text = getString(R.string.start); startBtn.on = false }; showStatus() }
     private fun showStatus() {
         if (!::status.isInitialized) return
         val l = loop; val ch = runCatching { Engine.aaudioInChannels() }.getOrDefault(0)
@@ -235,8 +232,8 @@ class LocalMixerActivity : AppCompatActivity() {
     private fun showMeters() {
         val p = loop?.lastPeaks ?: return
         fun lvl(v: Float) = (((if (v > 1e-6f) 20 * Math.log10(v.toDouble()) else -120.0) + 60) / 60 * 1000).toInt().coerceIn(0, 1000)
-        for (s in 0 until STRIPS) meters["s$s"]?.progress = lvl(p.getOrElse(s) { 0f })
-        meters["L"]?.progress = lvl(p.getOrElse(STRIPS) { 0f }); meters["R"]?.progress = lvl(p.getOrElse(STRIPS + 1) { 0f })
+        for (s in 0 until STRIPS) faders[s]?.apply { level = lvl(p.getOrElse(s) { 0f }); clip = p.getOrElse(s) { 0f } >= 1f }
+        faders[-1]?.apply { val m = maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }); level = lvl(m); clip = m >= 1f }
     }
     override fun onDestroy() { stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
 }
