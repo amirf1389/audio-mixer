@@ -2058,5 +2058,6 @@
 "resampling · FLAC · RF64": "pengesampelan semula · FLAC · RF64",
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● REC pada MIXER menulis master dan setiap jalur yang diaktifkan (pre-fader, selepas trim / DSP / insert) ke dalam fail WAV atau FLAC, satu bagi setiap sumber, dinamakan mengikut masa.",
 "MICROPHONE ON AT START": "Mikrofon dihidupkan pada permulaan",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON menghidupkan pembesar suara atau fon kepala tanpa mikrofon, jadi mikrofon tidak akan memberi maklum balas semasa permulaan. Hidupkan mikrofon dengan INPUT: MIC pada pengadun. Antara muka ASIO dan SUARA KOMPUTER tidak terjejas."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "OFF: ENGINE ON menghidupkan pembesar suara atau fon kepala tanpa mikrofon, jadi mikrofon tidak akan memberi maklum balas semasa permulaan. Hidupkan mikrofon dengan INPUT: MIC pada pengadun. Antara muka ASIO dan SUARA KOMPUTER tidak terjejas.",
+"MY ACCOUNT ONLINE": "AKAUN SAYA DALAN MAYA"
 }

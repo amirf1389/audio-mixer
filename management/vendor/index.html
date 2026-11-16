@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en" class="h-full"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>AmF X1 Manager</title>
+<!-- one file: Tailwind Play CDN (pinned) for the utilities, the components below, the script at the end (allowed by its hash) -->
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<style type="text/tailwindcss">
+@layer base { [hidden] { display: none !important; }   /* a display utility (grid, flex) must never show a hidden part */
+  body { @apply bg-slate-100 text-slate-900 dark:bg-[#0b0f15] dark:text-slate-100 text-[13px] antialiased; }
+  input, select, textarea { @apply w-full mt-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0b0f15] px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-orange-500/60; }
+  label { @apply block text-[10px] tracking-widest text-slate-500 dark:text-slate-400 mt-2; }
+  th { @apply text-left text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 px-2 py-2 border-b border-slate-200 dark:border-slate-800; }
+  td { @apply px-2 py-2 border-b border-slate-200 dark:border-slate-800 align-top; }
+  button { @apply rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-[11px] font-bold tracking-wide hover:border-slate-500; } }
+@layer components { .card { @apply rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#121821] p-4 min-w-0; }
+  .h2 { @apply text-[11px] tracking-[.12em] font-semibold text-slate-500 dark:text-slate-400 mb-2; }
+  .pri { @apply bg-orange-600 border-orange-600 text-white hover:bg-orange-500 w-full mt-3 py-2.5; }
+  .danger { @apply text-red-500; } .ghost { @apply bg-transparent; } .x { @apply border-0 bg-transparent px-1 py-0 text-red-500; }
+  .mono { @apply font-mono; } .small { @apply text-[11px]; } .dim { @apply text-slate-500 dark:text-slate-400; } .err { @apply text-red-500 min-h-[1em]; } .ok { @apply text-emerald-500; }
+  .tag { @apply inline-block rounded border border-slate-300 dark:border-slate-700 px-1.5 text-[10px] text-slate-500; } .tag.ok { @apply text-emerald-500 border-emerald-500; }
+  .st { @apply rounded px-2 py-0.5 text-[10px] font-bold tracking-wide bg-slate-500/15; } .st.active { @apply text-emerald-500; } .st.expired { @apply text-amber-500; } .st.revoked { @apply text-red-500; }
+  .dot { @apply inline-block w-2.5 h-2.5 rounded-full bg-slate-400 mr-1; } .dot.ok { @apply bg-emerald-500; } .dot.bad { @apply bg-red-500; }
+  .kpi small { @apply block text-[10px] tracking-widest text-slate-500; } .kpi b { @apply block font-mono text-3xl font-semibold my-1; } .kpi span { @apply text-xs text-slate-500; } .kpi.warn b { @apply text-amber-500; }
+  .srv { @apply flex items-center gap-2 py-2 border-b border-slate-200 dark:border-slate-800; } .srv span { @apply text-xs text-slate-500 truncate; }
+  .bars .b { @apply grid grid-cols-[80px_1fr_40px] items-center gap-2 my-1.5; } .bars i { @apply h-2.5 rounded-full bg-orange-600; } .bars em { @apply not-italic text-right font-mono; }
+  .chart { @apply relative flex items-end gap-1 h-40 pb-8; } .chart .col { @apply relative flex-1 flex items-end gap-0.5 h-full; } .chart .col i { @apply flex-1 rounded-t-sm min-h-[1px]; }
+  .chart i.a { @apply bg-cyan-400; } .chart i.b { @apply bg-orange-600; } .chart .col span { @apply absolute -bottom-5 inset-x-0 text-center text-[9px] text-slate-500; }
+  .legend { @apply absolute bottom-0 left-0 text-[11px] text-slate-500; } .legend i { @apply inline-block w-2.5 h-2.5 rounded-sm ml-2 mr-1 align-[-1px]; }
+  .dev { @apply mt-1 text-slate-500; } .acts button { @apply ml-1 mb-1; }
+  nav button.cur { @apply bg-slate-100 dark:bg-[#0b0f15] text-slate-900 dark:text-white shadow-[inset_0_-2px_0_#ea580c]; } }
+</style></head>
+<body class="min-h-full">
+<header class="sticky top-0 z-10 flex flex-wrap items-center gap-4 px-5 py-2.5 bg-white/90 dark:bg-[#121821]/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+<div class="tracking-[.16em] font-bold text-slate-500 whitespace-nowrap"><b class="text-orange-600">AMF X1</b> · MANAGER</div>
+<nav id="nav" class="flex flex-wrap gap-0.5" hidden>
+<button class="border-transparent bg-transparent text-slate-500" data-t="overview">OVERVIEW</button><button class="border-transparent bg-transparent text-slate-500" data-t="licences">LICENCES</button><button class="border-transparent bg-transparent text-slate-500" data-t="customers">CUSTOMERS</button><button class="border-transparent bg-transparent text-slate-500" data-t="releases">RELEASES</button><button class="border-transparent bg-transparent text-slate-500" data-t="requests">REQUESTS</button><button class="border-transparent bg-transparent text-slate-500" data-t="activity">ACTIVITY</button></nav>
+<div class="ml-auto flex items-center gap-3 text-slate-500"><span id="who"></span><button id="out" class="ghost" hidden>SIGN OUT</button></div></header>
+<main class="max-w-[1400px] mx-auto px-5 pt-5 pb-10">
+<section id="signin" class="card max-w-sm mx-auto mt-16 grid gap-1">
+<h1 class="text-xl font-semibold">Sign in</h1><p class="dim">Staff account of the licence server: one sign-in (JWT, 8 hours) for licences, customers and releases. This page runs on this computer only.</p>
+<label>E-MAIL<input id="email" type="email" autocomplete="username"></label>
+<label>PASSWORD<input id="pw" type="password" autocomplete="current-password"></label>
+<button id="go" class="pri">SIGN IN</button><p id="serr" class="err"></p><p class="dim small" id="cfg"></p>
+</section>
+
+<section id="overview" class="tab" hidden>
+<div class="grid gap-3 mb-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]" id="kpis"></div>
+<div class="grid gap-3 mb-3 lg:grid-cols-2"><div class="card"><div class="h2">PLANS</div><div id="plans" class="bars"></div></div>
+<div class="card"><div class="h2">DOWNLOADS AND UPDATE CHECKS · 14 DAYS</div><div id="dl" class="chart"></div></div></div>
+<div class="grid gap-3 lg:grid-cols-2"><div class="card"><div class="h2">ENDING IN 30 DAYS</div><table class="w-full"><thead><tr><th>KEY</th><th>CUSTOMER</th><th>PLAN</th><th>ENDS</th></tr></thead><tbody id="soon"></tbody></table></div>
+<div class="card"><div class="h2">SERVERS</div><div id="health"></div></div></div>
+</section>
+
+<section id="licences" class="tab" hidden>
+<div class="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+<div class="card overflow-x-auto"><div class="flex flex-wrap items-center gap-2 mb-2"><div class="h2 mb-0">LICENCE KEYS</div><span class="flex-1"></span><input id="lq" class="!w-56 !mt-0" placeholder="search name, e-mail, key id"><select id="ls" class="!w-32 !mt-0"><option value="">all</option><option>active</option><option>expired</option><option>revoked</option></select></div>
+<table class="w-full"><thead><tr><th>KEY</th><th>CUSTOMER</th><th>PLAN</th><th>COMPUTERS</th><th>ENDS</th><th>STATE</th><th></th></tr></thead><tbody id="lic"></tbody></table></div>
+<div class="card"><div class="h2">ISSUE A KEY</div>
+<label>CUSTOMER NAME<input id="iname"></label><label>E-MAIL<input id="iemail" type="email"></label>
+<div class="grid grid-cols-2 gap-2"><label>PLAN<select id="iplan"></select></label><label>DAYS (0 = no end)<input id="idays" type="number" value="365" min="0" max="3650"></label></div>
+<div class="grid grid-cols-2 gap-2"><label>COMPUTERS<input id="iseats" type="number" value="1" min="1"></label><label>MACHINE CODE<input id="imach" placeholder="optional"></label></div>
+<label>NOTE<input id="inote"></label><button id="issue" class="pri">ISSUE KEY</button>
+<div id="issued" class="mt-3" hidden><p class="dim small">Shown once. Send it to the customer; the server keeps only its id.</p><textarea id="ikey" class="font-mono text-[11px]" readonly rows="4"></textarea>
+<div class="flex items-center gap-2 mt-2"><button id="icopy">COPY KEY</button><span id="ipk" class="mono small"></span></div></div><p id="ierr" class="err"></p></div></div>
+</section>
+
+<section id="customers" class="tab" hidden>
+<div class="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"><div class="card overflow-x-auto"><div class="flex flex-wrap items-center gap-2 mb-2"><div class="h2 mb-0">CUSTOMERS</div><span class="flex-1"></span><input id="cq" class="!w-56 !mt-0" placeholder="search"><select id="cs" class="!w-32 !mt-0"><option value="">all</option></select></div>
+<table class="w-full"><thead><tr><th>NAME</th><th>COMPANY</th><th>E-MAIL</th><th>STATUS</th><th>UPDATED</th></tr></thead><tbody id="cust"></tbody></table></div>
+<div class="card"><div class="h2">ADD A CUSTOMER</div><label>NAME<input id="cname"></label><label>E-MAIL<input id="cemail" type="email"></label><label>COMPANY<input id="ccomp"></label><label>PHONE<input id="cphone"></label>
+<label>STATUS<select id="cstat"></select></label><button id="cadd" class="pri">ADD</button><p id="cerr" class="err"></p></div></div>
+</section>
+
+<section id="releases" class="tab" hidden>
+<div class="grid gap-3 lg:grid-cols-2"><div class="card"><div class="h2">PUBLISHED</div><div id="chan"></div><div class="h2 mt-5">HISTORY · STABLE</div><table class="w-full"><thead><tr><th>VERSION</th><th>PUBLISHED</th><th>FILES</th></tr></thead><tbody id="hist"></tbody></table></div>
+<div class="card overflow-x-auto"><div class="flex items-center gap-2 mb-2"><div class="h2 mb-0">FILES ON THE SERVER</div><span class="flex-1"></span><button id="verify">VERIFY ALL</button></div><table class="w-full"><thead><tr><th>FILE</th><th>SIZE</th><th>SHA-256</th><th>IN</th></tr></thead><tbody id="files"></tbody></table><p id="vres" class="small mt-2"></p>
+<p class="dim small mt-2">Releases are signed on the vendor's own computer and uploaded with <code>scripts/ota.js</code>; this page shows and checks them. The vendor key never comes here.</p></div></div>
+</section>
+
+<section id="requests" class="tab" hidden>
+<div class="card overflow-x-auto"><div class="h2">KEY REQUESTS FROM THE APP</div><p class="dim small mb-2">What customers sent with LICENSE → REQUEST A KEY. ISSUE fills the form on LICENCES.</p>
+<table class="w-full"><thead><tr><th>WHEN</th><th>NAME</th><th>E-MAIL</th><th>PLAN</th><th>MACHINE</th><th></th></tr></thead><tbody id="req"></tbody></table></div>
+</section>
+
+<section id="activity" class="tab" hidden>
+<div class="card overflow-x-auto"><div class="flex flex-wrap items-center gap-2 mb-2"><div class="h2 mb-0">ACTIVITY · BOTH SERVERS</div><span class="flex-1"></span><span id="chain" class="small"></span></div>
+<table class="w-full"><thead><tr><th>WHEN</th><th>SERVER</th><th>ACTION</th><th>TARGET</th><th>FROM</th></tr></thead><tbody id="act"></tbody></table></div>
+</section>
+</main>
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-lg border border-emerald-500 bg-white dark:bg-[#121821] px-4 py-2.5 shadow-2xl" hidden></div>
+<script>
+'use strict';
+// AmF X1 MANAGER page: every call goes to this computer's manager (server.js), which passes it to the licence server (/lic) or the OTA
+// server (/ota). The staff sign-in token is kept in this tab only (sessionStorage) and sent as the Authorization header.
+const $ = s => document.querySelector(s);
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const day = t => t ? new Date(t).toISOString().slice(0, 10) : '—';
+const when = t => t ? new Date(t).toLocaleString() : '—';
+const size = n => n > 1e9 ? (n / 1e9).toFixed(2) + ' GB' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n > 1e3 ? (n / 1e3).toFixed(0) + ' kB' : (n || 0) + ' B';
+let token = ''; try { token = sessionStorage.getItem('amfx1.mgr') || ''; } catch (_) {}
+let tab = 'overview', licences = [], plans = [];
+
+async function api(path, opt = {}) {
+  const r = await fetch(path, { method: opt.method || 'GET', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}), body: opt.body ? JSON.stringify(opt.body) : undefined });
+  const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
+  if (r.status === 401 && token && !opt.quiet) { signOut('Your sign-in has ended: sign in again.'); throw new Error('signed out'); }
+  if (!r.ok || j.ok === false) throw new Error(j.error || 'HTTP ' + r.status);
+  return j;
+}
+function toast(t, bad) { const e = $('#toast'); e.textContent = t; e.classList.toggle('!border-red-500', !!bad); e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { e.hidden = true; }, 3500); }
+function signOut(why) { if (token) api('/lic/admin/auth/logout', { method: 'POST', quiet: true }).catch(() => {}); token = ''; try { sessionStorage.removeItem('amfx1.mgr'); } catch (_) {} show(); if (why) $('#serr').textContent = why; }
+function show() {
+  const on = !!token; $('#signin').hidden = on; $('#nav').hidden = !on; $('#out').hidden = !on;
+  for (const s of document.querySelectorAll('.tab')) s.hidden = !on || s.id !== tab;
+  for (const b of document.querySelectorAll('#nav button')) b.classList.toggle('cur', b.dataset.t === tab);
+  if (on) load(tab);
+}
+function go(t) { tab = t; try { sessionStorage.setItem('amfx1.tab', t); } catch (_) {} show(); }
+
+// ---- OVERVIEW
+async function overview() {
+  const [st, hl, ho, os, rq] = await Promise.allSettled([api('/lic/admin/stats'), api('/lic/health', { quiet: true }), api('/ota/healthz', { quiet: true }), api('/ota/admin/stats'), api('/ota/admin/license-requests?limit=200')]);
+  const s = st.value || {}, reqs = rq.value ? rq.value.requests : [];
+  const k = (label, v, note, cls = '') => `<div class="card kpi ${cls}"><small>${label}</small><b>${esc(v)}</b><span>${esc(note)}</span></div>`;
+  $('#kpis').innerHTML = k('ACTIVE KEYS', s.active ?? '—', `${s.total ?? 0} issued · ${s.revoked ?? 0} revoked`) + k('COMPUTERS', s.devices ?? '—', 'activated on keys') +
+    k('ENDING SOON', s.expiringSoon ?? '—', 'active keys, next 30 days', s.expiringSoon ? 'warn' : '') + k('KEY REQUESTS', reqs.length, reqs.length ? 'last: ' + day(reqs[0].receivedAt) : 'none yet');
+  const pl = s.plans || {}, max = Math.max(1, ...Object.values(pl));
+  $('#plans').innerHTML = Object.keys(pl).length ? Object.entries(pl).map(([p, n]) => `<div class="b"><span>${esc(p.toUpperCase())}</span><i style="width:${(100 * n / max).toFixed(0)}%"></i><em>${n}</em></div>`).join('') : '<p class="dim">no keys yet</p>';
+  // downloads and update checks per day, 14 days
+  const days = os.value ? os.value.days : {}, rows = [];
+  for (let i = 13; i >= 0; --i) { const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10), x = days[d] || {}, sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0); rows.push({ d, dl: sum(x.download), chk: sum(x.manifest) }); }
+  const top = Math.max(1, ...rows.map(r => Math.max(r.dl, r.chk)));
+  $('#dl').innerHTML = rows.map(r => `<div class="col" title="${r.d}: ${r.dl} downloads, ${r.chk} update checks"><i class="a" style="height:${(100 * r.chk / top).toFixed(0)}%"></i><i class="b" style="height:${(100 * r.dl / top).toFixed(0)}%"></i><span>${r.d.slice(8)}</span></div>`).join('') +
+    '<div class="legend"><i class="a"></i> update checks <i class="b"></i> downloads</div>';
+  try { licences = (await api('/lic/admin/licenses')).licenses; } catch (_) { licences = []; }
+  const soon = licences.filter(l => l.state === 'active' && l.expires && l.expires - Date.now() < 30 * 86400000).sort((a, b) => a.expires - b.expires);
+  $('#soon').innerHTML = soon.length ? soon.slice(0, 12).map(l => `<tr><td class="mono">${esc(l.id)}</td><td>${esc(l.name || '—')}</td><td>${esc((l.plan || '').toUpperCase())}</td><td class="whitespace-nowrap">${day(l.expires)}</td></tr>`).join('') : '<tr><td colspan="4" class="dim">nothing ends in the next 30 days</td></tr>';
+  const srv = (name, ok, extra) => `<div class="srv"><i class="dot ${ok ? 'ok' : 'bad'}"></i><b>${name}</b><span>${esc(extra)}</span></div>`;
+  const ch = ho.value && ho.value.channels ? Object.entries(ho.value.channels).map(([c, v]) => `${c} ${v || '—'}`).join(' · ') : '';
+  const cfg = await api('/config').catch(() => ({}));
+  $('#health').innerHTML = srv('LICENCE SERVER', hl.status === 'fulfilled', (cfg.licenseServer || '') + (s.node ? ' · node ' + s.node : '')) + srv('OTA SERVER', ho.status === 'fulfilled', (cfg.otaServer || '') + (ch ? ' · ' + ch : '')) +
+    (hl.status === 'rejected' || ho.status === 'rejected' ? `<p class="err small">${esc((hl.reason || ho.reason).message)}</p>` : '');
+}
+
+// ---- LICENCES
+async function licencesTab() {
+  const j = await api('/lic/admin/licenses'); licences = j.licenses; plans = j.plans || plans;
+  if (!$('#iplan').options.length) $('#iplan').innerHTML = plans.map(p => `<option value="${esc(p)}">${esc(p.toUpperCase())}</option>`).join('');
+  drawLicences();
+}
+function drawLicences() {
+  const q = $('#lq').value.trim().toLowerCase(), s = $('#ls').value;
+  const rows = licences.filter(l => (!s || l.state === s) && (!q || [l.id, l.name, l.email, l.plan].some(x => String(x || '').toLowerCase().includes(q))));
+  $('#lic').innerHTML = rows.length ? rows.map(l => `<tr><td class="mono">${esc(l.id)}${l.productKey ? ' <span class="tag">PK</span>' : ''}</td><td>${esc(l.name || '—')}<div class="dim small">${esc(l.email || '')}</div></td><td>${esc((l.plan || '').toUpperCase())}</td>
+    <td>${l.devices.length} / ${l.seats || 1}${l.devices.map(d => `<div class="dev mono small">${esc(d)} <button class="x" data-a="dev" data-id="${esc(l.id)}" data-m="${esc(d)}" title="free this computer">✕</button></div>`).join('')}</td>
+    <td class="whitespace-nowrap">${l.expires ? day(l.expires) : 'no end'}</td><td><span class="st ${l.state}">${l.state.toUpperCase()}</span></td>
+    <td class="acts">${l.state === 'revoked' ? `<button data-a="restore" data-id="${esc(l.id)}">RESTORE</button>` : `<button data-a="revoke" data-id="${esc(l.id)}" class="danger">REVOKE</button>`}<button data-a="pk" data-id="${esc(l.id)}">NEW PRODUCT KEY</button></td></tr>`).join('')
+    : '<tr><td colspan="7" class="dim">no keys match</td></tr>';
+}
+$('#lic').addEventListener('click', async ev => {
+  const b = ev.target.closest('button'); if (!b) return; const id = b.dataset.id;
+  try {
+    if (b.dataset.a === 'revoke') { const reason = prompt('Revoke key ' + id + '? The reason (kept with the key):', ''); if (reason === null) return; await api(`/lic/admin/licenses/${id}/revoke`, { method: 'POST', body: { reason } }); toast('Revoked ' + id); }
+    if (b.dataset.a === 'restore') { await api(`/lic/admin/licenses/${id}/restore`, { method: 'POST', body: {} }); toast('Restored ' + id); }
+    if (b.dataset.a === 'dev') { if (!confirm('Free computer ' + b.dataset.m + ' from key ' + id + '?')) return; await api(`/lic/admin/licenses/${id}/devices/${encodeURIComponent(b.dataset.m)}`, { method: 'DELETE' }); toast('Computer freed'); }
+    if (b.dataset.a === 'pk') { const r = await api(`/lic/admin/licenses/${id}/product-key`, { method: 'POST', body: {} }); prompt('New product key for ' + id + ' (shown once):', r.productKey); }
+    licencesTab();
+  } catch (e) { toast(e.message, true); }
+});
+$('#lq').oninput = drawLicences; $('#ls').onchange = drawLicences;
+$('#issue').onclick = async () => {
+  $('#ierr').textContent = ''; $('#issued').hidden = true;
+  const body = { name: $('#iname').value.trim(), email: $('#iemail').value.trim(), plan: $('#iplan').value, days: Number($('#idays').value), seats: Number($('#iseats').value), note: $('#inote').value.trim() };
+  if ($('#imach').value.trim()) body.machine = $('#imach').value.trim();
+  try { const r = await api('/lic/admin/licenses', { method: 'POST', body }); $('#ikey').value = r.key; $('#ipk').textContent = r.productKey ? 'product key: ' + r.productKey : ''; $('#issued').hidden = false; toast('Issued ' + r.id); licencesTab(); }
+  catch (e) { $('#ierr').textContent = e.message; }
+};
+$('#icopy').onclick = () => { navigator.clipboard.writeText($('#ikey').value).then(() => toast('Key copied'), () => { $('#ikey').select(); }); };
+
+// ---- CUSTOMERS
+async function customersTab() {
+  const j = await api('/lic/admin/crm/customers?q=' + encodeURIComponent($('#cq').value.trim()) + '&status=' + encodeURIComponent($('#cs').value));
+  if ($('#cs').options.length < 2) { const st = (await api('/lic/admin/crm/stats')).statuses || []; $('#cs').innerHTML = '<option value="">all</option>' + st.map(s => `<option>${esc(s)}</option>`).join(''); $('#cstat').innerHTML = st.map(s => `<option>${esc(s)}</option>`).join(''); }
+  $('#cust').innerHTML = j.customers.length ? j.customers.map(c => `<tr><td>${esc(c.name || '—')}</td><td>${esc(c.company || '')}</td><td>${esc(c.email || '')}</td><td><span class="st">${esc(String(c.status || '').toUpperCase())}</span></td><td>${day(c.updated)}</td></tr>`).join('') : '<tr><td colspan="5" class="dim">no customers match</td></tr>';
+}
+$('#cq').oninput = () => { clearTimeout(customersTab.t); customersTab.t = setTimeout(() => customersTab().catch(e => toast(e.message, true)), 250); }; $('#cs').onchange = () => customersTab().catch(e => toast(e.message, true));
+$('#cadd').onclick = async () => { $('#cerr').textContent = '';
+  try { await api('/lic/admin/crm/customers', { method: 'POST', body: { name: $('#cname').value.trim(), email: $('#cemail').value.trim(), company: $('#ccomp').value.trim(), phone: $('#cphone').value.trim(), status: $('#cstat').value } });
+    for (const id of ['#cname', '#cemail', '#ccomp', '#cphone']) $(id).value = ''; toast('Customer added'); customersTab(); } catch (e) { $('#cerr').textContent = e.message; } };
+
+// ---- RELEASES
+async function releasesTab() {
+  const [h, f, hist] = await Promise.all([api('/ota/healthz', { quiet: true }), api('/ota/admin/files'), api('/ota/admin/history/stable').catch(() => ({ versions: [] }))]);
+  $('#chan').innerHTML = Object.entries(h.channels || {}).map(([c, v]) => `<div class="srv"><i class="dot ${v ? 'ok' : ''}"></i><b>${esc(c.toUpperCase())}</b><span>${v ? 'version ' + esc(v) : 'nothing published'}</span></div>`).join('') || '<p class="dim">no channel</p>';
+  $('#hist').innerHTML = hist.versions.length ? hist.versions.map(v => `<tr><td class="mono">${esc(v.version)}${v.current ? ' <span class="tag ok">LIVE</span>' : ''}</td><td>${esc(v.released || '—')}</td><td class="small">${v.files.map(esc).join(', ')}</td></tr>`).join('') : '<tr><td colspan="3" class="dim">nothing published yet</td></tr>';
+  $('#files').innerHTML = f.files.length ? f.files.map(x => `<tr><td class="mono small">${esc(x.name)}</td><td>${size(x.size)}</td><td class="mono small" title="${esc(x.sha256)}">${esc(String(x.sha256).slice(0, 12))}…</td><td class="small">${esc((x.referencedBy || []).join(', ') || '—')}</td></tr>`).join('') : '<tr><td colspan="4" class="dim">no files</td></tr>';
+}
+$('#verify').onclick = async () => { $('#vres').textContent = 'checking…';
+  try { const r = await api('/ota/admin/verify'); const bad = (r.files || r.results || []).filter(x => x.ok === false); $('#vres').textContent = bad.length ? bad.length + ' file(s) damaged: ' + bad.map(x => x.name).join(', ') : 'every file matches its SHA-256'; $('#vres').className = bad.length ? 'small err' : 'small ok'; }
+  catch (e) { $('#vres').textContent = e.message; $('#vres').className = 'small err'; } };
+
+// ---- REQUESTS
+async function requestsTab() {
+  const r = (await api('/ota/admin/license-requests?limit=200')).requests;
+  $('#req').innerHTML = r.length ? r.map((x, i) => `<tr><td>${when(x.receivedAt)}</td><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${esc(String(x.plan || '').toUpperCase())}</td><td class="mono small">${esc(x.machineId)}</td><td><button data-i="${i}">ISSUE</button></td></tr>`).join('') : '<tr><td colspan="6" class="dim">no requests yet</td></tr>';
+  $('#req').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; const x = r[+b.dataset.i]; go('licences'); $('#iname').value = x.name || ''; $('#iemail').value = x.email || ''; $('#imach').value = x.machineId || ''; if (x.plan) $('#iplan').value = String(x.plan).toLowerCase(); };
+}
+
+// ---- ACTIVITY: both servers' hash-chained logs, newest first
+async function activityTab() {
+  const [l, o, lv, ov] = await Promise.allSettled([api('/lic/admin/audit'), api('/ota/admin/audit?limit=200'), api('/lic/admin/audit/verify'), api('/ota/admin/audit/verify')]);
+  const rows = [...(l.value ? l.value.entries : []).map(e => ({ t: Number(e.t), s: 'LICENCE', a: e.action, g: e.id, ip: e.ip })), ...(o.value ? o.value.entries : []).map(e => ({ t: Date.parse(e.t), s: 'OTA', a: e.action, g: e.target, ip: e.actor && e.actor.ip }))].sort((a, b) => b.t - a.t).slice(0, 300);
+  $('#act').innerHTML = rows.length ? rows.map(e => `<tr><td>${when(e.t)}</td><td><span class="tag">${e.s}</span></td><td class="mono small">${esc(e.a)}</td><td class="mono small">${esc(e.g || '')}</td><td class="small">${esc(e.ip || '')}</td></tr>`).join('') : '<tr><td colspan="5" class="dim">no activity</td></tr>';
+  const ok = x => x.value && (x.value.chain ? x.value.chain.ok : x.value.chainOk);
+  $('#chain').innerHTML = `<i class="dot ${ok(lv) ? 'ok' : 'bad'}"></i>licence log ${ok(lv) ? 'intact' : 'NOT intact'} &nbsp; <i class="dot ${ok(ov) ? 'ok' : 'bad'}"></i>OTA log ${ok(ov) ? 'intact' : 'NOT intact'}`;
+}
+
+const LOAD = { overview, licences: licencesTab, customers: customersTab, releases: releasesTab, requests: requestsTab, activity: activityTab };
+function load(t) { LOAD[t]().catch(e => { if (e.message !== 'signed out') toast(e.message, true); }); }
+
+$('#go').onclick = async () => {
+  $('#serr').textContent = '';
+  try { const r = await api('/lic/admin/auth/login', { method: 'POST', body: { email: $('#email').value.trim(), password: $('#pw').value }, quiet: true }); token = r.token; $('#pw').value = '';
+    try { sessionStorage.setItem('amfx1.mgr', token); } catch (_) {} $('#who').textContent = r.staff ? r.staff.name || r.staff.email : ''; show(); }
+  catch (e) { $('#serr').textContent = e.message; }
+};
+$('#pw').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
+$('#out').onclick = () => signOut();
+for (const b of document.querySelectorAll('#nav button')) b.onclick = () => go(b.dataset.t);
+api('/config').then(c => { $('#cfg').textContent = `licence server ${c.licenseServer} · OTA server ${c.otaServer}`; }).catch(() => {});
+try { tab = sessionStorage.getItem('amfx1.tab') || 'overview'; } catch (_) {}
+if (token) api('/lic/admin/auth/me', { quiet: true }).then(r => { $('#who').textContent = r.staff ? r.staff.name || r.staff.email : 'admin token'; }).catch(() => { token = ''; show(); });
+show();
+</script>
+</body></html>

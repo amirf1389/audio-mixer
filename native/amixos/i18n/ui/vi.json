@@ -2048,5 +2048,6 @@
 "resampling · FLAC · RF64": "lấy mẫu lại · FLAC · RF64",
 "● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.": "● Nút REC trên bàn trộn sẽ ghi tín hiệu tổng (master) và mọi kênh đã được kích hoạt (trước fader, sau trim / DSP / các khe chèn) thành các tệp WAV hoặc FLAC, mỗi nguồn một tệp, được đặt tên theo thời gian.",
 "MICROPHONE ON AT START": "BẬT MICRO TỪ ĐẦU",
-"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "Tắt: Chế độ ENGINE ON sẽ kích hoạt loa hoặc tai nghe mà không kích hoạt micrô, do đó micrô sẽ không gây ra hiện tượng phản hồi âm thanh khi khởi động. Hãy bật micrô bằng cách chọn INPUT: MIC trên bộ trộn âm. Các giao diện ASIO và COMPUTER SOUND không bị ảnh hưởng."
+"OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.": "Tắt: Chế độ ENGINE ON sẽ kích hoạt loa hoặc tai nghe mà không kích hoạt micrô, do đó micrô sẽ không gây ra hiện tượng phản hồi âm thanh khi khởi động. Hãy bật micrô bằng cách chọn INPUT: MIC trên bộ trộn âm. Các giao diện ASIO và COMPUTER SOUND không bị ảnh hưởng.",
+"MY ACCOUNT ONLINE": "TÀI KHOẢN TRỰC TUYẾN CỦA TÔI"
 }
