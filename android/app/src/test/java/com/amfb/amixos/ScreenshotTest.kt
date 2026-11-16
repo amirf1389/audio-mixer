@@ -87,6 +87,16 @@ class ScreenshotTest {
         a.showTakes(listOf(RecorderActivity.Take(File("2026-11-16_10-42-07.flac"), "96 kHz · 24-bit · stereo · 03:25 · 41.8 MB"), RecorderActivity.Take(File("2026-11-15_19-03-55.wav"), "48 kHz · 32-bit float · mono · 00:48 · 9.2 MB")))
         shot(a.window.decorView.rootView, "recorder")
     }
+    @Test fun phoneMixer() {   // no native engine on the JVM: the screen and a rack are drawn from saved choices and made-up engine JSON
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString(LocalMixerActivity.rackKey(0), "comp|plate||").putString(LocalMixerActivity.rackKey(-1), "maximizer|||").commit()
+        val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
+        shot(a.window.decorView.rootView, "phone-mixer")
+        val cat = listOf("comp" to "COMPRESSOR", "plate" to "PLATE REVERB", "delay" to "DELAY", "chorus" to "CHORUS")
+        val js = mapOf(0 to "{\"kind\":\"comp\",\"name\":\"COMPRESSOR\",\"bypass\":false,\"mix\":1.0,\"params\":[{\"id\":\"thr\",\"title\":\"THRESHOLD\",\"value\":0.55,\"default\":0.5,\"text\":\"-18.0 dB\"},{\"id\":\"ratio\",\"title\":\"RATIO\",\"value\":0.3,\"default\":0.3,\"text\":\"4.0:1\"}]}",
+            1 to "{\"kind\":\"plate\",\"name\":\"PLATE REVERB\",\"bypass\":true,\"mix\":0.25,\"params\":[{\"id\":\"decay\",\"title\":\"DECAY\",\"value\":0.4,\"default\":0.4,\"text\":\"1.8 s\"}]}")
+        shot(a.rackPanel(0, cat, { js[it] ?: "null" }, {}), "phone-mixer-rack")
+    }
     @Test fun muteGroups() {
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
         ctx.getSharedPreferences("muteGroups", 0).edit().putString("g0", "0,1,2,3").putBoolean("on0", true).putString("g1", "8,9").putString("g3", "4,5,6").commit()

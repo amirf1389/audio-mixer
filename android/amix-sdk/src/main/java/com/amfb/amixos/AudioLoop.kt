@@ -8,7 +8,7 @@ import android.media.MediaRecorder
 import kotlin.concurrent.thread
 
 /** Microphone -> strip 0 of the engine -> speaker / headphones, in 256-frame blocks on a worker thread. Needs RECORD_AUDIO. */
-class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256, private val outDevice: Int = 0, private val inDevice: Int = 0, private val bursts: Int = 2) {
+class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256, private val outDevice: Int = 0, private val inDevice: Int = 0, private val bursts: Int = 2, private val inChannels: Int = 1) {
     @Volatile private var running = false
     private var worker: Thread? = null
     @Volatile var lastPeaks: FloatArray = FloatArray(engine.strips + 2)
@@ -23,12 +23,12 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
         if (running) return
         running = true
         // the NDK's recommended path first: AAudio in native code. A device change (headphones in / out) disconnects the stream: the watcher reopens it
-        if (engine.startNative(sampleRate, true, outDevice, inDevice, bursts) > 0) {
+        if (engine.startNative(sampleRate, true, outDevice, inDevice, bursts, inChannels) > 0) {
             path = "aaudio"
             watcher = thread(name = "amix-aaudio-watch") {
                 while (running) {
                     lastPeaks = engine.peaks()
-                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, true, outDevice, inDevice, bursts) <= 0) { running = false; path = "" } }
+                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, true, outDevice, inDevice, bursts, inChannels) <= 0) { running = false; path = "" } }
                     Thread.sleep(33)
                 }
             }

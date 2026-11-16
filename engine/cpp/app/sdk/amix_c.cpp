@@ -13,6 +13,9 @@
 #include <vector>
 
 #include "audiomixer/engine.hpp"
+#include "fx/fx.hpp"
+#include <array>
+#include <mutex>
 #include "audiomixer/runtime.hpp"
 #include "license/license.hpp"
 #include "paths/paths.hpp"
@@ -29,7 +32,15 @@ void fillMeter(amix_meter& m, const am::MeterState& s) { m.peak = s.pk; m.rms = 
 std::int64_t nowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
 }  // namespace
 
-struct amix_mixer { am::Mixer mixer; std::vector<float> silence; int frames = 0; explicit amix_mixer(int n, double fs) : mixer(n, fs) {} };
+// INSERTS: up to AMIX_MAX_INSERTS rack effects (app/fx) on each strip (before the mixer, on the strip's signal) and on the master (after it).
+// The audio thread only try-locks: a block that meets an edit in progress plays without its inserts, it never waits.
+struct amix_mixer {
+  am::Mixer mixer; std::vector<float> silence; int frames = 0; double fs;
+  std::mutex fxM; std::vector<std::array<std::unique_ptr<am::fx::Effect>, AMIX_MAX_INSERTS>> fx;   // [strip] ... [strips] = the master
+  std::vector<std::vector<float>> work; std::vector<float> scratch;
+  explicit amix_mixer(int n, double rate) : mixer(n, rate), fs(rate), fx(static_cast<std::size_t>(n) + 1) {}
+  std::unique_ptr<am::fx::Effect>* slot(int strip, int s) { const int k = strip < 0 ? mixer.strips() : strip; if (k < 0 || k > mixer.strips() || s < 0 || s >= AMIX_MAX_INSERTS) return nullptr; return &fx[static_cast<std::size_t>(k)][static_cast<std::size_t>(s)]; }
+};
 struct amix_rt { am::Runtime rt; std::string backend; am::net::Aoip net; explicit amix_rt(int n) : rt(n), net(rt) {} };
 
 extern "C" {
@@ -73,10 +84,40 @@ int amix_mixer_process5(amix_mixer* m, const float* const* in, int frames, float
 }
 int amix_mixer_process(amix_mixer* m, const float* const* in, int frames, float* outL, float* outR) {
   if (!m || frames <= 0 || !outL || !outR) return 0;
-  if (frames > m->frames) { m->silence.assign(static_cast<std::size_t>(frames), 0.f); m->frames = frames; }
-  const float* ins[AMIX_MAX_STRIPS]; for (int s = 0; s < m->mixer.strips(); ++s) ins[s] = (in && in[s]) ? in[s] : m->silence.data();
+  const int n = m->mixer.strips();
+  if (frames > m->frames) {   // grows only on the first larger block (the native loop calls with its fixed maximum first)
+    m->silence.assign(static_cast<std::size_t>(frames), 0.f); m->scratch.assign(static_cast<std::size_t>(frames), 0.f); m->work.assign(static_cast<std::size_t>(n), std::vector<float>(static_cast<std::size_t>(frames), 0.f)); m->frames = frames; }
+  const float* ins[AMIX_MAX_STRIPS]; for (int s = 0; s < n; ++s) ins[s] = (in && in[s]) ? in[s] : m->silence.data();
+  std::unique_lock<std::mutex> lk(m->fxM, std::try_to_lock);
+  if (lk.owns_lock()) for (int s = 0; s < n; ++s) {   // strip inserts: the strip's signal through each effect (stereo effects: left kept, a mono strip)
+    bool any = false; for (const auto& e : m->fx[static_cast<std::size_t>(s)]) if (e && !e->bypass()) { any = true; break; }
+    if (!any || !in || !in[s]) continue;
+    float* w = m->work[static_cast<std::size_t>(s)].data(); std::copy(in[s], in[s] + frames, w);
+    for (const auto& e : m->fx[static_cast<std::size_t>(s)]) if (e && !e->bypass()) { std::copy(w, w + frames, m->scratch.data()); e->process(w, m->scratch.data(), static_cast<std::size_t>(frames)); }
+    ins[s] = w; }
   m->mixer.process(ins, static_cast<std::size_t>(frames), outL, outR);
+  if (lk.owns_lock()) for (const auto& e : m->fx[static_cast<std::size_t>(n)]) if (e && !e->bypass()) e->process(outL, outR, static_cast<std::size_t>(frames));   // the master rack
   return frames;
+}
+char* amix_fx_catalog_json(void) {
+  std::string j = "["; bool first = true; for (const auto& [k, nm] : am::fx::catalog()) { j += (first ? "" : ",") + std::string("{\"kind\":") + jstr(k) + ",\"name\":" + jstr(nm) + "}"; first = false; }
+  return dup(j + "]");
+}
+int amix_mixer_insert(amix_mixer* m, int strip, int s, const char* kind) {
+  if (!m) return -1; std::unique_ptr<am::fx::Effect> e;
+  if (kind && *kind) { e = am::fx::make(kind, m->fs); if (!e) return -2; }
+  std::lock_guard<std::mutex> g(m->fxM); auto* p = m->slot(strip, s); if (!p) return -1; *p = std::move(e); return 0;   // the old effect dies here, never under the audio thread
+}
+char* amix_mixer_insert_json(amix_mixer* m, int strip, int s) {
+  if (!m) return dup("null"); std::lock_guard<std::mutex> g(m->fxM); auto* p = m->slot(strip, s); if (!p || !*p) return dup("null");
+  const am::fx::Effect& e = **p; std::string j = "{\"kind\":" + jstr(e.kind()) + ",\"name\":" + jstr(e.name()) + ",\"bypass\":" + (e.bypass() ? "true" : "false") + ",\"mix\":" + std::to_string(e.mix()) + ",\"params\":[";
+  bool first = true; for (const am::fx::Param& q : e.params()) { j += (first ? "" : ",") + std::string("{\"id\":") + jstr(q.id) + ",\"title\":" + jstr(q.title) + ",\"value\":" + std::to_string(q.value) + ",\"default\":" + std::to_string(q.def) + ",\"text\":" + jstr(e.text(q.id, q.value)) + "}"; first = false; }
+  return dup(j + "]}");
+}
+int amix_mixer_insert_set(amix_mixer* m, int strip, int s, const char* id, double v) {
+  if (!m || !id) return -1; std::lock_guard<std::mutex> g(m->fxM); auto* p = m->slot(strip, s); if (!p || !*p) return -1;
+  const std::string k = id; if (k == "mix") (*p)->setMix(v); else if (k == "bypass") (*p)->setBypass(v >= 0.5); else (*p)->set(k, v < 0 ? 0 : v > 1 ? 1 : v);
+  return 0;
 }
 void amix_mixer_levels(const amix_mixer* m, amix_levels* o) {
   if (!m || !o) return;

@@ -27,6 +27,7 @@ extern "C" {
 #define AMIX_API_VERSION 6   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h)
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
+#define AMIX_MAX_INSERTS 4
 
 typedef struct amix_meter { double peak, rms, hold; uint32_t clips; double comp_gr_db, gate_db, in_peak; } amix_meter;   /* linear 0..1+, dB for the reductions */
 typedef struct amix_levels {
@@ -65,6 +66,13 @@ AMIX_API void        amix_mixer_set_bus_return(amix_mixer*, int bus, double db);
 AMIX_API void        amix_mixer_set_width(amix_mixer*, double width);               /* 0 mono .. 1 .. 2 wide */
 /* in: strips pointers of `frames` floats (NULL = silence); out_l / out_r: `frames` floats. Returns frames processed. */
 AMIX_API int         amix_mixer_process(amix_mixer*, const float* const* in, int frames, float* out_l, float* out_r);
+/* INSERTS on the offline mixer: AMIX_MAX_INSERTS AmF X1 rack effects per strip (on the strip's signal) and on the master (strip -1, after
+ * the mix). kind from amix_fx_catalog_json ("reverb", "delay", "comp" ...), "" or NULL empties the slot. Parameters are 0..1; "mix" (0 dry ..
+ * 1 wet) and "bypass" (0 / 1) work on every effect. Safe to call while amix_mixer_process runs on the audio thread. */
+AMIX_API char* amix_fx_catalog_json(void);                                                   /* [{"kind","name"}] */
+AMIX_API int   amix_mixer_insert(amix_mixer*, int strip, int slot, const char* kind);       /* 0 = ok, -2 = unknown effect */
+AMIX_API char* amix_mixer_insert_json(amix_mixer*, int strip, int slot);                    /* {"kind","name","bypass","mix","params":[{"id","title","value","default","text"}]} or null */
+AMIX_API int   amix_mixer_insert_set(amix_mixer*, int strip, int slot, const char* id, double value);
 /* SURROUND 5.0: outs = L, R, C, Ls, Rs; a strip's depth (+1 front .. -1 rear, default +1) with its pan places it in the field; buses and
    effects stay with the stereo process. Added in API version 3. */
 AMIX_API void        amix_mixer_set_depth(amix_mixer*, int strip, double depth);
