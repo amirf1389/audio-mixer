@@ -48,6 +48,7 @@ void Remote::post(const QVariantMap& cmd) {
 }
 bool Remote::touched(int strip, int) const { const auto it = touched_.constFind(strip); return running() && it != touched_.cend() && QDateTime::currentMSecsSinceEpoch() - it.value() < 800; }
 void Remote::syncTick() {
+  ++dTicks_;
   if (!running()) { sync_.stop(); if (lastTouch_) { lastTouch_ = 0; ++pulse_; emit pulseChanged(); } return; }
   if (lastTouch_ && QDateTime::currentMSecsSinceEpoch() - lastTouch_ < 1000) { ++pulse_; emit pulseChanged(); }   // keeps the glow of a remote fader up to date, then lets it go
   if (token_.isEmpty()) { QFile f(tokenFile()); if (f.open(QIODevice::ReadOnly)) token_ = f.readLine().trimmed(); if (token_.isEmpty()) return; }
@@ -62,7 +63,7 @@ void Remote::syncTick() {
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   // 2. what moved on the remotes comes in (only when nothing of ours is on the way, so an older answer never undoes a newer move here)
   if (getting_ || posting_ > 0) return;
-  getting_ = true; stale_ = false;
+  getting_ = true; stale_ = false; ++dGets_;
   QNetworkReply* r = net_.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/state?since=%2").arg(port()).arg(v_))));
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); getting_ = false;
     if (r->error() != QNetworkReply::NoError || stale_ || !running()) return;
@@ -79,7 +80,7 @@ void Remote::syncTick() {
       if (!nm.isEmpty() && nm != b.name) { b.name = nm; engine_->setName(i, nm == syncName(i, QString()) ? QString() : nm); ++n; } }
     const double md = o.value("master").toMap().value("db", baseMaster_).toDouble();
     if (std::abs(md - baseMaster_) > 0.05) { baseMaster_ = md; engine_->setMaster(md); touched_[-1] = lastTouch_ = QDateTime::currentMSecsSinceEpoch(); ++n; }
-    if (n) { syncedChanges_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick
+    if (n) { syncedChanges_ += n; dApplied_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick
 }
 
 Remote::~Remote() { if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }

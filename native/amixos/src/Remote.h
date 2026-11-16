@@ -57,6 +57,7 @@ class Remote : public QObject {
   int syncedChanges() const { return syncedChanges_; }
   int remotes() const { return running() ? remotes_ : 0; }
   int pulse() const { return pulse_; }
+  QString syncDebug() const { return QStringLiteral("ticks %1, gets %2, applied %3, posts %4, v %5, token %6, timer %7").arg(dTicks_).arg(dGets_).arg(dApplied_).arg(syncedChanges_).arg(v_).arg(token_.isEmpty() ? "none" : "set").arg(sync_.isActive()); }
   // the fader a phone or browser just moved (strip, or -1 for the MASTER): true for 0.8 s after its last remote move, so the mixer can
   // light it while the remote holds it (tick: any value that changes, to re-read it from a binding)
   Q_INVOKABLE bool touched(int strip, int tick = 0) const;
@@ -73,7 +74,7 @@ class Remote : public QObject {
   void writeSeed();
   void syncTick();
   void post(const QVariantMap& cmd);
-  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0, remotes_ = 0, pulse_ = 0; qint64 lastTouch_ = 0; QHash<int, qint64> touched_;
+  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0, remotes_ = 0, pulse_ = 0; qint64 lastTouch_ = 0; int dTicks_ = 0, dGets_ = 0, dApplied_ = 0; QHash<int, qint64> touched_;
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
