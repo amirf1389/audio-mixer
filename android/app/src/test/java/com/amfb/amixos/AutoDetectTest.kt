@@ -96,4 +96,11 @@ class AutoDetectTest {
         assertEquals(listOf("s", "t", "h"), idle.take(3).map { it.console.token }); assertEquals(PairedConsoles.Presence.ONLINE, idle[0].presence)
         assertTrue(PairedConsoles.chips(emptyList(), emptyList(), "", "").isEmpty())
     }
+    @Test fun phoneReadsTheConsolesWindowsSound() {
+        @Suppress("UNCHECKED_CAST") val o = com.amfb.amixos.remote.MiniJson.parse("""{"strips":[],"buses":[],"master":{"db":0,"limiter":true,"ceilingDb":-0.5},"v":3,"settings":{"winVolume":50,"winGain":true,"winTrimDb":-9.03,"winSetsLevel":false}}""") as Map<String, Any?>
+        val w = DaemonClient.parseState(o).windows
+        assertEquals(50, w.volume); assertTrue(w.gainMode); assertEquals(-9.03, w.trimDb, 1e-9)
+        @Suppress("UNCHECKED_CAST") val old = com.amfb.amixos.remote.MiniJson.parse("""{"strips":[],"buses":[],"master":{"db":0}}""") as Map<String, Any?>
+        assertEquals(-1, DaemonClient.parseState(old).windows.volume)   // a 1.23 console: no Windows section
+    }
 }

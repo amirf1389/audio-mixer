@@ -581,6 +581,23 @@ class RemoteActivity : AppCompatActivity() {
         box.addView(SeekBar(this).apply { max = 200; progress = ((ceil + 20) * 10).toInt().coerceIn(0, 200)
             setOnSeekBarChangeListener(change { p -> ceil = p / 10.0 - 20; ui.post { t.text = String.format("CEILING  %.1f dBFS", ceil) }; c.limiter(on, ceil) }) })
         box.addView(TextView(this).apply { text = "The limiter keeps the master under the ceiling (no clipping on the output)."; setTextColor(Color.parseColor("#8B98A8")) })
+        // WINDOWS: the computer's own output slider, and GAIN MODE (that slider as a trim after the master)
+        val w = st?.windows ?: com.amfb.amixos.remote.WindowsSound()
+        box.addView(TextView(this).apply { text = getString(R.string.win_title); setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(0, 28, 0, 6) })
+        val trim = TextView(this).apply { setTextColor(Color.parseColor("#FBBF24")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f }
+        fun showTrim(on: Boolean, vol: Int) { trim.text = if (!on) getString(R.string.win_gain_off) else if (w.windowsSetsLevel) getString(R.string.win_sets_level) else { val t = if (vol <= 0) -120.0 else 30 * Math.log10(vol / 100.0); if (t <= -119) getString(R.string.win_trim_off) else getString(R.string.win_trim, String.format("%.1f", t)) } }
+        var vol = w.volume; var gain = w.gainMode
+        if (w.volume >= 0) {
+            val vt = TextView(this).apply { text = getString(R.string.win_volume, vol); setTextColor(Color.WHITE) }
+            box.addView(vt)
+            box.addView(SeekBar(this).apply { max = 100; progress = vol; setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar, p: Int, u: Boolean) { if (!u) return; vol = p; vt.text = getString(R.string.win_volume, p); showTrim(gain, p); live.submit("winVolume") { c.setting("winVolume", p) } }
+                override fun onStartTrackingTouch(s: SeekBar) {}; override fun onStopTrackingTouch(s: SeekBar) {} }) })
+        } else box.addView(TextView(this).apply { text = getString(R.string.win_none); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f })
+        box.addView(ToggleButton(this).apply { textOn = getString(R.string.win_gain_on_btn); textOff = getString(R.string.win_gain_off_btn); isChecked = gain
+            setOnCheckedChangeListener { b, v -> buzz(b); gain = v; showTrim(v, vol); io.execute { runCatching { c.setting("winGain", v) } } } })
+        box.addView(trim); showTrim(gain, vol)
+        box.addView(TextView(this).apply { text = getString(R.string.win_gain_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
         return box
     }
 
