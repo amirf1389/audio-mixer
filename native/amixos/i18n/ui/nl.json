@@ -2040,5 +2040,10 @@
 " · default": " · standaard",
 "ALLOWED": "TOEGESTAAN",
 "ALLOW": "TOESTAAN",
-"No input device found: plug one in, then RESCAN.": "Er is geen invoerapparaat gevonden: sluit er een aan en klik vervolgens op ‘Opnieuw scannen’."
+"No input device found: plug one in, then RESCAN.": "Er is geen invoerapparaat gevonden: sluit er een aan en klik vervolgens op ‘Opnieuw scannen’.",
+"INPUT: MIC": "INVOER: MIC",
+"INPUT: COMPUTER SOUND": "INVOER: COMPUTERGELUID",
+"The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "De muziek van elke app op deze computer (Spotify, YouTube, een muziekspeler) wordt ingevoerd op kanaal 1-2. De eigen uitvoer van de AmF X1 wordt buiten beschouwing gelaten, zodat het geluid via dezelfde hoofdtelefoon of luidsprekers wordt afgespeeld zonder dat er een lus ontstaat.",
+"Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Vereist Windows 10 versie 2004 of hoger, waarbij de geluidskaart op WASAPI is ingesteld.",
+"The microphone (the default capture device) is the input.": "De microfoon (het standaardopnameapparaat) is de ingang."
 }

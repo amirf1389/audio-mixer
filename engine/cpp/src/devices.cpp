@@ -1,6 +1,8 @@
 // listDevices(): every device the backends of this binary can open, for `audiomixer-native --list-devices` (the bridge's device list).
 //   WASAPI   active render and capture endpoints: id = the endpoint id string, channels and rate from the shared-mode mix format; every render endpoint
-//            also as "loopback:<id>", an input that captures what Windows plays on it (app audio: players, browsers, streaming apps)
+//            also as "loopback:<id>", an input that captures what Windows plays on it (app audio: players, browsers, streaming apps);
+//            and "loopback:system" (Windows 10 2004 / build 19041 and later): COMPUTER SOUND, every program except this one (process loopback,
+//            this process tree excluded), so the music can be the input while the mix plays on the same headphones or speakers without a loop
 //   DirectSound  every render and capture device DirectSound enumerates (Bluetooth headsets / speakers included); id = the device GUID "{...}", "default" for the Windows default
 //   ASIO     the registered drivers, probed through the Steinberg interface (real channel counts and rates); id = the driver name
 //   ALSA     the PCM names ALSA advertises (snd_device_name_hint), each opened for a moment (non-blocking) to read its real channel count;
@@ -83,8 +85,18 @@ std::string defaultEndpoint(IMMDeviceEnumerator* en, EDataFlow flow) {
   return id;
 }
 
+// process loopback (ActivateAudioInterfaceAsync with VAD\\Process_Loopback) exists from Windows 10 2004 (build 19041)
+bool processLoopbackAvailable() {
+  using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*); HMODULE nt = GetModuleHandleW(L"ntdll.dll"); if (!nt) return false;
+  const auto fn = reinterpret_cast<RtlGetVersionFn>(reinterpret_cast<void*>(GetProcAddress(nt, "RtlGetVersion"))); if (!fn) return false;
+  OSVERSIONINFOW v{}; v.dwOSVersionInfoSize = sizeof v; if (fn(&v) != 0) return false;
+  return v.dwMajorVersion > 10 || (v.dwMajorVersion == 10 && v.dwBuildNumber >= 19041);
+}
+
 void addWasapi(std::vector<DeviceInfo>& out) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // already initialised by the caller: fine
+  if (processLoopbackAvailable()) {   // COMPUTER SOUND: the music of every app, never the console's own output (no loop on the same headphones / speakers)
+    DeviceInfo sys; sys.backend = "wasapi"; sys.id = "loopback:system"; sys.name = "Computer sound: every app (music, browser, player)"; sys.inChannels = 2; sys.defaultRate = 48000; sys.kind = "app"; out.push_back(sys); }
   IMMDeviceEnumerator* en = nullptr;
   if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return;
   for (const EDataFlow flow : {eRender, eCapture}) {

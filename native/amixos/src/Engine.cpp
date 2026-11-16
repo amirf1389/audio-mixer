@@ -197,7 +197,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
     if (ik == "headset" || ik == "bluetooth" || (inDevice.isEmpty() && (ok == "headphones" || ok == "headset" || ok == "bluetooth"))) {
       inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("WASAPI: the headset's microphone is kept off. Outputs only."); }
   }
-  if (micAccessOff() && inCh > 0 && backend != "asio") { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
+  if (micAccessOff() && inCh > 0 && backend != "asio" && !inDev.startsWith("loopback:")) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
   rt_ = std::make_unique<am::Runtime>(kStrips);
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.bits = openBits_; if (openExclusive_) cfg.exclusive = true; cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
@@ -588,6 +588,7 @@ bool Engine::openBluetooth(const QString& backend, const QString& inId, const QS
   btNote_ = QStringLiteral("Bluetooth did not start. Tried: %1. Check that the device is connected and set as an output in Windows, then RESCAN.").arg(failed.join("; ")); status_ = btNote_; emit stateChanged(); return false;
 }
 void Engine::rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out) {
+  curBackend_ = backend; curIn_ = in; curOut_ = out;
   auto nameOf = [&](const std::string& id, bool wantIn) { if (id == "-") return QString(); for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString().toStdString() != backend) continue; if (wantIn ? d["inChannels"].toInt() <= 0 : d["outChannels"].toInt() <= 0) continue; if (id.empty() ? (wantIn ? d["defaultIn"].toBool() : d["defaultOut"].toBool()) : (d["id"].toString().toStdString() == id || d["name"].toString().toStdString() == id)) return d["name"].toString(); } return QString::fromStdString(id.empty() ? backend + " default" : id); };
   inDevName_ = nameOf(in, true); outDevName_ = nameOf(out, false);
 }
@@ -606,7 +607,7 @@ void Engine::setInputAllowed(const QString& backend, const QString& id, bool on)
 }
 QVariantList Engine::inputCandidates() const {
   QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); const QString b = d["backend"].toString(), id = d["id"].toString();
-    if (b == "null" || d["inChannels"].toInt() <= 0 || id.startsWith("loopback:")) continue;
+    if (b == "null" || d["inChannels"].toInt() <= 0) continue;   // COMPUTER SOUND and APP AUDIO are listed too: they can be allowed like a microphone
     QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = d["name"]; m["kind"] = d["kind"]; m["defaultIn"] = d["defaultIn"]; m["allowed"] = inputAllowed(b, id); l << m; }
   return l;
 }
@@ -624,7 +625,21 @@ void Engine::secureInputFor(am::DeviceConfig& cfg) {
     micOffNote_ = QStringLiteral("SECURE INPUT: %1 is not on the allowed list, so no input is opened (outputs only). Allow it on SOUND CARD → AUDIO ACCESS.").arg(name.isEmpty() ? QStringLiteral("the default input") : name);
     return; }
   cfg.inDevice = id.toStdString();   // the default resolved to the exact allowed device: a new default cannot slip in between
-  if (b == "wasapi") cfg.exclusive = true;   // exclusive: no other program shares, taps or mixes into the allowed microphone
+  if (b == "wasapi" && !id.startsWith("loopback:")) cfg.exclusive = true;   // exclusive: no other program shares, taps or mixes into the allowed microphone (a loopback is always shared)
+}
+QString Engine::inputSource() const { if (!rt_ || devIn_ <= 0 || curIn_ == "-") return QStringLiteral("none"); return curIn_.rfind("loopback:", 0) == 0 ? QStringLiteral("music") : QStringLiteral("mic"); }
+bool Engine::computerSoundAvailable() const { for (const QVariant& v : devices_) if (v.toMap()["id"].toString() == "loopback:system") return true; return false; }
+QVariantMap Engine::setInputSource(const QString& source) {
+  if (!rt_) { status_ = QStringLiteral("Start the sound card first (SOUND CARD), then pick the input source."); emit stateChanged(); return {}; }
+  const bool music = source == "music";
+  if (curBackend_ != "wasapi") { status_ = music ? QStringLiteral("COMPUTER SOUND as the input is a Windows audio (WASAPI) stream: open the headphones or speakers on WASAPI first (SOUND CARD).") : status_; emit stateChanged(); return {}; }
+  if (music && !computerSoundAvailable()) { status_ = QStringLiteral("COMPUTER SOUND needs Windows 10 version 2004 or later; on older Windows pick APP AUDIO on STREAM & MEDIA with a different output device."); emit stateChanged(); return {}; }
+  const QString in = music ? QStringLiteral("loopback:system") : QString(), out = QString::fromStdString(curOut_);
+  const double rate = sampleRate() > 0 ? sampleRate() : 48000; const int frames = blockFrames_ > 0 ? blockFrames_ : 256, outCh = devOut_ > 0 ? devOut_ : 2;
+  if (!open("wasapi", in, out, rate, frames, 2, outCh)) return {};
+  QVariantMap m; m["backend"] = "wasapi"; m["in"] = in; m["out"] = out; m["rate"] = rate; m["frames"] = frames; m["inChannels"] = 2; m["outChannels"] = outCh;
+  if (music) status_ = QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1, so no loop on these headphones / speakers) · ") + status_;
+  emit stateChanged(); return m;
 }
 QVariantMap Engine::secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels) {
   am::DeviceConfig cfg; cfg.backend = backend.toStdString(); cfg.inDevice = in.toStdString(); cfg.outDevice = out.toStdString(); cfg.inChannels = inChannels;

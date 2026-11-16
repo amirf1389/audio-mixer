@@ -25,7 +25,7 @@ Item {
         anchors.fill: parent
         onPaint: {
             const ctx = getContext("2d"); ctx.reset();
-            const w = width, h = height, cx = w / 2, cy = h * 1.0, r = h * 0.86;
+            const w = width, h = height, cx = w / 2, cy = h * 0.97, r = Math.min(h * 0.80, w * 0.62);
             ctx.lineWidth = 1.5;
             // the arc: black to 0 VU, red above
             const a = v => (-vu.span + 2 * vu.span * vu.pos(v)) * Math.PI / 180 - Math.PI / 2;
@@ -38,7 +38,8 @@ Item {
                 ctx.strokeStyle = ctx.fillStyle = v > 0 ? "#c8102e" : "#1e1a12";
                 ctx.beginPath(); ctx.moveTo(cx + Math.cos(t) * (r - (big ? 6 : 3)), cy + Math.sin(t) * (r - (big ? 6 : 3))); ctx.lineTo(cx + Math.cos(t) * r, cy + Math.sin(t) * r); ctx.stroke();
                 // labels: the whole face only when there is room; a strip-sized face shows -20, -10, 0 and +3
-                const show = h >= 56 ? (big || v === -3 || v === -7) : (v === -20 || v === -10 || v === 0 || v === 3);
+                // labels: every big mark only on a wide face; a strip or master sized face shows -20, -10, 0 and +3 (more ran together)
+                const show = w >= 160 ? (big || v === -3 || v === -7) : (v === -20 || v === -10 || v === 0 || v === 3);
                 if (show) ctx.fillText(v === 0 ? "0" : (v > 0 ? "+" + v : String(v)), cx + Math.cos(t) * (r - 11), cy + Math.sin(t) * (r - 11) + 3);
             }
             ctx.fillStyle = "#1e1a12"; ctx.font = "bold " + Math.max(6, Math.round(h * 0.15)) + "px sans-serif"; ctx.fillText(vu.label, cx, h * 0.84);
@@ -47,10 +48,10 @@ Item {
         onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
     }
     Connections { target: vu; function onLabelChanged() { face.requestPaint() } }
-    // the needle, pivoting below the face
-    Item { anchors.fill: parent; clip: true   // the pivot is below the face: only the part of the needle over the face is drawn
-        Item { x: parent.width / 2; y: parent.height * 1.0; rotation: vu.angle
-            Rectangle { x: -0.75; y: -vu.height * 0.90; width: 1.5; height: vu.height * 0.90; color: "#1e1a12"; antialiasing: true } } }
-    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.bottom; width: 10; height: 10; radius: 5; color: "#3a3326" }
+    // the needle and its cap stay inside the face (they used to hang over the controls under the meter)
+    Item { anchors.fill: parent; clip: true
+        Item { x: parent.width / 2; y: parent.height * 0.97; rotation: vu.angle
+            Rectangle { x: -0.75; y: -height; width: 1.5; height: Math.min(vu.height * 0.84, vu.width * 0.64); color: "#1e1a12"; antialiasing: true } }
+        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * 0.97 - height / 2; width: 8; height: 8; radius: 4; color: "#3a3326" } }
     Rectangle { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 3; width: 6; height: 6; radius: 3; color: vu.peakLamp ? "#ff2a2a" : "#6b2b2b"; border.color: "#3a3326" }
 }

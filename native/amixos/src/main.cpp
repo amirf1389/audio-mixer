@@ -683,6 +683,8 @@ int main(int argc, char* argv[]) {
         if (r["inChannels"].toInt() != 2 || r["in"].toString() != "{mic-a}" || !r["exclusive"].toBool() || !r["note"].toString().isEmpty()) { std::fprintf(stderr, "amixos --smoke: SECURE INPUT did not open the allowed device exclusively\n"); return 276; }
         r = engine.secureInputPreview("asio", "", "Other ASIO", 8); if (r["inChannels"].toInt() != 0) return 277;   // ASIO's input is the driver: not allowed, no input
         r = engine.secureInputPreview("wasapi", "-", "", 0); if (!r["note"].toString().isEmpty() || r["exclusive"].toBool()) return 278;   // no input asked: nothing to secure
+        engine.setInputAllowed("wasapi", "loopback:system", true); r = engine.secureInputPreview("wasapi", "loopback:system", "", 2);   // COMPUTER SOUND can be allowed; a loopback is never exclusive
+        if (r["inChannels"].toInt() != 2 || r["in"].toString() != "loopback:system" || r["exclusive"].toBool()) { std::fprintf(stderr, "amixos --smoke: SECURE INPUT and COMPUTER SOUND (in %s, exclusive %d)\n", qPrintable(r["in"].toString()), r["exclusive"].toBool()); return 280; }
         engine.setSecureInput(false); r = engine.secureInputPreview("wasapi", "{mic-b}", "", 2); if (r["inChannels"].toInt() != 2 || r["exclusive"].toBool()) return 279;
         QSettings().setValue("audio/allowedInputs", keepList); engine.setSecureInput(keepOn); }
       { // THE PAIRING QR CODE: a real QR (finder squares in three corners, a size of 21 + 4k), the PIN in the #fragment only
@@ -852,6 +854,7 @@ int main(int argc, char* argv[]) {
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
         for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "store", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+          if (const QStringList only = qEnvironmentVariable("AMIX_SHOTS_PAGES").split(',', Qt::SkipEmptyParts); !only.isEmpty() && !only.contains(QString::fromLatin1(id))) continue;   // AMIX_SHOTS_PAGES=mixer,asio: only those pages (a quick look at one page)
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());

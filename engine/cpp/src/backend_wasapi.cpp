@@ -56,6 +56,47 @@ void storeSample(BYTE* p, float x, const Sample& s) {
 template <class T> void release(T*& p) { if (p) { p->Release(); p = nullptr; } }
 std::string hr(const char* what, HRESULT r) { char b[96]; std::snprintf(b, sizeof b, "%s failed (0x%08lx)", what, static_cast<unsigned long>(r)); return b; }
 
+// PROCESS LOOPBACK ("loopback:system"): everything Windows plays except this program's own process tree. The parameter block of
+// audioclientactivationparams.h (Windows SDK 10.0.20348; not in mingw-w64), declared here exactly as documented.
+enum AmActivationType { kActivationDefault = 0, kActivationProcessLoopback = 1 };
+enum AmLoopbackMode { kIncludeTree = 0, kExcludeTree = 1 };
+struct AmLoopbackParams { DWORD TargetProcessId; AmLoopbackMode ProcessLoopbackMode; };
+struct AmActivationParams { AmActivationType ActivationType; AmLoopbackParams ProcessLoopbackParams; };
+const GUID kIidUnknown = {0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+const GUID kIidAgile = {0x94ea2b94, 0xe9cc, 0x49e0, {0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90}};
+const GUID kIidActivateHandler = {0x41D949AB, 0x9862, 0x444A, {0x80, 0xF6, 0xC2, 0x61, 0x33, 0x4D, 0xA5, 0xEB}};
+// the completion handler: agile (called on any MTA thread), signals an event; the result is read from the operation afterwards
+class ActivateDone : public IActivateAudioInterfaceCompletionHandler {
+ public:
+  HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  ~ActivateDone() { if (done) CloseHandle(done); }
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** p) override {
+    if (IsEqualGUID(id, kIidUnknown) || IsEqualGUID(id, kIidAgile) || IsEqualGUID(id, kIidActivateHandler)) { *p = static_cast<IActivateAudioInterfaceCompletionHandler*>(this); AddRef(); return S_OK; }
+    *p = nullptr; return E_NOINTERFACE; }
+  ULONG STDMETHODCALLTYPE AddRef() override { return static_cast<ULONG>(++refs_); }
+  ULONG STDMETHODCALLTYPE Release() override { const long n = --refs_; if (n == 0) delete this; return static_cast<ULONG>(n); }
+  HRESULT STDMETHODCALLTYPE ActivateCompleted(IActivateAudioInterfaceAsyncOperation*) override { SetEvent(done); return S_OK; }
+ private:
+  std::atomic<long> refs_{1};
+};
+// an IAudioClient on the process-loopback virtual device, this process tree excluded; loaded at run time (older Windows: a clear error)
+HRESULT activateProcessLoopback(IAudioClient** ac, std::string& err) {
+  using ActivateFn = HRESULT(WINAPI*)(LPCWSTR, REFIID, PROPVARIANT*, IActivateAudioInterfaceCompletionHandler*, IActivateAudioInterfaceAsyncOperation**);
+  HMODULE mm = LoadLibraryW(L"Mmdevapi.dll"); const auto fn = mm ? reinterpret_cast<ActivateFn>(reinterpret_cast<void*>(GetProcAddress(mm, "ActivateAudioInterfaceAsync"))) : nullptr;
+  if (!fn) { err = "computer sound capture needs Windows 10 version 2004 or later"; return E_NOTIMPL; }
+  AmActivationParams prm{}; prm.ActivationType = kActivationProcessLoopback; prm.ProcessLoopbackParams.TargetProcessId = GetCurrentProcessId(); prm.ProcessLoopbackParams.ProcessLoopbackMode = kExcludeTree;
+  PROPVARIANT pv; PropVariantInit(&pv); pv.vt = VT_BLOB; pv.blob.cbSize = sizeof prm; pv.blob.pBlobData = reinterpret_cast<BYTE*>(&prm);
+  auto* h = new ActivateDone; IActivateAudioInterfaceAsyncOperation* op = nullptr;
+  HRESULT r = fn(L"VAD\\Process_Loopback", kIidAudioClient, &pv, h, &op);
+  if (SUCCEEDED(r) && WaitForSingleObject(h->done, 5000) != WAIT_OBJECT_0) r = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+  HRESULT ar = E_FAIL; IUnknown* unk = nullptr;
+  if (SUCCEEDED(r)) { r = op->GetActivateResult(&ar, &unk); if (SUCCEEDED(r)) r = ar; }
+  if (SUCCEEDED(r) && unk) r = unk->QueryInterface(kIidAudioClient, reinterpret_cast<void**>(ac));
+  if (unk) unk->Release(); if (op) op->Release(); h->Release();
+  if (FAILED(r)) err = hr("computer sound (process loopback)", r);
+  return r;
+}
+
 class WasapiBackend : public Backend {
  public:
   ~WasapiBackend() override { stop(); closeAll(); }
@@ -108,6 +149,13 @@ class WasapiBackend : public Backend {
   bool client(IMMDeviceEnumerator* en, EDataFlow flow, int ch, IAudioClient** ac, IAudioRenderClient** rc, IAudioCaptureClient** cc, Sample* used, std::string& err) {
     // the endpoint: the one named by its id string (from --list-devices), else the default one of this direction
     const bool loop = flow == eCapture && loopback_; std::string want = flow == eRender ? cfg_.outDevice : cfg_.inDevice; if (loop) want = want.substr(9);
+    if (loop && want == "system") {   // COMPUTER SOUND: every program but this one, so the mix can play on the same device without a loop
+      if (FAILED(activateProcessLoopback(ac, err))) return false;
+      WAVEFORMATEXTENSIBLE f = makeFormat(ch, cfg_.sampleRate, Sample()); const REFERENCE_TIME dur = static_cast<REFERENCE_TIME>(cfg_.frames * 3.0 / cfg_.sampleRate * 1e7);
+      HRESULT r = (*ac)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, dur, 0, &f.Format, nullptr);
+      if (FAILED(r)) { err = hr("Initialize (computer sound)", r); return false; }
+      r = (*ac)->GetService(kIidCaptureClient, reinterpret_cast<void**>(cc)); if (FAILED(r)) { err = hr("GetService (computer sound)", r); return false; }
+      return true; }
     if (loop) flow = eRender;   // a loopback capture opens the RENDER endpoint and reads what is mixed into it
     IMMDevice* dev = nullptr; HRESULT r;
     if (!want.empty() && want != "-") {

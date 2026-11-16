@@ -2066,5 +2066,10 @@
 " · default": " · por defecto",
 "ALLOWED": "PERMITIDO",
 "ALLOW": "PERMITIR",
-"No input device found: plug one in, then RESCAN.": "No se ha encontrado ningún dispositivo de entrada: conecta uno y, a continuación, vuelve a escanear."
+"No input device found: plug one in, then RESCAN.": "No se ha encontrado ningún dispositivo de entrada: conecta uno y, a continuación, vuelve a escanear.",
+"INPUT: MIC": "ENTRADA: MIC",
+"INPUT: COMPUTER SOUND": "ENTRADA: SONIDO DEL ORDENADOR",
+"The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "La música de todas las aplicaciones de este ordenador (Spotify, YouTube, un reproductor) se transmite a las entradas CH 1-2. La salida propia del AmF X1 queda excluida, por lo que se reproduce en los mismos auriculares o altavoces sin bucle.",
+"Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Requiere Windows 10, versión 2004 o posterior, con la tarjeta de sonido configurada en WASAPI.",
+"The microphone (the default capture device) is the input.": "El micrófono (el dispositivo de captura predeterminado) es la entrada."
 }
