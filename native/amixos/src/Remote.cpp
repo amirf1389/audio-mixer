@@ -19,7 +19,8 @@
 #include "qr/qrcodegen.hpp"
 
 Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
-  sync_.setInterval(60);   // LIVE SYNC: a remote's fader reaches this console within a frame or two connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
+  sync_.setInterval(60);   // LIVE SYNC: a remote's fader reaches this console within a frame or two
+  connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
   proc_.setProcessChannelMode(QProcess::MergedChannels);
   connect(&proc_, &QProcess::readyRead, this, [this] { const QString out = QString::fromLocal8Bit(proc_.readAll()).trimmed(); if (!out.isEmpty()) { status_ = out.section('\n', -1).left(200); emit changed(); } });
   connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); emit changed(); emit stopped(); });
