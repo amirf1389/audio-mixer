@@ -61,7 +61,7 @@ table.dv{width:100%;border-collapse:collapse;font-size:12px}table.dv td,table.dv
 kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 </style></head><body>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
 <div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
@@ -75,6 +75,17 @@ kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:
 <p class="note" style="margin:-4px 0 10px">Tap a channel's name to open it on CHANNEL (EQ, dynamics, sends).</p>
 <div id="strips"></div>
 </section>
+<section id="rta" class="page"><div class="grid">
+<div class="card" style="grid-column:1/-1"><h2>RTA EQ · MASTER PROGRAM EQ</h2>
+<div class="bar"><span>RTA of</span><select id="rtaSrc"></select><span class="sp"></span><button id="rtaOn" class="sm"></button><button id="rtaFlat" class="sm">FLAT</button></div>
+<canvas class="eq" id="rtaC" width="900" height="340"></canvas>
+<div id="rtaB" style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-top:8px"></div>
+<p class="note">The live spectrum (filled, with its peak line) behind the RTA EQ curve. Ten bells at the ISO octaves, as on the console's RTA EQ page; the console follows at once.</p></div>
+<div class="card" style="grid-column:1/-1"><h2>AUTO EQ</h2>
+<div class="row"><span>Target<small>what the measured sound should look like</small></span><span class="seg" id="aeT"></span></div>
+<div class="row"><span>Measure<small>play pink noise or the programme through the source above; the RTA is averaged for 6 s</small></span><button id="aeGo" class="pri sm">MEASURE</button></div>
+<p class="note" id="aeN">The proposal is shown dashed on the graph; nothing changes until APPLY.</p>
+<div class="bar"><button id="aeApply" class="pri sm" disabled>APPLY</button><button id="aeCancel" class="sm" disabled>CANCEL</button></div></div></div></section>
 <section id="bus" class="page"><div class="bar"><span class="seg"><button id="bAux" class="on acc">AUX 1–8</button><button id="bFx">FX 1–8</button></span><span class="sp"></span></div><div id="buses" class="grid"></div>
 <p class="note">AUX buses are the monitor mixes, FX buses the effect returns. LEVEL is the bus master, RETURN what comes back into the main mix.</p></section>
 <section id="mon" class="page"><div class="grid">
@@ -244,6 +255,51 @@ function monitor(){if(!state||!state.monitor)return;const m=state.monitor,sel=$(
  const sendLim=()=>send("lim",{op:"limiter",on:M.limiter,ceilingDb:M.ceilingDb});lo.onclick=()=>{buzz();M.limiter=!M.limiter;lo.classList.toggle("on",M.limiter);lo.textContent=M.limiter?"ON":"OFF";sendLim()};
  if(free(ce)){ce.value=Math.round((M.ceilingDb??-.5)*10);$("#lCeT").textContent=(M.ceilingDb??-.5).toFixed(1)+" dBTP"}ce.oninput=()=>{M.ceilingDb=ce.value/10;$("#lCeT").textContent=M.ceilingDb.toFixed(1)+" dBTP";sendLim()};ce.onpointerdown=()=>{drag=ce};
  hslider("#mMa","#mMaT",M.db,v=>{M.db=v;send("master",{op:"master",db:v});const e=els.find(x=>x.i<0);if(e){e.f.value=Math.round(dbToPos(v)*1000);e.d.textContent=fmt(v)}})}
+// ---- RTA: the live spectrum for the CHANNEL EQ graph and the RTA EQ page. The service sends it while asked (renewed every 8 s)
+let rtaF=[],rtaDb=[],rtaPk=[],rtaWanted=null,rtaSent=0;const ISO=[31.5,63,125,250,500,1000,2000,4000,8000,16000];
+function rtaWant(src){if(src===rtaWanted&&Date.now()-rtaSent<8000)return;rtaWanted=src;rtaSent=Date.now();rtaPk=[];api("/api/control",{op:"rta",src:src===null?"off":src}).catch(()=>{})}
+setInterval(()=>{if(!token)return;if(tab==="ch")rtaWant(cur);else if(tab==="rta")rtaWant(+($("#rtaSrc").value||-1));else if(rtaWanted!==null)rtaWant(null)},2000);
+function rtaFrame(r){if(r.f)rtaF=r.f;rtaDb=r.db||[];rtaPk=rtaDb.map((v,i)=>Math.max(v,(rtaPk[i]??-120)-0.6));if(aeRun)aeAdd(rtaDb);if(tab==="ch")drawEq();if(tab==="rta")drawRta()}
+function drawSpectrum(g,W,H,x0,dark){if(!rtaF.length||!rtaDb.length)return;const X=f=>x0(f),Y=d=>H-Math.max(0,Math.min(1,(d+90)/90))*(H-14);
+ g.fillStyle=dark?"rgba(34,211,238,.18)":"rgba(14,165,233,.16)";g.beginPath();g.moveTo(X(rtaF[0]),H);rtaF.forEach((f,i)=>g.lineTo(X(f),Y(rtaDb[i]??-120)));g.lineTo(X(rtaF[rtaF.length-1]),H);g.closePath();g.fill();
+ g.strokeStyle=dark?"rgba(34,211,238,.75)":"rgba(14,116,144,.8)";g.lineWidth=1.2;g.beginPath();rtaF.forEach((f,i)=>{const y=Y(rtaPk[i]??-120);i?g.lineTo(X(f),y):g.moveTo(X(f),y)});g.stroke();
+ g.fillStyle=dark?"#5b6573":"#94a3b8";g.font="10px monospace";g.textAlign="right";for(const d of [0,-30,-60])g.fillText(d+" dBFS",W-3,Y(d)+10);g.textAlign="left"}
+// ---- RTA EQ (the master's program EQ, 10 bells at the ISO octaves) and AUTO EQ
+let peq=null,aeRun=null,aeProp=null,aeTarget="flat";
+const TARGETS={flat:{n:"FLAT",f:()=>0},house:{n:"HOUSE",f:f=>f<1000?3*Math.log2(1000/f)/5:-1.5*Math.log2(f/1000)},warm:{n:"WARM",f:f=>-1*Math.log2(f/250)}};
+// the AUTO EQ proposal: per ISO band, the measured level (power average of the 1/6-octave bands within half an octave) against the target,
+// the overall level (the median, 125 Hz .. 8 kHz) taken out, 70 % of the difference corrected, at most 9 dB; a band with no sound gets nothing
+function autoEq(f,db,target){const lvl=ISO.map(c=>{let p=0,n=0;f.forEach((x,i)=>{if(Math.abs(Math.log2(x/c))<=0.5){p+=Math.pow(10,db[i]/10);n++}});return n&&p>0?10*Math.log10(p/n):-120});
+ const t=ISO.map(c=>TARGETS[target].f(c)),use=ISO.map((c,i)=>c>=125&&c<=8000&&lvl[i]>-80);const k=use.filter(Boolean).length;if(!k)return null;
+ // the overall level: the median, so one bump does not move the rest
+ const ds=ISO.map((c,i)=>lvl[i]-t[i]).filter((d,i)=>use[i]).sort((a,b)=>a-b),off=ds.length%2?ds[(ds.length-1)/2]:(ds[ds.length/2-1]+ds[ds.length/2])/2;return ISO.map((c,i)=>lvl[i]<=-80?0:Math.round(Math.max(-9,Math.min(9,-0.7*(lvl[i]-t[i]-off)))*2)/2)}
+function aeAdd(db){aeRun.n++;db.forEach((v,i)=>{aeRun.p[i]=(aeRun.p[i]||0)+Math.pow(10,v/10)})}
+function peqSend(){api("/api/control",{op:"programEq",gains:peq.gains,on:peq.on}).catch(e=>setSt(e.message,true))}
+function drawRta(){const cv=$("#rtaC");if(!cv||tab!=="rta")return;const g=cv.getContext("2d"),W=cv.width,H=cv.height,dark=!document.body.classList.contains("light");g.clearRect(0,0,W,H);
+ const X=f=>W*Math.log(f/20)/Math.log(1000);g.strokeStyle=dark?"#1c2531":"#e2e8f0";g.lineWidth=1;g.font="10px monospace";g.fillStyle=dark?"#5b6573":"#94a3b8";
+ for(const f of ISO){const x=X(f);g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();g.fillText(hz(f),x+2,H-3)}
+ drawSpectrum(g,W,H,X,dark);
+ const curve=(gains,col,dash)=>{const co=gains.map((d,i)=>Math.abs(d)>0.01?biq({type:"peaking",freq:ISO[i],q:1.41,gainDb:d},48000):null).filter(Boolean);g.setLineDash(dash||[]);g.strokeStyle=col;g.lineWidth=2.5;g.beginPath();
+  for(let x=0;x<=W;x+=2){const f=20*Math.pow(1000,x/W);let d=0;for(const c of co)d+=magDb(c,f,48000);const y=H/2-Math.max(-18,Math.min(18,d))*(H/2-10)/18;x?g.lineTo(x,y):g.moveTo(x,y)}g.stroke();g.setLineDash([])};
+ g.strokeStyle=dark?"#334155":"#cbd5e1";g.beginPath();g.moveTo(0,H/2);g.lineTo(W,H/2);g.stroke();
+ if(peq)curve(peq.on?peq.gains:peq.gains.map(()=>0),"#ea580c");if(aeProp)curve(aeProp,"#a78bfa",[6,5])}
+function rtaPage(){if(!state)return;const S=state.programEq||{on:false,gains:new Array(10).fill(0)};if(!peq||!drag)peq={on:!!S.on,gains:(S.gains||[]).map(Number)};
+ const sel=$("#rtaSrc");if(sel.options.length!==state.strips.length+1){const v=sel.value;sel.innerHTML="";const o=document.createElement("option");o.value="-1";o.textContent="MASTER";sel.appendChild(o);
+  state.strips.forEach((s,i)=>{const x=document.createElement("option");x.value=String(i);x.textContent=(i+1)+" · "+(s.name||("CH "+(i+1)));sel.appendChild(x)});sel.value=v||"-1"}
+ const on=$("#rtaOn");on.className="sm acc"+(peq.on?" on":"");on.textContent=peq.on?"EQ ON":"EQ OFF";on.onclick=()=>{peq.on=!peq.on;buzz();peqSend();rtaPage()};
+ $("#rtaFlat").onclick=()=>{peq.gains=peq.gains.map(()=>0);buzz();peqSend();rtaPage()};
+ const box=$("#rtaB");if(box.childElementCount!==10){box.innerHTML="";ISO.forEach((f,i)=>{const c=document.createElement("div");c.style.cssText="display:flex;flex-direction:column;align-items:center;gap:4px";
+  c.innerHTML='<b style="font:600 11px ui-monospace,monospace" class="pv"></b><input type="range" class="f" min="-12" max="12" step="0.5" style="height:150px"><small style="color:var(--dim);font:10px ui-monospace,monospace">'+hz(f)+'</small>';box.appendChild(c)})}
+ [...box.children].forEach((c,i)=>{const r=c.querySelector("input"),v=c.querySelector(".pv");if(free(r))r.value=peq.gains[i];v.textContent=(peq.gains[i]>0?"+":"")+(+peq.gains[i]).toFixed(1);
+  r.oninput=()=>{peq.gains[i]=+r.value;v.textContent=(r.value>0?"+":"")+(+r.value).toFixed(1);drawRta()};r.onchange=()=>{peqSend()};r.onpointerdown=()=>{drag=r}});
+ const ts=$("#aeT");if(!ts.childElementCount)for(const k of Object.keys(TARGETS)){const b=document.createElement("button");b.textContent=TARGETS[k].n;b.onclick=()=>{aeTarget=k;[...ts.children].forEach(x=>x.className=x===b?"on acc":"");if(aeRun===null&&aeProp)aeProp=null;drawRta()};b.className=k===aeTarget?"on acc":"";ts.appendChild(b)}
+ $("#aeGo").onclick=()=>{if(aeRun)return;buzz();aeProp=null;aeRun={n:0,p:[]};$("#aeN").textContent="Measuring… keep the sound playing";$("#aeGo").disabled=true;
+  setTimeout(()=>{const r=aeRun;aeRun=null;$("#aeGo").disabled=false;if(!r||r.n<10){$("#aeN").textContent="Not enough sound to measure: is the source playing?";return}
+   const avg=r.p.map(p=>10*Math.log10(p/r.n));aeProp=autoEq(rtaF,avg,aeTarget);if(!aeProp){$("#aeN").textContent="Too quiet to measure: raise the source.";return}
+   $("#aeN").textContent="Proposal ("+TARGETS[aeTarget].n+"): "+aeProp.map((d,i)=>hz(ISO[i])+" "+(d>0?"+":"")+d).join(" · ");$("#aeApply").disabled=$("#aeCancel").disabled=false;drawRta()},6000)};
+ $("#aeApply").onclick=()=>{if(!aeProp)return;buzz();peq.gains=aeProp.slice();peq.on=true;aeProp=null;peqSend();$("#aeApply").disabled=$("#aeCancel").disabled=true;$("#aeN").textContent="Applied to the RTA EQ.";rtaPage()};
+ $("#aeCancel").onclick=()=>{aeProp=null;$("#aeApply").disabled=$("#aeCancel").disabled=true;$("#aeN").textContent="Nothing changed.";drawRta()};
+ drawRta()}
 // ---- CONSOLE SOUND and WINDOWS: the console's settings from the live state; a change goes to the computer at once (op "setting")
 function setting(key,value){buzz();return api("/api/control",{op:"setting",key,value}).catch(e=>setSt(e.message,true))}
 function segOf(id,list,cur,key,fmt){const h=$(id);if(h.dataset.cur===String(cur))return;h.dataset.cur=String(cur);h.innerHTML="";for(const v of list){const b=document.createElement("button");b.textContent=fmt?fmt(v):String(v);b.className=v===cur?"on acc":"";b.onclick=()=>{setting(key,v);h.dataset.cur=""}; h.appendChild(b)}}
@@ -258,7 +314,7 @@ function consoleSettings(){const S=state&&state.settings;if(!S)return;
  onOff("#cGain",S.winGain,"winGain");onOff("#cWinMute",S.winMuteSync,"winMuteSync");
  $("#cTrim").textContent=!S.winGain?"—":S.winTrimDb<=-119?"OFF":S.winTrimDb===0?"0 dB":S.winTrimDb.toFixed(1)+" dB";
  $("#cTrimN").textContent=!has?"This computer has no Windows volume the console can reach.":S.winGain&&S.winSetsLevel?"The console plays through Windows' own mixer here, which already sets the level with this slider: no extra trim (no double cut).":""}
-function panels(){consoleSettings();if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
+function panels(){consoleSettings();if(tab==="rta")rtaPage();if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
 // ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
 const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
 const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
@@ -343,6 +399,7 @@ function drawEq(){const cv=$("#eqC");if(!cv||tab!=="ch")return;const g=cv.getCon
  g.strokeStyle=dark?"#1c2531":"#e2e8f0";g.lineWidth=1;g.font="10px monospace";g.fillStyle=dark?"#5b6573":"#94a3b8";
  for(const f of [50,100,200,500,1000,2000,5000,10000]){const x=W*Math.log(f/20)/Math.log(1000);g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();g.fillText(hz(f),x+2,H-3)}
  for(const d of [-12,-6,0,6,12]){const y=H/2-d*(H/2-8)/18;g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();g.fillText((d>0?"+":"")+d,2,y-2)}
+ drawSpectrum(g,W,H,f=>W*Math.log(f/20)/Math.log(1000),dark);   // this channel's live spectrum behind the curve (RTA)
  const co=P(cur).eq.map(b=>b.type==="off"?null:biq(b,48000)).filter(Boolean);g.strokeStyle="#ea580c";g.lineWidth=2.5;g.beginPath();
  for(let x=0;x<=W;x+=2){const f=20*Math.pow(1000,x/W);let d=0;for(const c of co)d+=magDb(c,f,48000);const y=H/2-Math.max(-18,Math.min(18,d))*(H/2-8)/18;x?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()}
 // DYNAMICS
@@ -424,7 +481,7 @@ $("#bAux").onclick=()=>{busSet=0;$("#bAux").classList.add("on");$("#bFx").classL
 let heldUntil=0;function kicked(sec){heldUntil=Date.now()+sec*1000;const w=ws;ws=null;try{w&&w.close()}catch(e){}setSt(sec?"the console disconnected this device · it can connect again in "+Math.ceil(sec/60)+" min":"the console disconnected this device",true);if(sec)setTimeout(()=>{if(token&&!ws)stream()},sec*1000+500)}
 function stream(){if(Date.now()<heldUntil)return;if(ws)ws.close();bridgeShow();const who=ls.get("who","")||(/Android|iPhone|iPad/.test(navigator.userAgent)?"Browser on phone":"Browser");
  const u=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/meters?token="+encodeURIComponent(token)+"&client="+encodeURIComponent(who.slice(0,40));
- try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.kicked){kicked(o.holdSeconds||0);return}if(o.error){setSt(o.error,true);return}if(o.state){if(opt.sync||!state)apply(o.state);return}meters(o)}catch(e){}};
+ try{ws=new WebSocket(u)}catch(e){return}ws.onmessage=ev=>{try{const o=JSON.parse(ev.data);if(o.kicked){kicked(o.holdSeconds||0);return}if(o.rta){rtaFrame(o.rta);return}if(o.error){setSt(o.error,true);return}if(o.state){if(opt.sync||!state)apply(o.state);return}meters(o)}catch(e){}};
  ws.onopen=()=>setSt(opt.sync?"connected · live sync":"connected");ws.onclose=ev=>{if(ev.target!==ws)return;if(token&&Date.now()>=heldUntil){setSt("reconnecting…",true);setTimeout(()=>token&&stream(),1500)}}}
 async function load(){try{const s=await api("/api/state");state=null;apply(s);stream();if(poll)clearInterval(poll);poll=setInterval(async()=>{if(document.hidden||!opt.sync||(ws&&ws.readyState===1))return;try{apply(await api("/api/state"))}catch(e){}},5000)}catch(e){setSt(e.message,true)}}   // the push is the sync; this only covers a stream that is down
 function show(){$("#pair").style.display=token?"none":"";$("#nav").style.display=token?"flex":"none";if(token){go(opt.start||ls.get("tab","mix"));load()}else for(const s of document.querySelectorAll(".page"))s.style.display="none"}
