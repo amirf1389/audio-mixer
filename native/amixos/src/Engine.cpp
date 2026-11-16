@@ -1058,6 +1058,7 @@ bool Engine::openPluginWindow(int i, int slot, bool evenHere) {
   auto* win = new QWindow; win->setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowCloseButtonHint | Qt::MSWindowsFixedSizeDialogHint);
   win->setTitle(QStringLiteral("%1  ·  CH %2").arg(QString::fromStdString(p.vst->info().name)).arg(i + 1)); win->resize(640, 400); win->create();
   int w = 640, h = 400;
+  if (!win->handle()) { delete win; status_ = QStringLiteral("The plug-in's own window could not be created on this display."); emit stateChanged(); return false; }   // no native window (no display, a remote session that refuses one): asking for its id would fault
   if (!p.vst->openEditor(reinterpret_cast<void*>(win->winId()), w, h)) { delete win; return false; }
   w = std::clamp(w, 120, 4000); h = std::clamp(h, 60, 3000); win->setMinimumSize(QSize(w, h)); win->setMaximumSize(QSize(w, h)); win->resize(w, h);
   win->installEventFilter(this); win->show(); pluginWins_.push_back({win, p.vst, i, slot});

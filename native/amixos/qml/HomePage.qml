@@ -14,7 +14,7 @@ Flickable {
         y: 24
         spacing: 16
         Text { text: Theme.product; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 30; font.weight: Font.Black }
-        Text { text: i18n.t("Native console, version ", i18n.lang) + appVersion + " • " + engine.edition + i18n.t(" tier • engine ", i18n.lang) + (engine.running ? engine.backend : i18n.t("idle", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
+        Text { text: i18n.t("Native console, version ", i18n.lang) + appVersion + " (build " + buildStamp + ") " + " • " + engine.edition + i18n.t(" tier • engine ", i18n.lang) + (engine.running ? engine.backend : i18n.t("idle", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
         Text { text: i18n.t(engine.status, i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.WordWrap }
         // LIVE: the SOUND SCORE of the master now, its weakest part with the fix, the DSP MODE, and the analyzer, one click each
         Rectangle { objectName: "homeLive"; Layout.fillWidth: true; implicitHeight: liveRow.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line

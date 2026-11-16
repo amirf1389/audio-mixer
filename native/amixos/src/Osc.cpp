@@ -29,7 +29,7 @@ QVariantList Osc::interfaces() const {
     if (!(ni.flags() & QNetworkInterface::IsUp)) continue;
     for (const QNetworkAddressEntry& e : ni.addressEntries()) { if (e.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
       QVariantMap m; m["name"] = ni.humanReadableName(); m["ip"] = e.ip().toString(); m["mask"] = e.netmask().toString(); m["up"] = bool(ni.flags() & QNetworkInterface::IsRunning);
-      m["kind"] = ni.flags() & QNetworkInterface::IsLoopBack ? "loopback" : ni.type() == QNetworkInterface::Wifi ? "wifi" : ni.type() == QNetworkInterface::Ethernet ? "ethernet" : ni.type() == QNetworkInterface::Virtual ? "virtual" : "other"; l << m; } }
+      m["kind"] = ((ni.flags() & QNetworkInterface::IsLoopBack) || e.ip().isLoopback()) ? "loopback"   /* 127.x counts even when the system does not flag the adapter */ : ni.type() == QNetworkInterface::Wifi ? "wifi" : ni.type() == QNetworkInterface::Ethernet ? "ethernet" : ni.type() == QNetworkInterface::Virtual ? "virtual" : "other"; l << m; } }
   return l;
 }
 void Osc::setBindAddress(const QString& ip) { s_.setValue("osc/bind", ip.trimmed()); if (sock_) { setEnabled(false); setEnabled(true); } emit changed(); }

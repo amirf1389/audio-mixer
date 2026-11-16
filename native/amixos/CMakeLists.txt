@@ -147,7 +147,8 @@ qt_add_qml_module(amixos
         i18n/ui/vi.json
         i18n/ui/th.json
         i18n/ui/uk.json)
-target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}")
+string(TIMESTAMP AMIX_BUILD_STAMP "%Y-%m-%d %H:%M" UTC)   # when this build was configured: shown next to the version, so two builds of one version can be told apart
+target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}" AMIX_BUILD_STAMP="${AMIX_BUILD_STAMP}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
 # libsoxr (LGPL 2.1) stays its own library next to the program, loaded at run time (app/hires): copied beside amixos on every build

@@ -12,7 +12,7 @@ ApplicationWindow {
     height: 860
     minimumWidth: 720
     minimumHeight: 480
-    title: Theme.product + " " + appVersion + " · " + Theme.vendor
+    title: Theme.product + " " + appVersion + " · " + Theme.vendor + " · build " + buildStamp
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
     property string current: settings.startPage
@@ -320,7 +320,7 @@ ApplicationWindow {
         background: Rectangle { radius: 10; color: Theme.cardSolid; border.color: Theme.line }
         contentItem: Column { spacing: 8
             Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 20; font.weight: Font.Black; font.letterSpacing: 5 }
-            Text { text: i18n.t("BY AMFB AUDIO", i18n.lang) + "  ·  " + i18n.t("version ", i18n.lang) + appVersion; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
+            Text { text: i18n.t("BY AMFB AUDIO", i18n.lang) + "  ·  " + i18n.t("version ", i18n.lang) + appVersion + "  ·  build " + buildStamp + " UTC"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
             Rectangle { width: parent.width; height: 1; color: Theme.lineSoft }
             Text { width: parent.width; wrapMode: Text.WordWrap; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9
                 text: i18n.t("Engine: ", i18n.lang) + (engine.running ? engine.status : i18n.t("off", i18n.lang)) }
