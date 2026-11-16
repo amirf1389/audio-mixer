@@ -50,7 +50,7 @@ bool Media::load(int i, QString& err) {
   if (!am::arr::readAudio(path.toStdString(), a, e)) { err = QString::fromStdString(e); return false; }
   const double fs = engine_->running() ? engine_->sampleRate() : (engine_->sampleRate() > 0 ? engine_->sampleRate() : 48000);
   auto clip = std::make_shared<MediaSource::Clip>(); clip->rate = fs;
-  if (std::fabs(a.rate - fs) > 1) { clip->L = am::arr::resampleLinear(a.L, a.rate, fs); clip->R = am::arr::resampleLinear(a.R, a.rate, fs); } else { clip->L = a.L; clip->R = a.R; }
+  if (std::fabs(a.rate - fs) > 1) { clip->L = am::arr::resampleHq(a.L, a.rate, fs); clip->R = am::arr::resampleHq(a.R, a.rate, fs); } else { clip->L = a.L; clip->R = a.R; }
   duration_ = a.duration(); loadedRate_ = fs; src_.set(clip); QVariantMap m = list_[i].toMap(); m["seconds"] = duration_; m["ok"] = true; m["error"] = QString(); list_[i] = m;
   return true;
 }

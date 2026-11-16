@@ -6,11 +6,12 @@
 #include <time.h>
 
 #include "amix.h"
+#include "amix_hires.h"
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
 
 int main(void) {
-  CHECK(amix_api_version() == 5 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  CHECK(amix_api_version() == 6 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
   { amix_set_dirs("/tmp/amix-sdk-paths/data", "/tmp/amix-sdk-paths/cache", NULL); char* pj = amix_paths_json(); CHECK(pj && strstr(pj, "\"data\":\"/tmp/amix-sdk-paths/data\"") && strstr(pj, "\"downloads\":\"/tmp/amix-sdk-paths/cache/downloads\"") && strstr(pj, "\"os\":")); amix_free(pj); }
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);
@@ -46,6 +47,19 @@ int main(void) {
   amix_rt_stop(rt); CHECK(!amix_rt_running(rt)); amix_rt_destroy(rt);
   char* lic = amix_license_json(); CHECK(lic && strstr(lic, "\"state\"")); amix_free(lic);
   char* mid = amix_machine_id(); CHECK(mid && strlen(mid) > 4); amix_free(mid);
-  printf("sdk_c_test: C API version %s, offline mixer, null runtime, licence JSON OK\n", amix_version());
+  { /* HIGH-RESOLUTION AUDIO: 96 kHz streamed down to 44.1 kHz with r8brain, a 24-bit FLAC written and read back, dither */
+    char e[256] = {0}; amix_hr_resampler* r = amix_hr_resampler_create(96000, 44100, 2, "r8brain", AMIX_HR_QUALITY_24BIT, e, sizeof e); CHECK(r && strcmp(amix_hr_resampler_engine(r), "r8brain") == 0);
+    static double inL[960], inR[960], oL[4096], oR[4096]; const double* in[2] = {inL, inR}; double* out[2] = {oL, oR}; int got = 0;
+    for (int b = 0; b < 100; ++b) { for (int i = 0; i < 960; ++i) { inL[i] = inR[i] = 0.5 * sin(2 * M_PI * 1000 * (b * 960 + i) / 96000.0); } got += amix_hr_resampler_process(r, in, 960, out, 4096); }
+    got += amix_hr_resampler_process(r, NULL, 0, out, 4096); CHECK(got >= 44100 && got <= 44100 + 4096); amix_hr_resampler_destroy(r);
+    CHECK(amix_hr_resampler_create(48000, 44100, 2, "nope", 1, e, sizeof e) == NULL && strlen(e) > 5);
+    static double tone[2 * 4800]; for (int i = 0; i < 4800; ++i) tone[2 * i] = tone[2 * i + 1] = 0.25 * sin(2 * M_PI * 440 * i / 192000.0);
+    CHECK(amix_hr_write("/tmp/amix-sdk-hires.flac", tone, 4800, 2, 192000, "flac24", "tpdf", e, sizeof e) == 0);
+    amix_hr_info inf; double* back = amix_hr_read("/tmp/amix-sdk-hires.flac", &inf, e, sizeof e); remove("/tmp/amix-sdk-hires.flac");
+    CHECK(back && inf.rate == 192000 && inf.channels == 2 && inf.frames == 4800 && inf.bits == 24 && strcmp(inf.container, "flac") == 0 && fabs(back[2000] - tone[2000]) < 1e-6); amix_free(back);
+    double* rs = NULL; int64_t rn = 0; CHECK(amix_hr_resample(tone, 4800, 2, 192000, 48000, "auto", 1, &rs, &rn, e, sizeof e) == 0 && rn == 1200); amix_free(rs);
+    int32_t q[4]; const double qi[4] = {0.5, -0.5, 1.5, -1.5}; CHECK(amix_hr_quantize(qi, 4, 2, 16, "none", 1, q) == 0 && q[0] == 16384 && q[1] == -16384 && q[2] == 32767 && q[3] == -32768);
+    char* hj = amix_hr_info_json(); CHECK(hj && strstr(hj, "r8brain") && strstr(hj, "libFLAC")); amix_free(hj); }
+  printf("sdk_c_test: C API version %s, offline mixer, null runtime, licence JSON, hi-res audio OK\n", amix_version());
   return 0;
 }

@@ -13,6 +13,7 @@
 #include <QElapsedTimer>
 #include "Engine.h"
 #include "measure/score.hpp"
+#include "hires/hires.hpp"
 #include "fx/speakers.hpp"
 #include <QUrl>
 #include "Extension.h"
@@ -627,6 +628,7 @@ void Engine::secureInputFor(am::DeviceConfig& cfg) {
   cfg.inDevice = id.toStdString();   // the default resolved to the exact allowed device: a new default cannot slip in between
   if (b == "wasapi" && !id.startsWith("loopback:")) cfg.exclusive = true;   // exclusive: no other program shares, taps or mixes into the allowed microphone (a loopback is always shared)
 }
+QString Engine::hiresSummary() const { QStringList l; for (const auto& i : am::hr::libraries()) l << QString::fromStdString(i.name + " " + i.version) + (i.available ? QString() : QStringLiteral(" (not installed)")); return l.join(QStringLiteral(" · ")); }
 QString Engine::inputSource() const { if (!rt_ || devIn_ <= 0 || curIn_ == "-") return QStringLiteral("none"); return curIn_.rfind("loopback:", 0) == 0 ? QStringLiteral("music") : QStringLiteral("mic"); }
 bool Engine::computerSoundAvailable() const { for (const QVariant& v : devices_) if (v.toMap()["id"].toString() == "loopback:system") return true; return false; }
 QVariantMap Engine::setInputSource(const QString& source) {

@@ -232,8 +232,8 @@ bool readSystem(const std::string& path, Audio& out, std::string& err) {
 
 bool readAudio(const std::string& path, Audio& out, std::string& err) {
   std::ifstream f(path, std::ios::binary); char m[12] = {}; if (!f) { err = "cannot open " + path; return false; } f.read(m, 12);
-  if (!std::memcmp(m, "RIFF", 4) || !std::memcmp(m, "RF64", 4)) return readWav(path, out, err);
-  if (!std::memcmp(m, "fLaC", 4)) return readFlac(path, out, err);
+  if (!std::memcmp(m, "RIFF", 4) || !std::memcmp(m, "RF64", 4) || !std::memcmp(m, "riff", 4)) return readWav(path, out, err);   // "riff": Sony Wave64
+  if (!std::memcmp(m, "fLaC", 4)) { if (readWav(path, out, err)) return true; return readFlac(path, out, err); }   // dr_flac first (readWav goes through the hi-res reader), the built-in decoder after
   if (!std::memcmp(m, "FORM", 4) && (!std::memcmp(m + 8, "AIFF", 4) || !std::memcmp(m + 8, "AIFC", 4))) return readAiff(path, out, err);
 #ifdef _WIN32
   std::string e1; if (readSystem(path, out, e1)) return true;            // Windows' own decoders first; FFmpeg (when installed with the program) for the rest

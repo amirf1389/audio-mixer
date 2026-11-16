@@ -56,7 +56,7 @@ Flickable {
                 Rectangle { id: gbAcc; objectName: "openSoundCardBtn"; implicitWidth: accT.implicitWidth + 16; implicitHeight: 22; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gbAcc.color) } GradientStop { position: 1; color: Theme.btnBottom(gbAcc.color) } } border.color: Theme.cyan
                     Text { id: accT; anchors.centerIn: parent; text: i18n.t("GO TO SOUND CARD", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (typeof root !== "undefined") root.current = "asio" } } }
-            Opt { label: i18n.t("Format", i18n.lang); Choice { objectName: "recordFormatChoice"; options: [{t: "24-bit PCM", v: 0}, {t: "32-bit PCM", v: 3}, {t: "32-bit float", v: 1}, {t: "64-bit float", v: 2}]; value: engine.recordFormat; onPicked: function (v) { engine.recordFormat = v } } }
+            Opt { label: i18n.t("Format", i18n.lang); Choice { objectName: "recordFormatChoice"; options: [{t: "24-bit PCM", v: 0}, {t: "32-bit PCM", v: 3}, {t: "32-bit float", v: 1}, {t: "64-bit float", v: 2}, {t: "FLAC 24-bit (lossless)", v: 4}]; value: engine.recordFormat; onPicked: function (v) { engine.recordFormat = v } } }
             Text { visible: engine.recordMessage.length > 0; text: engine.recordMessage; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Repeater { model: engine.recordFiles; delegate: Text { text: modelData; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
         }

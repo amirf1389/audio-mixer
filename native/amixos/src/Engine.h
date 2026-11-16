@@ -186,6 +186,7 @@ class Engine : public QObject {
   Q_PROPERTY(QString recordFolder READ recordFolder WRITE setRecordFolder NOTIFY recordChanged)
   Q_PROPERTY(bool recordFloat READ recordFloat WRITE setRecordFloat NOTIFY recordChanged)
   Q_PROPERTY(int recordFormat READ recordFormat WRITE setRecordFormat NOTIFY recordChanged)
+  Q_PROPERTY(QString hiresSummary READ hiresSummary CONSTANT)   // the hi-res libraries in this build: "r8brain 6.5 · soxr 0.1.3 · libFLAC 1.5.0 · dr_wav 0.14.6 · dr_flac 0.13.4"
   Q_PROPERTY(QString deviceFormat READ deviceFormat NOTIFY stateChanged)
   Q_PROPERTY(bool recordMaster READ recordMaster WRITE setRecordMaster NOTIFY recordChanged)
   Q_PROPERTY(QString recordMessage READ recordMessage NOTIFY recordChanged)
@@ -194,8 +195,10 @@ class Engine : public QObject {
   QStringList recordFiles() const { QStringList l; for (const auto& f : recorder_.files()) l << QString::fromStdString(f); return l; }
   QString recordFolder() const; void setRecordFolder(const QString& f) { settings_.setValue("record/folder", f); emit recordChanged(); }
   // record format: 0 = 24-bit PCM, 1 = 32-bit float, 2 = 64-bit float, 3 = 32-bit PCM (the old float32 switch still reads and writes 0 / 1)
-  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); if (f >= 0 && f <= 3) return f; return settings_.contains("record/float32") ? (settings_.value("record/float32").toBool() ? 1 : 0) : 2; }   // new installs: 64-bit float
-  void setRecordFormat(int f) { f = std::clamp(f, 0, 3); settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
+  QString hiresSummary() const;
+  int recordFormat() const { const int f = settings_.value("record/format", -1).toInt(); if (f >= 0 && f <= 4) return f; return settings_.contains("record/float32") ? (settings_.value("record/float32").toBool() ? 1 : 0) : 2; }   // new installs: 64-bit float
+  void setRecordFormat(int f) { f = std::clamp(f, 0, 4);   // 4 = FLAC 24-bit
+    settings_.setValue("record/format", f); settings_.setValue("record/float32", f == 1 || f == 2); emit recordChanged(); }
   bool recordFloat() const { const int f = recordFormat(); return f == 1 || f == 2; } void setRecordFloat(bool v) { setRecordFormat(v ? 1 : 0); }
   QString deviceFormat() const;
   // OUTPUT word length (WASAPI exclusive): 32-bit integer first (the device's own word length) or 32-bit float first

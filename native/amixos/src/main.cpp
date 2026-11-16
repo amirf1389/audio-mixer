@@ -376,7 +376,7 @@ int main(int argc, char* argv[]) {
       { // the device's own sample format is reported while it runs; the record format choice keeps the old 24 / float switch in step
         const QString df = engine.deviceFormat(); const int rf0 = engine.recordFormat();
         engine.setRecordFormat(2); const bool f64 = engine.recordFormat() == 2 && engine.recordFloat(); engine.setRecordFormat(3); const bool p32 = engine.recordFormat() == 3 && !engine.recordFloat();
-        engine.setRecordFormat(9); const bool clamp = engine.recordFormat() == 3; engine.setRecordFloat(false); const bool back = engine.recordFormat() == 0; engine.setRecordFormat(rf0);
+        engine.setRecordFormat(9); const bool clamp = engine.recordFormat() == 4; engine.setRecordFloat(false); const bool back = engine.recordFormat() == 0; engine.setRecordFormat(rf0);
         if ((engine.running() && df.isEmpty()) || !f64 || !p32 || !clamp || !back) { std::fprintf(stderr, "amixos --smoke: formats (device \"%s\", 64f %d, 32i %d, clamp %d, back %d)\n", qPrintable(df), f64, p32, clamp, back); return 156; } }
       { // COMPRESSION TARGET: listens first, then suggests; nothing is applied without the call; the apply sets the channel compressor
         const QVariantMap before = engine.compSuggestion(0); const QVariantMap ch0 = engine.channelParams(0);
@@ -674,6 +674,9 @@ int main(int argc, char* argv[]) {
         QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic); }
       { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
         if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
+      { // HIGH-RESOLUTION AUDIO: r8brain, libFLAC, dr_wav / dr_flac built in; libsoxr loaded from beside the program
+        const QString hs = engine.hiresSummary(); if (!hs.contains("r8brain-free-src 6.5") || !hs.contains("libFLAC") || !hs.contains("libsoxr") || hs.contains("not installed")) { std::fprintf(stderr, "amixos --smoke: hi-res libraries: %s\n", qPrintable(hs)); return 281; }
+        engine.setRecordFormat(4); if (engine.recordFormat() != 4 || engine.recordFloat()) { std::fprintf(stderr, "amixos --smoke: FLAC recording format did not take\n"); return 282; } engine.setRecordFormat(0); }
       { // SECURE INPUT: an input not on the allowed list is never opened; an allowed WASAPI input opens exclusively; switched off, nothing changes
         const bool keepOn = engine.secureInput(); const QStringList keepList = QSettings().value("audio/allowedInputs").toStringList();
         engine.setSecureInput(true); engine.setInputAllowed("wasapi", "{mic-a}", false);

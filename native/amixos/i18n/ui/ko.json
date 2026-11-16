@@ -2092,5 +2092,8 @@
 "INPUT: COMPUTER SOUND": "입력: 컴퓨터 소리",
 "The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "이 컴퓨터에 설치된 모든 앱(Spotify, YouTube, 음악 플레이어 등)의 음악이 CH 1-2의 입력 신호로 처리됩니다. AmF X1 자체의 출력은 제외되므로, 루프 없이 동일한 헤드폰이나 스피커에서 재생됩니다.",
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "WASAPI 모드로 설정된 사운드 카드가 장착된 Windows 10 버전 2004 이상이 필요합니다.",
-"The microphone (the default capture device) is the input.": "마이크(기본 캡처 장치)가 입력 장치입니다."
+"The microphone (the default capture device) is the input.": "마이크(기본 캡처 장치)가 입력 장치입니다.",
+"FLAC 24-bit (lossless)": "FLAC 24비트 (무손실)",
+"HI-RES AUDIO": "고해상도 오디오",
+"resampling · FLAC · RF64": "리샘플링 · FLAC · RF64"
 }

@@ -2043,5 +2043,8 @@
 "INPUT: COMPUTER SOUND": "ĐẦU VÀO: ÂM THANH TỪ MÁY TÍNH",
 "The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "Âm thanh từ mọi ứng dụng trên máy tính này (Spotify, YouTube, trình phát nhạc) đều được đưa vào kênh 1-2. Âm thanh đầu ra của chính AmF X1 bị loại bỏ, do đó âm thanh sẽ phát ra từ cùng một cặp tai nghe hoặc loa mà không cần kết nối vòng lặp.",
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "Yêu cầu hệ điều hành Windows 10 phiên bản 2004 trở lên và card âm thanh phải được thiết lập ở chế độ WASAPI.",
-"The microphone (the default capture device) is the input.": "Micrô (thiết bị ghi âm mặc định) là nguồn đầu vào."
+"The microphone (the default capture device) is the input.": "Micrô (thiết bị ghi âm mặc định) là nguồn đầu vào.",
+"FLAC 24-bit (lossless)": "FLAC 24-bit (không mất dữ liệu)",
+"HI-RES AUDIO": "ÂM THANH ĐỘ PHÂN GIẢI CAO",
+"resampling · FLAC · RF64": "lấy mẫu lại · FLAC · RF64"
 }

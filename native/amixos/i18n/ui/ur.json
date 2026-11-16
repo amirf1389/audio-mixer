@@ -2130,5 +2130,8 @@
 "INPUT: COMPUTER SOUND": "ان پٹ: کمپیوٹر کی آواز",
 "The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.": "اس کمپیوٹر پر موجود ہر ایپ (Spotify، YouTube، کوئی پلیئر) کی موسیقی CH 1-2 پر ان پٹ بن جاتی ہے۔ AmF X1 کا اپنا آؤٹ پٹ شامل نہیں کیا جاتا، لہٰذا یہ بغیر لوپ کے انہی ہیڈفونز یا اسپیکرز پر چلتا رہتا ہے۔",
 "Needs Windows 10 version 2004 or later with the sound card on WASAPI.": "اس کے لیے ونڈوز 10 ورژن 2004 یا اس کے بعد کا، اور ساؤنڈ کارڈ کو WASAPI پر سیٹ کرنا ضروری ہے۔",
-"The microphone (the default capture device) is the input.": "مائیکروفون (ڈیفالٹ کیپچر ڈیوائس) ان پٹ ہے۔"
+"The microphone (the default capture device) is the input.": "مائیکروفون (ڈیفالٹ کیپچر ڈیوائس) ان پٹ ہے۔",
+"FLAC 24-bit (lossless)": "FLAC 24-بٹ (بغیر نقصان کے)",
+"HI-RES AUDIO": "اعلیٰ معیار کی آواز",
+"resampling · FLAC · RF64": "دوبارہ نمونہ بندی · فلیک · آر ایف۶۴"
 }
