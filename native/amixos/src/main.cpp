@@ -283,13 +283,16 @@ int main(int argc, char* argv[]) {
   // network as the button does, the MIXER page is on screen, and every 100 ms the console's own state goes to the file (the pairing PIN,
   // strips 1-4, master, remotes connected). Every 4 s the console moves strip 4 itself (-12 / -24 dB) so the phone's side can be checked.
   if (qEnvironmentVariableIsSet("AMIX_REMOTE_HOLD")) {
-    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); if (win) win->setProperty("current", "mixer");
+    // AMIX_REMOTE_PAGE: the page on screen (default MIXER); AMIX_REMOTE_SHOT=<png>: one picture of it at AMIX_REMOTE_SHOT_AT seconds (tests)
+    auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); if (win) win->setProperty("current", qEnvironmentVariable("AMIX_REMOTE_PAGE", "mixer"));
+    const QString shotFile = qEnvironmentVariable("AMIX_REMOTE_SHOT"); const qint64 shotAt = qEnvironmentVariableIsSet("AMIX_REMOTE_SHOT_AT") ? qEnvironmentVariableIntValue("AMIX_REMOTE_SHOT_AT") * 1000LL : -1; bool shotDone = false;
     if (!remote.start(true)) { std::fprintf(stderr, "amixos: remote hold: the remote did not start: %s\n", qPrintable(remote.status())); return 3; }
     const int secs = qEnvironmentVariableIntValue("AMIX_REMOTE_HOLD"); const QString dump = qEnvironmentVariable("AMIX_REMOTE_DUMP");
     QElapsedTimer t; t.start(); qint64 lastMove = 0; int k = 0;
     while (t.elapsed() < secs * 1000LL) {
       QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(10);
       if (t.elapsed() - lastMove > 4000) { lastMove = t.elapsed(); engine.setGain(3, (k++ % 2) ? -24.0 : -12.0); }
+      if (!shotDone && win && !shotFile.isEmpty() && shotAt >= 0 && t.elapsed() >= shotAt) { shotDone = true; remote.refreshLinks(); QElapsedTimer w; w.start(); while (w.elapsed() < 600) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(10); } win->grabWindow().save(shotFile); }
       static qint64 lastDump = -1000; if (t.elapsed() - lastDump < 100 || dump.isEmpty()) continue; lastDump = t.elapsed();
       QJsonArray st; for (int i = 0; i < 4; ++i) { const QVariantMap m = engine.stripAt(i); st.append(QJsonObject{{"db", m["db"].toDouble()}, {"mute", m["mute"].toBool()}, {"name", m["name"].toString()}}); }
       QFile f(dump + ".tmp"); if (f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(QJsonObject{{"t", t.elapsed()}, {"pin", remote.pairPin()}, {"port", remote.port()}, {"running", remote.running()},
