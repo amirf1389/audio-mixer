@@ -51,6 +51,11 @@
     <string name="auto_connected">connected · live sync</string>
     <string name="auto_lost">link lost · %1$s</string>
     <string name="link_timeline">LINK TIMELINE</string>
+    <string name="fx_presets">PRESETS</string>
+    <string name="fx_preset_init">INIT (every knob to its default)</string>
+    <string name="fx_preset_save">SAVE AS PRESET…</string>
+    <string name="fx_preset_delete">DELETE A PRESET…</string>
+    <string name="fx_preset_n">My preset %1$d</string>
     <string name="home_q_mute">MUTE ALL</string>
     <string name="home_q_mute_ask">Mute every channel on the console?</string>
     <string name="home_q_muted">%1$d channels muted</string>

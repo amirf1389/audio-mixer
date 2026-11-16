@@ -164,27 +164,14 @@ class LocalMixerActivity : AppCompatActivity() {
                 continue
             }
             @Suppress("UNCHECKED_CAST") val st = runCatching { MiniJson.parse(slotJson(slot)) as? Map<String, Any?> }.getOrNull()
-            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            val byp = st?.get("bypass") == true
-            head.addView(TextView(this).apply { text = (slot + 1).toString() + "  " + (st?.get("name")?.toString() ?: cat.firstOrNull { it.first == kind }?.second ?: kind); setTextColor(if (byp) dim else Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD)
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
-            head.addView(Button(this).apply { text = getString(R.string.lm_bypass); textSize = 11f; setTextColor(if (byp) Color.parseColor("#FBBF24") else Color.WHITE)
-                setOnClickListener { engine?.insertSet(s, slot, "bypass", if (byp) 0.0 else 1.0); setParam(s, slot, "bypass", if (byp) 0.0 else 1.0); changed() } })
-            head.addView(Button(this).apply { text = "✕"; textSize = 11f; contentDescription = getString(R.string.lm_remove)
-                setOnClickListener { engine?.insert(s, slot, ""); val l = rack(s); l[slot] = ""; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply(); changed() } })
-            c.addView(head)
-            @Suppress("UNCHECKED_CAST") val params = (st?.get("params") as? List<Map<String, Any?>>).orEmpty()
-            val knobs = listOf(mapOf("id" to "mix", "title" to "MIX", "value" to ((st?.get("mix") as? Number)?.toDouble() ?: 1.0), "text" to String.format("%.0f %%", ((st?.get("mix") as? Number)?.toDouble() ?: 1.0) * 100))) + params
-            for (k in knobs) {
-                val id = k["id"].toString(); val v = (k["value"] as? Number)?.toDouble() ?: 0.0
-                val t = TextView(this).apply { text = k["title"].toString() + "   " + k["text"].toString(); setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE }
-                c.addView(t)
-                c.addView(SeekBar(this).apply { max = 1000; progress = (v * 1000).toInt()
-                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(b: SeekBar, x: Int, u: Boolean) { if (!u) return; val nv = x / 1000.0; engine?.insertSet(s, slot, id, nv); setParam(s, slot, id, nv)
-                            t.text = k["title"].toString() + "   " + (if (id == "mix") String.format("%.0f %%", nv * 100) else liveText(s, slot, id) ?: String.format("%.2f", nv)) }
-                        override fun onStartTrackingTouch(b: SeekBar) {}; override fun onStopTrackingTouch(b: SeekBar) {} }) })
-            }
+                ?: mapOf("kind" to kind, "name" to (cat.firstOrNull { it.first == kind }?.second ?: kind), "bypass" to false, "mix" to 1.0, "params" to emptyList<Any>())
+            // the effect as a plug-in face: power (bypass), PRESETS, a knob per parameter
+            c.addView(PluginFace.build(this, st, slot, object : PluginFace.Host {
+                override fun set(id: String, value: Double) { engine?.insertSet(s, slot, id, value); setParam(s, slot, id, value) }
+                override fun remove() { engine?.insert(s, slot, ""); val l = rack(s); l[slot] = ""; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply() }
+                override fun changed() = changed()
+                override fun text(id: String) = liveText(s, slot, id)
+            }))
         }
         return box
     }
