@@ -14,6 +14,8 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSettings>
+#include "AutoZoom.h"
 #include <QQuickItem>
 #include <QPalette>
 #include <QDir>
@@ -76,6 +78,12 @@ static void logToFile(QtMsgType t, const QMessageLogContext&, const QString& m) 
   static const char* kind[] = {"debug", "warning", "critical", "fatal", "info"}; const QByteArray line = QDateTime::currentDateTime().toString("HH:mm:ss.zzz ").toUtf8() + kind[int(t) < 5 ? int(t) : 0] + ": " + m.toUtf8() + "\n";
   std::fputs(line.constData(), stderr); if (g_log && g_log->isOpen()) { g_log->write(line); g_log->flush(); }
 }
+// PAGE AUDIT (--bench with AMIX_BENCH_PAGES): every warning or error the interface logs, counted and kept with the page it came from
+static int g_auditWarn = 0; static QStringList g_auditLines; static QString g_auditPage;
+static void auditLog(QtMsgType t, const QMessageLogContext&, const QString& m) {
+  if (t == QtWarningMsg || t == QtCriticalMsg || t == QtFatalMsg) { ++g_auditWarn; if (g_auditLines.size() < 60) g_auditLines << ("[" + g_auditPage + "] " + m.left(220)); }
+  std::fputs((m + "\n").toLocal8Bit().constData(), stderr);
+}
 #if defined(_WIN32) && defined(_WIN64)
 char g_amixCrashPath[600] = {0};
 // CRASH REPORT (Windows): an unhandled fault prints where it happened (module + offset of every frame, walked from the fault itself) to
@@ -106,6 +114,18 @@ int main(int argc, char* argv[]) {
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);   // COM for the main thread before Qt starts: the ASIO driver objects (CoCreateInstance) and the WASAPI enumerator are created from here
 #endif
   for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--software") QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); else if (a == "--opengl") QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL); }
+  // AUTO ZOOM (AutoZoom.h): before Qt starts, a zoom that fits the screen; Windows only (the screen and its scale are read here)
+  QString zoomNote;
+#ifdef _WIN32
+  if (qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR")) {
+    const int userPct = QSettings("AMFB Audio", "A mix OS").value("ui/zoom", 0).toInt();
+    RECT wa{}; SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);   // the process is DPI aware (its manifest): device pixels
+    HDC dc = GetDC(nullptr); const double dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96; if (dc) ReleaseDC(nullptr, dc);
+    const double os = dpi > 0 ? dpi / 96.0 : 1.0, lw = (wa.right - wa.left) / os, lh = (wa.bottom - wa.top) / os;
+    const double z = autozoom::factor(lw, lh, userPct); zoomNote = autozoom::describe(os, lw, lh, z) + (userPct > 0 ? " (fixed in SETTINGS)" : " (AUTO)");
+    if (z < 0.999) qputenv("QT_SCALE_FACTOR", QByteArray::number(z, 'f', 2));
+  }
+#endif
   QGuiApplication app(argc, argv);
   // One explicit palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Fusion style draws
   // them from the application palette, which Windows and macOS hand over in their own colours. The values are Theme.qml's (every one an
@@ -136,8 +156,8 @@ int main(int argc, char* argv[]) {
   { const std::string cp = am::paths::file("crash.log"); std::snprintf(g_amixCrashPath, sizeof g_amixCrashPath, "%s", cp.c_str()); SetUnhandledExceptionFilter(amixCrashFilter); }
 #endif
   if (smoke) std::setvbuf(stdout, nullptr, _IONBF, 0);   // the self-test prints as it goes: after a crash the last line is the step that was running
-  if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
+  if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); if (!zoomNote.isEmpty()) qInfo("%s", qPrintable(zoomNote)); } }
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); settings.setZoomNote(zoomNote); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
   // SAMPLE PADS while phones are linked: the console's engine is stopped and the remote service plays, so the pads are sent there
   samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
   samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
@@ -266,6 +286,53 @@ int main(int argc, char* argv[]) {
       std::printf("amixos --bench: memory at start %.0f MB\n", rssMb());
       for (int r = 0; r < 5; ++r) { for (const QVariant& v : engine.pages()) { win->setProperty("current", v.toMap().value("id").toString()); waitMs(60); } win->setProperty("current", "mixer"); waitMs(1600); if (qEnvironmentVariableIsSet("AMIX_BENCH_GC")) { qml.collectGarbage(); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); waitMs(100); } std::printf("amixos --bench: memory after round %d of every page: %.0f MB\n", r + 1, rssMb()); }
       engine.stop(); return 0; }
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_PAGES")) {   // PAGE SWITCHING AUDIT: every page, three rounds; warnings, freezes, memory, sound, mixer state
+      qInstallMessageHandler(auditLog);
+      auto rssMb = [] { QFile f("/proc/self/statm"); if (!f.open(QIODevice::ReadOnly)) return 0.0; const QList<QByteArray> v = f.readAll().split(' '); return v.size() > 1 ? v[1].toDouble() * 4096.0 / 1048576.0 : 0.0; };
+      // the longest the interface thread stays away from the event loop while a page opens (a heartbeat every 5 ms; its lateness is the freeze)
+      auto openPage = [&](const QString& id, double& blockMs, double& stallMs) {
+        g_auditPage = id; QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); blockMs = o.nsecsElapsed() / 1e6;
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);   // the old page goes, as the running event loop does it
+        stallMs = 0; QElapsedTimer hb; hb.start(); qint64 last = 0;
+        while (hb.elapsed() < 450) { QCoreApplication::processEvents(QEventLoop::AllEvents, 5); const qint64 now = hb.elapsed(); stallMs = std::max(stallMs, double(now - last)); last = now; QThread::msleep(2); }
+        stallMs = std::max(stallMs, blockMs); };
+      if (qEnvironmentVariableIsSet("AMIX_BENCH_LEAK")) {   // which page keeps memory: each page opened 6 times (and the mixer between), memory after vs before
+        // deferred deletes (an old page) are only delivered by a running event loop; this audit runs before app.exec(), so it delivers them
+        // itself, as the real event loop does after every page switch (without this the audit itself would keep every old page alive)
+        auto cycle = [&](const QString& id) { double b, st; openPage(id, b, st); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); openPage("mixer", b, st); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); };
+        auto settle = [&] { QElapsedTimer t; t.start(); while (t.elapsed() < 1500) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
+        if (qEnvironmentVariableIsSet("AMIX_LEAK_PAGE")) {   // one page, batches of 6 opens: does it level off (memory reused) or keep growing (a leak)?
+          const QString id = qEnvironmentVariable("AMIX_LEAK_PAGE"); cycle(id); settle(); std::printf("amixos --bench: LEAK %s start %.1f MB\n", qPrintable(id), rssMb());
+          const bool force = qEnvironmentVariableIsSet("AMIX_LEAK_FORCE");
+          if (qEnvironmentVariableIsSet("AMIX_LEAK_HIDE")) win->hide();   // pages built but never drawn: is the growth in the renderer?   // a full JS collection and the renderer's caches released after each batch
+          const int batches = qEnvironmentVariableIsSet("AMIX_LEAK_N") ? qEnvironmentVariableIntValue("AMIX_LEAK_N") : 6;
+          for (int b = 1; b <= batches; ++b) { for (int k = 0; k < 6; ++k) cycle(id); if (force) { qml.collectGarbage(); win->releaseResources(); } settle(); std::printf("amixos --bench: LEAK %s after %2d opens %.1f MB, %d items in the window, %d objects in the engine\n", qPrintable(id), b * 6, rssMb(), int(win->contentItem()->findChildren<QQuickItem*>().size()), int(qml.findChildren<QObject*>().size())); }
+          engine.stop(); return 0; }
+        QList<QPair<double, QString>> grow;
+        for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); cycle(id); settle(); const double m0 = rssMb();
+          for (int k = 0; k < 6; ++k) cycle(id); settle(); grow << qMakePair(rssMb() - m0, id); }
+        std::sort(grow.begin(), grow.end(), [](auto& a, auto& b) { return a.first > b.first; });
+        for (const auto& g : grow) std::printf("amixos --bench: LEAK %-12s %+6.1f MB after 6 more opens\n", qPrintable(g.second), g.first);
+        engine.stop(); return 0; }
+      engine.setSelectedStrip(5); const qulonglong blocks0 = engine.telemetry().value("blocks").toULongLong(); const qulonglong xr0 = engine.telemetry().value("xruns").toULongLong();
+      const QVariantList pages = engine.pages(); QMap<QString, double> firstOpen, worstReopen; double mem[4] = {rssMb(), 0, 0, 0}; int warnRound[3] = {0, 0, 0};
+      for (int r = 0; r < 3; ++r) { const int w0 = g_auditWarn;
+        for (const QVariant& v : pages) { const QString id = v.toMap().value("id").toString(); double b = 0, st = 0; openPage(id, b, st);
+          if (r == 0) firstOpen[id] = st; else worstReopen[id] = std::max(worstReopen.value(id), st);
+          double b2 = 0, st2 = 0; openPage("mixer", b2, st2); if (r > 0) worstReopen["mixer"] = std::max(worstReopen.value("mixer"), st2); }
+        { QElapsedTimer settle; settle.start(); while (settle.elapsed() < 2000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } }   // the user settles on the mixer: the window collects its garbage
+        warnRound[r] = g_auditWarn - w0; mem[r + 1] = rssMb(); }
+      const qulonglong blocks1 = engine.telemetry().value("blocks").toULongLong(), xr1 = engine.telemetry().value("xruns").toULongLong();
+      QList<QPair<double, QString>> slow; for (auto it = firstOpen.cbegin(); it != firstOpen.cend(); ++it) slow << qMakePair(it.value(), it.key());
+      std::sort(slow.begin(), slow.end(), [](auto& a, auto& b) { return a.first > b.first; });
+      double reWorst = 0; QString reWorstId; for (auto it = worstReopen.cbegin(); it != worstReopen.cend(); ++it) if (it.value() > reWorst) { reWorst = it.value(); reWorstId = it.key(); }
+      std::printf("amixos --bench: PAGES %d pages x 3 rounds (each page, then back to the mixer)\n", int(pages.size()));
+      std::printf("amixos --bench: PAGES slowest first opens:"); for (int k = 0; k < std::min<int>(8, slow.size()); ++k) std::printf(" %s %.0f ms;", qPrintable(slow[k].second), slow[k].first); std::printf("\n");
+      std::printf("amixos --bench: PAGES worst re-open (rounds 2-3): %s %.0f ms\n", qPrintable(reWorstId), reWorst);
+      std::printf("amixos --bench: PAGES memory %.0f -> %.0f -> %.0f -> %.0f MB; warnings per round %d / %d / %d\n", mem[0], mem[1], mem[2], mem[3], warnRound[0], warnRound[1], warnRound[2]);
+      std::printf("amixos --bench: PAGES sound kept running %d (%llu blocks, dropouts %llu); selected strip kept %d\n", blocks1 > blocks0 + 100, blocks1 - blocks0, xr1 - xr0, engine.selectedStrip() == 5);
+      for (const QString& l : g_auditLines) std::printf("amixos --bench: WARNING %s\n", qPrintable(l));
+      engine.stop(); return g_auditWarn > 0 || engine.selectedStrip() != 5 || blocks1 <= blocks0 + 100 ? 1 : 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_ALL")) {   // the opening time of every page, slowest first
       QList<QPair<double, QString>> t; for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", "home"); waitMs(150);
         QElapsedTimer o; o.start(); win->setProperty("current", id); QCoreApplication::processEvents(); double first = o.nsecsElapsed() / 1e6; waitMs(150);
@@ -420,6 +487,12 @@ int main(int argc, char* argv[]) {
       engine.setWindowsGainMode(keepMode); engine.setMaster(keepMaster);
       if (!(offOk && std::abs(t50 + 9.03) < 0.01 && t100 == 0.0 && std::abs(t25 + 18.06) < 0.01 && t0 <= -119 && wrote && fader && curve && shared && gone)) {
         std::fprintf(stderr, "amixos --smoke: WINDOWS VOLUME failed (off %d, 50 %.2f, 100 %.2f, 25 %.2f, 0 %.0f, wrote %d, fader %d, curve %d, shared %d, gone %d)\n", offOk, t50, t100, t25, t0, wrote, fader, curve, shared, gone); return 288; } }
+    { // AUTO ZOOM on a 14" laptop, 1920 x 1080 (work area 1920 x 1032 device pixels): 100 % and 125 % fit as they are; 150 % is zoomed
+      // to fit (drawn as at about 130 %); a user's fixed zoom wins; a large screen is never zoomed
+      const auto z = [](double os, int pct) { return autozoom::factor(1920 / os, 1032 / os, pct); };
+      const double z100 = z(1.0, 0), z125 = z(1.25, 0), z150 = z(1.5, 0), zUser = z(1.5, 90), z4k = autozoom::factor(3840 / 1.5, 2112 / 1.5, 0);
+      std::printf("amixos --smoke: AUTO ZOOM 1920x1080: 100 %% -> %.2f, 125 %% -> %.2f, 150 %% -> %.2f (drawn as %.0f %%), fixed 90 %% -> %.2f, 4K at 150 %% -> %.2f\n", z100, z125, z150, z150 * 150, zUser, z4k);
+      if (!(z100 == 1.0 && z125 == 1.0 && z150 < 0.9 && z150 * 1.5 >= 1.25 && z150 * 1.5 <= 1.35 && std::abs(zUser - 0.9) < 1e-9 && z4k == 1.0)) { std::fprintf(stderr, "amixos --smoke: AUTO ZOOM failed\n"); return 1; } }
     { // LOW-CPU INTERFACE: the meter rate follows the window (front / behind another app / minimised) and ECO; the process CPU is measured
       // in each state over 3 s of the live mixer (the interface itself, not the sound, is what is slowed)
       const bool eco0 = engine.ecoUi(); engine.setEcoUi(false);

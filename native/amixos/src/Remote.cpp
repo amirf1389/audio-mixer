@@ -36,7 +36,7 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
   for (int i = 0; i < n && i < l.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip s; s.db = m.value("db").toDouble(); s.pan = m.value("pan").toDouble();
     s.mute = m.value("mute").toBool(); s.solo = m.value("solo").toBool(); s.name = syncName(i, m.value("name").toString());
     s.trim = engine_->trim(i); const QVariantMap t = engine_->channelEq(i); s.low = t.value("low").toDouble(); s.mid = t.value("mid").toDouble(); s.midHz = t.value("midFreq", 1000).toDouble(); s.high = t.value("high").toDouble();
-    s.toneOn = t.value("on", true).toBool() || (std::abs(s.low) < 0.01 && std::abs(s.mid) < 0.01 && std::abs(s.high) < 0.01);   // flat counts as on: the console reports flat bands as off
+    s.toneOn = t.value("on", true).toBool();   // the EQ key's own state (Engine keeps it)
     for (int b = 0; b < 8; ++b) { const QVariantMap e = engine_->eqBand(i, b); s.eq[b] = {e.value("type").toInt(), e.value("freq", 1000).toDouble(), e.value("q", 0.707).toDouble(), e.value("gainDb").toDouble()}; }
     v << s; }
   return v;

@@ -3,6 +3,7 @@
 // panel and hides with it). Drag the title bar to move it. One plug-in at a time; opening another replaces it.
 // Note: a native window is drawn above the interface, so nothing of the console should overlap the body while it is open.
 import QtQuick
+import QtQuick.Controls
 import AmixOS
 
 Rectangle {
@@ -43,6 +44,9 @@ Rectangle {
                     Text { id: bt; anchors.centerIn: parent; text: i18n.t(modelData.t, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                         onClicked: { const s = dock.strip, sl = dock.slot; dock.close(); if (modelData.k === "pop") engine.openPluginWindow(s, sl) } } } } } }
-    // the plug-in's editor is placed over this item by the engine
-    Item { id: body; objectName: "pluginDockBody"; x: 1; y: bar.height + 1; width: dock.ew; height: dock.eh }
+    // a menu or dialog of the console is open: the plug-in's native window (drawn above everything) steps aside so it is not hidden
+    readonly property bool covered: { const o = Overlay.overlay; if (!o) return false; const ch = o.children; for (let i = 0; i < ch.length; ++i) if (ch[i].visible && ch[i].width > 0) return true; return false }
+    // the plug-in's editor is placed over this item by the engine (hidden while covered)
+    Item { id: body; objectName: "pluginDockBody"; x: 1; y: bar.height + 1; width: dock.ew; height: dock.eh; visible: !dock.covered }
+    Text { anchors.centerIn: body; visible: dock.covered; text: i18n.t("The plug-in window comes back when the menu closes.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 }
 }

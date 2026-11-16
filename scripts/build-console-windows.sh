@@ -8,7 +8,11 @@
 # The result is unsigned: sign amixos.exe, "AmF X1.exe", "AmF X1 Network.exe" and the DLL with scripts/sign-windows.js before release.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; VER="$(tr -d ' \n' < "$ROOT/native/amixos/version.txt")"
-HOSTQT="$(grep -ho 'PACKAGE_VERSION "[0-9.]*"' /usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6ConfigVersion.cmake | head -1 | tr -dc '0-9.')"
+# the host's Qt version: Qt6ConfigVersion.cmake on older packages, Qt6ConfigVersionImpl.cmake on newer ones, else Qt's own qtpaths / qmake
+QTCM=/usr/lib/x86_64-linux-gnu/cmake/Qt6
+HOSTQT="$(grep -ho 'PACKAGE_VERSION "[0-9.]*"' "$QTCM/Qt6ConfigVersion.cmake" "$QTCM/Qt6ConfigVersionImpl.cmake" 2>/dev/null | head -1 | tr -dc '0-9.')"
+[ -n "$HOSTQT" ] || HOSTQT="$( (qtpaths6 --qt-query QT_VERSION || qmake6 -query QT_VERSION || qmake -query QT_VERSION) 2>/dev/null | head -1 | tr -dc '0-9.')"
+[ -n "$HOSTQT" ] || { echo "the host's Qt 6 version was not found (install qt6-base-dev, or pass the Windows kit's path as the first argument)"; exit 1; }
 KIT="${1:-}"; OUT="${2:-$ROOT/dist/windows}"; NAME="AmF-X1-$VER-windows-x64"
 command -v x86_64-w64-mingw32-g++ >/dev/null || { echo "mingw-w64 is needed (apt install mingw-w64)"; exit 1; }
 if [ -z "$KIT" ]; then

@@ -357,7 +357,7 @@ class RemoteActivity : AppCompatActivity() {
         io.execute {
             val devs = runCatching { c.devices() }.getOrDefault(emptyList())
             ui.post {
-                val names = devs.map { it.backend.toUpperCase() + "  " + it.name + "  (" + it.inputs + " in / " + it.outputs + " out)" }.toTypedArray()
+                val names = devs.map { it.backend.uppercase() + "  " + it.name + "  (" + it.inputs + " in / " + it.outputs + " out)" }.toTypedArray()
                 AlertDialog.Builder(this).setTitle(getString(R.string.devices)).setItems(names) { _, which -> val d = devs[which]
                     io.execute { runCatching { c.open(d.backend, if (d.inputs > 0) d.id else "", if (d.outputs > 0) d.id else "", d.defaultRate, 256, Math.min(32, Math.max(2, d.inputs)), Math.min(2, Math.max(2, d.outputs))) }.onFailure { e -> ui.post { status.text = getString(R.string.failed, e.message ?: "") } }.onSuccess { ui.post { status.text = "opened " + d.name } } } }
                     .setNegativeButton(getString(R.string.stop_engine)) { _, _ -> val doStop = { io.execute { runCatching { c.stop() }; ui.post { status.text = getString(R.string.stopped) } } }
@@ -640,7 +640,8 @@ class RemoteActivity : AppCompatActivity() {
     private fun hzToKnob(hz: Double) = (2 * Math.log(hz / 100) / Math.log(80.0) - 1).toFloat()
     private fun knobToHz(v: Float) = Math.round(100 * Math.pow(80.0, (v + 1) / 2.0)).toDouble()
     private fun toneBlock(st: com.amfb.amixos.remote.StripState, tint: Int): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        // a little room above GAIN: the pan knob's value ("C", "L40") sits right under it
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 14, 0, 0) }
         val dbF: (Float, Double) -> String = { v, r -> val d = Math.round(v * r * 2) / 2.0; (if (d > 0) "+" else "") + String.format("%.1f", d) }
         fun k(title: String, color: Int, f: (Float) -> String) = KnobView(this, color).apply { this.title = title; fmt = f; layoutParams = LinearLayout.LayoutParams(112, LinearLayout.LayoutParams.WRAP_CONTENT)
             onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() } }
@@ -707,7 +708,7 @@ class RemoteActivity : AppCompatActivity() {
     }
     private fun localIp(): String? = runCatching {
         java.net.NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }.flatMap { it.inetAddresses.toList() }
-            .filterIsInstance<java.net.Inet4Address>().map { it.hostAddress }.firstOrNull { it.startsWith("192.168.") || it.startsWith("10.") || Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(it) }
+            .filterIsInstance<java.net.Inet4Address>().map { it.hostAddress }.filterNotNull().firstOrNull { it.startsWith("192.168.") || it.startsWith("10.") || Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(it) }
     }.getOrNull()
 
     override fun onDestroy() { closing = true; syncing = false; ui.removeCallbacks(presence); stream?.stop(); io.shutdownNow(); scanIo.shutdownNow(); super.onDestroy() }

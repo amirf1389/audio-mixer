@@ -42,7 +42,7 @@ class ScreenshotTest {
         val strip = android.graphics.Bitmap.createBitmap(w * 5, h, android.graphics.Bitmap.Config.ARGB_8888); val c = android.graphics.Canvas(strip)
         val v = BootView(ctx); v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)); v.layout(0, 0, w, h)
         floatArrayOf(0.12f, 0.30f, 0.50f, 0.70f, 0.88f).forEachIndexed { i, t -> v.t = t; c.save(); c.clipRect(i * w, 0, (i + 1) * w, h); c.translate((i * w).toFloat(), 0f); c.drawColor(android.graphics.Color.parseColor("#0B0F15")); v.draw(c); c.restore() }
-        java.io.File(System.getProperty("amfx.shots")).mkdirs(); java.io.FileOutputStream(java.io.File(System.getProperty("amfx.shots"), "boot-animation.png")).use { strip.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        out.mkdirs(); java.io.FileOutputStream(java.io.File(out, "boot-animation.png")).use { strip.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
         org.junit.Assert.assertEquals(1f, BootView.overshoot(1f), 1e-6f); org.junit.Assert.assertTrue((0..100).any { BootView.overshoot(it / 100f) > 1.02f })   // it lands past its place and settles back
         org.junit.Assert.assertEquals(0f, BootView.alphaAt(1f), 1e-6f); org.junit.Assert.assertEquals(1f, BootView.alphaAt(0.5f), 1e-6f)
         HomeActivity.bootShown = false; Prefs.remote(ctx).edit().putBoolean("bootAnim", true).commit()
