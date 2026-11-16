@@ -28,6 +28,7 @@ class PluginsActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor(); private val ui = Handler(Looper.getMainLooper())
     private lateinit var body: LinearLayout; private lateinit var head: TextView
     private var info: Map<String, Any?> = emptyMap(); private var tab = 0; private var filter = ""
+    internal var liveRacks: Map<String, Any?>? = null; private var client: DaemonClient? = null   // LIVE: the console's plug-ins as the service plays them (tap one to control it)
     private val tabs = ArrayList<Button>()
     private val accent = Color.parseColor("#EA580C"); private val cyan = Color.parseColor("#00F2FF"); private val dim = Color.parseColor("#8B98A8"); private val card = Color.parseColor("#141B26")
 
@@ -50,11 +51,13 @@ class PluginsActivity : AppCompatActivity() {
         val p = Prefs.remote(this); val host = p.getString("host", "").orEmpty()
         if (host.isEmpty()) { head.text = getString(R.string.eq_offline); return }
         val c = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), p.getString("token", "").orEmpty()))
-        io.execute { val r = runCatching { c.consoleInfo() }; ui.post { r.onSuccess { show(it) }.onFailure { head.text = getString(R.string.failed, it.message ?: "") } } }
+        client = c
+        io.execute { val r = runCatching { c.consoleInfo() }; val lr = runCatching { c.racks() }.getOrNull()
+            ui.post { liveRacks = lr; r.onSuccess { show(it) }.onFailure { if (lr != null) { info = mapOf("available" to true); render() } else head.text = getString(R.string.failed, it.message ?: "") } } }
     }
     fun show(i: Map<String, Any?>) {
         info = i
-        if (i["available"] != true) { head.text = getString(R.string.plugins_none); render(); return }
+        if (i["available"] != true) { head.text = if ((liveRacks?.get("racks") as? List<*>)?.isNotEmpty() == true) getString(R.string.plugins_live_head) else getString(R.string.plugins_none); render(); return }
         val at = (i["written"] as? Number)?.toLong() ?: 0L
         head.text = getString(R.string.plugins_head, i["version"]?.toString() ?: "", DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(at)))
         render()
@@ -76,9 +79,11 @@ class PluginsActivity : AppCompatActivity() {
     fun tabTo(i: Int) { tab = i; render() }
     fun render() {
         tabs.forEachIndexed { k, b -> b.setTextColor(if (k == tab) accent else Color.WHITE) }
-        body.removeAllViews(); if (info["available"] != true) { empty(getString(R.string.plugins_none)); return }
+        body.removeAllViews()
+        val live = (liveRacks?.get("racks") as? List<*>)?.isNotEmpty() == true
+        if (info["available"] != true && !(tab == 0 && live)) { empty(getString(R.string.plugins_none)); return }   // the live racks need no saved list
         when (tab) {
-            0 -> { val racks = list("racks"); if (racks.isEmpty()) empty(getString(R.string.plugins_no_racks))
+            0 -> if (liveRacks?.get("racks") is List<*> && (liveRacks!!["racks"] as List<*>).isNotEmpty()) renderLive() else { val racks = list("racks"); if (racks.isEmpty()) empty(getString(R.string.plugins_no_racks))
                 for (r in racks) { @Suppress("UNCHECKED_CAST") val ps = (r["plugins"] as? List<Any?>).orEmpty().mapNotNull { it as? Map<String, Any?> }.filter { match(s(it, "name"), s(it, "kind")) }
                     if (ps.isEmpty()) continue
                     section(String.format("CH %02d  %s", ((r["strip"] as? Number)?.toInt() ?: 0) + 1, s(r, "name")))
@@ -94,7 +99,46 @@ class PluginsActivity : AppCompatActivity() {
                     for (e in l) item(s(e, "name"), s(e, "note"), if (e["installed"] != true) "NOT INSTALLED" else if (e["on"] == true) "ON" else "OFF",
                         if (e["installed"] != true) dim else if (e["on"] == true) Color.parseColor("#34D399") else Color.parseColor("#FBBF24")) } }
         }
-        body.addView(TextView(this).apply { text = getString(R.string.plugins_note); setTextColor(dim); textSize = 11f; setPadding(0, 24, 0, 0) })
+        if (!(tab == 0 && live)) body.addView(TextView(this).apply { text = getString(R.string.plugins_note); setTextColor(dim); textSize = 11f; setPadding(0, 24, 0, 0) })   // the read-only note, not under the live racks
+    }
+    // ---- LIVE RACKS: tap a plug-in to open its face; every knob, the power LED and the presets act on the computer at once
+    @Suppress("UNCHECKED_CAST")
+    private fun renderLive() {
+        body.addView(TextView(this).apply { text = getString(R.string.plugins_live_note); setTextColor(Color.parseColor("#34D399")); textSize = 12f; setPadding(0, 12, 0, 4) })
+        for (r in (liveRacks!!["racks"] as List<Map<String, Any?>>)) { val strip = (r["strip"] as? Number)?.toInt() ?: 0
+            val slots = (r["slots"] as? List<Map<String, Any?>>).orEmpty().filter { match(s(it, "name"), s(it, "kind"), s(it, "vendor")) }; if (slots.isEmpty()) continue
+            section(String.format("CH %02d  %s", strip + 1, s(r, "name")))
+            for (p in slots) { val slot = (p["slot"] as? Number)?.toInt() ?: 0; val err = s(p, "error"); val loaded = p["loaded"] == true
+                item("${slot + 1}.  " + s(p, "name").ifEmpty { s(p, "kind") }, if (!loaded) err else listOf(s(p, "format"), s(p, "vendor")).filter { it.isNotEmpty() }.joinToString(" · ") + "   ·   " + getString(R.string.plugins_tap),
+                    if (!loaded) "ERROR" else if (p["bypass"] == true) "BYPASS" else "ON", if (!loaded) Color.parseColor("#EF4444") else if (p["bypass"] == true) Color.parseColor("#FBBF24") else Color.parseColor("#34D399"))
+                if (loaded) body.getChildAt(body.childCount - 1).apply { isClickable = true; setOnClickListener { openPlugin(strip, slot) } } } }
+    }
+    /** one of the computer's plug-ins as a face: its parameters fetched now, each change sent at once */
+    @Suppress("UNCHECKED_CAST")
+    internal fun openPlugin(strip: Int, slot: Int) {
+        val c = client ?: return
+        io.execute { val r = runCatching { c.racks(strip) }.getOrNull()
+            val slotJson = ((r?.get("racks") as? List<Map<String, Any?>>)?.firstOrNull()?.get("slots") as? List<Map<String, Any?>>)?.firstOrNull { (it["slot"] as? Number)?.toInt() == slot }
+            ui.post { if (slotJson == null) { head.text = getString(R.string.failed, "no plug-in"); return@post }; showFace(c, strip, slot, slotJson) } }
+    }
+    internal var lastFace: android.view.View? = null
+    internal fun faceView(c: DaemonClient?, strip: Int, slot: Int, json: Map<String, Any?>, onChanged: () -> Unit): android.view.View {
+        val texts = HashMap<String, String>(); @Suppress("UNCHECKED_CAST") (json["params"] as? List<Map<String, Any?>>).orEmpty().forEach { texts[it["id"].toString()] = it["text"].toString() }
+        return PluginFace.build(this, json, slot, object : PluginFace.Host {
+            override fun set(id: String, value: Double) { val cl = c ?: return
+                io.execute { runCatching { if (id == "bypass") cl.pluginBypass(strip, slot, value >= 0.5) else cl.pluginParam(strip, slot, id.toDouble().toLong(), value) }
+                    .onSuccess { m -> m["text"]?.let { texts[id] = it.toString() } }.onFailure { e -> ui.post { head.text = getString(R.string.failed, e.message ?: "") } } } }
+            override fun remove() { head.text = getString(R.string.plugins_remove_here) }   // the rack itself is changed on the computer
+            override fun changed() = onChanged()
+            override fun text(id: String) = texts[id] })
+    }
+    private fun showFace(c: DaemonClient, strip: Int, slot: Int, json: Map<String, Any?>) {
+        val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 8, 16, 8) }
+        val dlg = android.app.AlertDialog.Builder(this).setPositiveButton(android.R.string.ok, null).create()
+        fun refresh(j: Map<String, Any?>) { holder.removeAllViews(); lastFace = faceView(c, strip, slot, j) { io.execute { @Suppress("UNCHECKED_CAST") val r = runCatching { c.racks(strip) }.getOrNull()
+            val nj = ((r?.get("racks") as? List<Map<String, Any?>>)?.firstOrNull()?.get("slots") as? List<Map<String, Any?>>)?.firstOrNull { (it["slot"] as? Number)?.toInt() == slot }
+            if (nj != null) ui.post { refresh(nj) } } }; holder.addView(lastFace) }
+        refresh(json); dlg.setView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(holder) }); dlg.setOnDismissListener { load() }; dlg.show()
     }
     override fun onDestroy() { io.shutdownNow(); super.onDestroy() }
 }

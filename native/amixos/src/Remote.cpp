@@ -42,7 +42,10 @@ void Remote::writeSeed() {
   QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}}).toJson(QJsonDocument::Compact));
+  QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
+  for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
+  racksV_ = 0;
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
   return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")},
@@ -61,6 +64,14 @@ void Remote::post(const QVariantMap& cmd) {
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); --posting_; emit synced(); });
 }
 bool Remote::touched(int strip, int) const { const auto it = touched_.constFind(strip); return running() && it != touched_.cend() && QDateTime::currentMSecsSinceEpoch() - it.value() < 800; }
+void Remote::takeRacks() {
+  ensureToken(); if (token_.isEmpty()) return;
+  QNetworkReply* r = net_.get(api(QStringLiteral("/api/racks?states=1")));
+  connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); if (r->error() != QNetworkReply::NoError) return;
+    for (const QVariant& rv : QJsonDocument::fromJson(r->readAll()).toVariant().toMap().value("racks").toList()) { const QVariantMap rk = rv.toMap();
+      for (const QVariant& sv : rk.value("slots").toList()) { const QVariantMap s = sv.toMap(); if (!s.value("loaded").toBool()) continue;
+        engine_->takeRemotePlugin(rk.value("strip").toInt(), s.value("slot").toInt(), s.value("bypass").toBool(), s.value("state").toString()); } } });
+}
 void Remote::syncTick() {
   ++dTicks_;
   if (!running()) { sync_.stop(); if (lastTouch_) { lastTouch_ = 0; ++pulse_; emit pulseChanged(); } return; }
@@ -88,6 +99,7 @@ void Remote::syncTick() {
     const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
     if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
     if (o.value("same").toBool() || !o.contains("strips")) return;
+    { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; takeRacks(); } }   // a phone changed a plug-in: the console's instance follows
     { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
       for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
         const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());

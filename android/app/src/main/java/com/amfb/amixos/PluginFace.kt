@@ -70,19 +70,19 @@ object PluginFace {
         bar.addView(TextView(c).apply { text = if (byp) "○" else "●"; textSize = 20f; setTextColor(if (byp) Color.argb(140, Color.red(st.ink), Color.green(st.ink), Color.blue(st.ink)) else Color.parseColor("#22C55E"))
             setPadding(0, 0, 18, 0); contentDescription = "power"; setOnClickListener { host.set("bypass", if (byp) 0.0 else 1.0); host.changed() } })
         bar.addView(LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(c).apply { text = "AMF X1 · SLOT " + (slot + 1); setTextColor(Color.argb(150, Color.red(st.ink), Color.green(st.ink), Color.blue(st.ink))); textSize = 9f; letterSpacing = 0.2f; typeface = Typeface.MONOSPACE })
+            addView(TextView(c).apply { text = listOf(json["format"]?.toString().orEmpty().ifEmpty { "AMF X1" }, json["vendor"]?.toString().orEmpty()).filter { it.isNotEmpty() }.joinToString(" · ").uppercase() + " · SLOT " + (slot + 1); setTextColor(Color.argb(150, Color.red(st.ink), Color.green(st.ink), Color.blue(st.ink))); textSize = 9f; letterSpacing = 0.2f; typeface = Typeface.MONOSPACE })
             addView(TextView(c).apply { text = name.uppercase(); setTextColor(st.ink); textSize = 16f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.06f }) })
         fun pill(t: String, f: () -> Unit) = bar.addView(TextView(c).apply { text = t; setTextColor(st.ink); textSize = 11f; typeface = Typeface.DEFAULT_BOLD; setPadding(20, 10, 20, 10); setOnClickListener { f() }
             background = GradientDrawable().apply { cornerRadius = 30f; setStroke(2, Color.argb(130, Color.red(st.ink), Color.green(st.ink), Color.blue(st.ink))) }
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(10, 0, 0, 0) } })
         val params = (json["params"] as? List<Map<String, Any?>>).orEmpty()
-        val values = LinkedHashMap<String, Double>().apply { put("mix", (json["mix"] as? Number)?.toDouble() ?: 1.0); params.forEach { put(it["id"].toString(), (it["value"] as? Number)?.toDouble() ?: 0.0) } }
+        val values = LinkedHashMap<String, Double>().apply { if (json.containsKey("mix")) put("mix", (json["mix"] as? Number)?.toDouble() ?: 1.0); params.forEach { put(it["id"].toString(), (it["value"] as? Number)?.toDouble() ?: 0.0) } }
         pill(c.getString(R.string.fx_presets)) { presetMenu(c, kind, params, values, host) }
         pill("✕") { host.remove(); host.changed() }
         face.addView(bar)
         // the knobs: MIX first, then every parameter
         val grid = GridLayout(c).apply { columnCount = 4; setPadding(0, 16, 0, 0) }
-        val knobs = listOf(mapOf("id" to "mix", "title" to "MIX", "value" to values["mix"], "default" to 1.0, "text" to String.format("%.0f %%", (values["mix"] ?: 1.0) * 100))) + params
+        val knobs = (if (json.containsKey("mix")) listOf(mapOf("id" to "mix", "title" to "MIX", "value" to values["mix"], "default" to 1.0, "text" to String.format("%.0f %%", (values["mix"] ?: 1.0) * 100))) else emptyList()) + params   // a hosted plug-in has no MIX of ours
         for (k in knobs) {
             val id = k["id"].toString(); val v = (k["value"] as? Number)?.toDouble() ?: 0.0; val def = (k["default"] as? Number)?.toDouble() ?: v
             val cell = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(4, 6, 4, 6)
@@ -102,7 +102,7 @@ object PluginFace {
         val items = listOf(c.getString(R.string.fx_preset_init)) + mine.keys.map { "▸ $it" } + listOf(c.getString(R.string.fx_preset_save)) + (if (mine.isNotEmpty()) listOf(c.getString(R.string.fx_preset_delete)) else emptyList())
         android.app.AlertDialog.Builder(c).setTitle(R.string.fx_presets).setItems(items.toTypedArray()) { _, w ->
             when {
-                w == 0 -> { params.forEach { p -> host.set(p["id"].toString(), (p["default"] as? Number)?.toDouble() ?: 0.5) }; host.set("mix", 1.0); host.changed() }   // INIT: every knob to its default
+                w == 0 -> { params.forEach { p -> host.set(p["id"].toString(), (p["default"] as? Number)?.toDouble() ?: 0.5) }; if (values.containsKey("mix")) host.set("mix", 1.0); host.changed() }   // INIT: every knob to its default
                 w <= mine.size -> { mine.values.elementAt(w - 1).forEach { (id, v) -> host.set(id, v) }; host.changed() }
                 items[w] == c.getString(R.string.fx_preset_save) -> { val e = android.widget.EditText(c).apply { setText(c.getString(R.string.fx_preset_n, mine.size + 1)); setSingleLine() }
                     android.app.AlertDialog.Builder(c).setTitle(R.string.fx_preset_save).setView(e).setPositiveButton(android.R.string.ok) { _, _ ->

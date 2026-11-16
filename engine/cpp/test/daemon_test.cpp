@@ -11,6 +11,27 @@
 #include <thread>
 
 #include "daemon/daemon.hpp"
+#include <atomic>
+
+namespace {
+// a stand-in plug-in: GAIN and TONE, counts its audio calls, keeps its state as "gain,tone"
+struct FakePlugin final : am::host::Plugin {
+  am::host::Info inf; std::string path = "fake"; double gain = 0.5, tone = 0.25; bool byp = false; std::atomic<int> calls{0};
+  FakePlugin() { inf.format = "VST3"; inf.name = "Fake Gain"; inf.vendor = "Test Labs"; }
+  const am::host::Info& info() const override { return inf; } const std::string& modulePath() const override { return path; }
+  int inputChannels() const override { return 1; } int outputChannels() const override { return 1; } std::uint32_t latencySamples() const override { return 0; }
+  std::vector<am::host::ParamInfo> params() const override { am::host::ParamInfo a; a.id = 7; a.title = "GAIN"; a.units = "dB"; a.normalized = gain; a.defaultNormalized = 0.5;
+    am::host::ParamInfo b; b.id = 9; b.title = "TONE"; b.normalized = tone; b.defaultNormalized = 0.25; am::host::ParamInfo h; h.id = 11; h.title = "HIDDEN"; h.hidden = true; return {a, b, h}; }
+  double param(std::uint32_t id) const override { return id == 7 ? gain : tone; }
+  void setParam(std::uint32_t id, double v) override { if (id == 7) gain = v; else tone = v; }
+  std::string paramText(std::uint32_t id, double v) const override { return id == 7 ? std::to_string(static_cast<int>(v * 24 - 12)) : std::to_string(static_cast<int>(v * 100)) + " %"; }
+  bool hasBypass() const override { return true; } void setBypass(bool on) override { byp = on; } bool bypass() const override { return byp; }
+  void process(const float* const* in, float* const* out, int frames) override { ++calls; for (int i = 0; i < frames; ++i) { out[0][i] = in ? in[0][i] : 0.f; out[1][i] = out[0][i]; } }
+  std::string state() const override { return std::to_string(gain) + "," + std::to_string(tone); }
+  bool setState(const std::string& s) override { const auto c = s.find(','); if (c == std::string::npos) return false; gain = std::atof(s.substr(0, c).c_str()); tone = std::atof(s.substr(c + 1).c_str()); return true; }
+};
+FakePlugin* g_fake = nullptr;
+}  // namespace
 
 using am::json::Value;
 #define CHECK(c) do { if (!(c)) { std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
@@ -210,6 +231,33 @@ int main() {
     CHECK(st["strips"].at(1)["mute"].asBool() && st["strips"].at(1)["db"].asNumber() == -12 && st["master"]["db"].asNumber() == -2);
     CHECK(st["settings"]["width"].asNumber() == 1.5 && st["settings"]["winGain"].asBool() && st["settings"]["outputBits"].asInt() == 16);   // the console's settings came with the seed
     sd.stop(); std::remove(sf.c_str()); }
-  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE OK on port %u\n", port);
+  { // THE CONSOLE'S PLUG-INS played by the service: racks from the seed, a plug-in that cannot load says why, parameters, bypass, states
+    const std::string sf = "daemon_test_racks.json"; { std::FILE* f = std::fopen(sf.c_str(), "wb");
+      std::fputs("{\"racks\":[{\"strip\":0,\"name\":\"VOCAL\",\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"name\":\"Fake Gain\",\"bypass\":false,\"state\":\"0.75,0.5\"}]},"
+                 "{\"strip\":1,\"name\":\"GTR\",\"plugins\":[{\"slot\":0,\"kind\":\"vst2:C:/missing.dll\",\"name\":\"Gone\"}]}]}", f); std::fclose(f); }
+    am::Daemon::Options po = o; po.port = 0; po.seed = sf; po.tokenStore.clear();
+    po.pluginFactory = [](const std::string& kind, double, int, std::string& err) -> std::unique_ptr<am::host::Plugin> {
+      if (kind.find("FakeGain") == std::string::npos) { err = "the module is not on this computer"; return nullptr; } auto p = std::make_unique<FakePlugin>(); g_fake = p.get(); return p; };
+    am::Daemon pd(po); std::string e; CHECK(pd.start(e)); const unsigned short pp = pd.port(); const std::vector<std::pair<std::string, std::string>> pa = {{"X-Amix-Token", po.token}};
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"inChannels\":2,\"outChannels\":2}", pa, status, body) && status == 200);
+    CHECK(g_fake && std::abs(g_fake->gain - 0.75) < 1e-9);   // loaded with the console's state
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", {}, status, body) && (status == 401 || status == 429));
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", pa, status, body) && status == 200);
+    Value rk = Value::parse(body, ok)["racks"]; CHECK(ok && rk.size() == 2);
+    CHECK(rk.at(0)["name"].asString() == "VOCAL" && rk.at(0)["slots"].at(0)["slot"].asInt() == 2 && rk.at(0)["slots"].at(0)["loaded"].asBool() && rk.at(0)["slots"].at(0)["vendor"].asString() == "Test Labs");
+    CHECK(!rk.at(1)["slots"].at(0)["loaded"].asBool() && rk.at(1)["slots"].at(0)["error"].asString() == "the module is not on this computer");
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?strip=0", "", pa, status, body) && status == 200);
+    Value ps = Value::parse(body, ok)["racks"].at(0)["slots"].at(0)["params"]; CHECK(ok && ps.size() == 2 && ps.at(0)["title"].asString() == "GAIN" && ps.at(0)["text"].asString() == "6 dB");   // the hidden one is not shown
+    const double rv = pd.state()["racksV"].asNumber();
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"param\":7,\"value\":0.25}", pa, status, body) && status == 200 && Value::parse(body, ok)["text"].asString() == "-6");
+    CHECK(std::abs(g_fake->gain - 0.25) < 1e-9 && pd.state()["racksV"].asNumber() > rv);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"bypass\":true}", pa, status, body) && status == 200 && g_fake->byp);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"param\":99,\"value\":0.5}", pa, status, body) && status == 400);   // no such parameter
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"param\":7,\"value\":3}", pa, status, body) && status == 400);    // out of 0..1
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":1,\"slot\":0,\"param\":7,\"value\":0.5}", pa, status, body) && status == 400);    // not loaded here
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks?states=1", "", pa, status, body) && status == 200 && Value::parse(body, ok)["racks"].at(0)["slots"].at(0)["state"].asString().rfind("0.25", 0) == 0);
+    { const int c0 = g_fake->calls.load(); std::this_thread::sleep_for(std::chrono::milliseconds(300)); CHECK(g_fake->calls.load() > c0); }   // the sound goes through it
+    pd.stop(); std::remove(sf.c_str()); g_fake = nullptr; }
+  std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE, console plug-ins OK on port %u\n", port);
   return 0;
 }

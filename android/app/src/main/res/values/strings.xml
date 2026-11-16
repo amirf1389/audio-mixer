@@ -51,6 +51,10 @@
     <string name="auto_connected">connected · live sync</string>
     <string name="auto_lost">link lost · %1$s</string>
     <string name="link_timeline">LINK TIMELINE</string>
+    <string name="plugins_live_note">LIVE: the computer\'s plug-ins as they play now. Tap one to control it.</string>
+    <string name="plugins_tap">tap to control</string>
+    <string name="plugins_live_head">The console\'s racks, live from the computer.</string>
+    <string name="plugins_remove_here">Plug-ins are added and removed on the computer; here you control them.</string>
     <string name="fx_presets">PRESETS</string>
     <string name="fx_preset_init">INIT (every knob to its default)</string>
     <string name="fx_preset_save">SAVE AS PRESET…</string>

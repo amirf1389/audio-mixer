@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "audiomixer/runtime.hpp"
+#include "plugin/plugin.hpp"
 #include "httpd.hpp"
 #include "json.hpp"
 #include "tokens.hpp"
@@ -39,7 +40,10 @@ namespace am {
 
 class Daemon {
  public:
-  struct Options { std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; };   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
+  // PLUG-INS: makes one plug-in from a rack slot's kind ("vst3:<module>|<class>", "vst2:<module>", "fx:<effect>") at the engine's rate;
+  // the network extension gives the real loaders, tests a stand-in. Empty: racks are listed but not played.
+  using PluginFactory = std::function<std::unique_ptr<host::Plugin>(const std::string& kind, double rate, int maxBlock, std::string& err)>;
+  struct Options { PluginFactory pluginFactory; std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; };   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);
@@ -66,6 +70,13 @@ class Daemon {
   // held for kHoldSeconds (its token is refused) so the phone does not come straight back. Revoking a pairing closes its links too.
   bool kick(int id); int kickToken(const std::string& tokenId, bool hold);
   static constexpr int kHoldSeconds = 120;
+  // THE CONSOLE'S PLUG-INS while the service plays (the console hands its racks over in the seed: kind, name, bypass, state):
+  //   GET /api/racks                every rack: [{strip, name, slots:[{slot, kind, name, vendor, format, bypass, loaded, error}]}], "v"
+  //   GET /api/racks?strip=N        that strip's slots with their parameters [{id, title, value 0..1, default, text, steps}]
+  //   GET /api/racks?states=1       with each plug-in's state (master token: the console takes the phones' changes back)
+  //   POST /api/control {"op":"plugin","strip":N,"slot":K, "bypass":true|false | "param":ID,"value":0..1}
+  json::Value racks(int strip = -1, bool params = false, bool states = false) const;
+  unsigned long long racksVersion() const { return racksV_.load(); }
   // CONSOLE SETTINGS over the remote (POST /api/control {"op":"setting","key":K,"value":V}), applied to the sound while the service runs
   // it, reported in the state as "settings" (and kept in step with the console): width 0..2, outputBits 0 (float) / 16 / 24 (-1 auto =
   // float here), dcBlock, analog (DSP MODE ANALOG on every channel), autoLevel / autoTarget (-30..-6 LUFS) / autoMax (0..24 dB), clipDb
@@ -98,6 +109,9 @@ class Daemon {
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
+  struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
+  std::map<int, std::vector<PlugSlot>> racks_; std::map<int, std::string> rackNames_; std::atomic<unsigned long long> racksV_{1};
+  void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)
   struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; } set_;
   std::atomic<int> winVol_{-1}; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; std::thread volWatch_;
   double outMaster() const;   // the master the engine gets: the fader plus the GAIN MODE trim (m_ held)

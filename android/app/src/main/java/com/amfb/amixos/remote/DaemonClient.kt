@@ -106,6 +106,10 @@ class DaemonClient(val ep: Endpoint) {
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
     fun master(db: Double) = control(mapOf("op" to "master", "db" to db))
     /** a console setting (the service checks each): "winVolume" 0..100, "winGain" true/false, "width" 0..2 ... */
+    /** THE CONSOLE'S PLUG-INS while the service plays them: the racks (strip >= 0: with that strip's parameters), bypass, one parameter (0..1) */
+    fun racks(strip: Int = -1): Map<String, Any?> = getObj(if (strip < 0) "/api/racks" else "/api/racks?strip=$strip")
+    fun pluginBypass(strip: Int, slot: Int, on: Boolean) = control(mapOf("op" to "plugin", "strip" to strip, "slot" to slot, "bypass" to on))
+    fun pluginParam(strip: Int, slot: Int, id: Long, value: Double) = control(mapOf("op" to "plugin", "strip" to strip, "slot" to slot, "param" to id, "value" to value))
     fun setting(key: String, value: Any) = control(mapOf("op" to "setting", "key" to key, "value" to value))
     fun trim(strip: Int, db: Double) = control(mapOf("op" to "trim", "strip" to strip, "db" to db))
     fun polarity(strip: Int, on: Boolean) = control(mapOf("op" to "polarity", "strip" to strip, "on" to on))

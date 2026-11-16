@@ -1220,6 +1220,19 @@ void Engine::setPlugin(int i, int slot, const QString& kind) {
   else if (wasIamf && iamfSlot(i) < 0 && kind != QStringLiteral("fx:iamfelement")) { s.spOn = true; pushSpatial(i); }   // taken out: the 360 stage holds the same place
   emit stripsChanged(); emit spatialMoved();
 }
+QVariantList Engine::remoteRack(int i) const {
+  QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
+  for (int k = 0; k < kPluginSlots; ++k) { const PluginUi& p = s.plugins[k]; if (!isVstKind(p.kind)) continue;
+    QString name; if (p.vst) name = QString::fromStdString(p.vst->info().name); else { QString mod, cid; splitVstKind(p.kind, mod, cid); name = QFileInfo(mod).completeBaseName(); }
+    l << QVariantMap{{"slot", k}, {"kind", p.kind}, {"name", name}, {"bypass", p.bypass}, {"state", p.vst ? QString::fromStdString(p.vst->state()) : p.state}}; }
+  return l;
+}
+void Engine::takeRemotePlugin(int i, int slot, bool bypass, const QString& state) {
+  if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!isVstKind(p.kind)) return;
+  p.bypass = bypass; if (!state.isEmpty()) p.state = state;
+  if (p.vst) { if (!state.isEmpty()) p.vst->setState(state.toStdString()); p.vst->setBypass(bypass); }
+  emit stripsChanged();
+}
 void Engine::setPluginBypass(int i, int slot, bool bypass) {
   if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPluginBypass(partner(i), slot, bypass); mirror_ = false; }
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (p.kind.isEmpty()) return;

@@ -90,6 +90,7 @@ class Remote : public QObject {
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
   QVariantMap baseSet_;   // the settings both sides last agreed on
+  quint64 racksV_ = 0; void takeRacks();   // the plug-ins a phone changed, taken back into the console's racks
   QVariantList links_; QString linkNote_; QTimer linkTimer_; bool linksGetting_ = false;
   void ensureToken(); QNetworkRequest api(const QString& path) const;
 };

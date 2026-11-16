@@ -531,6 +531,10 @@ class Engine : public QObject {
   Q_INVOKABLE QString loadSampleFile(int strip, int slot, const QString& pathOrUrl);   // that slot's SAMPLE PLAYER plays the user's file ("" = back to the built-in samples); "" or the error
   Q_INVOKABLE QString sampleFileOf(int strip, int slot) const;   // the SAMPLE PLAYER of that channel (added if needed) set to that sample and started; the slot, or -1   // the slot that holds that kind (already there, or put in the first free slot); -1 = the rack is full
   Q_INVOKABLE void setPluginBypass(int strip, int slot, bool bypass);
+  // PHONES AND THE RACKS: the rack inserts (VST3, VST2, built-in fx) handed to the remote service while it plays, and what a phone changed
+  // taken back (state and bypass onto the console's own instance, so the plug-in sounds the same when the console plays again)
+  QVariantList remoteRack(int strip) const;   // [{slot, kind, name, bypass, state}] of the inserts the service can play
+  void takeRemotePlugin(int strip, int slot, bool bypass, const QString& state);
   Q_INVOKABLE QVariantList pluginCatalog() const;     // the built-in stages, for the chooser
   Q_INVOKABLE void movePlugin(int strip, int from, int to);   // reorder the rack (swap two slots)
   // VST3 (engine/cpp/app/vst3): plug-ins found in the VST3 folders (Settings adds more), loaded into a slot as "vst3:<module path>|<class id>"

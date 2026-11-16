@@ -63,6 +63,25 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "home-live")
         val tiles = a.tiles().map { it.id }; org.junit.Assert.assertEquals(listOf("Scenes", "ToolsActivity"), Home.pinnedFirst(tiles, { it }, Home.pinned(ctx)).take(2))
     }
+    @Test fun computerPlugins() {   // THE COMPUTER'S PLUG-INS from the phone (AMFX_RACKS=port,token: a service playing a rack with real test plug-ins)
+        val cfg = (System.getenv("AMFX_RACKS") ?: "").split(","); if (cfg.size != 2) return
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.remote(ctx).edit().putString("host", "127.0.0.1").putString("port", cfg[0]).putString("token", cfg[1]).commit()
+        val a = Robolectric.buildActivity(PluginsActivity::class.java).setup().get(); idle(2500)
+        shot(a.window.decorView.rootView, "phone-computer-racks")
+        @Suppress("UNCHECKED_CAST") val slots = ((a.liveRacks!!["racks"] as List<Map<String, Any?>>).first { (it["strip"] as Number).toInt() == 0 }["slots"] as List<Map<String, Any?>>)
+        println("COMPUTER RACK CH 1: " + slots.map { it["name"].toString() + " loaded=" + it["loaded"] + " " + it["error"] })
+        val vst3 = slots.first { it["format"] == "VST3" && it["loaded"] == true }; val slot = (vst3["slot"] as Number).toInt()
+        val c = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint("127.0.0.1", cfg[0].toInt(), cfg[1]))
+        @Suppress("UNCHECKED_CAST") val full = ((c.racks(0)["racks"] as List<Map<String, Any?>>)[0]["slots"] as List<Map<String, Any?>>).first { (it["slot"] as Number).toInt() == slot }
+        shot(a.faceView(c, 0, slot, full) {}, "phone-computer-plugin-face")
+        @Suppress("UNCHECKED_CAST") val p0 = (full["params"] as List<Map<String, Any?>>)[0]; val id = (p0["id"] as Number).toLong(); val want = if ((p0["value"] as Number).toDouble() < 0.5) 0.8 else 0.2
+        val r = c.pluginParam(0, slot, id, want); println("COMPUTER PLUG-IN " + vst3["name"] + ": " + p0["title"] + " -> " + r["text"])
+        @Suppress("UNCHECKED_CAST") val after = ((((c.racks(0)["racks"] as List<Map<String, Any?>>)[0]["slots"] as List<Map<String, Any?>>).first { (it["slot"] as Number).toInt() == slot })["params"] as List<Map<String, Any?>>)[0]
+        org.junit.Assert.assertEquals("the real VST3 on the computer took the phone's value", want, (after["value"] as Number).toDouble(), 0.01)
+        c.pluginBypass(0, slot, true); @Suppress("UNCHECKED_CAST") val byp = ((((c.racks(0)["racks"] as List<Map<String, Any?>>)[0]["slots"] as List<Map<String, Any?>>).first { (it["slot"] as Number).toInt() == slot })["bypass"])
+        org.junit.Assert.assertEquals(true, byp); c.pluginBypass(0, slot, false)
+    }
     @Test fun mixdown() {   // the empty screen (the file picker is not there on the JVM)
         val a = Robolectric.buildActivity(MixdownActivity::class.java).setup().get(); idle(300)
         shot(a.window.decorView.rootView, "mixdown")

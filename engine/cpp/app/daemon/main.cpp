@@ -15,11 +15,22 @@
 #include "daemon.hpp"
 #include "paths/paths.hpp"
 #include "ext/ext_host.hpp"
+#include "vst3/vst3_host.hpp"
+#include "vst2/vst2_host.hpp"
+#include "fx/fx_plugin.hpp"
 
 namespace {
 int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(const std::string&)> say) {
   using amfb_ext::fmt;
-  am::Daemon::Options o; std::string tokenFile = am::paths::file("daemon.token"), openBackend, openIn; bool lan = false, tokenArg = false;
+  am::Daemon::Options o;
+  // THE CONSOLE'S PLUG-INS: the same loaders the console uses, so its racks keep sounding while the service plays
+  o.pluginFactory = [](const std::string& kind, double rate, int block, std::string& err) -> std::unique_ptr<am::host::Plugin> {
+    if (kind.rfind("fx:", 0) == 0) { auto p = am::fx::FxPlugin::make(kind.substr(3), rate); if (!p) err = "unknown effect " + kind.substr(3); return p; }
+    const bool v3 = kind.rfind("vst3:", 0) == 0; if (!v3 && kind.rfind("vst2:", 0) != 0) { err = "unknown plug-in kind"; return nullptr; }
+    std::string k = kind.substr(5), module = k, cid; const auto bar = k.rfind('|'); if (bar != std::string::npos) { module = k.substr(0, bar); cid = k.substr(bar + 1); }
+    if (v3) return am::vst3::Plugin::load(module, cid, rate, block, err);
+    return am::vst2::Plugin::load(module, rate, block, err); };
+  std::string tokenFile = am::paths::file("daemon.token"), openBackend, openIn; bool lan = false, tokenArg = false;
   std::string tokensFile = am::paths::file("daemon.tokens.json"), newName, newRole = "control", revokeId; int newDays = 0; bool doNew = false, doList = false, doRevoke = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };

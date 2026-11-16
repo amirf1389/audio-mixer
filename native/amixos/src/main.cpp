@@ -57,6 +57,7 @@
 #include "Update.h"
 #include "Measure.h"
 #include "Remote.h"
+#include "fx/fx.hpp"
 #include "Net.h"
 #include "Frame.h"
 #include "measure/measure.hpp"
@@ -765,6 +766,7 @@ int main(int argc, char* argv[]) {
         const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();
         const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+        const QString rackFx = QStringLiteral("fx:") + QString::fromStdString(am::fx::catalog().front().first); engine.setPlugin(5, 0, rackFx);   // a rack effect: the service must play it
         engine.setGain(1, 0); engine.setMute(2, false); engine.setGain(3, 0);   // a known start: a run stopped half-way never leaves its moves behind for the next one
         engine.setGain(0, -9); if (!remote.start(false)) { std::fprintf(stderr, "amixos --smoke: LIVE SYNC: the remote did not start: %s\n", qPrintable(remote.status())); return 284; }
         wait(1500); QNetworkAccessManager nam; QString lastHttpErr; const auto http = [&](const QString& path, const QByteArray& body) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", remote.token().toUtf8());
@@ -783,6 +785,23 @@ int main(int argc, char* argv[]) {
         if (sw && qEnvironmentVariableIsSet("AMIX_SYNC_SHOT")) { http("/api/control", "{\"op\":\"gain\",\"strip\":1,\"db\":-16}"); wait(140); sw->grabWindow().save(qEnvironmentVariable("AMIX_SYNC_SHOT")); }
         engine.setGain(3, -21); QElapsedTimer t2; t2.start(); double out = 0; while (t2.elapsed() < 2000) { wait(40); out = http("/api/state", {})["strips"].toList().value(3).toMap()["db"].toDouble(); if (std::abs(out + 21) < 0.05) break; } const qint64 outMs = t2.elapsed();
         const bool ok = std::abs(seeded + 9) < 0.05 && std::abs(engine.stripAt(1)["db"].toDouble() + (qEnvironmentVariableIsSet("AMIX_SYNC_SHOT") ? 16 : 14)) < 0.05 && engine.stripAt(2)["mute"].toBool() && std::abs(out + 21) < 0.05 && lit && remotesSeen >= 1;
+        // THE CONSOLE'S PLUG-INS while phones are linked: the service plays the rack effect; a phone turns one of its knobs; the console's own
+        // instance follows (so it sounds the same when the console plays again)
+        bool rackOk = false; QString rackWhy;
+        { const auto get = [&](const QString& path) { QNetworkRequest q(QUrl("http://127.0.0.1:8765" + path)); q.setRawHeader("X-Amix-Token", remote.token().toUtf8()); QNetworkReply* r = nam.get(q);
+            QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20); const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
+          if (!http("/api/status", {}).value("running").toBool()) { http("/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"inChannels\":2,\"outChannels\":2}"); wait(300); }   // this test computer has no sound card: the timed one
+          const QVariantMap slot = get("/api/racks?strip=5").value("racks").toList().value(0).toMap().value("slots").toList().value(0).toMap();
+          const QVariantList ps = slot.value("params").toList();
+          if (!slot.value("loaded").toBool() || ps.isEmpty()) rackWhy = "not loaded by the service: " + slot.value("error").toString();
+          else { const int id = ps[0].toMap().value("id").toInt(); const double want = ps[0].toMap().value("value").toDouble() < 0.5 ? 0.9 : 0.1;
+            http("/api/control", QJsonDocument(QJsonObject{{"op", "plugin"}, {"strip", 5}, {"slot", 0}, {"param", id}, {"value", want}}).toJson(QJsonDocument::Compact));
+            QElapsedTimer t; t.start(); double now = -1;
+            while (t.elapsed() < 3000) { wait(40); for (const QVariant& v : engine.pluginParams(5, 0)) if (v.toMap().value("id").toInt() == id) now = v.toMap().value("value").toDouble(); if (std::abs(now - want) < 0.02) break; }
+            rackOk = std::abs(now - want) < 0.02; if (!rackOk) rackWhy = QStringLiteral("the console's instance did not follow (%1, wanted %2)").arg(now).arg(want);
+            std::printf("amixos --smoke: CONSOLE PLUG-INS %s played by the service, a phone set %s to %.2f, the console followed in %lld ms\n", qPrintable(slot.value("name").toString()), qPrintable(ps[0].toMap().value("title").toString()), want, static_cast<long long>(t.elapsed())); } }
+        engine.setPlugin(5, 0, QString());
+        if (!rackOk) { std::fprintf(stderr, "amixos --smoke: CONSOLE PLUG-INS failed: %s\n", qPrintable(rackWhy)); remote.stop(); return 290; }
         // SETTINGS SYNC: a remote changes the stereo width and GAIN MODE: the console follows; the console changes the width: the service follows
         const double keepW = engine.width(); const bool keepG = engine.windowsGainMode(); bool setOk = false; qint64 setIn = -1, setOut = -1;
         { http("/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":0.5}"); http("/api/control", "{\"op\":\"setting\",\"key\":\"winGain\",\"value\":" + QByteArray(keepG ? "false" : "true") + "}");
