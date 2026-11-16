@@ -32,6 +32,8 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     /** [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen, outDeviceId, inDeviceId, sampleRate] */
     fun nativeState(): IntArray = IntArray(9).also { aaudioState(it) }
     fun peaks(): FloatArray { peaks(handle, peakBuf); return peakBuf.copyOf() }
+    /** each strip's INPUT level before fader, mute and effects (linear peak, 0..1+): the input indicator */
+    fun inputPeaks(): FloatArray = FloatArray(strips).also { inputPeaks(handle, it) }
 
     override fun close() { if (handle != 0L) { destroy(handle); handle = 0L } }
 
@@ -68,5 +70,6 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         @JvmStatic external fun aaudioProbe(out: IntArray)
         @JvmStatic external fun aaudioStop()
         @JvmStatic private external fun aaudioState(out: IntArray)
+        @JvmStatic private external fun inputPeaks(handle: Long, out: FloatArray)
     }
 }
