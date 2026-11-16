@@ -716,6 +716,14 @@ int main(int argc, char* argv[]) {
         const bool wasapiMic = engine.keepInputAtStart("wasapi", ""), dsMic = engine.keepInputAtStart("dsound", "{mic}"), asio = engine.keepInputAtStart("asio", "UMC ASIO"), music = engine.keepInputAtStart("wasapi", "loopback:system"), none = engine.keepInputAtStart("wasapi", "-");
         engine.setMicAtStart(true); const bool onKeeps = engine.keepInputAtStart("wasapi", ""); engine.setMicAtStart(keep);
         if (wasapiMic || dsMic || !asio || !music || !none || !onKeeps) { std::fprintf(stderr, "amixos --smoke: MIC AT ENGINE ON (wasapi %d, dsound %d, asio %d, music %d, none %d, on %d)\n", wasapiMic, dsMic, asio, music, none, onKeeps); return 283; } }
+      { // NO INPUT ASKED, NO MICROPHONE: no device named with 0 input channels opens no input (it used to become 2 channels of the default
+        // microphone: a remembered outputs-only start, CONNECTIONS with no input picked or a muted input opened the mic by itself)
+        const bool wasOn = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
+        const bool a = engine.open("null", "", "", 48000, 256, 0, 2); const int inA = engine.deviceInputs();
+        const bool b = engine.openSmart("null", "", "", 48000, 256, 0, 2); const int inB = engine.deviceInputs();
+        const bool c = engine.open("null", "", "", 48000, 256, 2, 2); const int inC = engine.deviceInputs();   // asked for inputs: still opened
+        engine.stop(); if (wasOn) engine.open(wb, "", "", wr, wf, wi, wo);
+        if (!a || !b || !c || inA != 0 || inB != 0 || inC < 2) { std::fprintf(stderr, "amixos --smoke: NO INPUT ASKED opened an input (open %d:%d, smart %d:%d, asked %d:%d)\n", a, inA, b, inB, c, inC); return 286; } }
       if (remote.available() && qEnvironmentVariableIsSet("AMIXOS_SMOKE_SYNC")) { // LIVE SYNC: with the remote service on, a move on a "phone" lands on the console and one on the console reaches the service
         const auto wait = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) { app.processEvents(QEventLoop::AllEvents, 20); QThread::msleep(5); } };
         const double g0 = engine.stripAt(0)["db"].toDouble(), g1 = engine.stripAt(1)["db"].toDouble();

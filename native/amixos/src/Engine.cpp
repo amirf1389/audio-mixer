@@ -189,9 +189,13 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   // WASAPI, and with headphones or a headset as the output the system's default microphone (which is the headset's own when one is
   // plugged in) is not opened either. A microphone picked by name that is not a headset's is opened as asked.
   QString inDev = inDevice; int inCh = inChannels; micOffNote_.clear();
+  // NO INPUT ASKED, NO MICROPHONE: an empty input means "the system's default" only when input channels are asked for. With 0 input
+  // channels and no device named it is "no input" ("-"). It used to become 2 channels of the default device here, so a start meant to be
+  // outputs only (the remembered device, CONNECTIONS with no input picked, a muted input) opened the microphone by itself.
+  if (inDev.isEmpty() && inCh <= 0 && backend != "asio") inDev = QStringLiteral("-");
   // 2 IN / 2 OUT at least, on every driver (ASIO, WASAPI, DirectSound, Bluetooth): a device that reported 0 channels (busy when the list was read, or a
   // driver that does not say) still opens its first pair; ASIO and DirectSound take only what the device has, so asking for two is safe
-  if (inDevice != "-" && inCh < 2) inCh = 2;
+  if (inDev != "-" && inCh < 2) inCh = 2;
   if (outChannels < 2 && outDevice != "-") outChannels = 2;
   if (backend == "wasapi" && inCh > 0 && headsetMicOff()) {
     const auto kindOf = [this](const QString& id, bool capture) { for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi") continue;
@@ -679,8 +683,11 @@ QVariantList Engine::bluetoothDevices() const {
   return l;
 }
 int Engine::forgetDriverLocks(const QString& name) { const int n = am::drv::forget(name.toStdString()); emit devicesChanged(); return n; }
-bool Engine::openSmart(const QString& backend, const QString& in, const QString& out, double rate, int frames, int inCh, int outCh) {
+bool Engine::openSmart(const QString& backend, const QString& inAsked, const QString& out, double rate, int frames, int inCh, int outCh) {
   if (opening_) return false;   // a start is already under way (the interface stays live during it)
+  // NO INPUT ASKED, NO MICROPHONE (see open()): no device named and 0 input channels is "no input", never the default microphone; the
+  // RESCUE steps below then do not add a default microphone either
+  const QString in = inAsked.isEmpty() && inCh <= 0 && backend != "asio" ? QStringLiteral("-") : inAsked;
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   auto steps = am::drv::plan(backend.toStdString(), in.toStdString(), out.toStdString(), devInfos(devices_), now);
   // RESCUE: when the whole plan fails the console must not stay without input and output. After the planned steps come the Realtek ASIO

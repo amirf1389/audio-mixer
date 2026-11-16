@@ -16,8 +16,10 @@ Item {
     property string rateNote: ""
     function reopen(rate, frames) {
         const d = page.last; if (!d || (!d.in && !d.out)) { return }
-        const ok = engine.openSmart(d.backend, d.in, d.out, rate, frames, d.inChannels || 2, d.outChannels || 2)
-        if (ok) settings.rememberDevice(d.backend, d.in, d.out, rate, frames, d.inChannels || 2, d.outChannels || 2)
+        const noIn = !d.in || d.in === "-" ? !(d.inChannels > 0) : false   // started without an input: a new rate keeps it that way (no microphone)
+        const inId = noIn ? "-" : d.in, inCh = noIn ? 0 : (d.inChannels || 2)
+        const ok = engine.openSmart(d.backend, inId, d.out, rate, frames, inCh, d.outChannels || 2)
+        if (ok) settings.rememberDevice(d.backend, inId, d.out, rate, frames, inCh, d.outChannels || 2)
     }
     Component.onCompleted: if (page.last && page.last.backend) page.plan = engine.driverPlan(page.last.backend, page.last.in || "", page.last.out || "")
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }

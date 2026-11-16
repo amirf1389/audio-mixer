@@ -65,7 +65,8 @@ Flickable {
                 Layout.fillWidth: true; spacing: 8
                 Rectangle { implicitWidth: 110; implicitHeight: 30; radius: 6; color: engine.running ? Theme.ov(0.08) : Theme.emerald
                     Text { anchors.centerIn: parent; text: engine.running ? i18n.t("RESTART", i18n.lang) : i18n.t("START ENGINE", i18n.lang); color: engine.running ? Theme.ink : "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var ok = engine.open(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, page.inId, page.outId, page.rate, page.frames, i ? Math.min(32, i.inChannels) : 2, o ? Math.min(2, o.outChannels) : 2) } } }
+                    // no input picked = no input: START never opens the default microphone by itself (pick it in the INPUT list)
+                    MouseArea { anchors.fill: parent; onClicked: { var i = page.dev(page.inId), o = page.dev(page.outId); var inId = page.inId === "" ? "-" : page.inId, inCh = page.inId === "" ? 0 : (i ? Math.min(32, i.inChannels) : 2); var ok = engine.open(page.backend, inId, page.outId, page.rate, page.frames, inCh, o ? Math.min(2, o.outChannels) : 2); if (ok) settings.rememberDevice(page.backend, inId, page.outId, page.rate, page.frames, inCh, o ? Math.min(2, o.outChannels) : 2) } } }
                 Rectangle { implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 30; radius: 6; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); border.color: Theme.amber
                     Text { anchors.centerIn: parent; text: i18n.t("AUTO DETECT", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     property var det: engine.autoDetect()
