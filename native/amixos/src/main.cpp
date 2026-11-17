@@ -161,6 +161,7 @@ int main(int argc, char* argv[]) {
   // SAMPLE PADS while phones are linked: the console's engine is stopped and the remote service plays, so the pads are sent there
   samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
   samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
+  engine.remoteInput = [&](const QString& in) { return remote.send(QVariantMap{{"op", "input"}, {"in", in}}); };   // INPUT while phones are linked
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -487,6 +488,14 @@ int main(int argc, char* argv[]) {
       engine.setWindowsGainMode(keepMode); engine.setMaster(keepMaster);
       if (!(offOk && std::abs(t50 + 9.03) < 0.01 && t100 == 0.0 && std::abs(t25 + 18.06) < 0.01 && t0 <= -119 && wrote && fader && curve && shared && gone)) {
         std::fprintf(stderr, "amixos --smoke: WINDOWS VOLUME failed (off %d, 50 %.2f, 100 %.2f, 25 %.2f, 0 %.0f, wrote %d, fader %d, curve %d, shared %d, gone %d)\n", offOk, t50, t100, t25, t0, wrote, fader, curve, shared, gone); return 288; } }
+    { // INPUT: MIC on a console started with outputs only (the default start keeps the microphone off): the press opens the input and the
+      // sound goes on; a press that cannot open the input (here: a sound card that is not there) leaves the sound as it was, and says why
+      const double r0 = engine.sampleRate() > 0 ? engine.sampleRate() : 48000; const int f0 = engine.blockFrames() > 0 ? engine.blockFrames() : 256;
+      engine.stop(); engine.open("null", "-", "", r0, f0, 0, 2); const int before = engine.deviceInputs();
+      const QVariantMap r = engine.setInputSource("mic"); const int after = engine.deviceInputs(); const bool on = engine.running();
+      std::printf("amixos --smoke: INPUT MIC on an outputs-only start: inputs %d -> %d, sound running %d, source %s\n", before, after, on, qPrintable(engine.inputSource()));
+      if (!(before == 0 && after >= 2 && on && engine.inputSource() == "mic" && !r.isEmpty())) { std::fprintf(stderr, "amixos --smoke: INPUT MIC failed: %s\n", qPrintable(engine.status())); return 1; }
+      engine.stop(); engine.open("null", "", "", r0, f0, 2, 2); }
     { // AUTO ZOOM on a 14" laptop, 1920 x 1080 (work area 1920 x 1032 device pixels): 100 % and 125 % fit as they are; 150 % is zoomed
       // to fit (drawn as at about 130 %); a user's fixed zoom wins; a large screen is never zoomed
       const auto z = [](double os, int pct) { return autozoom::factor(1920 / os, 1032 / os, pct); };
@@ -953,6 +962,12 @@ int main(int argc, char* argv[]) {
             samples.stopAll();
             std::printf("amixos --smoke: SAMPLE PADS while phones are linked: sent to the service %d, its master %.3f -> %.3f (in %lld ms)\n", sent, before, during, static_cast<long long>(tp.elapsed()));
             if (!(sent && during > 0.05 && during > before * 4)) { rackOk = false; rackWhy = QStringLiteral("SAMPLE PADS not heard through the service (%1 -> %2)").arg(before).arg(during); } }
+          // INPUT: MIC while phones are linked: the service reopens its sound card with the microphone, and back to outputs only
+          { http("/api/control", "{\"op\":\"input\",\"in\":\"-\"}"); wait(200);
+            const int inNone = http("/api/status", {}).value("inChannels").toInt(); const QVariantMap r = engine.setInputSource("mic"); QElapsedTimer ti; ti.start(); int inMic = 0;
+            while (ti.elapsed() < 3000) { wait(60); inMic = http("/api/status", {}).value("inChannels").toInt(); if (inMic >= 2) break; }
+            std::printf("amixos --smoke: INPUT MIC while phones are linked: sent to the service %d, its inputs %d -> %d\n", r.value("remote").toBool(), inNone, inMic);
+            if (!(r.value("remote").toBool() && inMic >= 2)) { rackOk = false; rackWhy = QStringLiteral("INPUT MIC through the service (%1)").arg(inMic); } }
           if (!(std::abs(there - want) < 0.02 && std::abs(eqOut - 5) < 0.05 && eqIn)) { rackOk = false; rackWhy = QStringLiteral("REAL-TIME SYNC: plug-in %1 / EQ out %2 / EQ in %3").arg(there).arg(eqOut).arg(eqIn); } }
         engine.setPlugin(5, 0, QString());
         if (!rackOk) { std::fprintf(stderr, "amixos --smoke: CONSOLE PLUG-INS failed: %s\n", qPrintable(rackWhy)); remote.stop(); return 290; }

@@ -254,6 +254,8 @@ class Engine : public QObject {
   // the input of the running stream becomes the microphone ("mic") or the computer's sound ("music"); the output stays as it is. Returns
   // the stream that opened as {backend, in, out, rate, frames, inChannels, outChannels} for SETTINGS to remember, or an empty map.
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
+  // while phones are linked the console's engine is stopped and the remote service plays: the input choice goes there (main.cpp sets it)
+  std::function<bool(const QString& in)> remoteInput;
   Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -752,6 +754,7 @@ class Engine : public QObject {
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
   mutable QSettings settings_;

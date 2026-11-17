@@ -199,7 +199,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   // driver that does not say) still opens its first pair; ASIO and DirectSound take only what the device has, so asking for two is safe
   if (inDev != "-" && inCh < 2) inCh = 2;
   if (outChannels < 2 && outDevice != "-") outChannels = 2;
-  if (backend == "wasapi" && inCh > 0 && headsetMicOff()) {
+  if (backend == "wasapi" && inCh > 0 && headsetMicOff() && !askedMic_) {   // not when the user pressed INPUT: MIC
     const auto kindOf = [this](const QString& id, bool capture) { for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi") continue;
         if (id.isEmpty() ? (capture ? m["defaultIn"].toBool() && m["inChannels"].toInt() > 0 : m["defaultOut"].toBool() && m["outChannels"].toInt() > 0) : m["id"].toString() == id) return m["kind"].toString(); } return QString(); };
     const QString ik = kindOf(inDevice, true), ok = kindOf(outDevice, false);
@@ -676,15 +676,34 @@ QString Engine::hiresSummary() const { QStringList l; for (const auto& i : am::h
 QString Engine::inputSource() const { if (!rt_ || devIn_ <= 0 || curIn_ == "-") return QStringLiteral("none"); return curIn_.rfind("loopback:", 0) == 0 ? QStringLiteral("music") : QStringLiteral("mic"); }
 bool Engine::computerSoundAvailable() const { for (const QVariant& v : devices_) if (v.toMap()["id"].toString() == "loopback:system") return true; return false; }
 QVariantMap Engine::setInputSource(const QString& source) {
-  if (!rt_) { status_ = QStringLiteral("Start the sound card first (SOUND CARD), then pick the input source."); emit stateChanged(); return {}; }
   const bool music = source == "music";
-  if (curBackend_ != "wasapi") { status_ = music ? QStringLiteral("COMPUTER SOUND as the input is a Windows audio (WASAPI) stream: open the headphones or speakers on WASAPI first (SOUND CARD).") : status_; emit stateChanged(); return {}; }
+  // phones linked: the service holds the sound card, so the input is changed there
+  if (!rt_ && remoteInput && remoteInput(music ? QStringLiteral("loopback:system") : QString())) {
+    status_ = music ? QStringLiteral("INPUT: COMPUTER SOUND, on the remote service (phones are linked).") : QStringLiteral("INPUT: MIC, on the remote service (phones are linked).");
+    emit stateChanged(); return QVariantMap{{"remote", true}}; }
+  if (!rt_) { status_ = QStringLiteral("Start the sound card first (SOUND CARD), then pick the input source."); emit stateChanged(); return {}; }
+  const QString backend = QString::fromStdString(curBackend_);
+  if (music && backend != "wasapi") { status_ = QStringLiteral("COMPUTER SOUND as the input is a Windows audio (WASAPI) stream: open the headphones or speakers on WASAPI first (SOUND CARD)."); emit stateChanged(); return {}; }
   if (music && !computerSoundAvailable()) { status_ = QStringLiteral("COMPUTER SOUND needs Windows 10 version 2004 or later; on older Windows pick APP AUDIO on STREAM & MEDIA with a different output device."); emit stateChanged(); return {}; }
-  const QString in = music ? QStringLiteral("loopback:system") : QString(), out = QString::fromStdString(curOut_);
+  if (!music && micAccessOff() && backend != "asio") { status_ = QStringLiteral("MIC ACCESS is OFF on SOUND CARD → AUDIO ACCESS: switch it on to use the microphone."); emit stateChanged(); return {}; }
+  // what plays now, to come back to if the microphone cannot be opened (the sound is never left off by a press on INPUT)
+  const std::string keepB = curBackend_, keepIn = curIn_, keepOut = curOut_; const int keepInCh = devIn_, keepOutCh = devOut_;
+  const QString out = QString::fromStdString(curOut_);
+  // the microphone: the system's default input on Windows audio / DirectSound; on ASIO the driver's own inputs (the same device)
+  const QString in = music ? QStringLiteral("loopback:system") : (backend == "asio" ? out : QString());
   const double rate = sampleRate() > 0 ? sampleRate() : 48000; const int frames = blockFrames_ > 0 ? blockFrames_ : 256, outCh = devOut_ > 0 ? devOut_ : 2;
-  if (!open("wasapi", in, out, rate, frames, 2, outCh)) return {};
-  QVariantMap m; m["backend"] = "wasapi"; m["in"] = in; m["out"] = out; m["rate"] = rate; m["frames"] = frames; m["inChannels"] = 2; m["outChannels"] = outCh;
-  if (music) status_ = QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1, so no loop on these headphones / speakers) · ") + status_;
+  askedMic_ = !music;   // asked for by name: the automatic headset rule (headsetMicOff) does not take it away
+  const bool ok = open(backend, in, out, rate, frames, 2, outCh);
+  askedMic_ = false;
+  const QString why = micOffNote_;
+  if (!ok || (!music && devIn_ <= 0)) {
+    const QString reason = !ok ? status_ : (why.isEmpty() ? QStringLiteral("the sound card opened without an input") : why);
+    if (!ok) open(QString::fromStdString(keepB), QString::fromStdString(keepIn), QString::fromStdString(keepOut), rate, frames, keepInCh, keepOutCh);   // the sound comes back as it was
+    status_ = (music ? QStringLiteral("COMPUTER SOUND could not be opened: ") : QStringLiteral("The microphone could not be opened: ")) + reason
+              + (music ? QString() : QStringLiteral(" · Check that a microphone is plugged in or built in, that Windows lets desktop apps use it (Settings → Privacy & security → Microphone), and that no other program holds it."));
+    emit stateChanged(); return {}; }
+  QVariantMap m; m["backend"] = backend; m["in"] = in; m["out"] = out; m["rate"] = rate; m["frames"] = frames; m["inChannels"] = 2; m["outChannels"] = outCh;
+  status_ = (music ? QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1, so no loop on these headphones / speakers) · ") : QStringLiteral("INPUT: MIC on CH 1-2 · ")) + status_;
   emit stateChanged(); return m;
 }
 QVariantMap Engine::secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels) {
