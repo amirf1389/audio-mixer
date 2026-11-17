@@ -214,6 +214,9 @@ int main() {
       CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", auth, status, body) && status == 200);
       const Value sl = Value::parse(body, ok)["samples"]; CHECK(ok && sl.size() == 100 && sl.at(0)["id"].asInt() == 1 && !sl.at(0)["name"].asString().empty());
       CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", {}, status, body) && (status == 401 || status == 429)); }
+    // INPUT while phones are linked: the service reopens its sound card with the microphone; with no sound card open it says so
+    { const int code = ctl("{\"op\":\"input\",\"in\":\"\"}"); CHECK(code == 200 || code == 400);
+      if (code == 200) { CHECK(d.status()["inChannels"].asInt() == 2 && d.status()["running"].asBool()); } }
     // ROUTING: kept without a device, in the state and on /api/routing with the sources by name; out of range refused
     { CHECK(ctl("{\"op\":\"inRoute\",\"strip\":3,\"input\":7}") == 200 && ctl("{\"op\":\"outRoute\",\"out\":2,\"source\":1}") == 200);
       CHECK(ctl("{\"op\":\"outRoute\",\"out\":2,\"source\":9999}") == 400 && ctl("{\"op\":\"outRoute\",\"out\":-1,\"source\":1}") == 400);

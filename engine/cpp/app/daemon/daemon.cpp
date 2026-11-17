@@ -473,6 +473,14 @@ json::Value Daemon::meters() const {
 }
 
 json::Value Daemon::control(const json::Value& cmd, std::string& err) {
+  if (cmd["op"].asString() == "input") {   // the console's INPUT button while phones are linked: the same device reopened with the microphone ("") or COMPUTER SOUND ("loopback:system")
+    DeviceConfig keep; { std::lock_guard<std::mutex> g(m_); if (!rt_) { err = "no sound card open"; return {}; } keep = lastCfg_; }
+    const std::string in = cmd["in"].asString("");
+    auto openCmd = [](const DeviceConfig& c, const std::string& inDev, int inCh) { json::Value o = json::Value::object(); o.set("op", "open"); o.set("backend", c.backend); o.set("in", inDev); o.set("out", c.outDevice);
+      o.set("rate", c.sampleRate); o.set("frames", static_cast<int>(c.frames)); o.set("inChannels", inCh); o.set("outChannels", c.outChannels); return o; };
+    json::Value r = apply(openCmd(keep, in, in == "-" ? 0 : 2), err);   // "-": outputs only
+    if (!err.empty()) { const std::string why = err; std::string e2; apply(openCmd(keep, keep.inDevice, keep.inChannels), e2); err = why; return {}; }   // could not open it: the sound comes back as it was
+    ++version_; return r; }
   json::Value out = apply(cmd, err);
   if (err.empty() && cmd["op"].asString() != "clearClips") ++version_;
   return out;
