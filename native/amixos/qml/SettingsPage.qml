@@ -82,7 +82,7 @@ Flickable {
         Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("LANGUAGE", i18n.lang) + " • " + i18n.count + i18n.t(" LANGUAGES", i18n.lang)
-            subtitle: i18n.t("22 languages come from the web console and were checked; 58 are machine translations marked \"auto\" until a native speaker reviews them. Right-to-left languages mirror the layout.", i18n.lang)
+            subtitle: i18n.t("22 languages are checked by people; the rest are machine translations and say so in the menu. Right-to-left languages mirror the layout.", i18n.lang)
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: i18n.languages; delegate: Rectangle { implicitWidth: lt.implicitWidth + 14; implicitHeight: 22; radius: 4; color: i18n.lang === modelData.code ? Theme.amber : Theme.ov(0.06)
                     Text { id: lt; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.auto ? i18n.t(" ·auto", i18n.lang) : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8 }
