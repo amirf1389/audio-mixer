@@ -35,6 +35,9 @@ object Prefs {
     fun meterFloor(c: Context) = remote(c).getInt("meterFloor", 60)                   // the meters show 0 to -N dBFS
     fun localOutDevice(c: Context) = local(c).getInt("outDevice", 0)                 // AudioDeviceInfo id the phone mixer plays to; 0 = the system route
     fun localInDevice(c: Context) = local(c).getInt("inDevice", 0)
+    /** the phone mixer's INPUT ON / OFF: OFF opens no microphone at all */
+    fun localInputOn(c: Context) = local(c).getBoolean("inputOn", true)
+    fun setLocalInputOn(c: Context, on: Boolean) { local(c).edit().putBoolean("inputOn", on).apply() }
 }
 
 class SettingsActivity : AppCompatActivity() {

@@ -11,6 +11,7 @@
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
 #include "audiomixer/driver_intel.hpp"
+#include "audiomixer/app_sound.hpp"
 #include <algorithm>
 #include <mutex>
 #ifdef _WIN32
@@ -111,7 +112,9 @@ bool processLoopbackAvailable() {
 void addWasapi(std::vector<DeviceInfo>& out) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);   // already initialised by the caller: fine
   if (processLoopbackAvailable()) {   // COMPUTER SOUND: the music of every app, never the console's own output (no loop on the same headphones / speakers)
-    DeviceInfo sys; sys.backend = "wasapi"; sys.id = "loopback:system"; sys.name = "Computer sound: every app (music, browser, player)"; sys.inChannels = 2; sys.defaultRate = 48000; sys.kind = "app"; out.push_back(sys); }
+    DeviceInfo sys; sys.backend = "wasapi"; sys.id = "loopback:system"; sys.name = "Computer sound: every app (music, browser, player)"; sys.inChannels = 2; sys.defaultRate = 48000; sys.kind = "app"; out.push_back(sys); 
+    // APP SOUND: each program that has a sound stream open now (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube ...), on its own
+    for (const am::app::Session& s : am::app::sessions()) { DeviceInfo d; d.backend = "wasapi"; d.id = am::app::deviceId(s.pid); d.name = "App sound: " + s.label + (s.active ? "" : " (silent now)"); d.inChannels = 2; d.defaultRate = 48000; d.kind = "app"; out.push_back(d); } }
   IMMDeviceEnumerator* en = nullptr;
   if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return;
   for (const EDataFlow flow : {eRender, eCapture}) {

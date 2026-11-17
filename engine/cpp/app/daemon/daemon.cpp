@@ -92,12 +92,28 @@ bool Daemon::start(std::string& err) {
       link->role = role; link->ip = r.peer; link->since = static_cast<long long>(std::time(nullptr));
       std::lock_guard<std::mutex> g(linksM_); link->id = nextLink_++; links_[link->id] = link; }
     struct Drop { Daemon* d; int id; ~Drop() { std::lock_guard<std::mutex> g(d->linksM_); d->links_.erase(id); } } drop{this, link->id};
-    std::thread reader([&ws] { std::string t; int op = 0; while (ws.open() && ws.read(t, op)) {} ws.close(); });   // drains pings / close from the phone; the phone hung up: the link ends now, not at the next failed send
+    // CONTROL ON THE OPEN SOCKET: a phone sends its moves as text frames ({"op":"gain",...}, the same commands as POST /api/control) on
+    // this connection, so a fader move costs no new TCP connection over the Wi-Fi (each HTTP request opens one: the delay the user felt).
+    // Only a token that may control (master / control) is obeyed; a view token's frame gets an error back. A frame may carry "seq": the
+    // answer {"ack":seq} (or {"ack":seq,"controlError":...}: not "error", which ends a stream) lets the phone know it landed. The state
+    // frames say "wsControl":true, so a phone uses this path only with a service that has it (an older one would ignore the frames). Pings and close are answered as before.
+    const bool mayControl = role == "admin" || role == "control";
+    std::thread reader([this, &ws, link, mayControl] { std::string t; int op = 0;
+      while (ws.open() && ws.read(t, op)) {
+        if (op != 1 || t.empty() || t.size() > 256 * 1024) continue;
+        if (link->kick) break;
+        bool ok = false; const json::Value cmd = json::Value::parse(t, ok); if (!ok || !cmd.isObject() || !cmd.has("op")) continue;   // not a command: ignored
+        const bool hasSeq = cmd.has("seq"); json::Value ack = json::Value::object(); if (hasSeq) ack.set("ack", cmd["seq"]);
+        if (!mayControl) { ack.set("controlError", "this token may only watch"); ws.send(ack.dump()); continue; }
+        std::string err; control(cmd, err);
+        if (!err.empty()) { ack.set("controlError", err); ws.send(ack.dump()); } else if (hasSeq) ws.send(ack.dump());
+      }
+      ws.close(); });
     unsigned long long sent = 0; unsigned rtaTick = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
     while (running_ && ws.open()) {
       if (link->kick) { ws.send("{\"kicked\":true,\"holdSeconds\":" + std::to_string(link->tokenId == "master" ? 0 : kHoldSeconds) + "}"); break; }   // DISCONNECT from the console
       const unsigned long long v = version_.load();
-      if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); if (!ws.send(m.dump())) break; sent = v; }
+      if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); m.set("wsControl", true); if (!ws.send(m.dump())) break; sent = v; }
       if (!ws.send(meters().dump())) break;
       if (rta_.source.load() != Rta::kOff) {   // RTA: ten times a second while a remote has it open; stops by itself when nobody renews it
         if (static_cast<long long>(std::time(nullptr)) > rtaUntil_.load()) rta_.source.store(Rta::kOff);

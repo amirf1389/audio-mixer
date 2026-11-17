@@ -21,6 +21,13 @@ int main(int argc, char** argv) {
     {"s24.flac", "-c:a flac -sample_fmt s32 -bits_per_raw_sample 24 -compression_level 5", true}, {"s24-c12.flac", "-c:a flac -sample_fmt s32 -bits_per_raw_sample 24 -compression_level 12", true},
     {"mono.flac", "-ac 1 -c:a flac -sample_fmt s16", false}, {"ref.aiff", "-c:a pcm_s24be", true}, {"f32.aiff", "-c:a pcm_f32be -f aiff", true},
     {"lossy.mp3", "-c:a libmp3lame -b:a 192k", false}, {"lossy.m4a", "-c:a aac -b:a 192k", false}, {"lossy.ogg", "-c:a libvorbis -q:a 5", false},
+    // what streaming services and their downloads use: YouTube (Opus / Vorbis in WebM, AAC in M4A), Spotify (Vorbis in Ogg, AAC), TIDAL / Deezer /
+    // Qobuz (FLAC, also FLAC in MP4, AAC), Apple Music / Roon libraries (ALAC in M4A), raw ADTS AAC, Opus in Ogg and in Matroska
+    {"lossy-opus.webm", "-c:a libopus -b:a 160k -f webm", false}, {"lossy-vorbis.webm", "-c:a libvorbis -q:a 5 -f webm", false},
+    {"lossy-opus.opus", "-c:a libopus -b:a 128k", false}, {"lossy-opus.mka", "-c:a libopus -b:a 128k", false},
+    {"lossy-adts.aac", "-c:a aac -b:a 256k -f adts", false}, {"lossy-aac.mp4", "-c:a aac -b:a 320k", false},
+    {"alac.m4a", "-c:a alac -sample_fmt s32p", true},
+    {"s24.mka", "-c:a flac -sample_fmt s32 -bits_per_raw_sample 24", true}, {"ref.caf", "-c:a pcm_s24le", true},
   };
   for (const Case& c : cases) {
     const std::string f = dir + "/" + c.name;

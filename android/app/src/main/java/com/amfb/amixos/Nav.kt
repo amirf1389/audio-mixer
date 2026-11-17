@@ -38,6 +38,15 @@ object Nav {
                 addView(TextView(a).apply { text = t.glyph; textSize = 20f; setTextColor(col); gravity = Gravity.CENTER })
                 addView(TextView(a).apply { text = a.getString(t.label); textSize = 10f; setTextColor(col); gravity = Gravity.CENTER; typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT; letterSpacing = 0.08f }) })
         }
-        root.addView(bar); return root
+        root.addView(bar); fitSystemBars(root); return root
+    }
+    /** EDGE TO EDGE (Android 15 draws every app under the status bar and the gesture bar): the page keeps clear of the clock, the notch and
+     *  the gesture handle, so no title sits under the time and the bottom tabs stay tappable */
+    fun fitSystemBars(v: View) {
+        v.setOnApplyWindowInsetsListener { view, ins ->
+            if (android.os.Build.VERSION.SDK_INT >= 30) { val b = ins.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout()); view.setPadding(b.left, b.top, b.right, b.bottom) }
+            else @Suppress("DEPRECATION") view.setPadding(ins.systemWindowInsetLeft, ins.systemWindowInsetTop, ins.systemWindowInsetRight, ins.systemWindowInsetBottom)
+            ins }
+        v.requestApplyInsets()
     }
 }

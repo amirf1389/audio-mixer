@@ -292,8 +292,8 @@ bool Remote::start(bool wifi) {
   QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion(),
     "--strips", QString::number(qBound(1, engine_->licensedChannels(), 32)), "--plan", engine_->license().value("planName").toString()};   // the phone gets the channels of the licence plan, no more
   args << "--seed" << QString::fromStdString(am::paths::file("remote-seed.json"));
-  // the microphone blocked here too: the service takes COMPUTER SOUND (or no input), unless MICROPHONE ON AT START is on
-  if (!engine_->micAtStart()) args << "--in" << engine_->autoInput(QStringLiteral("wasapi"));
+  // AUTO INPUT (MICROPHONE ON AT START) off: the service opens no input either
+  if (!engine_->micAtStart()) args << "--in" << QStringLiteral("-");   // AUTO INPUT OFF: the service captures nothing (it used to take COMPUTER SOUND)
   if (wifi) args << "--allow-lan";   // phones on this network may connect (local policy stays on: private addresses only). This sat inside the comment above and was never passed: every phone was refused
   if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);

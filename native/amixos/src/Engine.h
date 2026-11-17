@@ -243,7 +243,13 @@ class Engine : public QObject {
   // MICROPHONE BLOCKED AT START: what an automatic start (ENGINE ON, the remembered device, AUTO DETECT) takes as its input instead of a
   // microphone: COMPUTER SOUND (every app's sound but AmF X1's, on CH 1-2) on WASAPI where Windows has it, else "-" (no input). A
   // microphone opens only when picked on purpose (INPUT: MIC, CONNECTIONS) or with MICROPHONE ON AT START.
-  Q_INVOKABLE QString autoInput(const QString& backend) const { return backend == "wasapi" && computerSoundAvailable() ? QStringLiteral("loopback:system") : QStringLiteral("-"); }
+  // AUTO INPUT OFF: nothing is captured. (It used to put COMPUTER SOUND on the input instead of the microphone, so "no input" still captured
+  // everything the computer played, also on the phones' service.) The input at start is then none; AUTO INPUT ON opens the microphone.
+  Q_INVOKABLE QString autoInput(const QString& backend) const { Q_UNUSED(backend); return QStringLiteral("-"); }
+  // AUTO INPUT: one switch on the mixer (the same setting as MICROPHONE ON AT START). ON: the input opens by itself, the microphone, or
+  // COMPUTER SOUND where no microphone can be opened; OFF: no input at all, now and at every start, here and on the phones' service
+  Q_PROPERTY(bool autoInputOn READ micAtStart NOTIFY devicesChanged)
+  Q_INVOKABLE QVariantMap setAutoInput(bool on);
   void noteAutoInput(const QString& in) { if (in != "-") { micOffNote_ = QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1). A microphone is never opened by itself: pick it with INPUT: MIC on the mixer, or switch MICROPHONE ON AT START on (SOUND CARD)."); emit stateChanged(); } else noteOutputsOnly(); }
   bool secureInput() const { return settings_.value("audio/secureInput", false).toBool(); } void setSecureInput(bool v) { settings_.setValue("audio/secureInput", v); emit devicesChanged(); }
   QStringList allowedInputs() const { return settings_.value("audio/allowedInputs").toStringList(); }
@@ -251,11 +257,20 @@ class Engine : public QObject {
   Q_INVOKABLE void setInputAllowed(const QString& backend, const QString& id, bool on);
   Q_INVOKABLE QVariantList inputCandidates() const;
   QString inputSource() const; bool computerSoundAvailable() const;
+  Q_INVOKABLE QVariantList appSources();          // APP SOUND: [{id "loopback:app:<pid>", name, current}] of the programs playing now
+  Q_INVOKABLE QString appSourceName() const;     // the program on the input now ("" when the input is not APP SOUND)
   // the input of the running stream becomes the microphone ("mic") or the computer's sound ("music"); the output stays as it is. Returns
   // the stream that opened as {backend, in, out, rate, frames, inChannels, outChannels} for SETTINGS to remember, or an empty map.
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
   // while phones are linked the console's engine is stopped and the remote service plays: the input choice goes there (main.cpp sets it)
   std::function<bool(const QString& in)> remoteInput;
+  std::function<bool()> remoteInProcess;   // the network service plays the sound inside this program (phones linked): no working-set trim then
+  // SYSTEM OPTIMIZATION (engine/cpp/include/audiomixer/sysopt.hpp): the processor, its core types, an NPU, memory; and the three switches
+  //   fastCores: the audio thread asks for the performance cores of a hybrid processor; eco: the interface thread is EcoQoS while the window is
+  //   behind another program; trim: memory goes back to Windows 3 s after the window is minimised
+  Q_INVOKABLE QVariantMap systemInfo() const;
+  Q_INVOKABLE void setSysOpt(const QString& key, bool on);
+  Q_INVOKABLE QVariantMap trimMemoryNow();
   Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -754,6 +769,7 @@ class Engine : public QObject {
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  bool sysFast_ = true, sysEco_ = true, sysTrim_ = true; QString lastTrim_; void minimisedTrim();
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;

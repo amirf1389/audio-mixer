@@ -158,6 +158,20 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":3,\"db\":-7.5}", auth, status, body) && status == 200);
     bool pushed = false;
     for (int i = 0; i < 40 && !pushed; ++i) { CHECK(ws.read(t, op)); Value f = Value::parse(t, ok); if (ok && f.has("state")) { pushed = f["state"]["strips"].at(3)["db"].asNumber() == -7.5 && f["state"]["v"].asNumber() > v0; } }
+    // CONTROL ON THE OPEN SOCKET: the same command as a text frame on this connection lands at once (no new connection per move),
+    // with an ack for its seq; a broken command answers with the error
+    { const auto t0 = std::chrono::steady_clock::now();
+      CHECK(ws.send("{\"op\":\"gain\",\"strip\":4,\"db\":-11.5,\"seq\":7}"));
+      bool acked = false, landed = false;
+      for (int i = 0; i < 60 && !(acked && landed); ++i) { CHECK(ws.read(t, op)); Value f = Value::parse(t, ok); if (!ok) continue;
+        if (f.has("ack") && f["ack"].asNumber() == 7 && !f.has("controlError") && !f.has("error")) acked = true;
+        if (f.has("state")) CHECK(f["wsControl"].asBool());
+        if (f.has("state") && f["state"]["strips"].at(4)["db"].asNumber() == -11.5) landed = true; }
+      const long ms = static_cast<long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count());
+      CHECK(acked && landed && d.state()["strips"].at(4)["db"].asNumber() == -11.5); std::printf("daemon_test: control over the open socket: acked %d, in the state %d, %ld ms\n", acked, landed, ms);
+      CHECK(ws.send("{\"op\":\"gain\",\"strip\":99,\"db\":0,\"seq\":8}")); bool refused = false;
+      for (int i = 0; i < 60 && !refused; ++i) { CHECK(ws.read(t, op)); Value f = Value::parse(t, ok); if (ok && f.has("ack") && f["ack"].asNumber() == 8 && f.has("controlError") && !f.has("error")) refused = true; }
+      CHECK(refused); }
     CHECK(pushed);
     ws.close(); }
   { // GET /api/state?since=N: a short answer while nothing changed, the full state after a change

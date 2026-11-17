@@ -94,7 +94,12 @@ class LocalMixerActivity : AppCompatActivity() {
         val chRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 10) }
         listOf(1 to getString(R.string.lm_mono), 2 to getString(R.string.lm_stereo)).forEach { (n, t) ->
             chRow.addView(PadButton(this, t, cyan, 11f).apply { on = inChannels() == n; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (n == 1) 8 else 0, 0) }; setOnClickListener { setInChannels(n) } }) }
-        body.addView(chRow)
+        // INPUT ON / OFF: OFF opens no microphone at all (the phone records nothing); the lamp then says OFF, not "open"
+        val inRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 10) }
+        listOf(true to getString(R.string.lm_input_on), false to getString(R.string.lm_input_off)).forEach { (v, t) ->
+            inRow.addView(PadButton(this, t, if (v) cyan else ConsoleUi.RED, 11f).apply { on = Prefs.localInputOn(this@LocalMixerActivity) == v; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (v) 8 else 0, 0) }
+                setOnClickListener { if (Prefs.localInputOn(this@LocalMixerActivity) != v) { Prefs.setLocalInputOn(this@LocalMixerActivity, v); restartIfRunning(); render() } } }) }
+        body.addView(chRow); body.addView(inRow)
         // ---- THE DESK
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         for (s in 0 until inChannels()) desk.addView(stripView(s))
@@ -216,9 +221,10 @@ class LocalMixerActivity : AppCompatActivity() {
 
     // ---- AUDIO
     private fun startAudio() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
+        val inOn = Prefs.localInputOn(this)   // INPUT OFF: no microphone is opened and none is asked for
+        if (inOn && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
         val e = engine ?: run { status.text = getString(R.string.lm_no_engine); return }
-        loop = AudioLoop(e, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts, inChannels()).also { it.start() }
+        loop = AudioLoop(e, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts, inChannels(), inOn).also { it.start() }
         if (::startBtn.isInitialized) { startBtn.text = getString(R.string.stop); startBtn.on = true }
         ui.postDelayed({ showStatus() }, 400)
     }
@@ -237,7 +243,7 @@ class LocalMixerActivity : AppCompatActivity() {
     private fun showIo() {
         val l = loop; val running = l != null && l.path.isNotEmpty()
         val st = if (l?.path == "aaudio") runCatching { engine?.nativeState() }.getOrNull() else null
-        val inOpen = when (l?.path) { "aaudio" -> st?.get(5) == 1; "java" -> true; else -> false }
+        val inOpen = Prefs.localInputOn(this) && when (l?.path) { "aaudio" -> st?.get(5) == 1; "java" -> true; else -> false }   // INPUT OFF never reads as open
         val outOpen = when (l?.path) { "aaudio" -> st?.get(0) == 1 && st[1] == 0; "java" -> true; else -> false }
         val inPk = l?.lastInPeaks?.let { a -> (0 until minOf(inChannels(), a.size)).maxOfOrNull { a[it] } } ?: 0f
         val outPk = l?.lastPeaks?.let { p -> maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }) } ?: 0f
@@ -254,7 +260,7 @@ class LocalMixerActivity : AppCompatActivity() {
             val using = if (chosen == 0 && real > 0) getString(R.string.io_using, deviceName(real, out)) else ""
             v.state.text = when (s) {
                 IoLamp.State.STOPPED -> getString(R.string.io_stopped)
-                IoLamp.State.NOT_OPEN -> getString(if (out) R.string.io_out_not_open else R.string.io_in_not_open)
+                IoLamp.State.NOT_OPEN -> getString(if (out) R.string.io_out_not_open else if (!Prefs.localInputOn(this)) R.string.io_in_off else R.string.io_in_not_open)
                 IoLamp.State.SILENT -> getString(R.string.io_silent) + using
                 IoLamp.State.SIGNAL -> getString(R.string.io_signal, String.format(java.util.Locale.ROOT, "%.0f", IoLamp.db(pk))) + using
                 IoLamp.State.CLIP -> getString(R.string.io_clip) + using }
