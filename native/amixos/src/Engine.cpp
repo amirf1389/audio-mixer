@@ -26,6 +26,10 @@
 static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
+#include "audiomixer/sysopt.hpp"
+static void warmSystemInfo();   // SYSTEM OPTIMIZATION: looks the hardware up on a background thread (defined with systemInfo)
+#include <QGuiApplication>
+#include <QTimer>
 #include <QDir>
 #include <QStandardPaths>
 
@@ -66,6 +70,8 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
   ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate();
+  sysFast_ = settings_.value("sys/fastCores", true).toBool(); sysEco_ = settings_.value("sys/ecoBackground", true).toBool(); sysTrim_ = settings_.value("sys/trimMinimised", true).toBool();
+  am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
@@ -1557,7 +1563,54 @@ QVariantList Engine::pages() const {
 }
 
 void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : 33) : uiLevel_ == 1 ? 250 : 1000); }
-void Engine::setUiActivity(int level) { level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged(); if (level == 2) tick(); }   // back in front: fresh meters at once
+void Engine::setUiActivity(int level) {
+  level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged();
+  if (sysEco_) am::sysopt::setThreadEco(level < 2);   // ECO IN THE BACKGROUND: the interface thread only; the sound has its own (HighQoS) thread
+  if (level == 0 && sysTrim_) QTimer::singleShot(3000, this, [this] { if (uiLevel_ == 0) minimisedTrim(); });
+  if (level == 2) tick();   // back in front: fresh meters at once
+}
+// MEMORY WHEN MINIMISED: the windows drop their cached textures, the heap gives its free blocks back, and when no sound runs in this program
+// the working set is trimmed (the pages go to Windows' compressed store). With sound running only the first two: a trimmed working set would
+// make the audio thread fault its pages back in, which can cost a block.
+void Engine::minimisedTrim() {
+  const std::uint64_t before = am::sysopt::memory().processMb;
+  for (QWindow* w : QGuiApplication::allWindows()) if (auto* q = qobject_cast<QQuickWindow*>(w)) q->releaseResources();
+  const bool soundHere = rt_ != nullptr || (remoteInProcess && remoteInProcess());
+  const std::uint64_t after = am::sysopt::trimMemory(!soundHere);
+  lastTrim_ = QString("%1 -> %2 MB%3").arg(before).arg(after).arg(soundHere ? " (sound running: heap only)" : "");
+}
+QVariantMap Engine::trimMemoryNow() { minimisedTrim(); return {{"note", lastTrim_}, {"processMb", static_cast<qulonglong>(am::sysopt::memory().processMb)}}; }
+void Engine::setSysOpt(const QString& key, bool on) {
+  if (key == "fastCores") { sysFast_ = on; settings_.setValue("sys/fastCores", on); am::sysopt::setFastCoresForAudio(on); }   // takes effect when the sound next starts
+  else if (key == "eco") { sysEco_ = on; settings_.setValue("sys/ecoBackground", on); if (!on) am::sysopt::setThreadEco(false); }
+  else if (key == "trim") { sysTrim_ = on; settings_.setValue("sys/trimMinimised", on); }
+}
+// the hardware does not change while the console runs: looked up once. The NPU search walks Windows' device list, so it is started on a
+// background thread when the console starts (warmSystemInfo) and SETTINGS never waits for it.
+static const am::sysopt::CpuInfo& cpuOnce() { static const am::sysopt::CpuInfo c = am::sysopt::cpu(); return c; }
+static const am::sysopt::NpuInfo& npuOnce() { static const am::sysopt::NpuInfo n = am::sysopt::npu(); return n; }
+static void warmSystemInfo() { std::thread([] { (void)cpuOnce(); (void)npuOnce(); }).detach(); }
+QVariantMap Engine::systemInfo() const {
+  const am::sysopt::CpuInfo& c = cpuOnce();
+  const am::sysopt::NpuInfo& n = npuOnce();
+  const am::sysopt::MemInfo m = am::sysopt::memory();
+  auto q = [](const std::string& s) { return QString::fromStdString(s); };
+  QVariantMap r;
+  r["cpuName"] = q(c.name.empty() ? std::string("Unknown processor") : c.name); r["cpuVendor"] = q(c.vendor); r["arch"] = q(c.arch); r["buildArch"] = q(c.buildArch); r["emulated"] = c.emulated;
+  r["avx2"] = c.avx2; r["fma"] = c.fma; r["avx512"] = c.avx512; r["neon"] = c.neon;
+  r["logical"] = c.topo.logical; r["classes"] = c.topo.classes; r["hybrid"] = c.topo.classes > 1; r["perfCores"] = c.topo.perfCores; r["effCores"] = c.topo.effCores; r["lowPowerCores"] = c.topo.lowPowerCores;
+  r["npuFound"] = n.found; r["npuName"] = q(n.name); r["npuVendor"] = q(n.vendor);
+  r["ramTotalMb"] = static_cast<qulonglong>(m.totalMb); r["ramFreeMb"] = static_cast<qulonglong>(m.availMb); r["ramLoadPct"] = m.loadPct;
+  r["processMb"] = static_cast<qulonglong>(m.processMb); r["privateMb"] = static_cast<qulonglong>(m.privateMb);
+  r["audio"] = q(am::sysopt::audioThreadNote()); { const am::sysopt::AudioTune at = am::sysopt::audioThreadState(); r["audioState"] = at.state; r["audioHighQoS"] = at.highQoS; } r["fastCores"] = sysFast_; r["eco"] = sysEco_; r["trim"] = sysTrim_; r["lastTrim"] = lastTrim_;
+  QStringList tips;   // English keys: the page translates them
+  if (c.emulated) tips << "This x64 build of the mixing console runs on an ARM64 processor through Windows emulation (Prism). It works; emulation costs some extra CPU. A native ARM64 build would remove that cost.";
+  if (c.topo.classes > 1) tips << (sysFast_ ? "Hybrid processor: the sound asks for the performance cores and is never slowed down to save power." : "Hybrid processor: the fast cores option for audio is off, so Windows may run the sound on a slower, energy-saving core. Switch it on if you hear dropouts.");
+  if (n.found) tips << "AI accelerator (NPU) found. Nothing in the mixing console runs on it yet: the mixing is plain signal processing on the processor, which is what keeps the latency low.";
+  if (m.loadPct >= 85) tips << "Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.";
+  r["tips"] = tips;
+  return r;
+}
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
 void Engine::tick() {
   QVariantList m; QVariantMap t;

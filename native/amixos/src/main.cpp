@@ -80,7 +80,12 @@ static void logToFile(QtMsgType t, const QMessageLogContext&, const QString& m) 
 }
 // PAGE AUDIT (--bench with AMIX_BENCH_PAGES): every warning or error the interface logs, counted and kept with the page it came from
 static int g_auditWarn = 0; static QStringList g_auditLines; static QString g_auditPage;
+static int g_auditFontNotes = 0;   // see auditLog
 static void auditLog(QtMsgType t, const QMessageLogContext&, const QString& m) {
+  // the computer's fonts cannot shape a script (Qt: "OpenType support missing for <font>, script N"): the language menus show every language's
+  // name in its own script, and a test machine without Bengali / Tamil / Khmer ... fonts says so once per font. Counted apart (the host's fonts,
+  // not the console): Windows has fonts for all of them.
+  if (t == QtWarningMsg && m.contains("OpenType support missing for")) { ++g_auditFontNotes; std::fputs((m + "\n").toLocal8Bit().constData(), stderr); return; }
   if (t == QtWarningMsg || t == QtCriticalMsg || t == QtFatalMsg) { ++g_auditWarn; if (g_auditLines.size() < 60) g_auditLines << ("[" + g_auditPage + "] " + m.left(220)); }
   std::fputs((m + "\n").toLocal8Bit().constData(), stderr);
 }
@@ -162,6 +167,7 @@ int main(int argc, char* argv[]) {
   samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
   samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
   engine.remoteInput = [&](const QString& in) { return remote.send(QVariantMap{{"op", "input"}, {"in", in}}); };   // INPUT while phones are linked
+  engine.remoteInProcess = [&] { return remote.inProcess(); };
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -331,6 +337,7 @@ int main(int argc, char* argv[]) {
       std::printf("amixos --bench: PAGES slowest first opens:"); for (int k = 0; k < std::min<int>(8, slow.size()); ++k) std::printf(" %s %.0f ms;", qPrintable(slow[k].second), slow[k].first); std::printf("\n");
       std::printf("amixos --bench: PAGES worst re-open (rounds 2-3): %s %.0f ms\n", qPrintable(reWorstId), reWorst);
       std::printf("amixos --bench: PAGES memory %.0f -> %.0f -> %.0f -> %.0f MB; warnings per round %d / %d / %d\n", mem[0], mem[1], mem[2], mem[3], warnRound[0], warnRound[1], warnRound[2]);
+      if (g_auditFontNotes > 0) std::printf("amixos --bench: PAGES host fonts: %d notes that this computer has no font able to shape a script used by a language name (not counted)\n", g_auditFontNotes);
       std::printf("amixos --bench: PAGES sound kept running %d (%llu blocks, dropouts %llu); selected strip kept %d\n", blocks1 > blocks0 + 100, blocks1 - blocks0, xr1 - xr0, engine.selectedStrip() == 5);
       for (const QString& l : g_auditLines) std::printf("amixos --bench: WARNING %s\n", qPrintable(l));
       engine.stop(); return g_auditWarn > 0 || engine.selectedStrip() != 5 || blocks1 <= blocks0 + 100 ? 1 : 0; }
@@ -1396,6 +1403,13 @@ int main(int argc, char* argv[]) {
       std::printf("amixos --smoke: %d languages, %d cover all page names; MIXER in fa = %s\n", i18n.count(), full, qPrintable(i18n.t("MIXER", "fa")));
       const int offered = i18n.languages().size(); std::printf("amixos --smoke: %d languages offered in the menu, Swahili offered %d, Swahili MIXER = %s\n", offered, int(i18n.offered("sw")), qPrintable(i18n.t("MIXER", "sw")));
       if (i18n.count() < 80 || offered < 80 || full < offered || !i18n.offered("sw") || i18n.t("MIXER", "sw") == "MIXER" || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
+      { // SYSTEM OPTIMIZATION: the computer is described, memory can be freed, the switches are kept
+        const QVariantMap si = engine.systemInfo(); const QVariantMap tr = engine.trimMemoryNow();
+        engine.setSysOpt("fastCores", false); const bool off = !engine.systemInfo().value("fastCores").toBool(); engine.setSysOpt("fastCores", true);
+        std::printf("amixos --smoke: SYSTEM: %s, %d threads in %d core types, RAM %llu MB, console %llu MB, NPU %s; free memory now: %s; sound thread: %s; switch kept %d\n", qPrintable(si.value("cpuName").toString()),
+                    si.value("logical").toInt(), si.value("classes").toInt(), si.value("ramTotalMb").toULongLong(), si.value("processMb").toULongLong(), si.value("npuFound").toBool() ? qPrintable(si.value("npuName").toString()) : "none",
+                    qPrintable(tr.value("note").toString()), qPrintable(si.value("audio").toString()), int(off));
+        if (si.value("logical").toInt() <= 0 || si.value("ramTotalMb").toULongLong() == 0 || tr.value("note").toString().isEmpty() || !off || !engine.systemInfo().value("fastCores").toBool()) { std::fprintf(stderr, "amixos --smoke: SYSTEM OPTIMIZATION failed\n"); QCoreApplication::exit(7); return; } }
       const QVariantMap m = engine.telemetry();
       const qulonglong blocks = m.value("blocks").toULongLong();
       { const QString b = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder"; const bool there = QFileInfo::exists(b) || QFileInfo::exists(b + ".exe");   // the separate PLUG-IN BUILDER sits next to the console (TOOLS opens it)

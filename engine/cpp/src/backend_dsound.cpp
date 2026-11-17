@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+#include "audiomixer/sysopt.hpp"
 #include "backends.hpp"
 
 namespace am {
@@ -120,6 +121,7 @@ class DsoundBackend : public Backend {
     }
   }
   void loop() {
+    am::sysopt::tuneAudioThread();   // never slowed for power; the fast cores on a hybrid processor
     timeBeginPeriod(1); const DWORD total = outBytes(), need = out_ ? periodBytes(nOut_) : 0;
     while (running_.load()) {
       if (out_) {

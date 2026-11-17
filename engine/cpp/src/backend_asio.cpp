@@ -11,6 +11,7 @@
 #ifdef _WIN32
 #include "audiomixer/sample_format.hpp"
 #include "asio_sdk.h"
+#include "audiomixer/sysopt.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -176,7 +177,7 @@ class AsioBackend : public Backend {
         if (buffers_) { drv_->disposeBuffers(); buffers_ = false; }
         long mn = 0, mx = 0, pref = 0, gran = 0;
         if (drv_->getBufferSize(&mn, &mx, &pref, &gran) == ASE_OK) { const long f = chooseBuffer(frames_, mn, mx, pref, gran); if (f == frames_ || f <= static_cast<long>(std::max<unsigned>(cfg_.frames, 16)) * 8) frames_ = f; }
-        std::string err; if (createBuffers(err) && wasRunning) { running_ = true; if (drv_->start() != ASE_OK) running_ = false; }
+        std::string err; if (createBuffers(err) && wasRunning) { tuned_ = false; running_ = true; if (drv_->start() != ASE_OK) running_ = false; }
         ++resets_;
       }
       lk.lock();
@@ -185,6 +186,7 @@ class AsioBackend : public Backend {
   void requestReset() { { std::lock_guard<std::mutex> g(wm_); resetPending_ = true; } wcv_.notify_one(); }
   bool start(std::string& err) override {
     if (!drv_) { err = "open() first"; return false; }
+    am::sysopt::prepareAudioTuning(); tuned_ = false;   // the driver's own thread calls block(): it is tuned on its first call
     running_ = true; ASIOError a = drv_->start();
     if (a != ASE_OK) { running_ = false; err = msg("start", a); return false; }
     return true;
@@ -243,6 +245,7 @@ class AsioBackend : public Backend {
   }
   void block(long index) {
     struct Guard { std::atomic<int>& c; explicit Guard(std::atomic<int>& x) : c(x) { ++c; } ~Guard() { --c; } } guard(inCallback_);
+    if (!tuned_.exchange(true)) am::sysopt::tuneAudioThread();   // once per start, on the driver's audio thread
     if (!running_ || !buffers_) {   // stopped or mid-reset: hand the driver silence, never stale output
       for (long i = 0; i < nOut_ && i < static_cast<long>(infos_.size()) - nIn_; ++i) { const ASIOSampleType t = types_[static_cast<std::size_t>(nIn_ + i)]; const std::size_t bytes = static_cast<std::size_t>(frames_) * (t == ASIOSTInt16LSB ? 2 : t == ASIOSTInt24LSB ? 3 : t == ASIOSTFloat64LSB ? 8 : 4); if (buffers_) std::memset(infos_[static_cast<std::size_t>(nIn_ + i)].buffers[index], 0, bytes); }
       return; }
@@ -280,7 +283,7 @@ class AsioBackend : public Backend {
   long nIn_ = 0, nOut_ = 0, frames_ = 0; std::atomic<bool> buffers_{false}; bool mine_ = false;
   std::vector<ASIOBufferInfo> infos_; std::vector<ASIOSampleType> types_; std::vector<std::string> outNames_; ASIOCallbacks callbacks_{};
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<float> zeros_, sink_; std::vector<const float*> inp_; std::vector<float*> outp_;
-  std::atomic<bool> running_{false}; std::atomic<int> inCallback_{0}; std::atomic<std::uint64_t> xruns_{0}, resets_{0}; std::atomic<long> inLatency_{0}, outLatency_{0};
+  std::atomic<bool> running_{false}, tuned_{false}; std::atomic<int> inCallback_{0}; std::atomic<std::uint64_t> xruns_{0}, resets_{0}; std::atomic<long> inLatency_{0}, outLatency_{0};
   std::thread worker_; std::mutex wm_; std::condition_variable wcv_; bool resetPending_ = false, quit_ = false;
 };
 }  // namespace

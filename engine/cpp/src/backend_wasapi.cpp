@@ -16,6 +16,7 @@
 #include <avrt.h>
 #include <thread>
 
+#include "audiomixer/sysopt.hpp"
 #include "backends.hpp"
 
 namespace am {
@@ -211,6 +212,7 @@ class WasapiBackend : public Backend {
   void loop() {
     const int ci = cfg_.inChannels, co = cfg_.outChannels; UINT32 bufFrames = 0; if (out_) out_->GetBufferSize(&bufFrames);
     DWORD task = 0; HANDLE mm = AvSetMmThreadCharacteristicsW(L"Pro Audio", &task);          // the scheduler keeps the audio thread running
+    am::sysopt::tuneAudioThread();                                                         // never slowed for power; the fast cores on a hybrid processor
     while (!stop_) {
       if (out_ || captureEvent_) WaitForSingleObject(ev_, 100); else Sleep(static_cast<DWORD>(1000.0 * cfg_.frames / cfg_.sampleRate));
       if (stop_) break;

@@ -256,6 +256,13 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
   // while phones are linked the console's engine is stopped and the remote service plays: the input choice goes there (main.cpp sets it)
   std::function<bool(const QString& in)> remoteInput;
+  std::function<bool()> remoteInProcess;   // the network service plays the sound inside this program (phones linked): no working-set trim then
+  // SYSTEM OPTIMIZATION (engine/cpp/include/audiomixer/sysopt.hpp): the processor, its core types, an NPU, memory; and the three switches
+  //   fastCores: the audio thread asks for the performance cores of a hybrid processor; eco: the interface thread is EcoQoS while the window is
+  //   behind another program; trim: memory goes back to Windows 3 s after the window is minimised
+  Q_INVOKABLE QVariantMap systemInfo() const;
+  Q_INVOKABLE void setSysOpt(const QString& key, bool on);
+  Q_INVOKABLE QVariantMap trimMemoryNow();
   Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -754,6 +761,7 @@ class Engine : public QObject {
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  bool sysFast_ = true, sysEco_ = true, sysTrim_ = true; QString lastTrim_; void minimisedTrim();
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;

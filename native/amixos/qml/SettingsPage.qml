@@ -9,6 +9,9 @@ Flickable {
     contentHeight: col.implicitHeight + 24; clip: true
     component Opt: RowLayout { property string label: ""; property string hint: ""; Layout.fillWidth: true; spacing: 10
         ColumnLayout { Layout.preferredWidth: 260; spacing: 1; Text { text: i18n.t(label, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } Text { visible: hint.length > 0; text: hint; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 260 } } }
+    component Line: RowLayout { property string k: ""; property string v: ""; Layout.fillWidth: true; spacing: 10
+        Text { Layout.preferredWidth: 120; text: k; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+        Text { Layout.fillWidth: true; text: v; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.Wrap } }
     component Toggle: Rectangle { property bool on: false; signal toggled(bool v); implicitWidth: 44; implicitHeight: 20; radius: 10; color: on ? Theme.emerald : Theme.ov(0.1); border.color: on ? Theme.emerald : Theme.lineSoft
         Rectangle { width: 16; height: 16; radius: 8; y: 2; x: parent.on ? parent.width - 18 : 2; color: parent.on ? "#000" : Theme.muted; Behavior on x { NumberAnimation { duration: 90 } } }
         MouseArea { anchors.fill: parent; onClicked: parent.toggled(!parent.on) } }
@@ -88,6 +91,40 @@ Flickable {
                     Text { id: lt; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.auto ? i18n.t(" ·auto", i18n.lang) : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8 }
                     MouseArea { anchors.fill: parent; onClicked: i18n.lang = modelData.code } } }
             }
+        }
+        Panel {
+            id: sysPanel
+            Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
+            title: i18n.t("System optimization", i18n.lang).toUpperCase()
+            subtitle: i18n.t("What this computer is, and how the mixing console keeps the sound steady while it uses less of the processor and memory. Only the mixing console's own threads and memory are changed, never other programs.", i18n.lang)
+            property var sys: engine.systemInfo()
+            Timer { interval: 2000; repeat: true; running: page.visible && engine.uiAwake; onTriggered: sysPanel.sys = engine.systemInfo() }
+            Line { k: i18n.t("Processor", i18n.lang).toUpperCase(); v: sysPanel.sys.cpuName + "  ·  " + sysPanel.sys.arch.toUpperCase() + (sysPanel.sys.emulated ? "  ·  " + i18n.t("x64 build under emulation", i18n.lang) : "") }
+            Line { k: i18n.t("Processor cores", i18n.lang).toUpperCase()
+                v: (!sysPanel.sys.hybrid ? i18n.t("%1 cores of the same type", i18n.lang).arg(sysPanel.sys.perfCores)
+                    : sysPanel.sys.lowPowerCores > 0 ? i18n.t("%1 performance cores + %2 efficiency cores + %3 low-power cores", i18n.lang).arg(sysPanel.sys.perfCores).arg(sysPanel.sys.effCores).arg(sysPanel.sys.lowPowerCores)
+                    : i18n.t("%1 performance cores + %2 efficiency cores", i18n.lang).arg(sysPanel.sys.perfCores).arg(sysPanel.sys.effCores))
+                   + "  ·  " + i18n.t("%1 processor threads", i18n.lang).arg(sysPanel.sys.logical) }
+            Line { k: i18n.t("Instruction sets", i18n.lang).toUpperCase(); v: [sysPanel.sys.avx2 ? "AVX2" : "", sysPanel.sys.fma ? "FMA" : "", sysPanel.sys.avx512 ? "AVX-512" : "", sysPanel.sys.neon ? "NEON" : ""].filter(function (x) { return x !== "" }).join(" · ") || "—" }
+            Line { k: i18n.t("AI accelerator", i18n.lang).toUpperCase(); v: sysPanel.sys.npuFound ? sysPanel.sys.npuName : i18n.t("no AI accelerator found", i18n.lang) }
+            Line { k: i18n.t("Memory (RAM)", i18n.lang).toUpperCase(); v: (sysPanel.sys.ramTotalMb - sysPanel.sys.ramFreeMb) + " / " + sysPanel.sys.ramTotalMb + " MB (" + sysPanel.sys.ramLoadPct + " %)  ·  " + i18n.t("used by the mixing console", i18n.lang) + " " + sysPanel.sys.processMb + " MB" + (sysPanel.sys.lastTrim !== "" ? "  ·  " + i18n.t("last memory release", i18n.lang) + " " + sysPanel.sys.lastTrim : "") }
+            Line { k: i18n.t("Sound engine", i18n.lang).toUpperCase()
+                v: { const st = sysPanel.sys.audioState
+                     if (st === 0) return i18n.t("set when the sound engine starts", i18n.lang)
+                     const where = st === 1 ? i18n.t("on the performance cores (%1)", i18n.lang).arg(sysPanel.sys.perfCores) : st === 2 ? i18n.t("on any core (fast cores off)", i18n.lang) : st === 3 ? i18n.t("on any core (all cores alike)", i18n.lang) : i18n.t("on any core", i18n.lang)
+                     return where + (sysPanel.sys.audioHighQoS ? "  ·  " + i18n.t("it is never slowed down to save power", i18n.lang) : "") } }
+            Opt { label: i18n.t("Fast cores for audio", i18n.lang); hint: i18n.t("On processors with performance and efficiency cores (Intel Core 12th gen and later, Core Ultra, AMD Ryzen AI), the sound asks for the performance cores. It is never slowed down to save power. Takes effect when the sound next starts.", i18n.lang)
+                Toggle { on: sysPanel.sys.fastCores; onToggled: function (v) { engine.setSysOpt("fastCores", v); sysPanel.sys = engine.systemInfo() } } }
+            Opt { label: i18n.t("Power saving in the background", i18n.lang); hint: i18n.t("While the mixing console window is behind another program or minimised, Windows runs its interface on the slower, energy-saving cores at a lower clock speed (EcoQoS). The sound keeps its own full-speed thread.", i18n.lang)
+                Toggle { on: sysPanel.sys.eco; onToggled: function (v) { engine.setSysOpt("eco", v); sysPanel.sys = engine.systemInfo() } } }
+            Opt { label: i18n.t("Release memory when minimised", i18n.lang); hint: i18n.t("3 seconds after the mixing console window is minimised it gives its spare memory back to Windows, which compresses it. With the sound running only the safe part is done, so the sound never has to wait for memory.", i18n.lang)
+                Toggle { on: sysPanel.sys.trim; onToggled: function (v) { engine.setSysOpt("trim", v); sysPanel.sys = engine.systemInfo() } } }
+            RowLayout { Layout.fillWidth: true; spacing: 6
+                Rectangle { id: gbTrim; implicitWidth: Math.max(110, children[0].implicitWidth + 14); implicitHeight: 24; radius: 7; color: Theme.amber; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gbTrim.color) } GradientStop { position: 1; color: Theme.btnBottom(gbTrim.color) } }
+                    Text { anchors.centerIn: parent; text: i18n.t("Release memory now", i18n.lang).toUpperCase(); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.trimMemoryNow(); sysPanel.sys = engine.systemInfo() } } }
+                Item { Layout.fillWidth: true } }
+            Repeater { model: sysPanel.sys.tips; delegate: Text { Layout.fillWidth: true; text: "• " + i18n.t(modelData, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.Wrap } }
         }
         Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
