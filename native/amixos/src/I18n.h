@@ -26,7 +26,7 @@ class I18n : public QObject {
   int count() const { return meta_.size(); }
   Q_INVOKABLE QString t(const QString& key, const QString& lang = QString()) const;
   Q_INVOKABLE int coverage(const QString& code) const;
-  Q_INVOKABLE bool offered(const QString& code) const;   // shown in the language menu: English, or at least half of the interface translated   // how many of the known keys this language has
+  Q_INVOKABLE bool offered(const QString& code) const;   // shown in the language menu: every known language   // how many of the known keys this language has
   int keyCount() const { return keys_.size(); }
  signals:
   void langChanged();
