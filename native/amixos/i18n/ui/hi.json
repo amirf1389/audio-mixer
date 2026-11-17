@@ -2187,5 +2187,10 @@
 "Hybrid processor: the sound asks for the performance cores and is never slowed down to save power.": "हाइब्रिड प्रोसेसर: साउंड परफॉर्मेंस कोर की मांग करता है और पावर बचाने के लिए कभी धीमा नहीं होता।",
 "Hybrid processor: the fast cores option for audio is off, so Windows may run the sound on a slower, energy-saving core. Switch it on if you hear dropouts.": "हाइब्रिड प्रोसेसर: ऑडियो के लिए फास्ट कोर विकल्प बंद है, इसलिए विंडोज ध्वनि को धीमे, ऊर्जा-बचत कोर पर चला सकता है। यदि आपको ड्रॉपआउट सुनाई दें तो इसे चालू करें।",
 "AI accelerator (NPU) found. Nothing in the mixing console runs on it yet: the mixing is plain signal processing on the processor, which is what keeps the latency low.": "AI एक्सेलेरेटर (NPU) मिला। मिक्सिंग कंसोल में अभी तक कुछ भी इस पर नहीं चलता: मिक्सिंग प्रोसेसर पर साधारण सिग्नल प्रोसेसिंग ही है, जो लेटेंसी को कम रखती है।",
-"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "मेमोरी लगभग भर चुकी है: जिन प्रोग्रामों और प्लग-इन का आप उपयोग नहीं करते, उन्हें बंद करें, अन्यथा ध्वनि कट सकती है।"
+"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "मेमोरी लगभग भर चुकी है: जिन प्रोग्रामों और प्लग-इन का आप उपयोग नहीं करते, उन्हें बंद करें, अन्यथा ध्वनि कट सकती है।",
+"INPUT: APP SOUND": "इनपुट: ऐप साउंड",
+"The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "केवल एक प्रोग्राम की ध्वनि (Spotify, TIDAL, Deezer, Roon, ब्राउज़र में YouTube चलाना) CH 1-2 पर इनपुट बन जाती है। यह वह ध्वनि है जिसे Windows चलाता है: कुछ भी डाउनलोड या कॉपी नहीं किया जाता। Windows 10 संस्करण 2004 या बाद के संस्करण की आवश्यकता है।",
+"APP SOUND: pick the program to hear on CH 1-2": "एपीपी साउंड: CH 1-2 पर सुनने के लिए प्रोग्राम चुनें",
+"No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "अभी कोई प्रोग्राम ध्वनि नहीं चला रहा है। Spotify, TIDAL, Deezer, Roon या किसी ब्राउज़र में संगीत चलाएँ, फिर इस सूची को फिर से खोलें।",
+"APP SOUND needs Windows 10 version 2004 or later.": "एपीपी साउंड के लिए विंडोज 10 संस्करण 2004 या बाद का संस्करण आवश्यक है।"
 }

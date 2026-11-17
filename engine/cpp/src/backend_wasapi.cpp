@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "audiomixer/sysopt.hpp"
+#include "audiomixer/app_sound.hpp"
 #include "backends.hpp"
 
 namespace am {
@@ -80,12 +81,13 @@ class ActivateDone : public IActivateAudioInterfaceCompletionHandler {
  private:
   std::atomic<long> refs_{1};
 };
-// an IAudioClient on the process-loopback virtual device, this process tree excluded; loaded at run time (older Windows: a clear error)
-HRESULT activateProcessLoopback(IAudioClient** ac, std::string& err) {
+// an IAudioClient on the process-loopback virtual device: this process tree excluded (COMPUTER SOUND), or only `pid`'s tree included (APP SOUND);
+// loaded at run time (older Windows: a clear error)
+HRESULT activateProcessLoopback(IAudioClient** ac, std::string& err, DWORD pid = 0) {
   using ActivateFn = HRESULT(WINAPI*)(LPCWSTR, REFIID, PROPVARIANT*, IActivateAudioInterfaceCompletionHandler*, IActivateAudioInterfaceAsyncOperation**);
   HMODULE mm = LoadLibraryW(L"Mmdevapi.dll"); const auto fn = mm ? reinterpret_cast<ActivateFn>(reinterpret_cast<void*>(GetProcAddress(mm, "ActivateAudioInterfaceAsync"))) : nullptr;
   if (!fn) { err = "computer sound capture needs Windows 10 version 2004 or later"; return E_NOTIMPL; }
-  AmActivationParams prm{}; prm.ActivationType = kActivationProcessLoopback; prm.ProcessLoopbackParams.TargetProcessId = GetCurrentProcessId(); prm.ProcessLoopbackParams.ProcessLoopbackMode = kExcludeTree;
+  AmActivationParams prm{}; prm.ActivationType = kActivationProcessLoopback; prm.ProcessLoopbackParams.TargetProcessId = pid ? pid : GetCurrentProcessId(); prm.ProcessLoopbackParams.ProcessLoopbackMode = pid ? kIncludeTree : kExcludeTree;
   PROPVARIANT pv; PropVariantInit(&pv); pv.vt = VT_BLOB; pv.blob.cbSize = sizeof prm; pv.blob.pBlobData = reinterpret_cast<BYTE*>(&prm);
   auto* h = new ActivateDone; IActivateAudioInterfaceAsyncOperation* op = nullptr;
   HRESULT r = fn(L"VAD\\Process_Loopback", kIidAudioClient, &pv, h, &op);
@@ -94,7 +96,7 @@ HRESULT activateProcessLoopback(IAudioClient** ac, std::string& err) {
   if (SUCCEEDED(r)) { r = op->GetActivateResult(&ar, &unk); if (SUCCEEDED(r)) r = ar; }
   if (SUCCEEDED(r) && unk) r = unk->QueryInterface(kIidAudioClient, reinterpret_cast<void**>(ac));
   if (unk) unk->Release(); if (op) op->Release(); h->Release();
-  if (FAILED(r)) err = hr("computer sound (process loopback)", r);
+  if (FAILED(r)) err = hr(pid ? "app sound (process loopback)" : "computer sound (process loopback)", r) + (pid && r == E_INVALIDARG ? ": that program has closed" : "");
   return r;
 }
 
@@ -150,8 +152,9 @@ class WasapiBackend : public Backend {
   bool client(IMMDeviceEnumerator* en, EDataFlow flow, int ch, IAudioClient** ac, IAudioRenderClient** rc, IAudioCaptureClient** cc, Sample* used, std::string& err) {
     // the endpoint: the one named by its id string (from --list-devices), else the default one of this direction
     const bool loop = flow == eCapture && loopback_; std::string want = flow == eRender ? cfg_.outDevice : cfg_.inDevice; if (loop) want = want.substr(9);
-    if (loop && want == "system") {   // COMPUTER SOUND: every program but this one, so the mix can play on the same device without a loop
-      if (FAILED(activateProcessLoopback(ac, err))) return false;
+    std::uint32_t appPid = 0; const bool app = loop && am::app::parseDeviceId(cfg_.inDevice, appPid);
+    if (loop && (want == "system" || app)) {   // COMPUTER SOUND: every program but this one, so the mix can play on the same device without a loop; APP SOUND: one program
+      if (FAILED(activateProcessLoopback(ac, err, app ? static_cast<DWORD>(appPid) : 0))) return false;
       WAVEFORMATEXTENSIBLE f = makeFormat(ch, cfg_.sampleRate, Sample()); const REFERENCE_TIME dur = static_cast<REFERENCE_TIME>(cfg_.frames * 3.0 / cfg_.sampleRate * 1e7);
       HRESULT r = (*ac)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, dur, 0, &f.Format, nullptr);
       if (FAILED(r)) { err = hr("Initialize (computer sound)", r); return false; }

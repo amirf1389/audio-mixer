@@ -2149,5 +2149,11 @@
 "Hybrid processor: the sound asks for the performance cores and is never slowed down to save power.": "하이브리드 프로세서: 사운드는 성능 코어를 필요로 하며, 전력 절약을 위해 속도가 느려지는 일이 결코 없습니다.",
 "Hybrid processor: the fast cores option for audio is off, so Windows may run the sound on a slower, energy-saving core. Switch it on if you hear dropouts.": "하이브리드 프로세서: 오디오용 고속 코어 옵션이 꺼져 있어, Windows가 속도가 더 느리고 전력 효율이 높은 코어에서 사운드를 처리할 수 있습니다. 소리가 끊기는 현상이 발생하면 이 옵션을 켜보세요.",
 "AI accelerator (NPU) found. Nothing in the mixing console runs on it yet: the mixing is plain signal processing on the processor, which is what keeps the latency low.": "AI 가속기(NPU)가 발견되었습니다. 아직 믹싱 콘솔에서 이 가속기를 사용하는 기능은 없습니다. 믹싱 작업은 프로세서에서 단순한 신호 처리로 이루어지는데, 이것이 지연 시간을 낮게 유지하는 비결입니다.",
-"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "메모리가 거의 가득 찼습니다. 사용하지 않는 프로그램과 플러그인을 닫으십시오. 그렇지 않으면 소리가 끊길 수 있습니다."
+"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "메모리가 거의 가득 찼습니다. 사용하지 않는 프로그램과 플러그인을 닫으십시오. 그렇지 않으면 소리가 끊길 수 있습니다.",
+"INPUT: APP SOUND": "입력: 앱 사운드",
+"The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "단 하나의 프로그램(Spotify, TIDAL, Deezer, Roon, YouTube를 재생하는 브라우저)에서 나오는 소리만 CH 1-2의 입력 소리로 설정됩니다. 이는 Windows에서 재생하는 소리이며, 별도의 다운로드나 복사 과정은 없습니다. Windows 10 버전 2004 이상이 필요합니다.",
+"APP SOUND: pick the program to hear on CH 1-2": "앱 사운드: CH 1-2에서 들을 프로그램을 선택하세요",
+"No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "현재 소리를 재생 중인 프로그램이 없습니다. Spotify, TIDAL, Deezer, Roon 또는 브라우저에서 음악을 재생한 다음, 이 목록을 다시 열어 주세요.",
+"APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND를 사용하려면 Windows 10 버전 2004 이상이 필요합니다.",
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "스트림을 보호하는 서비스(DRM)가 소리 없이 재생될 수 있습니다. Windows는 사운드를 다른 프로그램에 전달하지 않으며, AmF X1은 이 제한을 우회하지 않습니다."
 }

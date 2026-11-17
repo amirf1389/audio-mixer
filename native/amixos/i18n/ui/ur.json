@@ -2183,5 +2183,9 @@
 "Hybrid processor: the sound asks for the performance cores and is never slowed down to save power.": "ہائبرڈ پروسیسر: آواز پرفارمنس کورز کا مطالبہ کرتی ہے اور توانائی بچانے کے لیے کبھی سست نہیں کی جاتی۔",
 "Hybrid processor: the fast cores option for audio is off, so Windows may run the sound on a slower, energy-saving core. Switch it on if you hear dropouts.": "ہائبرڈ پروسیسر: آڈیو کے لیے تیز کورز کا آپشن بند ہے، لہٰذا ونڈوز آواز کو سست اور توانائی بچانے والے کور پر چلا سکتی ہے۔ اگر آپ آواز میں وقفے سنیں تو اسے آن کریں۔",
 "AI accelerator (NPU) found. Nothing in the mixing console runs on it yet: the mixing is plain signal processing on the processor, which is what keeps the latency low.": "AI ایکسلریٹر (NPU) مل گیا۔ ابھی تک مکسنگ کنسول میں کوئی چیز اس پر نہیں چلتی: مکسنگ محض پروسیسر پر سگنل پروسیسنگ ہے، جو لیٹنسی کو کم رکھتی ہے۔",
-"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "میमोری تقریباً بھر چکی ہے: غیر استعمال شدہ پروگرامز اور پلگ انز بند کریں، ورنہ آواز رُک سکتی ہے۔"
+"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "میमोری تقریباً بھر چکی ہے: غیر استعمال شدہ پروگرامز اور پلگ انز بند کریں، ورنہ آواز رُک سکتی ہے۔",
+"INPUT: APP SOUND": "ان پٹ: ایپ کی آواز",
+"The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "صرف ایک پروگرام کی آواز (Spotify، TIDAL، Deezer، Roon، یا براؤزر میں YouTube چلانے سے) CH 1-2 پر ان پٹ بن جاتی ہے۔ یہ وہ آواز ہے جو ونڈوز چلاتی ہے: کچھ بھی ڈاؤن لوڈ یا کاپی نہیں کیا جاتا۔ ونڈوز 10 ورژن 2004 یا اس کے بعد کی ضرورت ہے۔",
+"APP SOUND: pick the program to hear on CH 1-2": "ایپ ساؤنڈ: چینل 1-2 پر سننے کے لیے پروگرام منتخب کریں۔",
+"No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "فی الحال کوئی پروگرام آواز نہیں چلا رہا۔ Spotify، TIDAL، Deezer، Roon یا کسی براؤزر میں موسیقی چلائیں، پھر اس فہرست کو دوبارہ کھولیں۔"
 }

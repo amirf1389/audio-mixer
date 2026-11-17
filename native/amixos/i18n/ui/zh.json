@@ -2085,5 +2085,10 @@
 "Hybrid processor: the sound asks for the performance cores and is never slowed down to save power.": "混合处理器：音频处理需要性能核心的支持，且绝不会为了节省功耗而降低运行速度。",
 "Hybrid processor: the fast cores option for audio is off, so Windows may run the sound on a slower, energy-saving core. Switch it on if you hear dropouts.": "混合处理器：音频的“快速核心”选项处于关闭状态，因此 Windows 可能会在速度较慢的节能核心上处理声音。如果听到声音中断，请将其打开。",
 "AI accelerator (NPU) found. Nothing in the mixing console runs on it yet: the mixing is plain signal processing on the processor, which is what keeps the latency low.": "已检测到 AI 加速器（NPU）。目前调音台中尚无任何功能运行于该加速器上：混音过程仅在处理器上进行简单的信号处理，这正是保持低延迟的原因。",
-"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "内存即将用尽：请关闭不使用的程序和插件，否则可能会出现声音中断的情况。"
+"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "内存即将用尽：请关闭不使用的程序和插件，否则可能会出现声音中断的情况。",
+"INPUT: APP SOUND": "输入：应用声音",
+"The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "仅来自一个程序（Spotify、TIDAL、Deezer、Roon 或通过浏览器播放的 YouTube）的声音会作为输入传输至 CH 1-2 声道。这是 Windows 播放的声音：不会下载或复制任何内容。需要 Windows 10 2004 版或更高版本。",
+"No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "目前没有程序正在播放声音。请在 Spotify、TIDAL、Deezer、Roon 或浏览器中播放音乐，然后再次打开此列表。",
+"APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND 需要 Windows 10 2004 版或更高版本。",
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "保护其流媒体内容的服务（DRM）可能会导致声音无法输出：Windows 不会将声音传递给其他程序，而 AmF X1 无法绕过这一限制。"
 }

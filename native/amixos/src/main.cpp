@@ -502,6 +502,15 @@ int main(int argc, char* argv[]) {
       const QVariantMap r = engine.setInputSource("mic"); const int after = engine.deviceInputs(); const bool on = engine.running();
       std::printf("amixos --smoke: INPUT MIC on an outputs-only start: inputs %d -> %d, sound running %d, source %s\n", before, after, on, qPrintable(engine.inputSource()));
       if (!(before == 0 && after >= 2 && on && engine.inputSource() == "mic" && !r.isEmpty())) { std::fprintf(stderr, "amixos --smoke: INPUT MIC failed: %s\n", qPrintable(engine.status())); return 1; }
+      // APP SOUND: one program's sound is a Windows audio stream; on another driver the press says so and the sound keeps playing as it was;
+      // the list of programs is Windows' own (none here); the toolbar has the picker
+      const QVariantMap ra = engine.setInputSource("loopback:app:4321"); const bool keptOn = engine.running(); const QString why = engine.status();
+      const QVariantList apps = engine.appSources(); QObject* appBtn = nullptr;
+      if (!qml.rootObjects().isEmpty()) { QObject* w = qml.rootObjects().first(); const QVariant pg = w->property("current"); w->setProperty("current", "mixer");
+        QElapsedTimer tw; tw.start(); while (!appBtn && tw.elapsed() < 3000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); appBtn = w->findChild<QObject*>("inputSource_app"); }
+        w->setProperty("current", pg); }
+      std::printf("amixos --smoke: APP SOUND on a non-Windows driver: refused %d, sound running %d, says WASAPI %d; programs listed %d; picker %d\n", int(ra.isEmpty()), int(keptOn), int(why.contains("APP SOUND") && why.contains("WASAPI")), int(apps.size()), int(appBtn != nullptr));
+      if (!(ra.isEmpty() && keptOn && why.contains("APP SOUND") && why.contains("WASAPI") && engine.inputSource() != "app" && appBtn)) { std::fprintf(stderr, "amixos --smoke: APP SOUND failed: %s\n", qPrintable(why)); return 1; }
       engine.stop(); engine.open("null", "", "", r0, f0, 2, 2); }
     { // AUTO ZOOM on a 14" laptop, 1920 x 1080 (work area 1920 x 1032 device pixels): 100 % and 125 % fit as they are; 150 % is zoomed
       // to fit (drawn as at about 130 %); a user's fixed zoom wins; a large screen is never zoomed

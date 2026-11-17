@@ -11,7 +11,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)   # the static libs also go into libamix
 add_library(audiomixer_engine STATIC src/engine.cpp)
 target_include_directories(audiomixer_engine PUBLIC include)
 
-set(RUNTIME_SRC src/runtime.cpp src/backend_null.cpp src/devices.cpp src/driver_intel.cpp src/bluetooth.cpp src/sysopt.cpp)
+set(RUNTIME_SRC src/runtime.cpp src/backend_null.cpp src/devices.cpp src/driver_intel.cpp src/bluetooth.cpp src/sysopt.cpp src/app_sound.cpp)
 set(RUNTIME_LIBS Threads::Threads)
 if(WIN32)
   list(APPEND RUNTIME_SRC src/backend_wasapi.cpp src/backend_asio.cpp src/backend_dsound.cpp)
@@ -279,6 +279,9 @@ find_program(AMIX_NODE node)   # signs a throwaway activation for this machine a
 if(AMIX_NODE)
   set_tests_properties(license PROPERTIES ENVIRONMENT "AMIX_LICENSE_VECTOR_GEN=${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/make-license-vectors.js")
 endif()
+add_executable(app_sound_test test/app_sound_test.cpp)
+target_link_libraries(app_sound_test audiomixer_runtime)
+add_test(NAME app_sound COMMAND app_sound_test)
 add_executable(sysopt_test test/sysopt_test.cpp)
 target_link_libraries(sysopt_test audiomixer_runtime)
 add_test(NAME sysopt COMMAND sysopt_test)

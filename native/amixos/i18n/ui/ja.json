@@ -2154,5 +2154,9 @@
 "Hybrid processor: the sound asks for the performance cores and is never slowed down to save power.": "ハイブリッドプロセッサ：サウンド処理にはパフォーマンスコアが割り当てられ、省電力のために処理速度が低下することは決してありません。",
 "Hybrid processor: the fast cores option for audio is off, so Windows may run the sound on a slower, energy-saving core. Switch it on if you hear dropouts.": "ハイブリッドプロセッサ：オーディオ用の「高速コア」オプションがオフになっているため、Windowsはより低速で省電力なコアでサウンド処理を実行している可能性があります。音飛びが発生する場合は、このオプションをオンにしてください。",
 "AI accelerator (NPU) found. Nothing in the mixing console runs on it yet: the mixing is plain signal processing on the processor, which is what keeps the latency low.": "AIアクセラレータ（NPU）が検出されました。現時点では、ミキシングコンソール内のどの処理もこれを利用して実行されていません。ミキシング処理はプロセッサ上での単純な信号処理であり、これがレイテンシを低く抑えている要因です。",
-"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "メモリがほぼ満杯です。使用していないプログラムやプラグインを終了してください。そうしないと、音が途切れる可能性があります。"
+"Memory is nearly full: close programs and plug-ins you do not use, or the sound may drop out.": "メモリがほぼ満杯です。使用していないプログラムやプラグインを終了してください。そうしないと、音が途切れる可能性があります。",
+"INPUT: APP SOUND": "入力：アプリのサウンド",
+"The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "1つのプログラム（Spotify、TIDAL、Deezer、Roon、YouTubeを再生するブラウザなど）からの音声のみが、CH 1-2の入力となります。これはWindowsが再生する音声であり、何もダウンロードやコピーは行われません。Windows 10 バージョン 2004以降が必要です。",
+"No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "現在、音声を再生しているプログラムはありません。Spotify、TIDAL、Deezer、Roon、またはブラウザで音楽を再生してから、このリストをもう一度開いてください。",
+"APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND には、Windows 10 バージョン 2004 以降が必要です。"
 }

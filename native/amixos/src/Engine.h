@@ -251,6 +251,8 @@ class Engine : public QObject {
   Q_INVOKABLE void setInputAllowed(const QString& backend, const QString& id, bool on);
   Q_INVOKABLE QVariantList inputCandidates() const;
   QString inputSource() const; bool computerSoundAvailable() const;
+  Q_INVOKABLE QVariantList appSources();          // APP SOUND: [{id "loopback:app:<pid>", name, current}] of the programs playing now
+  Q_INVOKABLE QString appSourceName() const;     // the program on the input now ("" when the input is not APP SOUND)
   // the input of the running stream becomes the microphone ("mic") or the computer's sound ("music"); the output stays as it is. Returns
   // the stream that opened as {backend, in, out, rate, frames, inChannels, outChannels} for SETTINGS to remember, or an empty map.
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
