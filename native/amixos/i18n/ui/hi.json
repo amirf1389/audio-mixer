@@ -2192,5 +2192,12 @@
 "The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "केवल एक प्रोग्राम की ध्वनि (Spotify, TIDAL, Deezer, Roon, ब्राउज़र में YouTube चलाना) CH 1-2 पर इनपुट बन जाती है। यह वह ध्वनि है जिसे Windows चलाता है: कुछ भी डाउनलोड या कॉपी नहीं किया जाता। Windows 10 संस्करण 2004 या बाद के संस्करण की आवश्यकता है।",
 "APP SOUND: pick the program to hear on CH 1-2": "एपीपी साउंड: CH 1-2 पर सुनने के लिए प्रोग्राम चुनें",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "अभी कोई प्रोग्राम ध्वनि नहीं चला रहा है। Spotify, TIDAL, Deezer, Roon या किसी ब्राउज़र में संगीत चलाएँ, फिर इस सूची को फिर से खोलें।",
-"APP SOUND needs Windows 10 version 2004 or later.": "एपीपी साउंड के लिए विंडोज 10 संस्करण 2004 या बाद का संस्करण आवश्यक है।"
+"APP SOUND needs Windows 10 version 2004 or later.": "एपीपी साउंड के लिए विंडोज 10 संस्करण 2004 या बाद का संस्करण आवश्यक है।",
+"AUTO INPUT: ON": "स्वचालित इनपुट: चालू",
+"AUTO INPUT: OFF": "स्वचालित इनपुट: बंद",
+"COMPUTER SOUND": "कंप्यूटर ध्वनि",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "ON: ध्वनि शुरू होने पर इनपुट अपने आप खुल जाता है: माइक्रोफ़ोन, या जब माइक्रोफ़ोन नहीं खोला जा सकता तो कंप्यूटर की साउंड।   OFF: कोई इनपुट नहीं खुलता और कुछ भी कैप्चर नहीं होता, न यहाँ और न ही फोन की सेवा पर।",
+"Every app (COMPUTER SOUND)": "हर ऐप (कंप्यूटर साउंड)",
+"AUTO INPUT": "स्वचालित इनपुट",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "ON: ध्वनि शुरू होने पर इनपुट अपने आप खुल जाता है: माइक्रोफोन, या जब माइक्रोफोन नहीं खोला जा सकता तो कंप्यूटर की साउंड।   OFF: कोई इनपुट नहीं खुलता और कुछ भी कैप्चर नहीं होता, न यहाँ और न ही फोन की सेवा पर।   मिक्सर पर भी यही स्विच है।"
 }

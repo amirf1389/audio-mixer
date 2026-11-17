@@ -2128,5 +2128,12 @@
 "APP SOUND: pick the program to hear on CH 1-2": "UYGULAMA SESİ: 1-2 numaralı kanallarda dinlemek istediğiniz programı seçin",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "Şu anda ses çalan bir program yok. Spotify, TIDAL, Deezer, Roon veya bir tarayıcıda müziği başlatın, ardından bu listeyi tekrar açın.",
 "APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND için Windows 10 sürüm 2004 veya daha yeni bir sürüm gereklidir.",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "Akışını koruyan bir hizmet (DRM), ses çıkarmadan çalışabilir: Windows, sesi diğer programlara aktarmaz ve AmF X1 bu durumu aşamaz."
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "Akışını koruyan bir hizmet (DRM), ses çıkarmadan çalışabilir: Windows, sesi diğer programlara aktarmaz ve AmF X1 bu durumu aşamaz.",
+"AUTO INPUT: ON": "OTOMATİK GİRİŞ: AÇIK",
+"AUTO INPUT: OFF": "OTOMATİK GİRİŞ: KAPALI",
+"COMPUTER SOUND": "BİLGİSAYAR SESİ",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "AÇIK: Ses başladığında giriş kendiliğinden açılır: mikrofon ya da mikrofonun açılamadığı durumlarda bilgisayarın sesi. KAPALI: Hiçbir giriş açılmaz ve ne burada ne de telefonların hizmetinde herhangi bir şey kaydedilmez.",
+"Every app (COMPUTER SOUND)": "Her uygulama (BİLGİSAYAR SESİ)",
+"AUTO INPUT": "OTOMATİK GİRİŞ",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "AÇIK: Ses başladığında giriş kendiliğinden açılır: mikrofon ya da mikrofonun açılamadığı durumlarda bilgisayarın sesi. KAPALI: Hiçbir giriş açılmaz ve ne burada ne de telefon hizmetinde herhangi bir ses yakalanmaz. Aynı anahtar mikserde de bulunur."
 }

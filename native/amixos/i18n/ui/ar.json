@@ -2121,5 +2121,12 @@
 "APP SOUND: pick the program to hear on CH 1-2": "صوت التطبيق: اختر البرنامج الذي تريد سماعه على القناة 1-2",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "لا يوجد برنامج يقوم بتشغيل الصوت في الوقت الحالي. قم بتشغيل الموسيقى عبر Spotify أو TIDAL أو Deezer أو Roon أو متصفح الويب، ثم افتح هذه القائمة مرة أخرى.",
 "APP SOUND needs Windows 10 version 2004 or later.": "يتطلب تطبيق APP SOUND نظام التشغيل Windows 10 الإصدار 2004 أو أحدث.",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "قد يتم تشغيل الخدمة التي تحمي البث (DRM) دون إصدار أي صوت: حيث لا يقوم نظام ويندوز بتمرير الصوت إلى البرامج الأخرى، ولا يتغلب برنامج AmF X1 على هذا الأمر."
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "قد يتم تشغيل الخدمة التي تحمي البث (DRM) دون إصدار أي صوت: حيث لا يقوم نظام ويندوز بتمرير الصوت إلى البرامج الأخرى، ولا يتغلب برنامج AmF X1 على هذا الأمر.",
+"AUTO INPUT: ON": "الإدخال التلقائي: قيد التشغيل",
+"AUTO INPUT: OFF": "الإدخال التلقائي: معطل",
+"COMPUTER SOUND": "صوت الكمبيوتر",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "\"تشغيل\": يتم فتح مصدر الإدخال تلقائيًا عند بدء الصوت: الميكروفون، أو صوت الكمبيوتر في حالة عدم توفر ميكروفون. \"إيقاف\": لا يتم فتح أي مصدر إدخال ولا يتم تسجيل أي شيء، سواء هنا أو في خدمة الهواتف.",
+"Every app (COMPUTER SOUND)": "كل تطبيق (صوت الكمبيوتر)",
+"AUTO INPUT": "الإدخال التلقائي",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "\"تشغيل\": يتم فتح مصدر الإدخال تلقائيًا عند بدء الصوت: الميكروفون، أو صوت الكمبيوتر في حالة عدم توفر ميكروفون. \"إيقاف\": لا يتم فتح أي مصدر إدخال ولا يتم تسجيل أي شيء، سواء هنا أو في خدمة الهواتف. ويوجد نفس المفتاح على جهاز المزج."
 }

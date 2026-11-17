@@ -34,7 +34,7 @@ import java.util.concurrent.Executors
 class RemoteActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor()
     private val scanIo = Executors.newSingleThreadExecutor()   // network searches: never on the fader thread (a search takes up to a second)
-    private val live = com.amfb.amixos.remote.LatestSender(io)   // REAL-TIME FADERS: only the newest move of each fader is sent, never a queue
+    private val live = com.amfb.amixos.remote.LatestSender(Executors.newSingleThreadExecutor())   // REAL-TIME FADERS: only the newest move of each fader is sent, never a queue; its own thread, so a slow status check never holds a fader back
     private val ui = Handler(Looper.getMainLooper())
     private var client: DaemonClient? = null
     private var stream: DaemonClient.MeterStream? = null
@@ -427,15 +427,15 @@ class RemoteActivity : AppCompatActivity() {
     /** INPUT: what the console listens to. MICROPHONE = its default capture device; COMPUTER SOUND = every program playing on that computer
      *  (Windows 10 2004 and later: the console lists it as "loopback:system"). The console's stream is opened again with that input. */
     private fun pickInput() {
+        // AUTO INPUT on the console: one switch, no list. ON: the console's microphone (its computer's sound where no microphone opens);
+        // OFF: no input at all, nothing is captured. The console reopens its own sound card with it (op "input").
         val c = client; if (c == null) { status.text = getString(R.string.not_connected); return }
-        io.execute { runCatching { c.devices() }.onSuccess { devs -> ui.post {
-            val hasSystem = devs.any { it.id == "loopback:system" }
-            val items = arrayOf(getString(R.string.remote_input_mic), getString(R.string.remote_input_music) + if (hasSystem) "" else "  (" + getString(R.string.remote_input_none) + ")")
-            AlertDialog.Builder(this).setTitle(R.string.remote_input).setItems(items) { _, w ->
-                if (w == 1 && !hasSystem) { status.text = getString(R.string.remote_input_none); return@setItems }
-                io.execute { runCatching { c.open("wasapi", if (w == 1) "loopback:system" else "", "", 48000.0, 256, 2, 2) }
-                    .onSuccess { ui.post { status.text = getString(if (w == 1) R.string.remote_input_music_on else R.string.remote_input_mic_on) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }.show() } }
-            .onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } }
+        io.execute {
+            val on = runCatching { c.status().inChannels > 0 }.getOrDefault(false)
+            val r = runCatching { if (on) c.input("-") else runCatching { c.input("") }.getOrElse { c.input("loopback:system") } }
+            val now = runCatching { c.status().inChannels > 0 }.getOrDefault(!on)
+            ui.post { status.text = if (r.isFailure) getString(R.string.failed, r.exceptionOrNull()?.message ?: "") else getString(if (now) R.string.remote_auto_input_on else R.string.remote_auto_input_off) }
+        }
     }
     /** MUTE GROUPS: eight groups of strips, muted and un-muted together. Kept on this phone (SharedPreferences "muteGroups"). */
     private fun showMuteGroups() {

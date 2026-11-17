@@ -208,7 +208,7 @@ class WasapiBackend : public Backend {
       dev->Release();
       if (FAILED(r)) { err = hr("Initialize (exclusive)", r) + (r == AUDCLNT_E_DEVICE_IN_USE ? ": another program holds the device" : r == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED ? ": exclusive mode is switched off for this device in the Windows sound settings" : ""); return false; }
     }
-    r = flow == eRender ? (*ac)->GetService(kIidRenderClient, reinterpret_cast<void**>(rc)) : (*ac)->GetService(kIidCaptureClient, reinterpret_cast<void**>(cc));
+    r = flow == eRender && !loop ? (*ac)->GetService(kIidRenderClient, reinterpret_cast<void**>(rc)) : (*ac)->GetService(kIidCaptureClient, reinterpret_cast<void**>(cc));   // a loopback reads the render endpoint through a CAPTURE client (asking it for a render client into a null pointer was the "GetService failed (0x80004003)" of APP AUDIO)
     if (FAILED(r)) { err = hr("GetService", r); return false; }
     return true;
   }

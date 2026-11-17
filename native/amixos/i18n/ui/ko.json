@@ -2155,5 +2155,12 @@
 "APP SOUND: pick the program to hear on CH 1-2": "앱 사운드: CH 1-2에서 들을 프로그램을 선택하세요",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "현재 소리를 재생 중인 프로그램이 없습니다. Spotify, TIDAL, Deezer, Roon 또는 브라우저에서 음악을 재생한 다음, 이 목록을 다시 열어 주세요.",
 "APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND를 사용하려면 Windows 10 버전 2004 이상이 필요합니다.",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "스트림을 보호하는 서비스(DRM)가 소리 없이 재생될 수 있습니다. Windows는 사운드를 다른 프로그램에 전달하지 않으며, AmF X1은 이 제한을 우회하지 않습니다."
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "스트림을 보호하는 서비스(DRM)가 소리 없이 재생될 수 있습니다. Windows는 사운드를 다른 프로그램에 전달하지 않으며, AmF X1은 이 제한을 우회하지 않습니다.",
+"AUTO INPUT: ON": "자동 입력: 켜짐",
+"AUTO INPUT: OFF": "자동 입력: 꺼짐",
+"COMPUTER SOUND": "컴퓨터 사운드",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "ON: 소리가 시작되면 입력 소스가 자동으로 열립니다. 마이크가 있거나, 마이크를 열 수 없는 경우 컴퓨터의 사운드가 사용됩니다. OFF: 입력 소스가 열리지 않으며, 여기나 휴대폰 서비스에서 어떤 소리도 캡처되지 않습니다.",
+"Every app (COMPUTER SOUND)": "모든 앱 (컴퓨터 사운드)",
+"AUTO INPUT": "자동 입력",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "ON: 소리가 시작되면 입력 소스가 자동으로 열립니다. 마이크가 열리지 않는 경우에는 컴퓨터의 사운드가 입력됩니다. OFF: 입력 소스가 열리지 않으며, 여기나 휴대폰 서비스에서 어떤 소리도 캡처되지 않습니다. 믹서에도 동일한 스위치가 있습니다."
 }

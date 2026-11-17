@@ -106,24 +106,24 @@ Item {
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Rectangle { id: gb82; implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: page.sidePanel ? Qt.rgba(0.235, 0.784, 0.859, 0.18) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb82.color) } GradientStop { position: 1; color: Theme.btnBottom(gb82.color) } } border.color: page.sidePanel ? Theme.cyan : "transparent"; Text { anchors.centerIn: parent; text: i18n.t("CHANNEL PANEL", i18n.lang); color: page.sidePanel ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.sidePanel = !page.sidePanel } }
                 Rectangle { id: gb83; implicitWidth: Math.max(70, children[0].implicitWidth + 14); implicitHeight: 20; radius: 7; color: page.vuMode ? Qt.rgba(0.984, 0.749, 0.141, 0.2) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb83.color) } GradientStop { position: 1; color: Theme.btnBottom(gb83.color) } } border.color: page.vuMode ? Theme.amber : "transparent"; Text { anchors.centerIn: parent; text: page.vuMode ? i18n.t("VU METERS", i18n.lang) : i18n.t("BAR METERS", i18n.lang); color: page.vuMode ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.vuMode = !page.vuMode } }
-                // INPUT SOURCE: the microphone, or the computer's own sound (every app but this one: music, a browser, a player) as CH 1-2,
-                // so the music is the input while the mix plays on the same headphones or speakers
-                Repeater { model: [{ src: "mic", label: "INPUT: MIC" }, { src: "music", label: "INPUT: COMPUTER SOUND" }]
-                    delegate: Rectangle { id: srcBtn; objectName: "inputSource_" + modelData.src; readonly property bool on: engine.inputSource === modelData.src
-                        implicitWidth: srcTxt.implicitWidth + 16; implicitHeight: 20; radius: 7; color: on ? Qt.rgba(0.133, 0.827, 0.933, 0.2) : Theme.ov(0.06)
-                        gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(srcBtn.color) } GradientStop { position: 1; color: Theme.btnBottom(srcBtn.color) } } border.color: on ? Theme.cyan : "transparent"
-                        opacity: modelData.src === "music" && !engine.computerSoundAvailable ? 0.45 : 1
-                        Text { id: srcTxt; anchors.centerIn: parent; text: i18n.t(modelData.label, i18n.lang); color: srcBtn.on ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        MouseArea { anchors.fill: parent; hoverEnabled: true
-                            ToolTip.visible: containsMouse; ToolTip.delay: 500
-                            ToolTip.text: modelData.src === "music" ? (engine.computerSoundAvailable ? i18n.t("The music of every app on this computer (Spotify, YouTube, a player) becomes the input on CH 1-2. AmF X1's own output is left out, so it plays on the same headphones or speakers without a loop.", i18n.lang) : i18n.t("Needs Windows 10 version 2004 or later with the sound card on WASAPI.", i18n.lang)) : i18n.t("The microphone (the default capture device) is the input.", i18n.lang)
-                            onClicked: { const m = engine.setInputSource(modelData.src); if (m && m.backend) settings.rememberDevice(m.backend, m.in, m.out, m.rate, m.frames, m.inChannels, m.outChannels) } } } }
+                // AUTO INPUT: one switch. ON: the input opens by itself (the microphone, or COMPUTER SOUND where no microphone can be opened);
+                // OFF: no input at all, nothing is captured (also on the phones' service). One program's sound: APP SOUND next to it
+                Rectangle { id: autoInBtn; objectName: "autoInput"; readonly property bool on: engine.autoInputOn
+                    implicitWidth: autoInTxt.implicitWidth + 16; implicitHeight: 20; radius: 7; color: on ? Qt.rgba(0.133, 0.827, 0.933, 0.2) : Theme.ov(0.06)
+                    gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(autoInBtn.color) } GradientStop { position: 1; color: Theme.btnBottom(autoInBtn.color) } } border.color: on ? Theme.cyan : "transparent"
+                    Text { id: autoInTxt; anchors.centerIn: parent; color: autoInBtn.on ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true
+                        text: (autoInBtn.on ? i18n.t("AUTO INPUT: ON", i18n.lang) : i18n.t("AUTO INPUT: OFF", i18n.lang))
+                              + (engine.inputSource === "mic" ? " · " + i18n.t("MIC", i18n.lang) : engine.inputSource === "music" ? " · " + i18n.t("COMPUTER SOUND", i18n.lang) : engine.inputSource === "app" ? " · " + engine.appSourceName() : engine.running ? " · " + i18n.t("NO INPUT", i18n.lang) : "") }
+                    MouseArea { anchors.fill: parent; hoverEnabled: true
+                        ToolTip.visible: containsMouse; ToolTip.delay: 500
+                        ToolTip.text: i18n.t("ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.", i18n.lang)
+                        onClicked: { const m = engine.setAutoInput(!autoInBtn.on); if (m && m.backend) settings.rememberDevice(m.backend, m.in, m.out, m.rate, m.frames, m.inChannels, m.outChannels) } } }
                 // APP SOUND: ONE program (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube ...) as CH 1-2, nothing else from the computer
-                Rectangle { id: appBtn; objectName: "inputSource_app"; readonly property bool on: engine.inputSource === "app"
+                Rectangle { id: appBtn; objectName: "inputSource_app"; readonly property bool on: engine.inputSource === "app" || engine.inputSource === "music"
                     implicitWidth: appTxt.implicitWidth + 16; implicitHeight: 20; radius: 7; color: on ? Qt.rgba(0.133, 0.827, 0.933, 0.2) : Theme.ov(0.06)
                     gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(appBtn.color) } GradientStop { position: 1; color: Theme.btnBottom(appBtn.color) } } border.color: on ? Theme.cyan : "transparent"
                     opacity: engine.computerSoundAvailable ? 1 : 0.45
-                    Text { id: appTxt; anchors.centerIn: parent; text: (appBtn.on ? i18n.t("INPUT: APP SOUND", i18n.lang) + " · " + engine.appSourceName() : i18n.t("INPUT: APP SOUND", i18n.lang)) + " ▾"; color: appBtn.on ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    Text { id: appTxt; anchors.centerIn: parent; text: i18n.t("INPUT: APP SOUND", i18n.lang) + (engine.inputSource === "music" ? " · " + i18n.t("COMPUTER SOUND", i18n.lang) : engine.inputSource === "app" ? " · " + engine.appSourceName() : "") + " ▾"; color: appBtn.on ? Theme.cyan : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; hoverEnabled: true
                         ToolTip.visible: containsMouse; ToolTip.delay: 500
                         ToolTip.text: i18n.t("The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.", i18n.lang)
@@ -133,6 +133,10 @@ Item {
                         Column { width: parent.width; spacing: 4
                             Text { width: parent.width; text: i18n.t("APP SOUND: pick the program to hear on CH 1-2", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.Wrap }
                             Text { width: parent.width; visible: appPop.apps.length === 0; text: engine.computerSoundAvailable ? i18n.t("No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.", i18n.lang) : i18n.t("APP SOUND needs Windows 10 version 2004 or later.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.Wrap }
+                            Rectangle { width: parent.width; height: 24; radius: 5; visible: engine.computerSoundAvailable; color: engine.inputSource === "music" ? Qt.rgba(0.133, 0.827, 0.933, 0.2) : (allMa.containsMouse ? Theme.ov(0.08) : "transparent")
+                                Text { anchors.verticalCenter: parent.verticalCenter; x: 8; width: parent.width - 16; elide: Text.ElideRight; text: i18n.t("Every app (COMPUTER SOUND)", i18n.lang); color: engine.inputSource === "music" ? Theme.cyan : Theme.ink; font.family: Theme.mono; font.pixelSize: 9 }
+                                MouseArea { id: allMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { appPop.close(); const m = engine.setInputSource("music"); if (m && m.backend) settings.rememberDevice(m.backend, m.in, m.out, m.rate, m.frames, m.inChannels, m.outChannels) } } }
                             Repeater { model: appPop.apps
                                 delegate: Rectangle { id: appRow; width: parent.width; height: 24; radius: 5; color: modelData.current ? Qt.rgba(0.133, 0.827, 0.933, 0.2) : (rowMa.containsMouse ? Theme.ov(0.08) : "transparent")
                                     Text { anchors.verticalCenter: parent.verticalCenter; x: 8; width: parent.width - 16; elide: Text.ElideRight; text: modelData.name; color: modelData.current ? Theme.cyan : Theme.ink; font.family: Theme.mono; font.pixelSize: 9 }

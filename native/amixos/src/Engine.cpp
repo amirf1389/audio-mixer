@@ -729,6 +729,21 @@ QVariantMap Engine::setInputSource(const QString& source) {
              : music ? QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1, so no loop on these headphones / speakers) · ") : QStringLiteral("INPUT: MIC on CH 1-2 · ")) + status_;
   emit stateChanged(); return m;
 }
+QVariantMap Engine::setAutoInput(bool on) {
+  setMicAtStart(on);
+  if (!rt_) {   // phones linked: the service holds the sound card
+    if (remoteInput && remoteInput(on ? QString() : QStringLiteral("-"))) { status_ = on ? QStringLiteral("AUTO INPUT ON, on the remote service (phones are linked).") : QStringLiteral("AUTO INPUT OFF: the remote service captures nothing."); emit stateChanged(); return QVariantMap{{"remote", true}}; }
+    status_ = on ? QStringLiteral("AUTO INPUT ON: the input opens when the sound card starts.") : QStringLiteral("AUTO INPUT OFF: no input will be opened."); emit stateChanged(); return {}; }
+  if (on) {
+    QVariantMap r = setInputSource(QStringLiteral("mic"));
+    if (r.isEmpty() && curBackend_ == "wasapi" && computerSoundAvailable()) r = setInputSource(QStringLiteral("music"));   // no microphone here: the computer's sound
+    return r; }
+  if (devIn_ > 0) {   // OFF: the sound card is reopened with outputs only, so nothing is captured
+    const double rate = sampleRate() > 0 ? sampleRate() : 48000; const int frames = blockFrames_ > 0 ? blockFrames_ : 256, outCh = devOut_ > 0 ? devOut_ : 2;
+    if (!open(QString::fromStdString(curBackend_), QStringLiteral("-"), QString::fromStdString(curOut_), rate, frames, 0, outCh)) return {}; }
+  status_ = QStringLiteral("AUTO INPUT OFF: no input is open, nothing is captured · ") + status_; emit stateChanged();
+  return QVariantMap{{"backend", QString::fromStdString(curBackend_)}, {"in", QStringLiteral("-")}, {"out", QString::fromStdString(curOut_)}, {"rate", sampleRate()}, {"frames", blockFrames_}, {"inChannels", 0}, {"outChannels", devOut_}};
+}
 QVariantMap Engine::secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels) {
   am::DeviceConfig cfg; cfg.backend = backend.toStdString(); cfg.inDevice = in.toStdString(); cfg.outDevice = out.toStdString(); cfg.inChannels = inChannels;
   const QString keepNote = micOffNote_; const int keepIn = devIn_; micOffNote_.clear(); secureInputFor(cfg);

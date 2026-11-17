@@ -84,7 +84,7 @@ class RtaEqActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor(); private val ui = Handler(Looper.getMainLooper())
     lateinit var graph: RtaEqView; private lateinit var note: TextView; private lateinit var onBtn: Button; private lateinit var srcBtn: Button
     private var src = -1; private var strips = 0; private var target = RtaEq.Target.FLAT
-    private var measuring: RtaEq.Average? = null; private var asked = 0L; @Volatile private var busy = false
+    private var measuring: RtaEq.Average? = null; private var asked = 0L; private var lastSpectrum = System.currentTimeMillis(); @Volatile private var askedWhy = 0L; private var noteIsWhy = false; @Volatile private var busy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,8 +136,13 @@ class RtaEqActivity : AppCompatActivity() {
     private val tick = object : Runnable { override fun run() { val c = client ?: return
         if (!busy) { busy = true; val want = src; io.execute { val now = System.currentTimeMillis()
             if (now - asked > 8000) { asked = now; runCatching { c.rta(want) } }
-            val r = c.rtaNow(); busy = false
-            ui.post { val s = r?.takeIf { it.src == src }; graph.spectrum = s; if (s != null) measuring?.add(RtaEq.octaves(s.f, s.db)) } } }
+            val r = c.rtaNow()
+            // NO SPECTRUM: say why instead of an empty graph (the console's sound card is not running, or nothing plays on that source)
+            val why = if (r?.db?.isNotEmpty() == true) null else if (now - lastSpectrum > 2500 && now - askedWhy > 3000) { askedWhy = now; if (runCatching { c.status().running }.getOrDefault(false)) getString(R.string.rta_silent) else getString(R.string.rta_engine_off) } else null
+            busy = false
+            ui.post { val s = r?.takeIf { it.src == src && it.db.isNotEmpty() }; graph.spectrum = s
+              if (s != null) { lastSpectrum = System.currentTimeMillis(); measuring?.add(RtaEq.octaves(s.f, s.db)); if (noteIsWhy) { note.text = ""; noteIsWhy = false } }
+              else if (why != null && measuring == null && graph.proposal == null) { note.text = why; noteIsWhy = true } } } }
         ui.postDelayed(this, 200) } }
     override fun onResume() { super.onResume(); asked = 0; ui.removeCallbacks(tick); ui.post(tick) }
     override fun onPause() { ui.removeCallbacks(tick); super.onPause() }

@@ -2126,5 +2126,12 @@
 "APP SOUND: pick the program to hear on CH 1-2": "SOM DO APLICATIVO: escolha o programa que deseja ouvir nos canais 1 e 2",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "Nenhum programa está reproduzindo som no momento. Comece a ouvir música no Spotify, TIDAL, Deezer, Roon ou em um navegador e, em seguida, abra esta lista novamente.",
 "APP SOUND needs Windows 10 version 2004 or later.": "O APP SOUND requer o Windows 10 versão 2004 ou posterior.",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "Um serviço que protege seu fluxo (DRM) pode ser executado em modo silencioso: o Windows não repassa o áudio para outros programas, e o AmF X1 não contorna essa restrição."
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "Um serviço que protege seu fluxo (DRM) pode ser executado em modo silencioso: o Windows não repassa o áudio para outros programas, e o AmF X1 não contorna essa restrição.",
+"AUTO INPUT: ON": "ENTRADA AUTOMÁTICA: ATIVADA",
+"AUTO INPUT: OFF": "ENTRADA AUTOMÁTICA: DESLIGADA",
+"COMPUTER SOUND": "SOM DO COMPUTADOR",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "LIGADO: a entrada é ativada automaticamente quando o som começa: o microfone ou o som do computador, caso não seja possível ativar o microfone. DESLIGADO: nenhuma entrada é ativada e nada é captado, nem aqui nem no serviço dos celulares.",
+"Every app (COMPUTER SOUND)": "Todos os aplicativos (SOM DO COMPUTADOR)",
+"AUTO INPUT": "ENTRADA AUTOMÁTICA",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "LIGADO: a entrada é ativada automaticamente quando o som começa: o microfone ou o som do computador, caso não seja possível ativar o microfone. DESLIGADO: nenhuma entrada é ativada e nada é captado, nem aqui nem no serviço dos telefones. O mesmo botão está localizado no mixer."
 }

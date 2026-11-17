@@ -7,8 +7,9 @@ import android.media.AudioTrack
 import android.media.MediaRecorder
 import kotlin.concurrent.thread
 
-/** Microphone -> strip 0 of the engine -> speaker / headphones, in 256-frame blocks on a worker thread. Needs RECORD_AUDIO. */
-class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256, private val outDevice: Int = 0, private val inDevice: Int = 0, private val bursts: Int = 2, private val inChannels: Int = 1) {
+/** Microphone -> strip 0 of the engine -> speaker / headphones, in 256-frame blocks on a worker thread. Needs RECORD_AUDIO.
+ *  [useInput] false: INPUT OFF, outputs only; no microphone is opened at all (no recording, no permission needed). */
+class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000, private val frames: Int = 256, private val outDevice: Int = 0, private val inDevice: Int = 0, private val bursts: Int = 2, private val inChannels: Int = 1, private val useInput: Boolean = true) {
     @Volatile private var running = false
     private var worker: Thread? = null
     @Volatile var lastPeaks: FloatArray = FloatArray(engine.strips + 2)
@@ -26,12 +27,12 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
         if (running) return
         running = true
         // the NDK's recommended path first: AAudio in native code. A device change (headphones in / out) disconnects the stream: the watcher reopens it
-        if (engine.startNative(sampleRate, true, outDevice, inDevice, bursts, inChannels) > 0) {
+        if (engine.startNative(sampleRate, useInput, outDevice, inDevice, bursts, inChannels) > 0) {
             path = "aaudio"
             watcher = thread(name = "amix-aaudio-watch") {
                 while (running) {
                     lastPeaks = engine.peaks(); lastInPeaks = engine.inputPeaks()
-                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, true, outDevice, inDevice, bursts, inChannels) <= 0) { running = false; path = "" } }
+                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, useInput, outDevice, inDevice, bursts, inChannels) <= 0) { running = false; path = "" } }
                     Thread.sleep(33)
                 }
             }
@@ -41,7 +42,7 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
         worker = thread(name = "amix-audio", priority = Thread.MAX_PRIORITY) {
             val inMin = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT)
             val outMin = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
-            val rec = try { AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT, maxOf(inMin, frames * 8)) }
+            val rec = if (!useInput) null else try { AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT, maxOf(inMin, frames * 8)) }
                 catch (e: SecurityException) { running = false; return@thread }   // the microphone permission was taken back: nothing to run
             val track = AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
@@ -50,16 +51,15 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
             val mono = FloatArray(frames)
             val inputs = arrayOfNulls<FloatArray>(engine.strips).also { it[0] = mono }
             try {
-                rec.startRecording(); track.play()
+                rec?.startRecording(); track.play()
                 while (running) {
-                    val got = rec.read(mono, 0, frames, AudioRecord.READ_BLOCKING)
-                    if (got <= 0) continue
+                    val got = if (rec != null) rec.read(mono, 0, frames, AudioRecord.READ_BLOCKING) else frames   // INPUT OFF: silence in, paced by the blocking write
                     val stereo = engine.process(inputs, got)
                     track.write(stereo, 0, stereo.size, AudioTrack.WRITE_BLOCKING)
                     lastPeaks = engine.peaks(); lastInPeaks = engine.inputPeaks()
                 }
             } finally {
-                runCatching { rec.stop() }; rec.release(); runCatching { track.stop() }; track.release()
+                if (rec != null) { runCatching { rec.stop() }; rec.release() }; runCatching { track.stop() }; track.release()
             }
         }
     }

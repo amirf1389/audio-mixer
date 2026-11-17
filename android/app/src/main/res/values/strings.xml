@@ -209,7 +209,7 @@
     <string name="remote_rec">● REC</string>
     <string name="remote_rec_on">The console is recording: %1$s</string>
     <string name="remote_rec_stopped">Recording stopped at %1$s. The file is in the console\'s recordings folder.</string>
-    <string name="remote_input">INPUT</string>
+    <string name="remote_input">AUTO INPUT</string>
     <string name="remote_input_mic">MICROPHONE (the console\'s default input)</string>
     <string name="remote_input_music">COMPUTER SOUND (music from every app)</string>
     <string name="remote_input_none">not offered by that computer: needs Windows 10 version 2004 or later</string>
@@ -429,4 +429,11 @@
     <string name="home_score_sub">The console\'s score, live</string>
     <string name="home_routing">Routing</string>
     <string name="home_routing_sub">Inputs and outputs of the console</string>
+    <string name="rta_engine_off">No spectrum: the console\'s sound card is not running. Start it (ENGINE or DEVICES), then the live spectrum appears here.</string>
+    <string name="rta_silent">No spectrum yet: nothing is playing on this source. Play music or pick another source (MASTER / a channel).</string>
+    <string name="lm_input_on">INPUT ON</string>
+    <string name="lm_input_off">INPUT OFF</string>
+    <string name="io_in_off">OFF · no microphone is open, nothing is recorded</string>
+    <string name="remote_auto_input_on">AUTO INPUT ON: the console\'s input is open (its microphone, or its computer\'s sound).</string>
+    <string name="remote_auto_input_off">AUTO INPUT OFF: the console has no input open; nothing is captured.</string>
 </resources>

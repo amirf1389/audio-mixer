@@ -2090,5 +2090,12 @@
 "The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "仅来自一个程序（Spotify、TIDAL、Deezer、Roon 或通过浏览器播放的 YouTube）的声音会作为输入传输至 CH 1-2 声道。这是 Windows 播放的声音：不会下载或复制任何内容。需要 Windows 10 2004 版或更高版本。",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "目前没有程序正在播放声音。请在 Spotify、TIDAL、Deezer、Roon 或浏览器中播放音乐，然后再次打开此列表。",
 "APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND 需要 Windows 10 2004 版或更高版本。",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "保护其流媒体内容的服务（DRM）可能会导致声音无法输出：Windows 不会将声音传递给其他程序，而 AmF X1 无法绕过这一限制。"
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "保护其流媒体内容的服务（DRM）可能会导致声音无法输出：Windows 不会将声音传递给其他程序，而 AmF X1 无法绕过这一限制。",
+"AUTO INPUT: ON": "自动输入：开启",
+"AUTO INPUT: OFF": "自动输入：关闭",
+"COMPUTER SOUND": "计算机声音",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "开启：声音开始播放时，输入会自动打开：麦克风，或者在无法打开麦克风的情况下，打开计算机的声音。关闭：不会打开任何输入，也不会进行任何录音，无论是在此处还是在手机服务中。",
+"Every app (COMPUTER SOUND)": "每个应用程序（计算机声音）",
+"AUTO INPUT": "自动输入",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "开启：声音开始播放时，输入通道会自动打开：如果是麦克风，则使用麦克风；如果无法打开麦克风，则使用计算机的声音。关闭：不会打开任何输入通道，也不会进行任何录音，无论是在此处还是在手机端。调音台上也有相同的开关。"
 }

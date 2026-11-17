@@ -2116,5 +2116,8 @@
 "The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "На канали 1–2 надходить звук лише з однієї програми (Spotify, TIDAL, Deezer, Roon, браузер, що відтворює відео з YouTube). Це звук, який відтворює Windows: нічого не завантажується і не копіюється. Потрібна Windows 10 версії 2004 або пізнішої.",
 "APP SOUND: pick the program to hear on CH 1-2": "ЗВУК ДОДАТКА: виберіть програму, яку хочете прослухати на каналах 1–2",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "Наразі жодна програма не відтворює звук. Увімкніть музику в Spotify, TIDAL, Deezer, Roon або у веб-браузері, а потім знову відкрийте цей список.",
-"APP SOUND needs Windows 10 version 2004 or later.": "Для роботи програми APP SOUND потрібна Windows 10 версії 2004 або новішої."
+"APP SOUND needs Windows 10 version 2004 or later.": "Для роботи програми APP SOUND потрібна Windows 10 версії 2004 або новішої.",
+"COMPUTER SOUND": "ЗВУК КОМП'ЮТЕРА",
+"Every app (COMPUTER SOUND)": "Кожен додаток (ЗВУК КОМП’ЮТЕРА)",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "ВКЛ.: при початку відтворення звуку вхід відкривається автоматично: мікрофон або звук комп’ютера, якщо мікрофон не можна увімкнути. ВИМКН.: вхід не відкривається, і нічого не записується — ні тут, ні в сервісі для телефонів. Такий самий перемикач є на мікшері."
 }

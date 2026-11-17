@@ -2102,5 +2102,8 @@
 "The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "Alleen het geluid van één programma (Spotify, TIDAL, Deezer, Roon, een browser waarin YouTube wordt afgespeeld) wordt als invoer op kanaal 1-2 weergegeven. Het is het geluid dat Windows afspeelt: er wordt niets gedownload of gekopieerd. Vereist Windows 10 versie 2004 of hoger.",
 "APP SOUND: pick the program to hear on CH 1-2": "APP-GELUID: kies het programma dat je wilt beluisteren op kanaal 1-2",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "Er wordt momenteel door geen enkel programma geluid afgespeeld. Start de muziek in Spotify, TIDAL, Deezer, Roon of een browser en open deze lijst vervolgens opnieuw.",
-"APP SOUND needs Windows 10 version 2004 or later.": "Voor APP SOUND is Windows 10 versie 2004 of hoger vereist."
+"APP SOUND needs Windows 10 version 2004 or later.": "Voor APP SOUND is Windows 10 versie 2004 of hoger vereist.",
+"COMPUTER SOUND": "COMPUTERGELUID",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "AAN: de invoer wordt automatisch geopend zodra het geluid begint: de microfoon, of het geluid van de computer wanneer er geen microfoon kan worden geopend. UIT: er wordt geen invoer geopend en er wordt niets opgenomen, noch hier, noch via de dienst op de telefoons.",
+"Every app (COMPUTER SOUND)": "Elke app (COMPUTERGELUID)"
 }

@@ -17,7 +17,7 @@ class MiniWebSocket(private val host: String, private val port: Int, private val
 
     fun connect(timeoutMs: Int = 4000) {
         val s = if (secure) SSLSocketFactory.getDefault().createSocket(host, port) else Socket(host, port)
-        s.soTimeout = timeoutMs
+        s.soTimeout = timeoutMs; s.tcpNoDelay = true   // a fader move is a small frame: sent at once, not held back to be merged with the next
         val key = Base64.getEncoder().encodeToString(ByteArray(16).also { rng.nextBytes(it) })
         val req = "GET $path HTTP/1.1\r\nHost: $host:$port\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: $key\r\nSec-WebSocket-Version: 13\r\n\r\n"
         s.getOutputStream().write(req.toByteArray(Charsets.ISO_8859_1)); s.getOutputStream().flush()
@@ -48,7 +48,7 @@ class MiniWebSocket(private val host: String, private val port: Int, private val
     }
     fun sendText(text: String) = send(0x1, text.toByteArray(Charsets.UTF_8))
     private fun send(opcode: Int, payload: ByteArray) {
-        val out = output ?: return; val mask = ByteArray(4).also { rng.nextBytes(it) }
+        val out = output ?: throw java.io.IOException("not connected"); if (socket?.isClosed != false) throw java.io.IOException("closed"); val mask = ByteArray(4).also { rng.nextBytes(it) }
         val head = java.io.ByteArrayOutputStream(); head.write(0x80 or opcode)
         when { payload.size < 126 -> head.write(0x80 or payload.size); payload.size < 65536 -> { head.write(0x80 or 126); head.write(payload.size shr 8); head.write(payload.size and 0xFF) }
             else -> { head.write(0x80 or 127); for (i in 7 downTo 0) head.write(((payload.size.toLong() shr (8 * i)) and 0xFF).toInt()) } }

@@ -113,12 +113,23 @@ class DaemonClient(val ep: Endpoint) {
 
     /** POST /api/control: {"op": ..., ...}. Returns the daemon's reply object; throws DaemonException with its message on refusal. */
     @Suppress("UNCHECKED_CAST") fun control(cmd: Map<String, Any?>): Map<String, Any?> = MiniJson.parse(request("POST", "/api/control", MiniJson.stringify(cmd))) as Map<String, Any?>
-    fun gain(strip: Int, db: Double) = control(mapOf("op" to "gain", "strip" to strip, "db" to db))
-    fun pan(strip: Int, pan: Double) = control(mapOf("op" to "pan", "strip" to strip, "pan" to pan))
-    fun mute(strip: Int, on: Boolean) = control(mapOf("op" to "mute", "strip" to strip, "on" to on))
-    fun solo(strip: Int, on: Boolean) = control(mapOf("op" to "solo", "strip" to strip, "on" to on))
+    /** FAST PATH for the live controls (faders, pan, mute, solo, trim, tone, EQ): the command goes as a text frame on the meter stream's
+     *  open WebSocket when the console's service accepts that ("wsControl" in its state frames), so a move costs no new TCP connection over
+     *  the Wi-Fi; otherwise (an older service, the stream down) it is the usual POST. The answer is not waited for on the fast path. */
+    @Volatile internal var liveSocket: MiniWebSocket? = null
+    fun push(cmd: Map<String, Any?>): Map<String, Any?> {
+        val ws = liveSocket
+        if (ws != null && runCatching { ws.sendText(MiniJson.stringify(cmd)) }.isSuccess) return mapOf("ok" to true, "via" to "socket")
+        return control(cmd)
+    }
+    /** AUTO INPUT on the console: "" its microphone, "loopback:system" its computer's sound, "-" no input (nothing captured) */
+    fun input(inDevice: String) = control(mapOf("op" to "input", "in" to inDevice))
+    fun gain(strip: Int, db: Double) = push(mapOf("op" to "gain", "strip" to strip, "db" to db))
+    fun pan(strip: Int, pan: Double) = push(mapOf("op" to "pan", "strip" to strip, "pan" to pan))
+    fun mute(strip: Int, on: Boolean) = push(mapOf("op" to "mute", "strip" to strip, "on" to on))
+    fun solo(strip: Int, on: Boolean) = push(mapOf("op" to "solo", "strip" to strip, "on" to on))
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
-    fun master(db: Double) = control(mapOf("op" to "master", "db" to db))
+    fun master(db: Double) = push(mapOf("op" to "master", "db" to db))
     /** a console setting (the service checks each): "winVolume" 0..100, "winGain" true/false, "width" 0..2 ... */
     /** THE CONSOLE'S PLUG-INS while the service plays them: the racks (strip >= 0: with that strip's parameters), bypass, one parameter (0..1) */
     fun racks(strip: Int = -1): Map<String, Any?> = getObj(if (strip < 0) "/api/racks" else "/api/racks?strip=$strip")
@@ -133,8 +144,8 @@ class DaemonClient(val ep: Endpoint) {
     /** the master program EQ (RTA EQ): 10 gains at the ISO octave centres */
     fun programEq(gains: List<Double>, on: Boolean) = control(mapOf("op" to "programEq", "gains" to gains, "on" to on))
     fun programEqNow(): ProgramEq = parseProgramEq(getObj("/api/state"))
-    fun trim(strip: Int, db: Double) = control(mapOf("op" to "trim", "strip" to strip, "db" to db))
-    fun tone(strip: Int, t: Tone) = control(mapOf("op" to "tone", "strip" to strip, "low" to t.low, "mid" to t.mid, "midHz" to t.midHz, "high" to t.high, "on" to t.on))
+    fun trim(strip: Int, db: Double) = push(mapOf("op" to "trim", "strip" to strip, "db" to db))
+    fun tone(strip: Int, t: Tone) = push(mapOf("op" to "tone", "strip" to strip, "low" to t.low, "mid" to t.mid, "midHz" to t.midHz, "high" to t.high, "on" to t.on))
     fun polarity(strip: Int, on: Boolean) = control(mapOf("op" to "polarity", "strip" to strip, "on" to on))
     fun delay(strip: Int, ms: Double) = control(mapOf("op" to "delay", "strip" to strip, "ms" to ms))
     fun limiter(on: Boolean, ceilingDb: Double) = control(mapOf("op" to "limiter", "on" to on, "ceilingDb" to ceilingDb))
@@ -151,7 +162,7 @@ class DaemonClient(val ep: Endpoint) {
     fun mastering(values: Map<String, Any>) = control(mapOf("op" to "mastering") + values)
     fun masteringNow(): Map<String, Any?> = getObj("/api/state").obj("mastering")
     fun send(strip: Int, bus: Int, db: Double, pre: Boolean) = control(mapOf("op" to "send", "strip" to strip, "bus" to bus, "db" to db, "pre" to pre))
-    fun eq(strip: Int, band: Int, type: String, freq: Double, q: Double, gainDb: Double) = control(mapOf("op" to "eq", "strip" to strip, "band" to band, "type" to type, "freq" to freq, "q" to q, "gainDb" to gainDb))
+    fun eq(strip: Int, band: Int, type: String, freq: Double, q: Double, gainDb: Double) = push(mapOf("op" to "eq", "strip" to strip, "band" to band, "type" to type, "freq" to freq, "q" to q, "gainDb" to gainDb))
     fun compressor(strip: Int, on: Boolean, thresholdDb: Double, ratio: Double, kneeDb: Double, attackMs: Double, releaseMs: Double, makeupDb: Double) = control(mapOf("op" to "compressor", "strip" to strip, "on" to on, "thresholdDb" to thresholdDb, "ratio" to ratio, "kneeDb" to kneeDb, "attackMs" to attackMs, "releaseMs" to releaseMs, "makeupDb" to makeupDb))
     fun gate(strip: Int, on: Boolean, thresholdDb: Double, rangeDb: Double, attackMs: Double, holdMs: Double, releaseMs: Double) = control(mapOf("op" to "gate", "strip" to strip, "on" to on, "thresholdDb" to thresholdDb, "rangeDb" to rangeDb, "attackMs" to attackMs, "holdMs" to holdMs, "releaseMs" to releaseMs))
     fun monitor(source: Int, db: Double, dim: Boolean, mono: Boolean, mute: Boolean) = control(mapOf("op" to "monitor", "source" to source, "db" to db, "dim" to dim, "mono" to mono, "mute" to mute))
@@ -187,9 +198,11 @@ class DaemonClient(val ep: Endpoint) {
                         @Suppress("UNCHECKED_CAST") val o = MiniJson.parse(text) as Map<String, Any?>
                         if (o["kicked"] == true) { h.stopped = true; onKicked?.invoke((o["holdSeconds"] as? Number)?.toInt() ?: 0); break }
                         if (o.containsKey("error")) { onState?.invoke(false, o.str("error")); h.stopped = true; break }
-                        if (o.containsKey("state")) { onConsole?.invoke(parseState(o.obj("state"))); continue }
+                        if (o.containsKey("state")) { if (o["wsControl"] == true) liveSocket = ws; onConsole?.invoke(parseState(o.obj("state"))); continue }
+                        if (o.containsKey("ack")) continue   // the answer to a command sent on this socket (a refused one carries controlError)
                         onFrame(parseMeters(o)) }
                 } catch (e: Exception) { if (!h.stopped) onState?.invoke(false, e.message ?: e.javaClass.simpleName) }
+                if (liveSocket === ws) liveSocket = null   // the stream is down: commands go by HTTP again
                 ws.close(); if (!h.stopped) { onState?.invoke(false, null); Thread.sleep(1000) }
             }
         }
@@ -197,4 +210,6 @@ class DaemonClient(val ep: Endpoint) {
     }
     class MeterStream { @Volatile var stopped = false; internal var socket: MiniWebSocket? = null; internal var worker: Thread? = null
         fun stop() { stopped = true; socket?.close(); worker?.join(1500) } }
+    /** the live controls' socket path is in use (for tests and the link line) */
+    fun fastPath(): Boolean = liveSocket != null
 }

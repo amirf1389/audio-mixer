@@ -60,10 +60,10 @@ Item {
                 // MIC AT ENGINE ON: off (the default), ENGINE ON starts with outputs only; the microphone waits to be picked (no feedback at start)
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                 RowLayout { spacing: 8; Layout.fillWidth: true
-                    Text { text: i18n.t("MICROPHONE ON AT START", i18n.lang); color: engine.micAtStart ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                    Btn { objectName: "micAtStartOn"; label: i18n.t("ON", i18n.lang); on: engine.micAtStart; onColor: Theme.amber; onClicked: engine.micAtStart = true }
-                    Btn { objectName: "micAtStartOff"; label: i18n.t("OFF", i18n.lang); on: !engine.micAtStart; onColor: Theme.emerald; onClicked: engine.micAtStart = false }
-                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("OFF: ENGINE ON starts the speakers or headphones without the microphone, so the mic never feeds back at start. Turn the mic on with INPUT: MIC on the mixer. ASIO interfaces and COMPUTER SOUND are not affected.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Text { text: i18n.t("AUTO INPUT", i18n.lang); color: engine.micAtStart ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    Btn { objectName: "micAtStartOn"; label: i18n.t("ON", i18n.lang); on: engine.micAtStart; onColor: Theme.amber; onClicked: engine.setAutoInput(true) }
+                    Btn { objectName: "micAtStartOff"; label: i18n.t("OFF", i18n.lang); on: !engine.micAtStart; onColor: Theme.emerald; onClicked: engine.setAutoInput(false) }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 // SECURE INPUT: only the inputs allowed below are ever opened, and an allowed WASAPI input is opened exclusively
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                 RowLayout { spacing: 8; Layout.fillWidth: true

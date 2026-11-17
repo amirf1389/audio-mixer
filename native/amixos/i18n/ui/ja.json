@@ -2158,5 +2158,12 @@
 "INPUT: APP SOUND": "入力：アプリのサウンド",
 "The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.": "1つのプログラム（Spotify、TIDAL、Deezer、Roon、YouTubeを再生するブラウザなど）からの音声のみが、CH 1-2の入力となります。これはWindowsが再生する音声であり、何もダウンロードやコピーは行われません。Windows 10 バージョン 2004以降が必要です。",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "現在、音声を再生しているプログラムはありません。Spotify、TIDAL、Deezer、Roon、またはブラウザで音楽を再生してから、このリストをもう一度開いてください。",
-"APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND には、Windows 10 バージョン 2004 以降が必要です。"
+"APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND には、Windows 10 バージョン 2004 以降が必要です。",
+"AUTO INPUT: ON": "自動入力：オン",
+"AUTO INPUT: OFF": "自動入力：オフ",
+"COMPUTER SOUND": "コンピュータのサウンド",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "ON：音が出始めると、入力ソースが自動的に開きます。マイク、またはマイクを開くことができない場合はコンピューターのサウンドが使用されます。OFF：入力ソースは開かれず、ここでも、また携帯電話のサービス上でも、何も録音されません。",
+"Every app (COMPUTER SOUND)": "すべてのアプリ（コンピュータのサウンド）",
+"AUTO INPUT": "自動入力",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "ON：音が出始めると、入力ソースが自動的に開きます。マイク、またはマイクを開くことができない場合はコンピューターのサウンドが使用されます。OFF：入力ソースは開かれず、ここでも、スマートフォンのサービス上でも何も録音されません。このスイッチはミキサーにもあります。"
 }

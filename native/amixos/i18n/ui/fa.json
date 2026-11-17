@@ -2179,5 +2179,12 @@
 "APP SOUND: pick the program to hear on CH 1-2": "صدای برنامه: برنامه را برای شنیدن در کانال ۱-۲ انتخاب کنید",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "در حال حاضر هیچ برنامه‌ای صدا پخش نمی‌کند. موسیقی را در اسپاتیفای، تیدال، دیزر، رون یا یک مرورگر پخش کنید، سپس این فهرست را دوباره باز کنید.",
 "APP SOUND needs Windows 10 version 2004 or later.": "اپلیکیشن APP SOUND به ویندوز ۱۰ نسخه ۲۰۰۴ یا جدیدتر نیاز دارد.",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "یک سرویس که از جریان پخش خود محافظت می‌کند (DRM) ممکن است به‌صورت بی‌صدا اجرا شود: ویندوز صدا را در اختیار برنامه‌های دیگر قرار نمی‌دهد و AmF X1 نیز راهکاری برای دور زدن آن ندارد."
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "یک سرویس که از جریان پخش خود محافظت می‌کند (DRM) ممکن است به‌صورت بی‌صدا اجرا شود: ویندوز صدا را در اختیار برنامه‌های دیگر قرار نمی‌دهد و AmF X1 نیز راهکاری برای دور زدن آن ندارد.",
+"AUTO INPUT: ON": "ورودی خودکار: روشن",
+"AUTO INPUT: OFF": "ورودی خودکار: خاموش",
+"COMPUTER SOUND": "صدای کامپیوتر",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "ON: ورودی هنگام شروع صدا به‌طور خودکار باز می‌شود: میکروفون یا صدای کامپیوتر در صورتی که میکروفون قابل باز شدن نباشد.   OFF: هیچ ورودی‌ای باز نمی‌شود و هیچ چیزی ضبط نمی‌شود، نه در اینجا و نه در سرویس تلفن‌ها.",
+"Every app (COMPUTER SOUND)": "هر برنامه (صدای کامپیوتر)",
+"AUTO INPUT": "ورودی خودکار",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "ON: ورودی هنگام شروع صدا به‌طور خودکار باز می‌شود: میکروفون یا صدای کامپیوتر در صورتی که میکروفون قابل باز شدن نباشد.   OFF: هیچ ورودی‌ای باز نمی‌شود و هیچ صدایی ضبط نمی‌شود، نه در اینجا و نه در سرویس تلفن‌ها.   همان کلید روی میکسر نیز وجود دارد."
 }

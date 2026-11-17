@@ -511,6 +511,14 @@ int main(int argc, char* argv[]) {
         w->setProperty("current", pg); }
       std::printf("amixos --smoke: APP SOUND on a non-Windows driver: refused %d, sound running %d, says WASAPI %d; programs listed %d; picker %d\n", int(ra.isEmpty()), int(keptOn), int(why.contains("APP SOUND") && why.contains("WASAPI")), int(apps.size()), int(appBtn != nullptr));
       if (!(ra.isEmpty() && keptOn && why.contains("APP SOUND") && why.contains("WASAPI") && engine.inputSource() != "app" && appBtn)) { std::fprintf(stderr, "amixos --smoke: APP SOUND failed: %s\n", qPrintable(why)); return 1; }
+      // AUTO INPUT: OFF closes the input (nothing captured), ON opens it again; "no input" never means COMPUTER SOUND behind the user's back
+      const bool keepAuto = engine.micAtStart();
+      engine.setAutoInput(false); const int offIn = engine.deviceInputs(); const bool offRun = engine.running(); const QString offSrc = engine.inputSource();
+      engine.setAutoInput(true); const int onIn = engine.deviceInputs(); const QString onSrc = engine.inputSource();
+      const bool noHidden = engine.autoInput("wasapi") == "-";
+      std::printf("amixos --smoke: AUTO INPUT off: inputs %d (%s), sound running %d; on: inputs %d (%s); no hidden computer sound %d\n", offIn, qPrintable(offSrc), int(offRun), onIn, qPrintable(onSrc), int(noHidden));
+      engine.setAutoInput(keepAuto);
+      if (!(offIn == 0 && offRun && offSrc == "none" && onIn >= 2 && onSrc == "mic" && noHidden)) { std::fprintf(stderr, "amixos --smoke: AUTO INPUT failed: %s\n", qPrintable(engine.status())); return 1; }
       engine.stop(); engine.open("null", "", "", r0, f0, 2, 2); }
     { // AUTO ZOOM on a 14" laptop, 1920 x 1080 (work area 1920 x 1032 device pixels): 100 % and 125 % fit as they are; 150 % is zoomed
       // to fit (drawn as at about 130 %); a user's fixed zoom wins; a large screen is never zoomed

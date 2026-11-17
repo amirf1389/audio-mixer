@@ -2133,5 +2133,12 @@
 "APP SOUND: pick the program to hear on CH 1-2": "SONIDO DE LA APLICACIÓN: elige el programa que quieres escuchar en los canales 1 y 2",
 "No program is playing sound right now. Start the music in Spotify, TIDAL, Deezer, Roon or a browser, then open this list again.": "En este momento no hay ningún programa reproduciendo sonido. Pon música en Spotify, TIDAL, Deezer, Roon o en un navegador y, a continuación, vuelve a abrir esta lista.",
 "APP SOUND needs Windows 10 version 2004 or later.": "APP SOUND requiere Windows 10, versión 2004 o posterior.",
-"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "Es posible que un servicio que protege su transmisión (DRM) no emita ningún sonido: Windows no transmite el sonido a otros programas, y AmF X1 no puede sortear esta restricción."
+"A service that protects its stream (DRM) may come through silent: Windows does not hand its sound to other programs, and AmF X1 does not work around that.": "Es posible que un servicio que protege su transmisión (DRM) no emita ningún sonido: Windows no transmite el sonido a otros programas, y AmF X1 no puede sortear esta restricción.",
+"AUTO INPUT: ON": "ENTRADA AUTOMÁTICA: ACTIVADA",
+"AUTO INPUT: OFF": "ENTRADA AUTOMÁTICA: DESACTIVADA",
+"COMPUTER SOUND": "SONIDO DEL ORDENADOR",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service.": "ACTIVADO: la entrada se abre automáticamente cuando empieza el sonido: el micrófono o el sonido del ordenador, en caso de que no se pueda abrir el micrófono. DESACTIVADO: no se abre ninguna entrada y no se captura nada, ni aquí ni en el servicio de los teléfonos.",
+"Every app (COMPUTER SOUND)": "Todas las aplicaciones (SONIDO DEL ORDENADOR)",
+"AUTO INPUT": "ENTRADA AUTOMÁTICA",
+"ON: the input opens by itself when the sound starts: the microphone, or the computer's sound where no microphone can be opened. OFF: no input is opened and nothing is captured, here and on the phones' service. The same switch is on the mixer.": "ON: la entrada se activa automáticamente cuando empieza el sonido: el micrófono o el sonido del ordenador, en caso de que no se pueda activar el micrófono. OFF: no se activa ninguna entrada y no se graba nada, ni aquí ni en el servicio de los teléfonos. El mismo interruptor se encuentra en el mezclador."
 }
