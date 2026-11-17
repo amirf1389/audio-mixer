@@ -12,7 +12,7 @@ static QJsonDocument readJson(const QString& path) { QFile f(path); if (!f.open(
 I18n::I18n(QObject* parent) : QObject(parent) {
   loadVerified(); loadAuto(); loadUi();
   const QString saved = settings_.value("ui/lang", "en").toString();
-  lang_ = meta_.contains(saved) && offered(saved) ? saved : "en";   // a language no longer offered (no interface table) falls back to English
+  lang_ = offered(saved) ? saved : "en";
 }
 
 void I18n::loadVerified() {
@@ -49,9 +49,9 @@ void I18n::loadUi() {
   for (const QString& l : langs) { const QJsonObject o = readJson(":/qt/qml/AmixOS/i18n/ui/" + l + ".json").object(); if (o.isEmpty()) continue;
     for (auto it = o.begin(); it != o.end(); ++it) { if (!words_.contains(it.key())) { words_.insert(it.key(), {}); keys_ << it.key(); } words_[it.key()].insert(l, it.value().toString()); } }
 }
-// OFFERED LANGUAGES: English and the ones whose interface is at least half translated (the 21 with full tables). The others only had
-// their page names, so picking one gave an English console with translated rail labels: they are no longer offered.
-bool I18n::offered(const QString& code) const { return code == "en" || coverage(code) * 2 >= keys_.size(); }
+// OFFERED LANGUAGES: all of them. The 21 with full interface tables are translated throughout; the 58 machine-translated ones ("auto")
+// translate the page names and the words they have, and show English for the rest until their tables are filled.
+bool I18n::offered(const QString& code) const { return meta_.contains(code); }
 void I18n::setLang(const QString& code) { if (!meta_.contains(code) || !offered(code) || code == lang_) return; lang_ = code; settings_.setValue("ui/lang", code); emit langChanged(); }
 
 QVariantList I18n::languages() const {

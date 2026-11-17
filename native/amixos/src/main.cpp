@@ -1394,8 +1394,8 @@ int main(int argc, char* argv[]) {
       // the language tables: 80 languages, every one covers the page names
       int full = 0; for (const QVariant& l : i18n.languages()) if (l.toMap().value("coverage").toInt() >= 44) ++full;
       std::printf("amixos --smoke: %d languages, %d cover all page names; MIXER in fa = %s\n", i18n.count(), full, qPrintable(i18n.t("MIXER", "fa")));
-      const int offered = i18n.languages().size(); std::printf("amixos --smoke: %d languages offered in the menu (the rest only had page names), Swahili offered %d\n", offered, int(i18n.offered("sw")));
-      if (i18n.count() < 80 || offered < 22 || full < offered || i18n.offered("sw") || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
+      const int offered = i18n.languages().size(); std::printf("amixos --smoke: %d languages offered in the menu, Swahili offered %d, Swahili MIXER = %s\n", offered, int(i18n.offered("sw")), qPrintable(i18n.t("MIXER", "sw")));
+      if (i18n.count() < 80 || offered < 80 || full < offered || !i18n.offered("sw") || i18n.t("MIXER", "sw") == "MIXER" || i18n.t("MIXER", "fa") == "MIXER") { std::fprintf(stderr, "amixos --smoke: language tables incomplete\n"); QCoreApplication::exit(7); return; }   // (a bare `return 7` here would make the lambda non-void and fall off the end: heap corruption)
       const QVariantMap m = engine.telemetry();
       const qulonglong blocks = m.value("blocks").toULongLong();
       { const QString b = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder"; const bool there = QFileInfo::exists(b) || QFileInfo::exists(b + ".exe");   // the separate PLUG-IN BUILDER sits next to the console (TOOLS opens it)
