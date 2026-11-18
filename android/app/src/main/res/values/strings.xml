@@ -436,4 +436,18 @@
     <string name="io_in_off">OFF · no microphone is open, nothing is recorded</string>
     <string name="remote_auto_input_on">AUTO INPUT ON: the console\'s input is open (its microphone, or its computer\'s sound).</string>
     <string name="remote_auto_input_off">AUTO INPUT OFF: the console has no input open; nothing is captured.</string>
+    <string name="lm_deck">DECK %1$s</string>
+    <string name="lm_sub_deck">SONG · STEREO</string>
+    <string name="lm_deck_load">LOAD</string>
+    <string name="lm_deck_loop">LOOP</string>
+    <string name="lm_deck_empty">No song: tap LOAD and pick a file on this phone</string>
+    <string name="lm_deck_error">Cannot play this file: %1$s</string>
+    <string name="lm_rec">● REC</string>
+    <string name="lm_rec_stop">■ STOP REC</string>
+    <string name="lm_rec_saved">Mix saved: %1$s (TOOLS → RECORDER)</string>
+    <string name="lm_rec_dropped">%1$d frames lost (the phone was too busy)</string>
+    <string name="set_start_phone_mixer">Open the phone mixer at start</string>
+    <string name="set_start_phone_mixer_sub">Standalone: the app opens straight into this phone\'s own mixer (inputs, two song decks, effects, master and recording). No computer needed. HOME stays one step back.</string>
+    <string name="shortcut_phone_mixer">Phone mixer</string>
+    <string name="shortcut_phone_mixer_long">Phone mixer (standalone)</string>
 </resources>

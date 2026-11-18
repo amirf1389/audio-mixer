@@ -28,6 +28,7 @@ object Prefs {
     fun showPan(c: Context) = remote(c).getBoolean("showPan", true)
     fun showTone(c: Context) = remote(c).getBoolean("showTone", true)               // GAIN and the analog 3-band EQ on every strip
     fun haptics(c: Context) = remote(c).getBoolean("haptics", true)
+    fun startInPhoneMixer(c: Context) = remote(c).getBoolean("startPhoneMixer", false)   // STANDALONE: the app opens straight into the phone's own mixer
     fun confirmStop(c: Context) = remote(c).getBoolean("confirmStop", true)
     fun syncSeconds(c: Context) = remote(c).getInt("syncSeconds", 3)                 // 0 = do not follow the console
     fun stripCount(c: Context) = remote(c).getInt("stripCount", 32)                   // 8 / 16 / 32 strips on the mixer
@@ -62,6 +63,7 @@ class SettingsActivity : AppCompatActivity() {
             confirm(getString(R.string.set_forget_q)) { r.edit().remove("host").remove("token").apply(); recreate() } }
 
         section(getString(R.string.set_mixer))
+        toggle(r, "startPhoneMixer", false, getString(R.string.set_start_phone_mixer), getString(R.string.set_start_phone_mixer_sub))
         choice(r, "stripCount", 32, listOf(8, 16, 32), getString(R.string.set_strips)) { "$it" }
         toggle(r, "showPan", true, getString(R.string.set_pan), null)
         toggle(r, "showTone", true, getString(R.string.set_tone), null)
