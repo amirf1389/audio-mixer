@@ -35,6 +35,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
+  Q_PROPERTY(bool mixerSimple READ mixerSimple WRITE setMixerSimple NOTIFY changed)   // MIXER strips: SIMPLE (name, tone, pan, MUTE / SOLO, fader) or FULL (every key and readout)
   Q_PROPERTY(bool rackCompactDefault READ rackCompactDefault WRITE setRackCompactDefault NOTIFY changed)
   Q_PROPERTY(bool channelPanelDefault READ channelPanelDefault WRITE setChannelPanelDefault NOTIFY changed)
   Q_PROPERTY(QVariantList dataFiles READ dataFiles NOTIFY changed)              // [{name, path, exists, bytes}]
@@ -72,6 +73,7 @@ class Settings : public QObject {
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }
+  bool mixerSimple() const { return s_.value("mixer/simple", true).toBool(); } void setMixerSimple(bool v) { set("mixer/simple", v); }
   bool channelPanelDefault() const { return s_.value("mixer/channelPanel", true).toBool(); } void setChannelPanelDefault(bool v) { set("mixer/channelPanel", v); }
   QVariantList dataFiles() const;
   QStringList vstDirs() const { return s_.value("vst3/dirs").toStringList(); }

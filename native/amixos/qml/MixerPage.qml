@@ -39,6 +39,7 @@ Item {
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
     property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
     // STRIP SECTIONS: what each strip shows (SETTINGS popover); off = a leaner strip. The fader, M/S, name and meters always stay.
+    property bool simple: settings.mixerSimple   // SIMPLE strips: the name, the tone knobs, pan, MUTE / SOLO and the fader; FULL adds every key and readout
     property bool showInput: true
     property bool showTone: true   // GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers
     property bool showBadges: true
@@ -91,6 +92,13 @@ Item {
                         MouseArea { anchors.fill: parent; onClicked: page.bank = index }
                     }
                 }
+                Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
+                Repeater {   // SIMPLE: only what a first mix needs on each strip; FULL: every key and readout
+                    model: [[true, "SIMPLE"], [false, "FULL"]]
+                    delegate: Rectangle { objectName: "mixerView_" + modelData[1]; readonly property bool on: page.simple === modelData[0]
+                        implicitWidth: vwT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: on ? Theme.amber : Theme.ov(0.06); border.color: on ? Theme.amber : Theme.lineSoft
+                        Text { id: vwT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { page.simple = modelData[0]; settings.mixerSimple = modelData[0] } } } }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Repeater {
                     model: ["FADERS", "AUX SENDS", "FX SENDS"]
@@ -424,7 +432,7 @@ Item {
                                                             MouseArea { anchors.fill: parent; onClicked: { engine.setInputRoute(page.sel, inp); inPop.close() } } } }
                                                     Text { visible: engine.deviceInputs <= 0; text: i18n.t("no device open", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
                                     StripTone { visible: page.showTone; Layout.alignment: Qt.AlignHCenter; strip: index; st: stripItem.st }
-                                    RowLayout { Layout.fillWidth: true; spacing: 2
+                                    RowLayout { visible: !page.simple; Layout.fillWidth: true; spacing: 2
                                         Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 4; color: st && st.armed ? Qt.rgba(1, 0.165, 0.373, 0.85) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#0b0f14" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: i18n.t("Arm CH ", i18n.lang) + (index + 1) + i18n.t(" for recording", i18n.lang); HoverHandler { id: armHov } }
                                         Rectangle { implicitWidth: 24; implicitHeight: 12; radius: 4; color: st && st.link ? Theme.harm(stripItem.sc) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: i18n.t("Stereo link with CH ", i18n.lang) + ((index ^ 1) + 1) + i18n.t(": gain, mute, solo follow, pan mirrors", i18n.lang); HoverHandler { id: lnkHov } }
                                         // ♪ MUSIC INPUT: this channel carries music (a player, a band, backing tracks): DUAL LISTEN ON, the DUAL LISTEN EQ in its rack
@@ -441,7 +449,7 @@ Item {
                                         Text { Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 1; elide: Text.ElideRight; horizontalAlignment: Text.AlignRight
                                             text: !page.sendView && !(st && st.trimDb !== 0) ? "" : (page.sendView ? i18n.t("TRIM ", i18n.lang) : "") + (st && st.trimDb > 0 ? "+" : "") + (st ? st.trimDb.toFixed(1) : "0.0"); color: st && st.trimDb !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.sidePanel = true } } } }
                                     // DSP badges: lit when on, click opens the page for this channel
-                                    Flow { visible: page.showBadges; Layout.fillWidth: true; spacing: 2
+                                    Flow { visible: page.showBadges && !page.simple; Layout.fillWidth: true; spacing: 2
                                         Repeater {
                                             model: [ { k: "gateOn", t: "GATE", p: "gate", c: "#10b981" }, { k: "eqOn", t: "EQ", p: "dsp", c: "#22d3ee" }, { k: "xoverOn", t: "X", p: "dsp", c: "#a78bfa" }, { k: "compOn", t: "COMP", p: "dyn", c: "#fbbf24" }, { k: "limOn", t: "LIM", p: "dsp", c: "#fb923c" }, { k: "delayOn", t: "DLY", p: "delay", c: "#f472b6" }, { k: "polarity", t: "Ø", p: "dsp", c: "#60a5fa" }, { k: "automix", t: "AM", p: "", c: "#22d3ee" } ]
                                             delegate: Rectangle { id: dspB; readonly property color hue: Theme.harm(stripItem.sc);   // one accent for every process: what is on reads at a glance, without a rainbow
@@ -469,13 +477,13 @@ Item {
                                             Text { anchors.centerIn: parent; text: i18n.t("OVER-COMPRESSED", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                             ToolTip.visible: ocHov.hovered; ToolTip.text: i18n.t("More than 12 dB of compression: click to add DE-SQUASH to this channel", i18n.lang); HoverHandler { id: ocHov }
                                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } } }
-                                        Rectangle { visible: page.showAi; Layout.fillWidth: true; implicitHeight: 15; radius: 5; color: st && st.automix ? Qt.rgba(Theme.harm(stripItem.sc).r, Theme.harm(stripItem.sc).g, Theme.harm(stripItem.sc).b, 0.45) : Theme.ov(0.05); border.color: st && st.automix ? Theme.harm(stripItem.sc) : Theme.lineSoft
+                                        Rectangle { visible: page.showAi && !page.simple; Layout.fillWidth: true; implicitHeight: 15; radius: 5; color: st && st.automix ? Qt.rgba(Theme.harm(stripItem.sc).r, Theme.harm(stripItem.sc).g, Theme.harm(stripItem.sc).b, 0.45) : Theme.ov(0.05); border.color: st && st.automix ? Theme.harm(stripItem.sc) : Theme.lineSoft
                                             Text { anchors.centerIn: parent; text: st && st.automix ? i18n.t("AI ", i18n.lang) + (mt && mt.amGainDb !== undefined && mt.amGainDb < -0.05 ? mt.amGainDb.toFixed(1) : "0.0") : i18n.t("AI", i18n.lang); color: st && st.automix ? Theme.ink : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                             Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 1; height: 2; radius: 1; color: Theme.harm(stripItem.sc); visible: st && st.automix; width: Math.max(0, Math.min(1, 1 + (mt && mt.amGainDb !== undefined ? mt.amGainDb : 0) / 30)) * (parent.width - 2) }
                                             MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) { engine.selectedStrip = index; page.go("ai") } else engine.setAutomix(index, !(st && st.automix), st ? st.amWeight : 1) } }
                                             ToolTip.visible: aiH.hovered && settings.tooltips; ToolTip.text: i18n.t("AI automix: when on, this channel shares gain with the other AI channels by who is speaking (the bar and number show the gain applied now). Right-click opens AI MIX.", i18n.lang); HoverHandler { id: aiH } }
-                                        Rectangle { implicitWidth: 18; implicitHeight: 15; radius: 5; color: moreL.item && moreL.item.visible ? stripItem.sc : Theme.ov(0.06); border.color: Theme.lineSoft
-                                            Text { anchors.centerIn: parent; text: "⋯"; color: moreL.item && moreL.item.visible ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                        Rectangle { objectName: "stripMore" + index; Layout.fillWidth: page.simple; implicitWidth: 18; implicitHeight: page.simple ? 18 : 15; radius: 5; color: moreL.item && moreL.item.visible ? stripItem.sc : Theme.ov(0.06); border.color: Theme.lineSoft
+                                            Text { anchors.centerIn: parent; text: page.simple ? i18n.t("MORE", i18n.lang) + " ⋯" : "⋯"; color: moreL.item && moreL.item.visible ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                             MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; moreL.active = true; moreL.item.popup() } }
                                         Connections { target: page; function onStripMenuDemoChanged() { if (index !== 0) return; if (page.stripMenuDemo) { moreL.active = true; moreL.item.popup(120, 40); moreL.item.openFx() } else if (moreL.item) { moreL.item.closeFx(); moreL.item.close() } } }
                                         Loader { id: moreL; active: false   // the channel menu (effects, 100 samples ...) is built the first time it opens: 32 of them at once made the MIXER take seconds to open
@@ -578,7 +586,7 @@ Item {
                                             Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("IN  OUT GR", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6 } } }
                                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
                                     // groups and sends readout
-                                    RowLayout { visible: page.showGroups; Layout.alignment: Qt.AlignHCenter; spacing: 2
+                                    RowLayout { visible: page.showGroups && !page.simple; Layout.alignment: Qt.AlignHCenter; spacing: 2
                                         Rectangle { visible: st && st.dca > 0; implicitWidth: 22; implicitHeight: 11; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); Text { anchors.centerIn: parent; text: "D" + (st ? st.dca : 0); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
                                         Repeater { model: 8; delegate: Rectangle { visible: st && ((st.muteGroups >> index) & 1); implicitWidth: 5; implicitHeight: 5; radius: 2.5; color: Theme.pink } }
                                         Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 }
