@@ -1233,6 +1233,17 @@ int main(int argc, char* argv[]) {
           if (engine.inputLabel(0).isEmpty() || !engine.inputLabel(0).endsWith("IN 1")) { std::fprintf(stderr, "amixos --shots: input label %s\n", qPrintable(engine.inputLabel(0))); QCoreApplication::exit(9); return; }
           std::printf("amixos --shots: real-time meters OK: in1 %.1f dBFS, out1 %.1f dBFS (fader %.1f), strip 3 silent then %.1f on input 1; label \"%s\"\n", in0, out0, engine.stripState()[0].toMap()["db"].toDouble(), in2b, qPrintable(engine.inputLabel(0))); }
         if (engine.meters().size() > 0 && engine.meters()[0].toMap()["inDb"].toDouble() < -20) { std::fprintf(stderr, "amixos --shots: the null test input is not reaching the strips (%.1f dBFS)\n", engine.meters()[0].toMap()["inDb"].toDouble()); QCoreApplication::exit(8); return; }
+        { // TODAY'S PAGES: the 1000 sound effects, PROCESSOR NOW in SETTINGS, the ROOM CORRECTION curve, AUTO MIX badges on the strips
+          auto settle = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+          win->setProperty("current", "samples"); settle(700);
+          if (QObject* sp = win->findChild<QObject*>("samplesPage")) { win->grabWindow().save(shots + "/samples-pads.png"); sp->setProperty("view", "EFFECTS"); sp->setProperty("family", "Laser"); sp->setProperty("pickedSfx", 257); settle(500); win->grabWindow().save(shots + "/samples-effects.png"); sp->setProperty("view", "PADS"); }
+          win->setProperty("current", "sys"); settle(2500);
+          if (auto* panel = win->findChild<QQuickItem*>("sysPanel")) { QQuickItem* f = panel->parentItem(); while (f && !f->inherits("QQuickFlickable")) f = f->parentItem();
+            if (f) { QQuickItem* ci = f->property("contentItem").value<QQuickItem*>(); const QPointF at = panel->mapToItem(ci, QPointF(0, 0)); f->setProperty("contentY", std::max(0.0, at.y() - 8)); settle(600); win->grabWindow().save(shots + "/settings-processor.png"); f->setProperty("contentY", 0); } }
+          measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
+          if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
+          engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+          std::printf("amixos --shots: samples-pads, samples-effects, settings-processor, acoustics-room-correction, mixer-automix\n"); }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
           win->setProperty("forceSetup", true);
           wiz->setProperty("step", 1); wiz->setProperty("termsAlert", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-2-alert.png")); wiz->setProperty("termsAlert", false);
@@ -1467,7 +1478,7 @@ int main(int argc, char* argv[]) {
         std::printf("amixos --smoke: SYSTEM: %s, %d threads in %d core types, RAM %llu MB, console %llu MB, NPU %s; free memory now: %s; sound thread: %s; switch kept %d\n", qPrintable(si.value("cpuName").toString()),
                     si.value("logical").toInt(), si.value("classes").toInt(), si.value("ramTotalMb").toULongLong(), si.value("processMb").toULongLong(), si.value("npuFound").toBool() ? qPrintable(si.value("npuName").toString()) : "none",
                     qPrintable(tr.value("note").toString()), qPrintable(si.value("audio").toString()), int(off));
-        { const QVariantMap z = engine.systemInfo();   // PROCESSOR NOW: the second reading has the load; every value in range or plainly not available
+        { (void)engine.systemInfo(); QThread::msleep(250); const QVariantMap z = engine.systemInfo();   // PROCESSOR NOW: the second reading has the load; every value in range or plainly not available
           std::fprintf(stderr, "amixos --smoke: PROCESSOR NOW load %s %.0f %%, clock %s, temperatures %d, power %s\n", z.value("loadOk").toBool() ? "yes" : "NO", z.value("cpuLoadPct").toDouble(),
                        z.value("clockOk").toBool() ? "yes" : "not exposed", static_cast<int>(z.value("temps").toList().size()), z.value("powerOk").toBool() ? "yes" : "not exposed");
           if (!z.value("loadOk").toBool() || z.value("cpuLoadPct").toDouble() < 0 || z.value("cpuLoadPct").toDouble() > 100 || !z.contains("ac")) { std::fprintf(stderr, "amixos --smoke: PROCESSOR NOW failed\n"); QCoreApplication::exit(7); return; } }

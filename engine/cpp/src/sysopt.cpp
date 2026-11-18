@@ -240,8 +240,10 @@ Sensors sensors() {
   FILETIME idle, kern, user;   // kernel time includes idle time
   if (GetSystemTimes(&idle, &kern, &user)) {
     const std::uint64_t i = ft64(idle), t = ft64(kern) + ft64(user);
-    if (lastTotal && t > lastTotal) { s.loadOk = true; s.loadPct = std::clamp(100.0 * (1.0 - static_cast<double>(i - lastIdle) / static_cast<double>(t - lastTotal)), 0.0, 100.0); }
-    lastIdle = i; lastTotal = t;
+    static double lastLoad = -1;   // two readings inside one system tick: the previous load stands (no new interval to measure yet)
+    if (lastTotal && t > lastTotal) { lastLoad = std::clamp(100.0 * (1.0 - static_cast<double>(i - lastIdle) / static_cast<double>(t - lastTotal)), 0.0, 100.0); lastIdle = i; lastTotal = t; }
+    else if (!lastTotal) { lastIdle = i; lastTotal = t; }
+    if (lastLoad >= 0) { s.loadOk = true; s.loadPct = lastLoad; }
   }
   if (pdh.q && pdh.collect(pdh.q) == 0) {
     if (!pdh.primed) { pdh.primed = true; Sleep(120); pdh.collect(pdh.q); }   // rate counters need two samples
@@ -352,8 +354,10 @@ Sensors sensors() {
   Sensors s;
   { std::istringstream st(readFile("/proc/stat")); std::string cpu; unsigned long long v[10] = {}; st >> cpu;
     if (cpu == "cpu") { for (auto& x : v) st >> x; const unsigned long long idle = v[3] + v[4]; unsigned long long total = 0; for (int k = 0; k < 8; ++k) total += v[k];
-      if (lastTotal && total > lastTotal) { s.loadOk = true; s.loadPct = std::clamp(100.0 * (1.0 - static_cast<double>(idle - lastIdle) / static_cast<double>(total - lastTotal)), 0.0, 100.0); }
-      lastIdle = idle; lastTotal = total; } }
+      static double lastLoad = -1;   // two readings inside one jiffy: the previous load stands
+      if (lastTotal && total > lastTotal) { lastLoad = std::clamp(100.0 * (1.0 - static_cast<double>(idle - lastIdle) / static_cast<double>(total - lastTotal)), 0.0, 100.0); lastIdle = idle; lastTotal = total; }
+      else if (!lastTotal) { lastIdle = idle; lastTotal = total; }
+      if (lastLoad >= 0) { s.loadOk = true; s.loadPct = lastLoad; } } }
   { double sum = 0; int n = 0;
     for (int c = 0; c < 256; ++c) { const std::string f = readFile("/sys/devices/system/cpu/cpu" + std::to_string(c) + "/cpufreq/scaling_cur_freq"); if (f.empty()) { if (c > 0) break; continue; } const double khz = std::atof(f.c_str()); if (khz > 0) { sum += khz; ++n; } }
     if (n) { s.clockOk = true; s.mhz = sum / n / 1000.0; } }

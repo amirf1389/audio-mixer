@@ -94,6 +94,7 @@ Flickable {
         }
         Panel {
             id: sysPanel
+            objectName: "sysPanel"
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("System optimization", i18n.lang).toUpperCase()
             subtitle: i18n.t("What this computer is, and how the mixing console keeps the sound steady while it uses less of the processor and memory. Only the mixing console's own threads and memory are changed, never other programs.", i18n.lang)
