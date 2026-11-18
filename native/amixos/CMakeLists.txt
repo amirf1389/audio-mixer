@@ -44,6 +44,7 @@ qt_add_qml_module(amixos
         qml/NavRail.qml
         qml/Panel.qml
         qml/Fader.qml
+        qml/MSlider.qml
         qml/MeterBar.qml
         qml/VuMeter.qml
         qml/RoutingPage.qml
@@ -84,6 +85,7 @@ qt_add_qml_module(amixos
         qml/ScorePage.qml
         qml/AmpPage.qml
         qml/Aurora.qml
+        qml/Songket.qml
         qml/Icon.qml
         qml/StorePage.qml
         qml/DantePanel.qml

@@ -61,16 +61,11 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         Rectangle {   // header
-            Layout.fillWidth: true; implicitHeight: 48; color: Theme.chrome
-            Rectangle { id: hdrLine; anchors.bottom: parent.bottom; width: parent.width; height: 2   // the colour line: orange, the section colour, violet, cyan, drifting
-                property real sh: 0
-                NumberAnimation on sh { from: 0; to: 1; duration: 9000; loops: Animation.Infinite; running: settings.colorMotion && root.visible && engine.uiAwake }   // still when another app is in front: no full-window repaint 60 times a second
-                gradient: Gradient { orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Theme.orange } GradientStop { position: 0.15 + 0.25 * hdrLine.sh; color: Theme.accent }
-                    GradientStop { position: 0.55 + 0.2 * (1 - hdrLine.sh); color: Theme.violet } GradientStop { position: 1.0; color: Theme.cyan } } }
+            Layout.fillWidth: true; implicitHeight: 52; color: Theme.chrome
+            Songket { anchors.bottom: parent.bottom; width: parent.width; height: 7; unit: 14 }   // the songket band under the header
             RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
-                Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
+                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.bottomMargin: 6; spacing: 12
+                Text { text: Theme.product.toUpperCase(); color: Theme.songket; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
                 Text { text: i18n.t("BY AMFB AUDIO", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 2 }
                 Row {   // FILE · VIEW · INFO: the menus of a desktop program, in the console's own look
                     objectName: "menuBar"; spacing: 2

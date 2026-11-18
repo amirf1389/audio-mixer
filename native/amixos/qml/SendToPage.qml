@@ -64,7 +64,7 @@ Item {
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.b ? page.b.db : 0) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
                     Rectangle { id: gb138; Layout.fillWidth: true; implicitHeight: 20; radius: 7; color: page.b && page.b.mute ? Theme.danger : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb138.color) } GradientStop { position: 1; color: Theme.btnBottom(gb138.color) } } Text { anchors.centerIn: parent; text: i18n.t("MUTE", i18n.lang); color: page.b && page.b.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusMute(page.bus, !(page.b && page.b.mute)) } }
                     Text { text: i18n.t("RETURN TO MASTER  ", i18n.lang) + (page.b && page.b.returnDb > -60 ? Theme.dbText(page.b.returnDb) + i18n.t(" dB", i18n.lang) : i18n.t("OFF", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 }
-                    Slider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.returnDb : -60; onMoved: engine.setBusReturn(page.bus, value) }
+                    MSlider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.returnDb : -60; onMoved: engine.setBusReturn(page.bus, value) }
                 }
             }
         }

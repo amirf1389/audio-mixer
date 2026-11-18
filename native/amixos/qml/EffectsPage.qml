@@ -98,7 +98,7 @@ Item {
                         delegate: RowLayout {
                             Layout.fillWidth: true; spacing: 10
                             Text { Layout.preferredWidth: 90; text: i18n.t(modelData.title ?? "", i18n.lang).toUpperCase(); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                            Slider { Layout.fillWidth: true; from: 0; to: 1; stepSize: 0.001; value: modelData.value; onMoved: engine.setBusFxParam(page.bus, modelData.id, value) }
+                            MSlider { Layout.fillWidth: true; from: 0; to: 1; stepSize: 0.001; value: modelData.value; onMoved: engine.setBusFxParam(page.bus, modelData.id, value) }
                             Text { Layout.preferredWidth: 80; text: i18n.t(modelData.text ?? "", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                         }
                     }
@@ -106,19 +106,19 @@ Item {
                         visible: page.fx.kind !== ""
                         Layout.fillWidth: true; spacing: 10
                         Text { Layout.preferredWidth: 90; text: i18n.t("MIX", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: 0; to: 1; stepSize: 0.01; value: page.fx.mix; onMoved: engine.setBusFxMix(page.bus, value) }
+                        MSlider { Layout.fillWidth: true; from: 0; to: 1; stepSize: 0.01; value: page.fx.mix; onMoved: engine.setBusFxMix(page.bus, value) }
                         Text { Layout.preferredWidth: 80; text: Math.round(page.fx.mix * 100) + i18n.t(" % wet", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                     }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 10
                         Text { Layout.preferredWidth: 90; text: i18n.t("RETURN", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.returnDb : -60; onMoved: engine.setBusReturn(page.bus, value) }
+                        MSlider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.returnDb : -60; onMoved: engine.setBusReturn(page.bus, value) }
                         Text { Layout.preferredWidth: 80; text: page.b ? (page.b.returnDb <= -60 ? i18n.t("off", i18n.lang) : page.b.returnDb.toFixed(1) + i18n.t(" dB", i18n.lang)) : ""; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                     }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 10
                         Text { Layout.preferredWidth: 90; text: i18n.t("BUS LEVEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.db : 0; onMoved: engine.setBusLevel(page.bus, value) }
+                        MSlider { Layout.fillWidth: true; from: -60; to: 10; stepSize: 0.5; value: page.b ? page.b.db : 0; onMoved: engine.setBusLevel(page.bus, value) }
                         Text { Layout.preferredWidth: 80; text: page.b ? page.b.db.toFixed(1) + i18n.t(" dB", i18n.lang) : ""; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                     }
                     RowLayout {

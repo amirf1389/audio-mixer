@@ -70,7 +70,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 10
                         Text { text: i18n.t("MONO", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                        Slider { id: widthSlider; Layout.fillWidth: true; from: 0; to: 2; stepSize: 0.01; value: engine.width; onMoved: engine.width = value }
+                        MSlider { id: widthSlider; Layout.fillWidth: true; from: 0; to: 2; stepSize: 0.01; value: engine.width; onMoved: engine.width = value }
                         Text { text: i18n.t("WIDE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         Text { Layout.preferredWidth: 50; text: Math.round(engine.width * 100) + " %"; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignRight }
                     }

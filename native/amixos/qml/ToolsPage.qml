@@ -62,7 +62,7 @@ Item {
                     }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("TEMPO", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: 40; to: 240; stepSize: 1; value: engine.clickBpm; onMoved: engine.clickBpm = value }
+                        MSlider { Layout.fillWidth: true; from: 40; to: 240; stepSize: 1; value: engine.clickBpm; onMoved: engine.clickBpm = value }
                         Text { Layout.preferredWidth: 60; text: engine.clickBpm.toFixed(0) + i18n.t(" BPM", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 6
                         Text { text: i18n.t("SIGNATURE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
@@ -71,7 +71,7 @@ Item {
                         Repeater { model: engine.clickBeats; delegate: Rectangle { width: 12; height: 12; radius: 6; color: engine.clickBeat === index + 1 ? (index === 0 ? Theme.amber : Theme.cyan) : Theme.ov(0.1) } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -40; to: 0; stepSize: 1; value: engine.clickDb; onMoved: engine.clickDb = value }
+                        MSlider { Layout.fillWidth: true; from: -40; to: 0; stepSize: 1; value: engine.clickDb; onMoved: engine.clickDb = value }
                         Text { Layout.preferredWidth: 60; text: engine.clickDb.toFixed(0) + i18n.t(" dB", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                         Btn { label: engine.clickOn ? i18n.t("STOP CLICK", i18n.lang) : i18n.t("START CLICK", i18n.lang); on: engine.clickOn; onColor: Theme.emerald; onClicked: engine.clickOn = !engine.clickOn } }
                     Note { text: i18n.t("The click is summed into the master (before the master fader), like the ARRANGE player. Accent on beat 1.", i18n.lang) }
@@ -87,11 +87,11 @@ Item {
                             delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: engine.testType === modelData.ty && (modelData.f === 0 || Math.abs(engine.testFreq - modelData.f) < 0.5); onColor: Theme.cyan; onClicked: { engine.testType = modelData.ty; if (modelData.f > 0) engine.testFreq = modelData.f } } } }
                     RowLayout { visible: engine.testType === 0; spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("FREQ", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, engine.testFreq)); onMoved: engine.testFreq = Math.round(Math.exp(value)) }
+                        MSlider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, engine.testFreq)); onMoved: engine.testFreq = Math.round(Math.exp(value)) }
                         Text { Layout.preferredWidth: 70; text: engine.testFreq >= 1000 ? (engine.testFreq / 1000).toFixed(2) + i18n.t(" kHz", i18n.lang) : engine.testFreq.toFixed(0) + i18n.t(" Hz", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -60; to: 0; stepSize: 1; value: engine.testDb; onMoved: engine.testDb = value }
+                        MSlider { Layout.fillWidth: true; from: -60; to: 0; stepSize: 1; value: engine.testDb; onMoved: engine.testDb = value }
                         Text { Layout.preferredWidth: 70; text: engine.testDb.toFixed(0) + i18n.t(" dBFS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 6
                         Btn { label: engine.testOn ? i18n.t("STOP TEST SIGNAL", i18n.lang) : i18n.t("ENGAGE TEST SIGNAL", i18n.lang); on: engine.testOn; onColor: Theme.danger; onClicked: engine.testOn = !engine.testOn }
@@ -105,11 +105,11 @@ Item {
                     Head { text: i18n.t("DELAY TOWER & TIME ALIGNMENT", i18n.lang) }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { Layout.preferredWidth: 100; text: i18n.t("DISTANCE (M)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: 0; to: 150; stepSize: 0.1; value: page.distanceM; onMoved: page.distanceM = value }
+                        MSlider { Layout.fillWidth: true; from: 0; to: 150; stepSize: 0.1; value: page.distanceM; onMoved: page.distanceM = value }
                         Text { Layout.preferredWidth: 70; text: page.distanceM.toFixed(1) + " m"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { Layout.preferredWidth: 100; text: i18n.t("TEMPERATURE (°C)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -20; to: 45; stepSize: 0.5; value: page.tempC; onMoved: page.tempC = value }
+                        MSlider { Layout.fillWidth: true; from: -20; to: 45; stepSize: 0.5; value: page.tempC; onMoved: page.tempC = value }
                         Text { Layout.preferredWidth: 70; text: page.tempC.toFixed(1) + " °C"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 16
                         ColumnLayout { spacing: 1; Text { text: i18n.t("SPEED OF SOUND", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: page.soundSpeed.toFixed(1) + " m/s"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } }

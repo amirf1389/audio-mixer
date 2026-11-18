@@ -98,7 +98,7 @@ Flickable {
                     delegate: Column { spacing: 2; width: 44
                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: { const g = toneGraphicGain(index); return (g > 0 ? "+" : "") + g.toFixed(1) } color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7
                             function toneGraphicGain(i) { const l = gcard.gains; return l && l[i] !== undefined ? Number(l[i]) : 0 } }
-                        Slider { anchors.horizontalCenter: parent.horizontalCenter; orientation: Qt.Vertical; height: 78; from: -12; to: 12; stepSize: 0.5
+                        MSlider { anchors.horizontalCenter: parent.horizontalCenter; orientation: Qt.Vertical; height: 78; from: -12; to: 12; stepSize: 0.5
                             value: { const l = gcard.gains; return l && l[index] !== undefined ? Number(l[index]) : 0 }
                             onMoved: { const card = gcard; const l = []; for (let b = 0; b < 10; ++b) l.push(b === index ? value : (card.gains[b] !== undefined ? Number(card.gains[b]) : 0)); engine.setGraphicEq(page.strip, l, true); card.tick++ } }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } } } } }
@@ -168,9 +168,9 @@ Flickable {
                 Text { text: "Q  " + Number(page.bandNow.q).toFixed(2); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: i18n.t("GAIN  ", i18n.lang) + Theme.dbText(page.bandNow.gainDb) + i18n.t(" dB", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Combo { Layout.fillWidth: true; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: engine.setEq(page.strip, page.band, currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
-                Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
-                Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
-                Slider { Layout.fillWidth: true; from: -24; to: 24; value: page.bandNow.gainDb; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) }
+                MSlider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
+                MSlider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
+                MSlider { Layout.fillWidth: true; from: -24; to: 24; value: page.bandNow.gainDb; onMoved: engine.setEq(page.strip, page.band, page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) }
             }
         }
         Panel {
@@ -217,23 +217,23 @@ Flickable {
                 Combo { Layout.fillWidth: true; model: xo.types; currentIndex: page.ch.xoverType === undefined ? 1 : page.ch.xoverType; onActivated: engine.setCrossover(page.strip, currentIndex, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
                 Text { text: i18n.t("HIGH PASS  ", i18n.lang) + Math.round(page.ch.hpFreq || 80) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 RowLayout { Combo { implicitWidth: 90; model: xo.slopes; currentIndex: page.ch.hpOrder || 0; onActivated: engine.setCrossover(page.strip, page.ch.xoverType, currentIndex, page.ch.hpFreq, page.ch.lpOrder, page.ch.lpFreq) }
-                    Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(page.ch.hpFreq || 80); onMoved: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, Math.exp(value), page.ch.lpOrder, page.ch.lpFreq) } }
+                    MSlider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(page.ch.hpFreq || 80); onMoved: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, Math.exp(value), page.ch.lpOrder, page.ch.lpFreq) } }
                 Text { text: i18n.t("LOW PASS  ", i18n.lang) + Math.round(page.ch.lpFreq || 4000) + i18n.t(" Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 RowLayout { Combo { implicitWidth: 90; model: xo.slopes; currentIndex: page.ch.lpOrder || 0; onActivated: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, page.ch.hpFreq, currentIndex, page.ch.lpFreq) }
-                    Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(page.ch.lpFreq || 4000); onMoved: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, Math.exp(value)) } }
+                    MSlider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(page.ch.lpFreq || 4000); onMoved: engine.setCrossover(page.strip, page.ch.xoverType, page.ch.hpOrder, page.ch.hpFreq, page.ch.lpOrder, Math.exp(value)) } }
             }
             Panel {
                 Layout.fillWidth: true
                 title: i18n.t("TIME & PROTECTION", i18n.lang)
                 subtitle: i18n.t("Delay for time alignment (sub-sample), channel peak limiter", i18n.lang)
                 Text { text: i18n.t("DELAY  ", i18n.lang) + Number(page.ch.delayMs || 0).toFixed(2) + i18n.t(" ms  (", i18n.lang) + (Number(page.ch.delayMs || 0) * 34.3).toFixed(1) + i18n.t(" cm)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                Slider { Layout.fillWidth: true; from: 0; to: 50; stepSize: 0.01; value: page.ch.delayMs || 0; onMoved: engine.setDelay(page.strip, value) }
+                MSlider { Layout.fillWidth: true; from: 0; to: 50; stepSize: 0.01; value: page.ch.delayMs || 0; onMoved: engine.setDelay(page.strip, value) }
                 RowLayout { Layout.fillWidth: true
                     Rectangle { id: gb160; implicitWidth: Math.max(70, children[0].implicitWidth + 12); implicitHeight: 22; radius: 7; color: page.ch.limiterOn ? Theme.emerald : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb160.color) } GradientStop { position: 1; color: Theme.btnBottom(gb160.color) } } Text { anchors.centerIn: parent; text: i18n.t("LIMITER", i18n.lang); color: page.ch.limiterOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setChannelLimiter(page.strip, !page.ch.limiterOn, page.ch.limiterCeilDb || -1, page.ch.limiterReleaseMs || 80) } }
                     Text { text: i18n.t("CEILING ", i18n.lang) + Theme.dbText(page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb) + i18n.t(" dBFS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
-                Slider { Layout.fillWidth: true; from: -30; to: 0; value: page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb; onMoved: engine.setChannelLimiter(page.strip, page.ch.limiterOn, value, page.ch.limiterReleaseMs || 80) }
+                MSlider { Layout.fillWidth: true; from: -30; to: 0; value: page.ch.limiterCeilDb === undefined ? -1 : page.ch.limiterCeilDb; onMoved: engine.setChannelLimiter(page.strip, page.ch.limiterOn, value, page.ch.limiterReleaseMs || 80) }
                 Text { text: i18n.t("RELEASE ", i18n.lang) + Math.round(page.ch.limiterReleaseMs || 80) + i18n.t(" ms", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                Slider { Layout.fillWidth: true; from: 1; to: 1000; value: page.ch.limiterReleaseMs || 80; onMoved: engine.setChannelLimiter(page.strip, page.ch.limiterOn, page.ch.limiterCeilDb || -1, value) }
+                MSlider { Layout.fillWidth: true; from: 1; to: 1000; value: page.ch.limiterReleaseMs || 80; onMoved: engine.setChannelLimiter(page.strip, page.ch.limiterOn, page.ch.limiterCeilDb || -1, value) }
             }
         }
     }

@@ -21,12 +21,16 @@ QtObject {
     readonly property color ink: dark ? "#f1f5f9" : "#0f172a"
     readonly property color muted: dark ? "#94a3b8" : "#475569"
     readonly property color dim: dark ? "#64748b" : "#64748b"
-    readonly property color orange: "#ea580c"
-    readonly property color orangeGlow: Qt.rgba(1, 0.416, 0, 0.45)
+    // MALAYSIA: the colours of songket cloth and the hibiscus (bunga raya). Gold is the console's own colour; red warns.
+    readonly property color songket: dark ? "#e8b84a" : "#b8860b"        // the woven gold thread
+    readonly property color bunga: dark ? "#f0304f" : "#d11a3c"          // hibiscus red
+    readonly property color nila: dark ? "#3b5bdb" : "#1e3a8a"           // indigo, the ground of the cloth
+    readonly property color orange: dark ? "#e8a93a" : "#b8860b"          // the console's accent: songket gold
+    readonly property color orangeGlow: Qt.rgba(0.91, 0.72, 0.29, 0.45)
     readonly property color amber: dark ? "#fbbf24" : "#d97706"
     readonly property color cyan: dark ? "#3cc8db" : "#0e7490"   // calmer than pure neon: the most used accent
     readonly property color emerald: dark ? "#10b981" : "#047857"
-    readonly property color danger: dark ? "#ef4466" : "#dc2626"
+    readonly property color danger: dark ? "#f0304f" : "#d11a3c"
     readonly property color violet: dark ? "#8b5cf6" : "#6d28d9"
     readonly property color pink: dark ? "#f472b6" : "#db2777"
     readonly property string product: "AmF X1"

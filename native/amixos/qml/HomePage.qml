@@ -13,7 +13,14 @@ Flickable {
         anchors.horizontalCenter: parent.horizontalCenter
         y: 24
         spacing: 16
-        Text { text: Theme.product; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 30; font.weight: Font.Black }
+        // THE HERO: the name on indigo cloth with a songket border above and below
+        Rectangle { Layout.fillWidth: true; implicitHeight: 96; radius: 8; clip: true
+            gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: Theme.dark ? "#1a1638" : "#e9e4f6" } GradientStop { position: 1; color: Theme.dark ? "#2a1220" : "#f6e6e2" } }
+            Songket { anchors.top: parent.top; width: parent.width; height: 14; unit: 22; ground: "transparent" }
+            Songket { anchors.bottom: parent.bottom; width: parent.width; height: 14; unit: 22; ground: "transparent" }
+            Column { anchors.left: parent.left; anchors.leftMargin: 22; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                Text { text: Theme.product; color: Theme.songket; font.family: Theme.sans; font.pixelSize: 32; font.weight: Font.Black }
+                Text { text: i18n.t("Digital mixing console", i18n.lang) + "  ·  " + Theme.vendor; color: Theme.ink; opacity: 0.85; font.family: Theme.mono; font.pixelSize: 10; font.letterSpacing: 2 } } }
         Text { text: i18n.t("Native console, version ", i18n.lang) + appVersion + " (build " + buildStamp + ") " + " • " + engine.edition + i18n.t(" tier • engine ", i18n.lang) + (engine.running ? engine.backend : i18n.t("idle", i18n.lang)); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10 }
         Text { text: i18n.t(engine.status, i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 10; Layout.fillWidth: true; wrapMode: Text.WordWrap }
         // LIVE: the SOUND SCORE of the master now, its weakest part with the fix, the DSP MODE, and the analyzer, one click each

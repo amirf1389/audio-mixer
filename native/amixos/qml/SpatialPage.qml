@@ -20,7 +20,7 @@ Item {
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Knob: RowLayout { property string label; property real from; property real to; property real value; property string unit; signal moved(real v); spacing: 8; Layout.fillWidth: true
         Text { text: i18n.t(label, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90 }
-        Slider { Layout.fillWidth: true; from: parent.from; to: parent.to; value: parent.value; onMoved: parent.moved(value) }
+        MSlider { Layout.fillWidth: true; from: parent.from; to: parent.to; value: parent.value; onMoved: parent.moved(value) }
         Text { text: parent.value.toFixed(parent.to > 30 ? 0 : 2) + " " + unit; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 60 } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
@@ -44,9 +44,9 @@ Item {
                         Btn { label: page.t("FACE FRONT"); onClicked: { engine.headYaw = 0; engine.headPitch = 0 } }
                         Text { text: page.t("yaw ") + Math.round(engine.headYaw) + "°  ·  " + page.t("pitch ") + Math.round(engine.headPitch) + "°"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
                     RowLayout { spacing: 6; Text { Layout.preferredWidth: 40; text: page.t("TURN"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        Slider { Layout.fillWidth: true; from: -180; to: 180; value: engine.headYaw; onMoved: engine.headYaw = value } }
+                        MSlider { Layout.fillWidth: true; from: -180; to: 180; value: engine.headYaw; onMoved: engine.headYaw = value } }
                     RowLayout { spacing: 6; Text { Layout.preferredWidth: 40; text: page.t("NOD"); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        Slider { Layout.fillWidth: true; from: -60; to: 60; value: engine.headPitch; onMoved: engine.headPitch = value } }
+                        MSlider { Layout.fillWidth: true; from: -60; to: 60; value: engine.headPitch; onMoved: engine.headPitch = value } }
                     Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: page.t("With HEAD TRACK on, the scene stays in the room while the head turns: drag on the map or use TURN and NOD. For headphones."); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                 Canvas { id: sceneMap; objectName: "sceneMap"; Layout.fillWidth: true; Layout.fillHeight: true
                     onPaint: { const g = getContext("2d"); g.clearRect(0, 0, width, height); const cx = width / 2, cy = height / 2, R = Math.min(width * 0.5, height) / 2 - 6, sx = (width / 2 - 8) / R;

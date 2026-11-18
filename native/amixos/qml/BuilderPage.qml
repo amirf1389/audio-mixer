@@ -97,7 +97,7 @@ Item {
                         Text { text: i18n.t("or drop a file on the window", i18n.lang); color: Theme.dim; font.pixelSize: 8 } }
                     RowLayout { spacing: 8
                         Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.pixelSize: 9; font.family: Theme.mono }
-                        Slider { Layout.fillWidth: true; from: -30; to: 6; value: builder.previewGainDb; onMoved: builder.setPreviewGainDb(value) }
+                        MSlider { Layout.fillWidth: true; from: -30; to: 6; value: builder.previewGainDb; onMoved: builder.setPreviewGainDb(value) }
                         Text { text: (builder.previewGainDb > 0 ? "+" : "") + builder.previewGainDb.toFixed(1) + " dB"; color: Theme.ink; font.pixelSize: 9; font.family: Theme.mono } }
                     Text { visible: builder.previewNote !== ""; text: builder.previewNote; color: builder.previewOn ? Theme.emerald : Theme.amber; font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
             GridLayout { columns: 2; columnSpacing: 8; rowSpacing: 6; Layout.fillWidth: true

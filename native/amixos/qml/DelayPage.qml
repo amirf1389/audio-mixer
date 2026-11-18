@@ -68,7 +68,7 @@ Flickable {
                         Text { text: page.t("CH ") + (row.index + 1 < 10 ? "0" : "") + (row.index + 1); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; Layout.preferredWidth: 42 }
                         Text { text: row.st && row.st.name ? row.st.name : ""; color: Theme.muted; font.pixelSize: 9; elide: Text.ElideRight; Layout.preferredWidth: 90 }
                         Btn { label: "−"; onClicked: page.put(row.index, row.ms - 0.1) }
-                        Slider { Layout.fillWidth: true; from: 0; to: page.limit; stepSize: 0.01; value: Math.min(row.ms, page.limit)
+                        MSlider { Layout.fillWidth: true; from: 0; to: page.limit; stepSize: 0.01; value: Math.min(row.ms, page.limit)
                                  Accessible.name: page.t("Delay of channel ") + (row.index + 1); onMoved: page.put(row.index, value) }
                         Btn { label: "+"; onClicked: page.put(row.index, row.ms + 0.1) }
                         Text { Layout.preferredWidth: 150; horizontalAlignment: Text.AlignRight; font.family: Theme.mono; font.pixelSize: 10

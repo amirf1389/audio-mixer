@@ -23,7 +23,7 @@ Item {
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Knob: RowLayout { property string label; property real value; property real from; property real to; property string unit; property int digits: 1; signal moved(real v); spacing: 6; Layout.fillWidth: true
         Text { text: i18n.t(label, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 86; elide: Text.ElideRight }
-        Slider { Layout.fillWidth: true; from: parent.from; to: parent.to; value: parent.value; onMoved: parent.moved(value) }
+        MSlider { Layout.fillWidth: true; from: parent.from; to: parent.to; value: parent.value; onMoved: parent.moved(value) }
         Text { text: Number(parent.value).toFixed(parent.digits) + " " + unit; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight } }
     component Meter: RowLayout { property string label; property real db; property real span: 20; property color tint: Theme.amber; spacing: 6; Layout.fillWidth: true
         Text { text: i18n.t(label, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 86 }
