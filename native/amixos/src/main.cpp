@@ -1249,6 +1249,7 @@ int main(int argc, char* argv[]) {
           measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+          win->setProperty("current", "update"); settle(900); win->grabWindow().save(shots + "/software-update.png");
           { // STORE > DOWNLOADS with two example entries (one already there)
             const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* name, const char* ver, const char* note, const char* file, double size) { QJsonObject f; f["name"] = file; f["url"] = QStringLiteral("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/") + file; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "linux-deb", "linux-tar", "macos-dmg", "macos"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = name; o["version"] = ver; o["note"] = note; o["files"] = files; return o; };
             QJsonArray list; list << entry("amfb-warm", "AMFB Warm Channel", "1.0", "tube warmth and a soft ceiling for a voice", "AMFB Warm Channel.vst3", 4.2e6) << entry("amfb-air", "AMFB Air Shelf", "1.1", "a bright, open top end", "AMFB Air Shelf.vst3", 3.1e6);
@@ -1525,6 +1526,11 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // SYSTEM INFORMATION: read only, every field safe to show, never an empty map
+        const QVariantMap fw = engine.firmwareInfo(); const QVariantList dr = engine.soundDrivers(); bool ok = fw.contains("biosVersion") && fw.contains("os") && fw.contains("maker");
+        for (const QString& k : fw.keys()) ok = ok && fw[k].toString().size() <= 96; for (const QVariant& v : dr) ok = ok && !v.toMap()["name"].toString().isEmpty();
+        std::printf("amixos --smoke: SYSTEM INFORMATION computer \"%s %s\", firmware \"%s\" \"%s\", OS \"%s\", %d sound driver(s): %s\n", qPrintable(fw["maker"].toString()), qPrintable(fw["model"].toString()), qPrintable(fw["biosVendor"].toString()), qPrintable(fw["biosVersion"].toString()), qPrintable(fw["os"].toString()), int(dr.size()), ok ? "ok" : "FAILED");
+        if (!ok) std::exit(96); }
       { // EXPORT: a .zip with only the console's own files, in the folder asked for, never over an earlier one
         const QString dir = QDir::tempPath() + "/amixos-smoke-export"; QDir(dir).removeRecursively(); engine.saveNow();
         { QFile f(settings.dataFolder() + "/daemon.tokens.json"); const bool had = f.exists(); if (!had && f.open(QIODevice::WriteOnly)) { f.write("{\"secret\":1}"); f.close(); }

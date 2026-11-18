@@ -66,6 +66,7 @@ Canvas {
         flag: "M5 21 V4 H17 L15 8 L17 12 H5",
         pulse: "M3 12 H7 L10 5 L14 19 L17 12 H21",
         store: "M5 8 H19 L18 21 H6 Z M9 8 V6 A3 3 0 0 1 15 6 V8",
+        update: "M19 12 A7 7 0 1 1 16.5 6.6 M19 4 V8 H15 M12 8 V14 M9.5 11.5 L12 14 L14.5 11.5",   // a turning arrow with a download arrow inside
         streaming: "M10 14 L14 10 M8 12 L6 14 A3.5 3.5 0 0 0 11 19 L13 17 M16 12 L18 10 A3.5 3.5 0 0 0 13 5 L11 7",   // two chain links
         vst: "M4 4 H20 V20 H4 Z M8 8 V16 M12 8 V16 M16 8 V16 M6 11 H10 M10 14 H14 M14 10 H18",
         extension: "M12 2 L21 7 V17 L12 22 L3 17 V7 Z M9 12 H15 M12 9 V15",

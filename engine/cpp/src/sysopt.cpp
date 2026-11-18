@@ -38,6 +38,7 @@
 #  endif
 #endif
 
+#include <fstream>
 namespace am::sysopt {
 
 // ---------------------------------------------------------------------------------------------------------------------------------- pure parts
@@ -384,6 +385,53 @@ std::uint64_t trimMemory(bool) {
   malloc_trim(0);
 #endif
   return memory().processMb;
+}
+#endif
+
+std::string cleanField(const std::string& raw) {
+  std::string o; for (unsigned char c : raw) { if (c == '\t' || c == '\r' || c == '\n') c = ' '; if (c >= 0x20 && c != 0x7f) o += static_cast<char>(c); }
+  while (!o.empty() && o.back() == ' ') o.pop_back(); std::size_t b = 0; while (b < o.size() && o[b] == ' ') ++b; o = o.substr(b);
+  if (o.size() > 96) o.resize(96);
+  return o;
+}
+#if defined(_WIN32)
+namespace {
+// one text value of a registry key under HKEY_LOCAL_MACHINE, opened for reading only
+std::string regText(HKEY key, const char* name) { char buf[512]; DWORD n = sizeof(buf) - 1, type = 0; if (RegQueryValueExA(key, name, nullptr, &type, reinterpret_cast<LPBYTE>(buf), &n) != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) return {}; buf[n < sizeof(buf) ? n : sizeof(buf) - 1] = 0; return cleanField(buf); }
+}  // namespace
+Firmware firmware() {
+  Firmware f; HKEY k;
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\BIOS", 0, KEY_READ, &k) == ERROR_SUCCESS) { f.biosVendor = regText(k, "BIOSVendor"); f.biosVersion = regText(k, "BIOSVersion"); f.biosDate = regText(k, "BIOSReleaseDate");
+    f.maker = regText(k, "SystemManufacturer"); f.model = regText(k, "SystemProductName"); f.board = regText(k, "BaseBoardProduct"); RegCloseKey(k); }
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", 0, KEY_READ, &k) == ERROR_SUCCESS) { const std::string name = regText(k, "ProductName"), ver = regText(k, "DisplayVersion"), build = regText(k, "CurrentBuild");
+    f.os = cleanField(name + (ver.empty() ? "" : " " + ver) + (build.empty() ? "" : " (build " + build + ")")); RegCloseKey(k); }
+  return f;
+}
+std::vector<DriverInfo> audioDrivers() {   // the "Sound, video and game controllers" class: one key per installed driver
+  std::vector<DriverInfo> out; HKEY cls;
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e96c-e325-11ce-bfc1-08002be10318}", 0, KEY_READ, &cls) != ERROR_SUCCESS) return out;
+  for (DWORD i = 0; i < 256 && out.size() < 64; ++i) { char sub[64]; DWORD n = sizeof(sub); if (RegEnumKeyExA(cls, i, sub, &n, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) break;
+    HKEY k; if (RegOpenKeyExA(cls, sub, 0, KEY_READ, &k) != ERROR_SUCCESS) continue;   // "Properties" and the like cannot be opened: skipped
+    DriverInfo d; d.name = regText(k, "DriverDesc"); d.provider = regText(k, "ProviderName"); d.version = regText(k, "DriverVersion"); d.date = regText(k, "DriverDate"); RegCloseKey(k);
+    if (!d.name.empty()) out.push_back(d); }
+  RegCloseKey(cls); return out;
+}
+#else
+namespace {
+std::string firstLine(const char* path) { std::ifstream f(path); std::string l; if (f) std::getline(f, l); return cleanField(l); }
+}  // namespace
+Firmware firmware() {
+  Firmware f; f.biosVendor = firstLine("/sys/class/dmi/id/bios_vendor"); f.biosVersion = firstLine("/sys/class/dmi/id/bios_version"); f.biosDate = firstLine("/sys/class/dmi/id/bios_date");
+  f.maker = firstLine("/sys/class/dmi/id/sys_vendor"); f.model = firstLine("/sys/class/dmi/id/product_name"); f.board = firstLine("/sys/class/dmi/id/board_name");
+  std::string pretty; { std::ifstream os("/etc/os-release"); std::string l; while (std::getline(os, l)) if (l.rfind("PRETTY_NAME=", 0) == 0) { pretty = l.substr(12); if (pretty.size() >= 2 && pretty.front() == '"') pretty = pretty.substr(1, pretty.size() - 2); } }
+  const std::string kernel = firstLine("/proc/sys/kernel/osrelease"); f.os = cleanField(pretty + (kernel.empty() ? "" : (pretty.empty() ? "Linux " : " (Linux ") + kernel + (pretty.empty() ? "" : ")")));
+  return f;
+}
+std::vector<DriverInfo> audioDrivers() {   // ALSA's sound cards: " 0 [PCH            ]: HDA-Intel - HDA Intel PCH"
+  std::vector<DriverInfo> out; std::ifstream f("/proc/asound/cards"); std::string l; const std::string kernel = firstLine("/proc/sys/kernel/osrelease");
+  while (std::getline(f, l) && out.size() < 64) { const auto c = l.find("]: "); if (c == std::string::npos) continue; const std::string rest = l.substr(c + 3); const auto dash = rest.find(" - ");
+    DriverInfo d; d.name = cleanField(dash == std::string::npos ? rest : rest.substr(dash + 3)); d.provider = cleanField(dash == std::string::npos ? "" : rest.substr(0, dash)); d.version = kernel.empty() ? "" : "Linux " + kernel; if (!d.name.empty()) out.push_back(d); }
+  return out;
 }
 #endif
 

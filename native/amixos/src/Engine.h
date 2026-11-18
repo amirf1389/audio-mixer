@@ -282,6 +282,10 @@ class Engine : public QObject {
   //   fastCores: the audio thread asks for the performance cores of a hybrid processor; eco: the interface thread is EcoQoS while the window is
   //   behind another program; trim: memory goes back to Windows 3 s after the window is minimised
   Q_INVOKABLE QVariantMap systemInfo() const;
+  // SYSTEM INFORMATION (read only): {maker, model, board, biosVendor, biosVersion, biosDate, os} and the installed sound drivers
+  // [{name, provider, version, date}]. Looked up once; the console never changes a driver or the firmware.
+  Q_INVOKABLE QVariantMap firmwareInfo() const;
+  Q_INVOKABLE QVariantList soundDrivers() const;
   Q_INVOKABLE void setSysOpt(const QString& key, bool on);
   Q_INVOKABLE QVariantMap trimMemoryNow();
   // LOW LATENCY SOUND DETECTION (audiomixer/latency.hpp): the open sound card's latency in plain words, with what would lower it;

@@ -82,6 +82,7 @@ qt_add_qml_module(amixos
         qml/MediaPage.qml
         qml/SamplesPage.qml
         qml/StreamingPage.qml
+        qml/UpdatePage.qml
         qml/SoundCardPage.qml
         qml/DspModeSwitch.qml
         qml/ScorePage.qml

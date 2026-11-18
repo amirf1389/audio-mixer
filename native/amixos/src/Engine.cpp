@@ -1647,7 +1647,7 @@ QVariantList Engine::pages() const {
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "score", "SOUND SCORE", "★", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "streaming", "STREAMING LINKS", "🔗", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "◇", true}, {"SOURCE", "assistant", "AI ASSISTANT", "✦", true}, {"SOURCE", "store", "STORE", "⬡", true}, {"SOURCE", "engctl", "ENGINE CONTROL", "⚡", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
     {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", true}, {"DEVICE", "cascade", "CASCADE", "⚭", true},
-    {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
+    {"SYSTEM", "update", "SOFTWARE UPDATE", "⟳", true}, {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
   QVariantList l; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; l << m; }
@@ -1682,6 +1682,15 @@ void Engine::setSysOpt(const QString& key, bool on) {
 static const am::sysopt::CpuInfo& cpuOnce() { static const am::sysopt::CpuInfo c = am::sysopt::cpu(); return c; }
 static const am::sysopt::NpuInfo& npuOnce() { static const am::sysopt::NpuInfo n = am::sysopt::npu(); return n; }
 static void warmSystemInfo() { std::thread([] { (void)cpuOnce(); (void)npuOnce(); }).detach(); }
+QVariantMap Engine::firmwareInfo() const {
+  static const am::sysopt::Firmware f = am::sysopt::firmware(); auto q = [](const std::string& v) { return QString::fromStdString(v); };
+  return {{"maker", q(f.maker)}, {"model", q(f.model)}, {"board", q(f.board)}, {"biosVendor", q(f.biosVendor)}, {"biosVersion", q(f.biosVersion)}, {"biosDate", q(f.biosDate)}, {"os", q(f.os)}};
+}
+QVariantList Engine::soundDrivers() const {
+  static const std::vector<am::sysopt::DriverInfo> d = am::sysopt::audioDrivers(); QVariantList l;
+  for (const auto& x : d) l << QVariantMap{{"name", QString::fromStdString(x.name)}, {"provider", QString::fromStdString(x.provider)}, {"version", QString::fromStdString(x.version)}, {"date", QString::fromStdString(x.date)}};
+  return l;
+}
 QVariantMap Engine::systemInfo() const {
   const am::sysopt::CpuInfo& c = cpuOnce();
   const am::sysopt::NpuInfo& n = npuOnce();
