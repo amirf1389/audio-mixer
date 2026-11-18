@@ -44,7 +44,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
     Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
-    Aurora { anchors.fill: parent; z: -1; motion: settings.colorMotion; accent: Theme.accent }
+    Aurora { anchors.fill: parent; z: -1; visible: Theme.glass; motion: Theme.glass && settings.colorMotion; accent: Theme.accent }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
     property bool autoFailed: false

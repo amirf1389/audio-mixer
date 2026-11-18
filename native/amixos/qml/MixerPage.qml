@@ -9,7 +9,6 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mixerPage"
-    Rectangle { anchors.fill: parent; anchors.margins: -12; z: -1; color: Theme.dark ? "#0d0f12" : "#e8ebf0" }   // the desk: flat graphite behind every panel of this page
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters

@@ -6,15 +6,16 @@ import QtQuick
 
 QtObject {
     property bool dark: true
-    readonly property color obsidian: dark ? "#040507" : "#f3f5f9"      // the window
-    readonly property color deep: dark ? "#05070a" : "#e6eaf1"          // meters, canvases, fader tracks, text fields
+    readonly property color obsidian: dark ? "#0d0f12" : "#e8ebf0"      // the window
+    readonly property color deep: dark ? "#0a0b0d" : "#dfe3ea"          // meters, canvases, fader tracks, text fields
     // GLASS: the header, the rail and the panels let the AURORA colour behind them through; cardSolid is for menus and popups over a page
-    property bool glass: true
+    property bool glass: false   // FLAT: every page is flat graphite tiles on a flat desk (true brings the translucent panels over the aurora back)
     property color accent: orange                                       // the colour of the section open now (Main.qml sets it)
-    readonly property color chrome: glass ? (dark ? Qt.rgba(0.027, 0.039, 0.063, 0.62) : Qt.rgba(1, 1, 1, 0.70)) : (dark ? "#070a10" : "#ffffff")        // the header bar
-    readonly property color card: glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : (dark ? "#0f141c" : "#ffffff")
-    readonly property color cardSolid: dark ? "#0f141c" : "#ffffff"
-    readonly property color cardRaised: dark ? "#141b26" : "#eef1f6"
+    readonly property color chrome: glass ? (dark ? Qt.rgba(0.027, 0.039, 0.063, 0.62) : Qt.rgba(1, 1, 1, 0.70)) : (dark ? "#121418" : "#ffffff")        // the header bar
+    readonly property color card: glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : (dark ? "#16181c" : "#f4f6f9")
+    readonly property color cardSolid: dark ? "#16181c" : "#ffffff"
+    readonly property color cardRaised: dark ? "#1d2026" : "#eef1f6"
+    readonly property color head: dark ? "#262a31" : "#d5dae2"            // the header bar of a section
     readonly property color line: dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.14)
     readonly property color lineSoft: dark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.07)
     readonly property color ink: dark ? "#f1f5f9" : "#0f172a"
@@ -39,8 +40,8 @@ QtObject {
     // (no neon next to pastel) and the gradient only shifts gently. Glass (translucent) colours stay glass.
     function harm(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return c; const h = c.hslHue < 0 ? 0 : c.hslHue, sat = c.hslHue < 0 ? 0 : Math.min(c.hslSaturation, dark ? 0.58 : 0.55);
         return Qt.hsla(h, sat, Math.max(dark ? 0.46 : 0.40, Math.min(dark ? 0.58 : 0.52, c.hslLightness)), c.a) }
-    function btnTop(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.35)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.66, h.hslLightness + 0.05), h.a) }
-    function btnBottom(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.55); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.06), h.a) }
+    function btnTop(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.1)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.64, h.hslLightness + 0.02), h.a) }
+    function btnBottom(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.9); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.02), h.a) }
     function ov(a) { return dark ? Qt.rgba(1, 1, 1, a) : Qt.rgba(0, 0, 0, a); }
     function groupColor(g) {
         switch (g) {
