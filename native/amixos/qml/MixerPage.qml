@@ -31,6 +31,17 @@ Item {
             gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.30) } GradientStop { position: 0.28; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.07) } GradientStop { position: 1; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.12) } } }
         Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: 1; width: parent.width * 0.6; height: 3; radius: 2; color: mp.tint; opacity: 0.9 }
         ColumnLayout { id: mpCol; anchors.fill: parent; anchors.margins: 9; anchors.topMargin: 10; spacing: 6 } }
+    // A MODERN KEY: rounded, flat, a soft light along the top; it glows in its colour when on, lights its edge under the pointer and
+    // dips a little when pressed. Used for MUTE / SOLO, the easy keys and MORE on every strip.
+    component MKey: Rectangle { id: mkey; property string label; property string glyph: ""; property bool on: false; property bool half: false; property color hue: Theme.accent; property bool can: true; property string tip: ""; signal hit()
+        implicitWidth: 28; implicitHeight: 26; radius: 9; opacity: can ? 1 : 0.38; scale: mkMa.pressed ? 0.94 : 1; Behavior on scale { NumberAnimation { duration: 70 } }
+        color: on ? hue : half ? Qt.rgba(hue.r, hue.g, hue.b, 0.30) : (mkMa.containsMouse ? Theme.ov(0.16) : Theme.ov(0.09)); Behavior on color { ColorAnimation { duration: 110 } }
+        border.width: 1; border.color: on || mkMa.containsMouse ? hue : Theme.line
+        Rectangle { visible: mkey.on; anchors.centerIn: parent; width: parent.width + 8; height: parent.height + 8; radius: parent.radius + 4; z: -1; color: Qt.rgba(mkey.hue.r, mkey.hue.g, mkey.hue.b, 0.28) }   // the glow of a key that is on
+        Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: 1; width: parent.width - 10; height: 1; radius: 1; color: Qt.rgba(1, 1, 1, mkey.on ? 0.55 : 0.14) }
+        Text { anchors.centerIn: parent; text: mkey.glyph !== "" ? mkey.glyph : i18n.t(mkey.label, i18n.lang); color: mkey.on ? "#0b0f14" : Theme.ink; font.family: mkey.glyph !== "" ? Theme.sans : Theme.mono; font.pixelSize: mkey.glyph !== "" ? 13 : 9; font.bold: true; font.letterSpacing: mkey.glyph !== "" ? 0 : 0.6 }
+        ToolTip.visible: mkey.tip !== "" && mkMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: mkey.tip
+        MouseArea { id: mkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: mkey.can; onClicked: mkey.hit() } }
     component Lamp: Rectangle { property color tint: Theme.emerald; property bool lit: true; width: 7; height: 7; radius: 4; color: lit ? tint : Theme.ov(0.15)
         Rectangle { anchors.centerIn: parent; width: 13; height: 13; radius: 7; color: Qt.rgba(parent.tint.r, parent.tint.g, parent.tint.b, 0.25); visible: parent.lit } }
     component ReadPill: Rectangle { property alias text: rpT.text; property color tint: Theme.amber; Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: Qt.rgba(tint.r, tint.g, tint.b, 0.12); border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.45)
@@ -386,7 +397,7 @@ Item {
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 124 : 108) : 0
+                                width: visible ? (page.sendView ? 124 : 114) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
@@ -469,8 +480,8 @@ Item {
                                         readonly property int p: Math.round((st ? st.pan : 0) * 100)
                                         text: i18n.t("PAN", i18n.lang) + " " + (p === 0 ? "C" : (p < 0 ? "L" + (-p) : "R" + p)); color: p === 0 ? Theme.muted : Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                     RowLayout { Layout.fillWidth: true; spacing: 3
-                                        Rectangle { id: gb104; objectName: "stripMute" + index; Layout.fillWidth: true; implicitWidth: 28; implicitHeight: 24; radius: 6; color: st && st.mute ? Qt.rgba(1, 0.165, 0.373, 0.85) : (st && st.effectiveMute ? Qt.rgba(1, 0.165, 0.373, 0.30) : Theme.ov(0.07)); border.width: 1; border.color: st && (st.mute || st.effectiveMute) ? Qt.rgba(1, 0.165, 0.373, 0.8) : Theme.lineSoft; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb104.color) } GradientStop { position: 1; color: Theme.btnBottom(gb104.color) } } Text { anchors.centerIn: parent; text: i18n.t("MUTE", i18n.lang); color: st && st.mute ? "#0b0f14" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMute(index, !(st && st.mute)) } }
-                                        Rectangle { id: gb105; objectName: "stripSolo" + index; Layout.fillWidth: true; implicitWidth: 28; implicitHeight: 24; radius: 6; color: st && st.solo ? Qt.rgba(0.984, 0.749, 0.141, 0.85) : Theme.ov(0.07); border.width: 1; border.color: st && st.solo ? Qt.rgba(0.984, 0.749, 0.141, 0.8) : Theme.lineSoft; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb105.color) } GradientStop { position: 1; color: Theme.btnBottom(gb105.color) } } Text { anchors.centerIn: parent; text: i18n.t("SOLO", i18n.lang); color: st && st.solo ? "#0b0f14" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }
+                                        MKey { objectName: "stripMute" + index; Layout.fillWidth: true; label: "MUTE"; hue: "#ff4d6d"; on: !!(st && st.mute); half: !!(st && !st.mute && st.effectiveMute); onHit: { engine.selectedStrip = index; engine.setMute(index, !(st && st.mute)) } }
+                                        MKey { objectName: "stripSolo" + index; Layout.fillWidth: true; label: "SOLO"; hue: "#fbbf24"; on: !!(st && st.solo); onHit: { engine.selectedStrip = index; engine.setSolo(index, !(st && st.solo)) } } }
                                     // AI: automix (gain sharing between open channels) on this strip, with the gain it applies right now; ⋯ = the strip menu (also right-click)
                                     RowLayout { Layout.fillWidth: true; spacing: 2
                                         Rectangle { visible: mt !== undefined && !!mt.overComp; Layout.fillWidth: true; implicitHeight: 13; radius: 3; color: Qt.rgba(1, 0.3, 0.3, 0.25); border.color: Theme.danger
@@ -482,9 +493,8 @@ Item {
                                             Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 1; height: 2; radius: 1; color: Theme.harm(stripItem.sc); visible: st && st.automix; width: Math.max(0, Math.min(1, 1 + (mt && mt.amGainDb !== undefined ? mt.amGainDb : 0) / 30)) * (parent.width - 2) }
                                             MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) { engine.selectedStrip = index; page.go("ai") } else engine.setAutomix(index, !(st && st.automix), st ? st.amWeight : 1) } }
                                             ToolTip.visible: aiH.hovered && settings.tooltips; ToolTip.text: i18n.t("AI automix: when on, this channel shares gain with the other AI channels by who is speaking (the bar and number show the gain applied now). Right-click opens AI MIX.", i18n.lang); HoverHandler { id: aiH } }
-                                        Rectangle { objectName: "stripMore" + index; Layout.fillWidth: page.simple; implicitWidth: 18; implicitHeight: page.simple ? 18 : 15; radius: 5; color: moreL.item && moreL.item.visible ? stripItem.sc : Theme.ov(0.06); border.color: Theme.lineSoft
-                                            Text { anchors.centerIn: parent; text: page.simple ? i18n.t("MORE", i18n.lang) + " ⋯" : "⋯"; color: moreL.item && moreL.item.visible ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                            MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; moreL.active = true; moreL.item.popup() } }
+                                        MKey { objectName: "stripMore" + index; Layout.fillWidth: page.simple; implicitWidth: 22; implicitHeight: page.simple ? 22 : 16; radius: 7; hue: stripItem.sc; on: !!(moreL.item && moreL.item.visible)
+                                            label: page.simple ? "MORE" : ""; glyph: page.simple ? "" : "⋯"; onHit: { engine.selectedStrip = index; moreL.active = true; moreL.item.popup() }
                                         Connections { target: page; function onStripMenuDemoChanged() { if (index !== 0) return; if (page.stripMenuDemo) { moreL.active = true; moreL.item.popup(120, 40); moreL.item.openFx() } else if (moreL.item) { moreL.item.closeFx(); moreL.item.close() } } }
                                         Loader { id: moreL; active: false   // the channel menu (effects, 100 samples ...) is built the first time it opens: 32 of them at once made the MIXER take seconds to open
                                             sourceComponent: Component {
@@ -565,18 +575,14 @@ Item {
                                         ColumnLayout { Layout.fillHeight: true; spacing: 3
                                             Item { Layout.fillHeight: true }
                                             Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
-                                                delegate: Rectangle { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 22; implicitHeight: 24; radius: 6; border.width: 1
-                                                    readonly property bool can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
-                                                    color: easyMa.pressed ? stripItem.sc : Theme.ov(0.09); border.color: easyMa.containsMouse ? stripItem.sc : Theme.line; opacity: can ? 1 : 0.4
-                                                    Text { anchors.centerIn: parent; text: modelData[0]; color: easyMa.pressed ? "#0b0f14" : Theme.ink; font.pixelSize: 12; font.bold: true }
-                                                    ToolTip.visible: easyMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: i18n.t(modelData[2], i18n.lang)
-                                                    MouseArea { id: easyMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: parent.can
-                                                        onClicked: { engine.selectedStrip = stripItem.stripIdx
-                                                            // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
-                                                            const now = fadRow.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : fadRow.before
-                                                            settleT.stop(); fadRow.before = now; fadRow.settled = to; engine.setGain(stripItem.stripIdx, to) } } } }
+                                                delegate: MKey { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 24; implicitHeight: 26; glyph: modelData[0]; hue: stripItem.sc; tip: i18n.t(modelData[2], i18n.lang)
+                                                    can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
+                                                    onHit: { engine.selectedStrip = stripItem.stripIdx
+                                                        // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
+                                                        const now = fadRow.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : fadRow.before
+                                                        settleT.stop(); fadRow.before = now; fadRow.settled = to; engine.setGain(stripItem.stripIdx, to) } } }
                                             Item { Layout.preferredHeight: 4 } }
-                                        Fader { objectName: "stripFader"; showLevels: false; Layout.fillHeight: true; value: st ? st.db : 0; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }
+                                        Fader { objectName: "stripFader"; showLevels: false; numbers: true; tint: stripItem.sc; Layout.fillHeight: true; value: st ? st.db : 0; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 0
                                             RowLayout { Layout.fillHeight: true; spacing: 2
                                                 MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 5; peakDb: mt ? mt.inDb : -120; rmsDb: mt ? mt.inDb : -120; floorDb: -60 }   // input (pre-fader)
