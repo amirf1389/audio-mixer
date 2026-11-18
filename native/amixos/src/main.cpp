@@ -180,6 +180,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("access", &access);
   qml.rootContext()->setContextProperty("osc", &osc);
   qml.rootContext()->setContextProperty("media", &media);
+  const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) engine.setWatchdog(false);   // test runs: no automatic restarts under the other checks
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("samples", &samples);
@@ -613,7 +614,7 @@ int main(int argc, char* argv[]) {
         const QVariantList sp = engine.pluginParams(20, a); const bool txt = sp.size() >= 4 && sp[0].toMap()["text"].toString().startsWith("1 ");
         if (a < 0 || a != b || n != 1 || d < 0 || dual != d || !txt) { std::fprintf(stderr, "amixos --smoke: rack helpers (sampler %d/%d x%d, dual %d/%d, text %d: %d params, first \"%s\")\n", a, b, n, d, dual, txt, static_cast<int>(sp.size()), sp.isEmpty() ? "" : qPrintable(sp[0].toMap()["text"].toString())); return 154; }
         engine.setPlugin(20, a, ""); engine.setPlugin(20, d, ""); }
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 46) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 46: 43 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 48) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 48: 45 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -1514,6 +1515,11 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // WATCHDOG FAILOVER: on by default; a restart by hand brings the same device back and says so
+        const bool wasRunning = engine.running(); const QString dev = engine.backend(); const bool ok = engine.failover("the self-test asked for it");
+        const bool same = engine.running() && engine.backend() == dev, said = engine.watchdogNote().contains("started again") && engine.failovers() >= 1;
+        std::printf("amixos --smoke: WATCHDOG on by default %d, FAILOVER restarted %d on the same device %d and said so %d\n", watchdogWas, ok, same, said);
+        if (!watchdogWas || !wasRunning || !ok || !same || !said) std::exit(92); }
       { // STREAMING LINKS: a pasted link is recognised, kept once, opened by its app address or its https address; anything else is refused; 360 AUDIO is off by default
         while (!links.list().isEmpty()) links.remove(0);
         const bool added = links.add(" https://open.spotify.com/intl-de/track/4uLU6hMCjMI75M1A2tKUQC?si=x ", "Opener"), twice = links.add("spotify:track:4uLU6hMCjMI75M1A2tKUQC", "");

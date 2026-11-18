@@ -77,6 +77,8 @@ Flickable {
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setDeviceEnabled(page.backend, modelData.id, modelData.enabled === false) } } } } }
                     Text { visible: page.devs("out").length === 0; text: i18n.t("No output of this driver", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 } }
             }
+            Rectangle { objectName: "watchdogNote"; visible: engine.watchdogNote.length > 0; Layout.fillWidth: true; implicitHeight: wdT.implicitHeight + 14; radius: 6; color: Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: Theme.amber
+                Text { id: wdT; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 10; wrapMode: Text.WordWrap; text: i18n.t(engine.watchdogNote, i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } }
             // NOT AVAILABLE NOW: devices Windows knows that cannot be opened at this moment, each with the reason (nothing is silently missing)
             Repeater { model: { engine.devices; return engine.absentDevices() }
                 delegate: RowLayout { Layout.fillWidth: true; spacing: 8

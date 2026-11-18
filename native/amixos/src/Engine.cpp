@@ -71,7 +71,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
-  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate(); oneVoice_ = settings_.value("audio/oneVoice", true).toBool();
+  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate(); oneVoice_ = settings_.value("audio/oneVoice", true).toBool(); watchdog_ = settings_.value("audio/watchdog", true).toBool(); wdClock_.start();
   sysFast_ = settings_.value("sys/fastCores", true).toBool(); sysEco_ = settings_.value("sys/ecoBackground", true).toBool(); sysTrim_ = settings_.value("sys/trimMinimised", true).toBool();
   am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -125,7 +125,10 @@ void Engine::applyFingerprint(const std::string& f) {
   refreshDevices();
   QStringList after; for (const QVariant& v : devices_) after << v.toMap()["name"].toString();
   QStringList added, gone; for (const QString& n : after) if (!before.contains(n)) added << n; for (const QString& n : before) if (!after.contains(n)) gone << n;
-  if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged(); }
+  if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { const int frames = blockFrames_ > 0 ? blockFrames_ : 256; stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged();
+    if (watchdog_) QTimer::singleShot(700, this, [this, frames, gone] { if (rt_) return;   // FAILOVER: the best device left takes over
+      const bool ok = autoStart(frames); ++failovers_; watchdogNote_ = ok ? QStringLiteral("WATCHDOG: %1 was unplugged; the sound moved to %2.").arg(gone.join(", "), outDevName_.isEmpty() ? QString::fromStdString(curBackend_) : outDevName_) : QStringLiteral("WATCHDOG: %1 was unplugged and no other sound card could be opened.").arg(gone.join(", "));
+      emit watchdogChanged(); }); }
   if (!added.isEmpty()) emit hotplug(true, added.join(", ")); else if (!gone.isEmpty()) emit hotplug(false, gone.join(", "));
 }
 // UNIVERSAL ASIO DETECTION: every ASIO driver, of any brand, gets who made it and what it is (interface, desk, DJ, guitar, onboard,
@@ -1707,10 +1710,27 @@ QVariantMap Engine::systemInfo() const {
 void Engine::setOneVoice(bool on) { if (on == oneVoice_) return; oneVoice_ = on; settings_.setValue("audio/oneVoice", on); ov_.reset(); emit oneVoiceChanged(); }
 void Engine::undoOneVoice() { if (!oneVoiceActed_) return; setInputRoute(0, 0); oneVoiceNote_.clear(); ov_.reset(); emit oneVoiceChanged(); }   // oneVoiceActed_ stays: not again on this device
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
+void Engine::setWatchdog(bool on) { if (on == watchdog_) return; watchdog_ = on; settings_.setValue("audio/watchdog", on); wd_.reset(); emit watchdogChanged(); }
+bool Engine::failover(const QString& why) {
+  if (opening_) return false;
+  const QString backend = QString::fromStdString(curBackend_), in = QString::fromStdString(curIn_), out = QString::fromStdString(curOut_);
+  const double rate = rt_ ? rt_->sampleRate() : 48000; const int frames = blockFrames_ > 0 ? blockFrames_ : 256, inCh = devIn_, outCh = devOut_ > 0 ? devOut_ : 2;
+  stop(); bool ok = !backend.isEmpty() && open(backend, in, out, rate, frames, inCh, outCh); bool moved = false;
+  if (!ok) { ok = autoStart(frames); moved = ok; }
+  ++failovers_; wd_.reset();
+  watchdogNote_ = !ok ? QStringLiteral("WATCHDOG: %1; the sound card could not be started again.").arg(why)
+                : moved ? QStringLiteral("WATCHDOG: %1; the sound moved to %2.").arg(why, outDevName_.isEmpty() ? QString::fromStdString(curBackend_) : outDevName_)
+                        : QStringLiteral("WATCHDOG: %1; the sound card was started again.").arg(why);
+  emit watchdogChanged(); return ok;
+}
 void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
+    // WATCHDOG: no new block for three seconds while the engine is running: the device stalled; start again (three times a minute at most)
+    if (watchdog_ && !opening_) { const am::Watchdog::Action act = wd_.feed(true, s.blocks, wdClock_.elapsed());
+      if (act == am::Watchdog::Action::Restart) { QMetaObject::invokeMethod(this, [this] { failover(QStringLiteral("the sound stopped arriving")); }, Qt::QueuedConnection); }
+      else if (act == am::Watchdog::Action::GiveUp) { watchdogNote_ = QStringLiteral("WATCHDOG: three restarts in a minute did not bring the sound back. Check the sound card, then press START."); emit watchdogChanged(); } }
     // ONE VOICE: the same mono microphone on inputs 1 and 2 (not on the null test device): CH 1 off, the voice heard once on CH 2
     if (oneVoice_ && !oneVoiceActed_ && rt_->backendName() != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {
       oneVoiceActed_ = true; setInputRoute(0, -1);
