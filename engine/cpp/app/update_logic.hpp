@@ -2,6 +2,7 @@
 // ({"payload": "<json text>", "signature": "<base64url, 64 bytes r||s>"}), comparing versions and deciding which download hosts are allowed.
 // Header only and free of Windows calls so the unit test can run it on any system (engine/cpp/test/update_logic_test.cpp). The signature itself is checked by win_tools.cpp (CNG).
 #pragma once
+#include <cstdint>
 #include <cctype>
 #include <cstdlib>
 #include <string>
@@ -108,6 +109,16 @@ inline bool hostAllowed(const std::string& url) {
 }
 
 inline bool isHex64(const std::string& s) { if (s.size() != 64) return false; for (char c : s) if (!std::isxdigit(static_cast<unsigned char>(c))) return false; return true; }
+// PLUG-IN DOWNLOADS: a plug-in in the signed list is one file saved into the console's own plug-in folder. Its name is used as a file
+// name on this computer, so it is held to plain characters: letters, digits, space, dot, dash, underscore and brackets, ending in .vst3,
+// not starting with a dot, no ".." and no path separator. Larger than 200 MB is not a plug-in this console downloads.
+constexpr std::uint64_t kMaxPluginBytes = 200ull * 1024 * 1024;
+inline bool pluginFileOk(const std::string& name) {
+  if (name.size() < 6 || name.size() > 80 || name[0] == '.' || name[0] == ' ' || name.find("..") != std::string::npos) return false;
+  for (unsigned char c : name) if (!(std::isalnum(c) || c == ' ' || c == '.' || c == '-' || c == '_' || c == '(' || c == ')')) return false;
+  std::string ext = name.substr(name.size() - 5); for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return ext == ".vst3";
+}
 
 }  // namespace upd
 }  // namespace am

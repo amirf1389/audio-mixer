@@ -11,6 +11,9 @@ static int fails = 0;
 
 int main(int argc, char** argv) {
   CHECK(cmpVersion("1.10.0", "1.9.0") > 0); CHECK(cmpVersion("1.18.0.0", "1.18.0.0") == 0); CHECK(cmpVersion("1.12.2.0", "1.18.0.0") < 0); CHECK(cmpVersion("2", "1.99.99") > 0); CHECK(cmpVersion("1.0", "1.0.0.0") == 0);
+  CHECK(pluginFileOk("AMFB Warm Channel.vst3") && pluginFileOk("My-Plug_2 (v1.2).VST3"));
+  for (const char* bad : {"", "a.vst3x", "plug.exe", "..vst3", ".hidden.vst3", "a/../b.vst3", "..\\x.vst3", "dir/plug.vst3", "C:plug.vst3", "plug.vst3.exe", " lead.vst3", "tab\tname.vst3", "nul\x01.vst3"}) CHECK(!pluginFileOk(bad));
+  CHECK(!pluginFileOk(std::string(90, 'a') + ".vst3") && kMaxPluginBytes == 200ull * 1024 * 1024);
   CHECK(hostAllowed("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json")); CHECK(hostAllowed("https://github.com/x/y/releases/download/v/a.exe"));
   CHECK(hostAllowed("https://ota.amirfakhribadri.my/update.json") && hostAllowed("https://amirfakhribadri.my/x") && !hostAllowed("http://ota.amirfakhribadri.my/update.json") && !hostAllowed("https://amirfakhribadri.my.evil.example/x") && !hostAllowed("https://evil-amirfakhribadri.my/x"));
   CHECK(!hostAllowed("http://github.com/x")); CHECK(!hostAllowed("https://evil.example/a.exe")); CHECK(!hostAllowed("https://github.com.evil.example/a")); CHECK(!hostAllowed("https://user@github.com/a")); CHECK(!hostAllowed("https://evilgithub.com/a"));

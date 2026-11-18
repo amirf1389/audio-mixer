@@ -184,6 +184,7 @@ int main(int argc, char* argv[]) {
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("samples", &samples);
+  update.pluginDir = settings.vstUserFolder(); QObject::connect(&update, &Update::pluginInstalled, &settings, [&] { settings.rescanVst(); });   // PLUG-IN DOWNLOADS land in the console's own plug-in folder
   qml.rootContext()->setContextProperty("updater", &update);
   QObject::connect(&update, &Update::revocations, &engine, [&](const QString& l) { engine.storeRevocations(l); });   // the newest revocation list the licence server signs
   QTimer::singleShot(4000, &update, [&] { update.fetchRevocations(); });   // once a start, quietly (nothing when no licence server is set)
@@ -1247,6 +1248,12 @@ int main(int argc, char* argv[]) {
           measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+          { // STORE > DOWNLOADS with two example entries (one already there)
+            const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* name, const char* ver, const char* note, const char* file, double size) { QJsonObject f; f["name"] = file; f["url"] = QStringLiteral("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/") + file; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "linux-deb", "linux-tar", "macos-dmg", "macos"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = name; o["version"] = ver; o["note"] = note; o["files"] = files; return o; };
+            QJsonArray list; list << entry("amfb-warm", "AMFB Warm Channel", "1.0", "tube warmth and a soft ceiling for a voice", "AMFB Warm Channel.vst3", 4.2e6) << entry("amfb-air", "AMFB Air Shelf", "1.1", "a bright, open top end", "AMFB Air Shelf.vst3", 3.1e6);
+            update.setPluginList(list); { QDir().mkpath(update.pluginDir); QFile f(update.pluginDir + "/AMFB Air Shelf.vst3"); if (f.open(QIODevice::WriteOnly)) f.write("x"); }
+            win->setProperty("current", "store"); settle(700); if (QObject* dp = win->findChild<QObject*>("storeDownloadPanel")) dp->setProperty("visible", true); settle(500); win->grabWindow().save(shots + "/store-downloads.png");
+            if (QObject* dp = win->findChild<QObject*>("storeDownloadPanel")) dp->setProperty("visible", false); QFile::remove(update.pluginDir + "/AMFB Air Shelf.vst3"); update.setPluginList(QJsonArray()); }
           for (const char* u : {"https://www.tiktok.com/@amfb.audio/live", "https://www.deezer.com/en/album/302127", "https://tidal.com/browse/track/12345678", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "https://youtu.be/dQw4w9WgXcQ"}) links.add(QString::fromLatin1(u), QString());
           win->setProperty("current", "streaming"); settle(800); win->grabWindow().save(shots + "/streaming.png");
           engine.setPlugin(0, 0, "fx:preamp"); engine.setPlugin(0, 1, "fx:regulator"); engine.setPlugin(0, 2, "fx:reverb"); engine.setPlugin(0, 3, "fx:protect"); engine.setPluginBypass(0, 2, true);   // THE RACK with effects in
@@ -1515,6 +1522,17 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // PLUG-IN DOWNLOADS: only well-formed entries of the list are offered; a file there counts as installed and REMOVE deletes only that file
+        const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* file, const char* url, double size) { QJsonObject f; f["name"] = file; f["url"] = url; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "win-x64-native", "linux-deb", "linux-tar", "macos", "android-apk", "win-x86-native"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = "Test plug-in"; o["version"] = "1.0"; o["files"] = files; return o; };
+        const char* good = "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/Test.vst3";
+        QJsonArray list; list << entry("warm", "AMFB Warm.vst3", good, 1000) << entry("evil-host", "A.vst3", "https://evil.example/A.vst3", 1000) << entry("http", "B.vst3", "http://raw.githubusercontent.com/x/B.vst3", 1000)
+             << entry("path", "../../C.vst3", good, 1000) << entry("exe", "D.exe", good, 1000) << entry("huge", "E.vst3", good, 3e9) << entry("Bad Id", "F.vst3", good, 1000) << entry("warm", "G.vst3", good, 1000);
+        const int kept = update.setPluginList(list); const QString dir = update.pluginDir, path = dir + "/AMFB Warm.vst3";
+        const bool notYet = !update.plugins()[0].toMap()["installed"].toBool(); { QDir().mkpath(dir); QFile f(path); if (f.open(QIODevice::WriteOnly)) f.write("x"); }
+        const bool there = update.plugins()[0].toMap()["installed"].toBool(), noUrl = !update.plugins()[0].toMap().contains("url"), removed = update.removePlugin("warm") && !QFile::exists(path), unknown = !update.removePlugin("nope");
+        update.setPluginList(QJsonArray());
+        std::printf("amixos --smoke: PLUG-IN DOWNLOADS %d of 8 entries offered (other hosts, http, paths, .exe, over 200 MB, odd ids and repeats left out), installed seen %d, REMOVE %d\n", kept, there && notYet, removed && unknown);
+        if (kept != 1 || !notYet || !there || !noUrl || !removed || !unknown) std::exit(93); }
       { // WATCHDOG FAILOVER: on by default; a restart by hand brings the same device back and says so
         const bool wasRunning = engine.running(); const QString dev = engine.backend(); const bool ok = engine.failover("the self-test asked for it");
         const bool same = engine.running() && engine.backend() == dev, said = engine.watchdogNote().contains("started again") && engine.failovers() >= 1;
