@@ -9,6 +9,7 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mixerPage"
+    Rectangle { anchors.fill: parent; anchors.margins: -12; z: -1; color: Theme.dark ? "#0d0f12" : "#e8ebf0" }   // the desk: flat graphite behind every panel of this page
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
@@ -31,123 +32,32 @@ Item {
             gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.30) } GradientStop { position: 0.28; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.07) } GradientStop { position: 1; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.12) } } }
         Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: 1; width: parent.width * 0.6; height: 3; radius: 2; color: mp.tint; opacity: 0.9 }
         ColumnLayout { id: mpCol; anchors.fill: parent; anchors.margins: 9; anchors.topMargin: 10; spacing: 6 } }
+    // A MODERN KEY: rounded, flat, a soft light along the top; it glows in its colour when on, lights its edge under the pointer and
+    // dips a little when pressed. Used for MUTE / SOLO, the easy keys and MORE on every strip.
+    component MKey: Rectangle { id: mkey; property string label; property string glyph: ""; property bool on: false; property bool half: false; property color hue: Theme.accent; property bool can: true; property string tip: ""; signal hit()
+        implicitWidth: 28; implicitHeight: 26; radius: 9; opacity: can ? 1 : 0.38; scale: mkMa.pressed ? 0.94 : 1; Behavior on scale { NumberAnimation { duration: 70 } }
+        color: on ? hue : half ? Qt.rgba(hue.r, hue.g, hue.b, 0.30) : (mkMa.containsMouse ? Theme.ov(0.16) : Theme.ov(0.09)); Behavior on color { ColorAnimation { duration: 110 } }
+        border.width: 1; border.color: on || mkMa.containsMouse ? hue : Theme.line
+        Rectangle { visible: mkey.on; anchors.centerIn: parent; width: parent.width + 8; height: parent.height + 8; radius: parent.radius + 4; z: -1; color: Qt.rgba(mkey.hue.r, mkey.hue.g, mkey.hue.b, 0.28) }   // the glow of a key that is on
+        Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: 1; width: parent.width - 10; height: 1; radius: 1; color: Qt.rgba(1, 1, 1, mkey.on ? 0.55 : 0.14) }
+        Text { anchors.centerIn: parent; text: mkey.glyph !== "" ? mkey.glyph : i18n.t(mkey.label, i18n.lang); color: mkey.on ? "#0b0f14" : Theme.ink; font.family: mkey.glyph !== "" ? Theme.sans : Theme.mono; font.pixelSize: mkey.glyph !== "" ? 13 : 9; font.bold: true; font.letterSpacing: mkey.glyph !== "" ? 0 : 0.6 }
+        ToolTip.visible: mkey.tip !== "" && mkMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: mkey.tip
+        MouseArea { id: mkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: mkey.can; onClicked: mkey.hit() } }
+    // A SECTION of the channel overview: a flat header bar with its title, as on a desk's channel screen
+    component SectHead: Rectangle { property string title; property string link: ""; signal open()
+        Layout.fillWidth: true; implicitHeight: 20; radius: 3; color: Theme.dark ? "#262a31" : "#d5dae2"
+        Text { anchors.centerIn: parent; text: i18n.t(parent.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+        Text { visible: parent.link !== ""; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: Theme.cyan; font.pixelSize: 13; font.bold: true }
+        MouseArea { anchors.fill: parent; enabled: parent.link !== ""; cursorShape: Qt.PointingHandCursor; onClicked: page.go(parent.link) } }
     component Lamp: Rectangle { property color tint: Theme.emerald; property bool lit: true; width: 7; height: 7; radius: 4; color: lit ? tint : Theme.ov(0.15)
         Rectangle { anchors.centerIn: parent; width: 13; height: 13; radius: 7; color: Qt.rgba(parent.tint.r, parent.tint.g, parent.tint.b, 0.25); visible: parent.lit } }
     component ReadPill: Rectangle { property alias text: rpT.text; property color tint: Theme.amber; Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: Qt.rgba(tint.r, tint.g, tint.b, 0.12); border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.45)
         Text { id: rpT; anchors.centerIn: parent; color: parent.tint; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
 
-    component DawChip: Rectangle { property string t; property bool on: false; property color hue: Theme.accent; property int strip: 0; signal hit()
-        implicitWidth: 20; implicitHeight: 16; radius: 2; color: on ? hue : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: on ? hue : (Theme.dark ? "#3a3e47" : "#c9ced8")
-        Text { anchors.centerIn: parent; text: parent.t; color: parent.on ? "#0b0d10" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = parent.strip; parent.hit() } } }
-    // ONE DAW STRIP: the colour tab and name, the input, TEN INSERT SLOTS (click an empty one: add an effect or a VST; click a filled one: its
-    // editor; the dot or a right-click: bypass), pan, MUTE / SOLO / REC / AUTO MIX, the fader with its IN / OUT meter, the level and the name plate
-    component DawStrip: Rectangle {
-        id: ds
-        property int idx: 0
-        readonly property int ver: engine.stripVer(idx, engine.stripTick)
-        readonly property var st: { ver; return engine.stripLite(idx) }
-        readonly property var mt: visible ? (page.tick, engine.meterAt(idx)) : undefined
-        readonly property var pl: { ver; engine.vstCount; return engine.plugins(idx).slice(0, 10) }
-        readonly property color sc: Theme.stripColors[st ? st.color : 0]
-        readonly property bool selected: page.sel === idx
-        readonly property bool locked: idx >= engine.licensedChannels
-        objectName: "dawStrip" + idx
-        radius: 3; clip: true
-        color: Theme.dark ? (selected ? "#2c2f36" : "#23252a") : (selected ? "#e4e7ed" : "#eef0f3")
-        border.color: selected ? Theme.accent : (Theme.dark ? "#30333a" : "#d5d9e0"); border.width: selected ? 1.5 : 1
-        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton; onPressed: function (m) { engine.selectedStrip = ds.idx; m.accepted = false } }
-        ColumnLayout {
-            anchors.fill: parent; anchors.margins: 4; spacing: 3
-            // NAME + COLOUR TAB
-            Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 2; color: Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.22 : 0.30)
-                Rectangle { width: 3; height: parent.height; radius: 1; color: ds.sc }
-                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: chNo.left; anchors.verticalCenter: parent.verticalCenter; text: ds.st ? ds.st.name : ""; elide: Text.ElideRight
-                    color: Theme.ink; font.family: Theme.sans; font.pixelSize: 9; font.bold: true }
-                Text { id: chNo; anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: ds.idx + 1; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } }
-            // INPUT
-            Rectangle { Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
-                readonly property int route: engine.inputRoutes[ds.idx] !== undefined ? engine.inputRoutes[ds.idx] : -1
-                Text { anchors.centerIn: parent; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideMiddle; font.family: Theme.mono; font.pixelSize: 7
-                    text: parent.route >= 0 ? (engine.running ? engine.inputLabel(parent.route) : i18n.t("IN ", i18n.lang) + (parent.route + 1)) : i18n.t("NO INPUT", i18n.lang); color: parent.route >= 0 ? Theme.emerald : Theme.dim }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = ds.idx; page.go("routing") } } }
-            // TEN INSERT SLOTS
-            Text { text: i18n.t("INSERTS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true; font.letterSpacing: 1 }
-            Repeater { model: ds.pl
-                delegate: Rectangle { objectName: "dawSlot" + ds.idx + "_" + index
-                    readonly property bool empty: !modelData.kind
-                    Layout.fillWidth: true; implicitHeight: 15; radius: 2
-                    color: empty ? (Theme.dark ? "#1b1d21" : "#e2e5eb") : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : modelData.bypass ? (Theme.dark ? "#272a30" : "#dde1e7") : Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.20 : 0.28)
-                    border.color: slotHover.hovered ? Theme.accent : "transparent"
-                    HoverHandler { id: slotHover }
-                    Rectangle { visible: !parent.empty; width: 2; height: parent.height - 4; x: 1; y: 2; radius: 1; color: modelData.bypass ? Theme.dim : ds.sc }
-                    Text { anchors.left: parent.left; anchors.leftMargin: 6; anchors.right: pwr.left; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
-                        text: parent.empty ? (slotHover.hovered ? "+" : "") : i18n.t(modelData.name ?? "", i18n.lang); color: parent.empty ? Theme.dim : modelData.bypass ? Theme.dim : Theme.ink
-                        font.family: Theme.sans; font.pixelSize: 8; font.strikeout: !parent.empty && modelData.bypass }
-                    Rectangle { id: pwr; visible: !parent.empty; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 4
-                        color: modelData.pending ? Theme.amber : modelData.bypass ? "transparent" : Theme.emerald; border.color: modelData.bypass ? Theme.dim : "transparent"
-                        MouseArea { anchors.fill: parent; anchors.margins: -3; onClicked: { engine.selectedStrip = ds.idx; engine.setPluginBypass(ds.idx, index, !modelData.bypass) } } }
-                    MouseArea { anchors.fill: parent; anchors.rightMargin: parent.empty ? 0 : 12; acceptedButtons: Qt.LeftButton | Qt.RightButton; cursorShape: Qt.PointingHandCursor
-                        onClicked: function (m) { engine.selectedStrip = ds.idx
-                            if (parent.empty || m.button === Qt.RightButton) { if (!parent.empty && m.button === Qt.RightButton) { engine.setPluginBypass(ds.idx, index, !modelData.bypass); return } chooser.slot = index; chooser.popup(); return }
-                            if (modelData.pending) { engine.retryPlugins(); return }
-                            if (modelData.builtIn) page.go(modelData.kind === "miceq" ? "miceq" : modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp")
-                            else plugEd.openFor(ds.idx, index, modelData.kind, modelData.name) } } } }
-            // PAN
-            // PAN: a bar from the centre (drag; double-click: centre)
-            Rectangle { id: panBar; objectName: "dawPan" + ds.idx; Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
-                readonly property real pan: ds.st ? ds.st.pan : 0
-                Rectangle { width: Math.abs(panBar.pan) * (parent.width / 2 - 2); height: parent.height - 6; y: 3; x: panBar.pan < 0 ? parent.width / 2 - width : parent.width / 2; radius: 1; color: ds.sc; opacity: 0.85 }
-                Rectangle { width: 1; height: parent.height; x: parent.width / 2; color: Theme.dim }
-                Text { anchors.centerIn: parent; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; color: Theme.ink
-                    text: Math.abs(panBar.pan) < 0.01 ? "C" : (panBar.pan < 0 ? "L" : "R") + Math.round(Math.abs(panBar.pan) * 100) }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.SizeHorCursor
-                    function setAt(x) { engine.setPan(ds.idx, Math.max(-1, Math.min(1, (x / width) * 2 - 1))) }
-                    onPressed: function (m) { engine.selectedStrip = ds.idx; setAt(m.x) } onPositionChanged: function (m) { if (pressed) setAt(m.x) } onDoubleClicked: engine.setPan(ds.idx, 0) } }
-            // MUTE / SOLO / REC / AUTO MIX
-            RowLayout { Layout.fillWidth: true; spacing: 2
-                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "M"; on: !!(ds.st && ds.st.mute); hue: Theme.danger; onHit: engine.setMute(ds.idx, !(ds.st && ds.st.mute)) }
-                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "S"; on: !!(ds.st && ds.st.solo); hue: Theme.amber; onHit: engine.setSolo(ds.idx, !(ds.st && ds.st.solo)) }
-                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "R"; on: !!(ds.st && ds.st.armed); hue: "#fb7185"; onHit: engine.setArmed(ds.idx, !(ds.st && ds.st.armed)) }
-                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "AM"; on: !!(ds.st && ds.st.automix); hue: Theme.cyan; onHit: engine.setAutomix(ds.idx, !(ds.st && ds.st.automix), ds.st ? ds.st.amWeight : 1) } }
-            // FADER with its IN / OUT meter
-            // FADER with its IN / OUT meter, and beside it the EASY BUTTONS for everyone (a beginner, a first-time user, anyone who finds dragging hard):
-            // LOUDER and QUIETER (1 dB a press), 0 (back to the normal level) and BACK (where the fader was before the last move); each says what it does
-            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
-                readonly property real db: ds.st ? ds.st.db : 0
-                property real settled: 0; property real before: 0
-                Component.onCompleted: { settled = db; before = db }   // the level the strip opens with is the first "before"
-                onDbChanged: settleT.restart()
-                Timer { id: settleT; interval: 700; onTriggered: { const p = parent; if (Math.abs(p.db - p.settled) > 0.05) { p.before = p.settled; p.settled = p.db } } }
-                Fader { objectName: "dawFader"; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: ds.st ? ds.st.db : 0; remoteHot: remote.touched(ds.idx, remote.pulse)
-                    inDb: ds.mt ? ds.mt.inDb : -120; outDb: ds.mt ? ds.mt.peakDb : -120; clip: ds.mt ? ds.mt.clip : false; onMoved: function (db) { engine.setGain(ds.idx, db) } }
-                ColumnLayout { Layout.fillHeight: true; spacing: 3
-                    Item { Layout.fillHeight: true }
-                    Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
-                        delegate: Rectangle { objectName: "dawEasy_" + modelData[1] + ds.idx; implicitWidth: 26; implicitHeight: 24; radius: 4
-                            readonly property bool can: modelData[1] !== "back" || Math.abs(parent.parent.before - parent.parent.settled) > 0.05
-                            color: easyMa.pressed ? Theme.accent : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: easyMa.containsMouse ? Theme.accent : (Theme.dark ? "#3a3e47" : "#c9ced8"); opacity: can ? 1 : 0.4
-                            Text { anchors.centerIn: parent; text: modelData[0]; color: easyMa.pressed ? "#0b0d10" : Theme.ink; font.pixelSize: 12; font.bold: true }
-                            ToolTip.visible: easyMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: i18n.t(modelData[2], i18n.lang)
-                            MouseArea { id: easyMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: parent.can
-                                onClicked: { const f = parent.parent.parent; engine.selectedStrip = ds.idx
-                                    // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
-                                    const now = f.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : f.before
-                                    settleT.stop(); f.before = now; f.settled = to; engine.setGain(ds.idx, to) } } } }
-                    Item { Layout.preferredHeight: 6 } } }
-            Text { Layout.alignment: Qt.AlignHCenter; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: ds.st && ds.st.db > 0 ? Theme.amber : Theme.ink
-                text: !ds.st ? "" : ds.st.db <= -90 ? "-inf" : (ds.st.db > 0 ? "+" : "") + ds.st.db.toFixed(1) }
-            Rectangle { Layout.fillWidth: true; implicitHeight: 4; radius: 2; color: ds.sc; opacity: ds.st && ds.st.effectiveMute ? 0.35 : 1 } }
-        // beyond the licence: locked, a click opens LICENSE
-        Rectangle { anchors.fill: parent; z: 10; radius: 3; color: Qt.rgba(0, 0, 0, 0.72); visible: ds.locked
-            Text { anchors.centerIn: parent; text: "⊘  " + i18n.t("UNLOCK ›", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-            MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
-    }
-    // THE LOOK: DAW (flat strips, ten insert slots on each, the default) or CONSOLE (the hardware-desk strips); the send views keep the console strips
-    readonly property bool daw: settings.mixerStyle === "daw" && sendView === 0
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
     property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
     // STRIP SECTIONS: what each strip shows (SETTINGS popover); off = a leaner strip. The fader, M/S, name and meters always stay.
+    property bool simple: settings.mixerSimple   // SIMPLE strips: the name, the tone knobs, pan, MUTE / SOLO and the fader; FULL adds every key and readout
     property bool showInput: true
     property bool showTone: true   // GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers
     property bool showBadges: true
@@ -201,12 +111,12 @@ Item {
                     }
                 }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
-                Repeater {   // THE LOOK of the faders view: DAW or CONSOLE (also on SETTINGS)
-                    model: [["daw", "DAW"], ["console", "CONSOLE"]]
-                    delegate: Rectangle { objectName: "mixerLook_" + modelData[0]; readonly property bool on: settings.mixerStyle === modelData[0]
-                        implicitWidth: lkT.implicitWidth + 14; implicitHeight: 20; radius: 7; color: on ? Theme.accent : Theme.ov(0.06); border.color: on ? Theme.accent : Theme.lineSoft
-                        Text { id: lkT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: settings.mixerStyle = modelData[0] } } }
+                Repeater {   // SIMPLE: only what a first mix needs on each strip; FULL: every key and readout
+                    model: [[true, "SIMPLE"], [false, "FULL"]]
+                    delegate: Rectangle { objectName: "mixerView_" + modelData[1]; readonly property bool on: page.simple === modelData[0]
+                        implicitWidth: vwT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: on ? Theme.amber : Theme.ov(0.06); border.color: on ? Theme.amber : Theme.lineSoft
+                        Text { id: vwT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { page.simple = modelData[0]; settings.mixerSimple = modelData[0] } } } }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Repeater {
                     model: ["FADERS", "AUX SENDS", "FX SENDS"]
@@ -479,17 +389,7 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
-                // DAW LOOK: flat strips, the ten insert slots of each channel on the strip itself
                 Flickable {
-                    objectName: "dawStrips"; visible: page.daw
-                    anchors.fill: parent; anchors.margins: 8
-                    contentWidth: dawRow.implicitWidth; contentHeight: height
-                    flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; clip: true
-                    Row { id: dawRow; spacing: 2; height: parent.height
-                        Repeater { model: page.daw ? engine.strips : 0
-                            delegate: DawStrip { idx: index; height: dawRow.height; visible: page.bank === 2 || Math.floor(index / 16) === page.bank; width: visible ? 100 : 0 } } } }
-                Flickable {
-                    visible: !page.daw
                     anchors.fill: parent; anchors.margins: 8
                     contentWidth: strips.implicitWidth; contentHeight: height
                     flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds
@@ -498,13 +398,13 @@ Item {
                         spacing: 4
                         height: parent.height
                         Repeater {
-                            model: page.daw ? 0 : engine.strips
+                            model: engine.strips
                             delegate: Item {
                                 id: stripItem
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 118 : 74) : 0
+                                width: visible ? (page.sendView ? 124 : 124) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
@@ -529,11 +429,14 @@ Item {
                                     MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
-                                    TextInput { Layout.fillWidth: true; text: st ? st.name : ""; color: st && st.effectiveMute ? Theme.dim : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index }
+                                    // THE NAME PLATE: the channel number and its name, large, on the channel's own colour
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 22; radius: 4; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, st && st.effectiveMute ? 0.30 : 0.92)
+                                        Text { id: chNum; anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: index + 1; color: "#0b0f14"; opacity: 0.7; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                        TextInput { anchors.left: chNum.right; anchors.leftMargin: 3; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; clip: true; text: st ? st.name : ""; color: "#0b0f14"; font.family: Theme.sans; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index } }
                                     // INPUT: which device input feeds this strip (click: pick another, or none)
-                                    Rectangle { visible: page.showInput; Layout.fillWidth: true; implicitHeight: 11; radius: 2; color: Qt.rgba(0.2, 0.9, 0.5, 0.12); border.color: inPop.visible ? Theme.emerald : "transparent"
+                                    Rectangle { visible: page.showInput; Layout.fillWidth: true; implicitHeight: 14; radius: 3; color: Qt.rgba(0.2, 0.9, 0.5, 0.12); border.color: inPop.visible ? Theme.emerald : "transparent"
                                         property int route: page.sendsTick >= 0 && engine.inputRoutes[index] !== undefined ? engine.inputRoutes[index] : -1
-                                        Text { anchors.centerIn: parent; width: parent.width - 4; elide: Text.ElideMiddle; horizontalAlignment: Text.AlignHCenter; text: parent.route >= 0 ? (page.sendsTick >= 0 ? engine.inputLabel(parent.route) : "") : i18n.t("IN —", i18n.lang); color: parent.route >= 0 && engine.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                        Text { anchors.centerIn: parent; width: parent.width - 4; elide: Text.ElideMiddle; horizontalAlignment: Text.AlignHCenter; text: parent.route >= 0 ? (page.sendsTick >= 0 ? engine.inputLabel(parent.route) : "") : i18n.t("IN —", i18n.lang); color: parent.route >= 0 && engine.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                         ToolTip.visible: inH.hovered && settings.tooltips; ToolTip.text: parent.route >= 0 ? (engine.running ? i18n.t("Input ", i18n.lang) + (parent.route + 1) + i18n.t(" of ", i18n.lang) + engine.inputDeviceName + " (" + engine.backend.toUpperCase() + ")" : i18n.t("Input ", i18n.lang) + (parent.route + 1) + i18n.t(": the engine is not running", i18n.lang)) : i18n.t("No input: this strip takes no device channel", i18n.lang); HoverHandler { id: inH }
                                         MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; inPop.open() } }
                                         Popup { id: inPop; y: parent.height + 2; width: 150; padding: 6; modal: false; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -547,7 +450,7 @@ Item {
                                                             MouseArea { anchors.fill: parent; onClicked: { engine.setInputRoute(page.sel, inp); inPop.close() } } } }
                                                     Text { visible: engine.deviceInputs <= 0; text: i18n.t("no device open", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
                                     StripTone { visible: page.showTone; Layout.alignment: Qt.AlignHCenter; strip: index; st: stripItem.st }
-                                    RowLayout { Layout.fillWidth: true; spacing: 2
+                                    RowLayout { visible: !page.simple; Layout.fillWidth: true; spacing: 2
                                         Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 4; color: st && st.armed ? Qt.rgba(1, 0.165, 0.373, 0.85) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#0b0f14" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: i18n.t("Arm CH ", i18n.lang) + (index + 1) + i18n.t(" for recording", i18n.lang); HoverHandler { id: armHov } }
                                         Rectangle { implicitWidth: 24; implicitHeight: 12; radius: 4; color: st && st.link ? Theme.harm(stripItem.sc) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: i18n.t("Stereo link with CH ", i18n.lang) + ((index ^ 1) + 1) + i18n.t(": gain, mute, solo follow, pan mirrors", i18n.lang); HoverHandler { id: lnkHov } }
                                         // ♪ MUSIC INPUT: this channel carries music (a player, a band, backing tracks): DUAL LISTEN ON, the DUAL LISTEN EQ in its rack
@@ -564,42 +467,41 @@ Item {
                                         Text { Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 1; elide: Text.ElideRight; horizontalAlignment: Text.AlignRight
                                             text: !page.sendView && !(st && st.trimDb !== 0) ? "" : (page.sendView ? i18n.t("TRIM ", i18n.lang) : "") + (st && st.trimDb > 0 ? "+" : "") + (st ? st.trimDb.toFixed(1) : "0.0"); color: st && st.trimDb !== 0 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.sidePanel = true } } } }
                                     // DSP badges: lit when on, click opens the page for this channel
-                                    Flow { visible: page.showBadges; Layout.fillWidth: true; spacing: 2
+                                    Flow { visible: page.showBadges && !page.simple; Layout.fillWidth: true; spacing: 2
                                         Repeater {
                                             model: [ { k: "gateOn", t: "GATE", p: "gate", c: "#10b981" }, { k: "eqOn", t: "EQ", p: "dsp", c: "#22d3ee" }, { k: "xoverOn", t: "X", p: "dsp", c: "#a78bfa" }, { k: "compOn", t: "COMP", p: "dyn", c: "#fbbf24" }, { k: "limOn", t: "LIM", p: "dsp", c: "#fb923c" }, { k: "delayOn", t: "DLY", p: "delay", c: "#f472b6" }, { k: "polarity", t: "Ø", p: "dsp", c: "#60a5fa" }, { k: "automix", t: "AM", p: "", c: "#22d3ee" } ]
                                             delegate: Rectangle { id: dspB; readonly property color hue: Theme.harm(stripItem.sc);   // one accent for every process: what is on reads at a glance, without a rainbow
-                                                    readonly property bool lit: !!(st && st[modelData.k]); implicitWidth: bt.implicitWidth + 8; implicitHeight: 13; radius: 4   // each process its own colour: tinted when off, solid when on
+                                                    readonly property bool lit: !!(st && st[modelData.k]); implicitWidth: bt.implicitWidth + 9; implicitHeight: 15; radius: 4   // each process its own colour: tinted when off, solid when on
                                                     color: lit ? Qt.rgba(hue.r, hue.g, hue.b, 0.80) : Theme.ov(0.05); border.color: lit ? Qt.rgba(hue.r, hue.g, hue.b, 0.9) : Theme.lineSoft
                                                     gradient: Gradient { GradientStop { position: 0; color: dspB.lit ? Qt.rgba(dspB.hue.r, dspB.hue.g, dspB.hue.b, 0.85) : Theme.ov(0.07) } GradientStop { position: 1; color: dspB.lit ? Qt.rgba(dspB.hue.r, dspB.hue.g, dspB.hue.b, 0.62) : Theme.ov(0.03) } }
-                                                Text { id: bt; anchors.centerIn: parent; text: modelData.k === "polarity" && st && st.autoPol ? "ØA" : i18n.t(modelData.t ?? "", i18n.lang); color: dspB.lit ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                Text { id: bt; anchors.centerIn: parent; text: modelData.k === "polarity" && st && st.autoPol ? "ØA" : i18n.t(modelData.t ?? "", i18n.lang); color: dspB.lit ? "#0b0f14" : Theme.ink; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                                 MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; if (modelData.k === "automix") engine.setAutomix(index, !(st && st.automix), st ? st.amWeight : 1); else page.go(modelData.p) } } }   // AM: this strip in / out of AUTO MIX at once
                                         }
                                     }
-                                    Dial { id: pan; visible: page.showPan; Layout.alignment: Qt.AlignHCenter; implicitWidth: 28; implicitHeight: 28; from: -1; to: 1; value: st ? st.pan : 0; onMoved: engine.setPan(index, value)
+                                    Dial { id: pan; visible: page.showPan; Layout.alignment: Qt.AlignHCenter; implicitWidth: 34; implicitHeight: 34; from: -1; to: 1; value: st ? st.pan : 0; onMoved: engine.setPan(index, value)
                                         background: Rectangle { radius: width / 2; color: Theme.deep; border.color: Theme.line }
                                         handle: Rectangle { x: pan.background.x + pan.background.width / 2 - width / 2; y: pan.background.y + 3; width: 4; height: 8; radius: 2; color: Theme.cyan; transform: Rotation { angle: pan.angle; origin.x: 2; origin.y: pan.background.height / 2 - 3 } }
                                         TapHandler { onDoubleTapped: engine.setPan(index, 0) } }   // double-click: back to the centre
                                     // PAN POSITION: where the strip sits, L100 .. C .. R100 (the dial alone did not say how far)
                                     Text { objectName: "panPos"; visible: page.showPan; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: -3
                                         readonly property int p: Math.round((st ? st.pan : 0) * 100)
-                                        text: p === 0 ? "C" : (p < 0 ? "L" + (-p) : "R" + p); color: p === 0 ? Theme.dim : Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                                    RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 3
-                                        Rectangle { id: gb104; implicitWidth: 28; implicitHeight: 18; radius: 8; color: st && st.mute ? Qt.rgba(1, 0.165, 0.373, 0.85) : (st && st.effectiveMute ? Qt.rgba(1, 0.165, 0.373, 0.30) : Theme.ov(0.07)); border.width: 1; border.color: st && (st.mute || st.effectiveMute) ? Qt.rgba(1, 0.165, 0.373, 0.8) : Theme.lineSoft; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb104.color) } GradientStop { position: 1; color: Theme.btnBottom(gb104.color) } } Text { anchors.centerIn: parent; text: "M"; color: st && st.mute ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setMute(index, !(st && st.mute)) } }
-                                        Rectangle { id: gb105; implicitWidth: 28; implicitHeight: 18; radius: 8; color: st && st.solo ? Qt.rgba(0.984, 0.749, 0.141, 0.85) : Theme.ov(0.07); border.width: 1; border.color: st && st.solo ? Qt.rgba(0.984, 0.749, 0.141, 0.8) : Theme.lineSoft; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb105.color) } GradientStop { position: 1; color: Theme.btnBottom(gb105.color) } } Text { anchors.centerIn: parent; text: "S"; color: st && st.solo ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSolo(index, !(st && st.solo)) } } }
+                                        text: i18n.t("PAN", i18n.lang) + " " + (p === 0 ? "C" : (p < 0 ? "L" + (-p) : "R" + p)); color: p === 0 ? Theme.muted : Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                    RowLayout { Layout.fillWidth: true; spacing: 3
+                                        MKey { objectName: "stripMute" + index; Layout.fillWidth: true; label: "MUTE"; hue: "#ff4d6d"; on: !!(st && st.mute); half: !!(st && !st.mute && st.effectiveMute); onHit: { engine.selectedStrip = index; engine.setMute(index, !(st && st.mute)) } }
+                                        MKey { objectName: "stripSolo" + index; Layout.fillWidth: true; label: "SOLO"; hue: "#fbbf24"; on: !!(st && st.solo); onHit: { engine.selectedStrip = index; engine.setSolo(index, !(st && st.solo)) } } }
                                     // AI: automix (gain sharing between open channels) on this strip, with the gain it applies right now; ⋯ = the strip menu (also right-click)
                                     RowLayout { Layout.fillWidth: true; spacing: 2
                                         Rectangle { visible: mt !== undefined && !!mt.overComp; Layout.fillWidth: true; implicitHeight: 13; radius: 3; color: Qt.rgba(1, 0.3, 0.3, 0.25); border.color: Theme.danger
                                             Text { anchors.centerIn: parent; text: i18n.t("OVER-COMPRESSED", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                             ToolTip.visible: ocHov.hovered; ToolTip.text: i18n.t("More than 12 dB of compression: click to add DE-SQUASH to this channel", i18n.lang); HoverHandler { id: ocHov }
                                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } } }
-                                        Rectangle { visible: page.showAi; Layout.fillWidth: true; implicitHeight: 15; radius: 5; color: st && st.automix ? Qt.rgba(Theme.harm(stripItem.sc).r, Theme.harm(stripItem.sc).g, Theme.harm(stripItem.sc).b, 0.45) : Theme.ov(0.05); border.color: st && st.automix ? Theme.harm(stripItem.sc) : Theme.lineSoft
+                                        Rectangle { visible: page.showAi && !page.simple; Layout.fillWidth: true; implicitHeight: 15; radius: 5; color: st && st.automix ? Qt.rgba(Theme.harm(stripItem.sc).r, Theme.harm(stripItem.sc).g, Theme.harm(stripItem.sc).b, 0.45) : Theme.ov(0.05); border.color: st && st.automix ? Theme.harm(stripItem.sc) : Theme.lineSoft
                                             Text { anchors.centerIn: parent; text: st && st.automix ? i18n.t("AI ", i18n.lang) + (mt && mt.amGainDb !== undefined && mt.amGainDb < -0.05 ? mt.amGainDb.toFixed(1) : "0.0") : i18n.t("AI", i18n.lang); color: st && st.automix ? Theme.ink : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                             Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 1; height: 2; radius: 1; color: Theme.harm(stripItem.sc); visible: st && st.automix; width: Math.max(0, Math.min(1, 1 + (mt && mt.amGainDb !== undefined ? mt.amGainDb : 0) / 30)) * (parent.width - 2) }
                                             MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) { engine.selectedStrip = index; page.go("ai") } else engine.setAutomix(index, !(st && st.automix), st ? st.amWeight : 1) } }
                                             ToolTip.visible: aiH.hovered && settings.tooltips; ToolTip.text: i18n.t("AI automix: when on, this channel shares gain with the other AI channels by who is speaking (the bar and number show the gain applied now). Right-click opens AI MIX.", i18n.lang); HoverHandler { id: aiH } }
-                                        Rectangle { implicitWidth: 18; implicitHeight: 15; radius: 5; color: moreL.item && moreL.item.visible ? stripItem.sc : Theme.ov(0.06); border.color: Theme.lineSoft
-                                            Text { anchors.centerIn: parent; text: "⋯"; color: moreL.item && moreL.item.visible ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                            MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; moreL.active = true; moreL.item.popup() } }
+                                        MKey { objectName: "stripMore" + index; Layout.fillWidth: page.simple; implicitWidth: 22; implicitHeight: page.simple ? 22 : 16; radius: 7; hue: stripItem.sc; on: !!(moreL.item && moreL.item.visible)
+                                            label: page.simple ? "MORE" : ""; glyph: page.simple ? "" : "⋯"; onHit: { engine.selectedStrip = index; moreL.active = true; moreL.item.popup() }
                                         Connections { target: page; function onStripMenuDemoChanged() { if (index !== 0) return; if (page.stripMenuDemo) { moreL.active = true; moreL.item.popup(120, 40); moreL.item.openFx() } else if (moreL.item) { moreL.item.closeFx(); moreL.item.close() } } }
                                         Loader { id: moreL; active: false   // the channel menu (effects, 100 samples ...) is built the first time it opens: 32 of them at once made the MIXER take seconds to open
                                             sourceComponent: Component {
@@ -669,18 +571,42 @@ Item {
                                                     MouseArea { anchors.fill: parent; onClicked: { engine.setSend(stripItem.stripIdx, bus, sd ? sd.db : -60, !(sd && sd.pre)); page.sendsTick++ } } } } }
                                         Item { Layout.fillHeight: true }   // lets this column take the strip height (a nested layout's maximum is otherwise the sum of its rows)
                                         Text { Layout.alignment: Qt.AlignHCenter; text: page.sendView === 1 ? i18n.t("AUX SENDS", i18n.lang) : i18n.t("FX SENDS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } } }
-                                    RowLayout { visible: page.sendView === 0; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
-                                        Fader { objectName: "stripFader"; showLevels: false; Layout.fillHeight: true; value: st ? st.db : 0; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }
+                                    // the fader, its meters and the EASY KEYS for everyone (a beginner, anyone who finds dragging hard): LOUDER and QUIETER
+                                    // (1 dB a press), 0 (the normal level) and BACK (where the fader was before the last move); each says what it does
+                                    RowLayout { id: fadRow; visible: page.sendView === 0; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 3
+                                        readonly property real db: st ? st.db : 0
+                                        property real settled: 0; property real before: 0
+                                        Component.onCompleted: { settled = db; before = db }   // the level the strip opens with is the first "before"
+                                        onDbChanged: settleT.restart()
+                                        Timer { id: settleT; interval: 700; onTriggered: { if (Math.abs(fadRow.db - fadRow.settled) > 0.05) { fadRow.before = fadRow.settled; fadRow.settled = fadRow.db } } }
+                                        ColumnLayout { Layout.fillHeight: true; spacing: 3
+                                            Item { Layout.fillHeight: true }
+                                            // THE CHANNEL KEYS above the easy keys: what a mix needs most, one press each, lit in its own colour when on
+                                            MKey { objectName: "side_rec" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "REC"; hue: "#ff4d6d"; on: !!(st && st.armed); tip: i18n.t("REC: record this channel when recording starts", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setArmed(stripItem.stripIdx, !(st && st.armed)) } }
+                                            MKey { objectName: "side_auto" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "AUTO"; hue: "#38bdf8"; on: !!(st && st.automix); tip: i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setAutomix(stripItem.stripIdx, !(st && st.automix), st ? st.amWeight : 1) } }
+                                            MKey { objectName: "side_fx" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: st && st.plugins > 0 ? "FX " + st.plugins : "FX"; hue: "#a78bfa"; on: !!(st && st.plugins > 0); tip: i18n.t("FX: the effects of this channel (plug-in rack)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.rack = true } }
+                                            MKey { objectName: "side_eq" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "EQ"; hue: "#4ade80"; on: !!(st && st.eqOn); tip: i18n.t("EQ: open the full equaliser of this channel", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.go("dsp") } }
+                                            MKey { objectName: "side_phase" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: "Ø"; hue: "#facc15"; on: !!(st && st.polarity); tip: i18n.t("PHASE: turn this channel round (when two microphones on one source sound thin together)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setPolarity(stripItem.stripIdx, !(st && st.polarity)) } }
+                                            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; implicitHeight: 1; color: Theme.line }
+                                            Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
+                                                delegate: MKey { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: modelData[0]; hue: stripItem.sc; tip: i18n.t(modelData[2], i18n.lang)
+                                                    can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
+                                                    onHit: { engine.selectedStrip = stripItem.stripIdx
+                                                        // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
+                                                        const now = fadRow.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : fadRow.before
+                                                        settleT.stop(); fadRow.before = now; fadRow.settled = to; engine.setGain(stripItem.stripIdx, to) } } }
+                                            Item { Layout.preferredHeight: 4 } }
+                                        Fader { objectName: "stripFader"; showLevels: false; numbers: true; tint: stripItem.sc; Layout.fillHeight: true; value: st ? st.db : 0; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 0
                                             RowLayout { Layout.fillHeight: true; spacing: 2
                                                 MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 5; peakDb: mt ? mt.inDb : -120; rmsDb: mt ? mt.inDb : -120; floorDb: -60 }   // input (pre-fader)
                                                 MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: mt ? mt.peakDb : -120; rmsDb: mt ? mt.rmsDb : -120; holdDb: mt ? mt.holdDb : -120; clip: mt ? mt.clip : false }   // post-fader
                                                 Rectangle { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 4; radius: 2; color: Theme.deep; border.color: Theme.lineSoft   // gain reduction, from the top
                                                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 1; height: Math.min(1, Math.max(0, -(mt ? mt.compGrDb : 0) / 24)) * (parent.height - 2); radius: 1; color: Theme.amber } } }
-                                            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("IN  OUT GR", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } } }
-                                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 7 }
+                                            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("IN  OUT GR", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6 } } }
+                                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
                                     // groups and sends readout
-                                    RowLayout { visible: page.showGroups; Layout.alignment: Qt.AlignHCenter; spacing: 2
+                                    RowLayout { visible: page.showGroups && !page.simple; Layout.alignment: Qt.AlignHCenter; spacing: 2
                                         Rectangle { visible: st && st.dca > 0; implicitWidth: 22; implicitHeight: 11; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); Text { anchors.centerIn: parent; text: "D" + (st ? st.dca : 0); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
                                         Repeater { model: 8; delegate: Rectangle { visible: st && ((st.muteGroups >> index) & 1); implicitWidth: 5; implicitHeight: 5; radius: 2.5; color: Theme.pink } }
                                         Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 }
@@ -694,15 +620,28 @@ Item {
             // the selected channel's whole chain, editable
             Rectangle {
                 visible: page.sidePanel
-                Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.cardRaised; border.color: Theme.cyan
+                objectName: "channelOverview"; Layout.preferredWidth: 236; Layout.fillHeight: true; radius: 6; color: Theme.dark ? "#16181c" : "#f4f6f9"; border.color: Theme.line
                 Flickable {
                     id: sideFlick; anchors.fill: parent; anchors.margins: 8; contentWidth: width; contentHeight: side.implicitHeight; clip: true
                     flickableDirection: Flickable.VerticalFlick
                     ColumnLayout {
                         id: side; width: sideFlick.width; spacing: 6   // the panel's width, not the content's: long help text wraps instead of widening the column
-                        RowLayout { Layout.fillWidth: true
-                            Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Theme.stripColors[page.selSt ? page.selSt.color : 0] }
-                            Text { Layout.fillWidth: true; text: (page.selSt ? page.selSt.name : "") + i18n.t("  ·  CH ", i18n.lang) + (page.sel + 1); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight } }
+                        // THE CHANNEL: its number, large, and its name on its own colour
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 4; color: Theme.stripColors[page.selSt ? page.selSt.color : 0]
+                            Rectangle { x: 3; y: 3; width: 30; height: 28; radius: 3; color: "#0b0f14"; Text { anchors.centerIn: parent; text: page.sel + 1; color: "#ffffff"; font.family: Theme.mono; font.pixelSize: 15; font.bold: true } }
+                            Text { anchors.left: parent.left; anchors.leftMargin: 40; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: page.selSt ? page.selSt.name : ""; color: "#0b0f14"; font.family: Theme.sans; font.pixelSize: 13; font.bold: true; elide: Text.ElideRight } }
+                        // LEVEL: the selected channel on a VU needle (0 VU = the reference chosen on the bar), its peak lamp, and the figures beside it
+                        SectHead { title: "LEVEL" }
+                        RowLayout { Layout.fillWidth: true; spacing: 8
+                            readonly property var m: visible ? (page.tick, engine.meterAt(page.sel)) : undefined
+                            VuMeter { objectName: "channelVu"; Layout.preferredWidth: 128; Layout.preferredHeight: 70; vuDb: parent.m ? parent.m.vuDb : -120; refDb: engine.vuRefDb; peakLamp: parent.m ? !!parent.m.clip : false; label: i18n.t("VU", i18n.lang) }
+                            ColumnLayout { Layout.fillWidth: true; spacing: 3
+                                Repeater { model: [["PEAK", "peakDb", Theme.amber], ["IN", "inDb", Theme.cyan], ["FADER", "", Theme.ink]]
+                                    delegate: RowLayout { Layout.fillWidth: true; spacing: 4
+                                        Text { text: i18n.t(modelData[0], i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; Layout.preferredWidth: 30 }
+                                        Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; color: modelData[2]; font.family: Theme.mono; font.pixelSize: 10; font.bold: true
+                                            text: { const mm = parent.parent.parent.m; const v = modelData[1] === "" ? (page.selSt ? page.selSt.db : 0) : (mm && mm[modelData[1]] !== undefined ? mm[modelData[1]] : -120); return Theme.dbText(v) } } } } } }
+                        SectHead { title: "INPUT" }
                         Text { text: i18n.t("COLOUR", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
                         RowLayout { Layout.fillWidth: true
@@ -711,7 +650,7 @@ Item {
                             Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
                             Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
                         Text { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: sideFlick.width }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        SectHead { title: "DYNAMICS" }
                         // gate
                         RowLayout { Layout.fillWidth: true
                             Rectangle { id: gb106; implicitWidth: Math.max(44, children[0].implicitWidth + 12); implicitHeight: 18; radius: 7; color: page.selCh.gateOn ? Theme.pink : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb106.color) } GradientStop { position: 1; color: Theme.btnBottom(gb106.color) } } Text { anchors.centerIn: parent; text: i18n.t("GATE", i18n.lang); color: page.selCh.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.sel, !page.selCh.gateOn, page.selCh.gateThresholdDb, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) } }
@@ -724,20 +663,38 @@ Item {
                             Text { text: i18n.t("THR ", i18n.lang) + Theme.dbText(page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb) + "  " + Number(page.selCh.compRatio || 4).toFixed(1) + ":1"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
                             Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dyn") } } }
                         Slider { Layout.fillWidth: true; from: -60; to: 0; value: page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb; onMoved: engine.setCompressor(page.sel, page.selCh.compOn, value, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) }
-                        // tone
-                        RowLayout { Layout.fillWidth: true
-                            Text { text: i18n.t("TONE: ", i18n.lang) + (page.selSt && page.selSt.eqOn ? i18n.t("EQ ", i18n.lang) : "") + (page.selSt && page.selSt.xoverOn ? i18n.t("X-OVER ", i18n.lang) : "") + (page.selSt && page.selSt.limOn ? i18n.t("LIM ", i18n.lang) : "") + (page.selSt && page.selSt.delayOn ? Number(page.selCh.delayMs).toFixed(2) + i18n.t(" ms ", i18n.lang) : "") + (page.selSt && page.selSt.polarity ? "Ø " : "") + (page.selSt && !(page.selSt.eqOn || page.selSt.xoverOn || page.selSt.limOn || page.selSt.delayOn || page.selSt.polarity) ? i18n.t("flat", i18n.lang) : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight }
-                            Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dsp") } } }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        // tone: the curve of the 3-band EQ on a grid (click: the full equaliser)
+                        SectHead { title: "EQ"; link: "dsp" }
+                        Rectangle { objectName: "eqCurve"; Layout.fillWidth: true; implicitHeight: 86; radius: 3; color: Theme.dark ? "#0a0b0d" : "#ffffff"; border.color: Theme.line
+                            readonly property var eq: (page.selSt, engine.channelEq(page.sel))
+                            onEqChanged: curve.requestPaint()
+                            Canvas { id: curve; anchors.fill: parent; anchors.margins: 1
+                                // the three bands as the strip's EQ has them: a low shelf at 100 Hz, a bell at FREQ, a high shelf at 10 kHz (a drawing of the curve, ±15 dB)
+                                onPaint: { const c = getContext("2d"), w = width, h = height, e = parent.eq || {}, on = !!e.on; c.reset()
+                                    const fx = f => Math.log(f / 20) / Math.log(1000) * w, gy = g => h / 2 - g / 18 * (h / 2)
+                                    c.lineWidth = 1; c.strokeStyle = Theme.dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"
+                                    for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) { c.beginPath(); c.moveTo(fx(f), 0); c.lineTo(fx(f), h); c.stroke() }
+                                    for (const g of [-12, -6, 6, 12]) { c.beginPath(); c.moveTo(0, gy(g)); c.lineTo(w, gy(g)); c.stroke() }
+                                    c.strokeStyle = Theme.dark ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)"; c.beginPath(); c.moveTo(0, h / 2); c.lineTo(w, h / 2); c.stroke()
+                                    const lo = e.low || 0, mid = e.mid || 0, hi = e.high || 0, f0 = e.midFreq || 1000
+                                    const gain = f => lo / (1 + Math.pow(f / 100, 2)) + hi / (1 + Math.pow(10000 / f, 2)) + mid * Math.exp(-Math.pow(Math.log(f / f0) / Math.log(2), 2) / 1.6)
+                                    c.lineWidth = 2; c.strokeStyle = on ? "#4ade80" : (Theme.dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)"); c.beginPath()
+                                    for (let x = 0; x <= w; x += 2) { const f = 20 * Math.pow(1000, x / w), y = gy(on ? gain(f) : 0); if (x === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke()
+                                    if (on) for (const [f, col] of [[100, "#fb7185"], [f0, "#4ade80"], [10000, "#38bdf8"]]) { c.fillStyle = col; c.beginPath(); c.arc(fx(f), gy(gain(f)), 3.5, 0, 2 * Math.PI); c.fill() } }
+                                Component.onCompleted: requestPaint(); onWidthChanged: requestPaint() }
+                            Text { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 3; text: "20"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 }
+                            Text { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; text: "20k"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 }
+                            Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 3; text: parent.eq && parent.eq.on ? i18n.t("EQ ON", i18n.lang) : i18n.t("EQ OFF", i18n.lang); color: parent.eq && parent.eq.on ? "#4ade80" : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.go("dsp") } }
+                        SectHead { title: "SENDS"; link: "bus" }
                         // sends
-                        RowLayout { Layout.fillWidth: true; Text { text: i18n.t("SENDS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true } Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("bus") } } }
                         Repeater { model: engine.busState; delegate: RowLayout { Layout.fillWidth: true; spacing: 4
                             property var sd: engine.send(page.sel, index)
                             Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
                             Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 36; elide: Text.ElideRight }
                             Slider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
                             Rectangle { implicitWidth: 30; Layout.minimumWidth: 30; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        SectHead { title: "GROUPS" }
                         // dca
                         RowLayout { Layout.fillWidth: true; spacing: 2; Text { text: i18n.t("DCA", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.rightMargin: 2 }
                             Repeater { model: 9; delegate: Rectangle { implicitWidth: 18; Layout.fillWidth: true; Layout.maximumWidth: 20; implicitHeight: 14; radius: 2; color: page.selSt && page.selSt.dca === index ? Theme.amber : Theme.ov(0.08); Text { anchors.centerIn: parent; text: index === 0 ? "-" : index; color: page.selSt && page.selSt.dca === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDca(page.sel, index) } } } }
@@ -764,7 +721,7 @@ Item {
                 // GAIN MODE on: the Windows volume trims the master; shown here so the level heard is never a surprise
                 Text { objectName: "winTrimLine"; visible: engine.windowsGainMode && engine.windowsVolume >= 0; Layout.alignment: Qt.AlignHCenter
                     text: "WIN " + engine.windowsVolume + "% · " + (engine.windowsTrimDb <= -119 ? "OFF" : engine.windowsTrimDb === 0 ? "0 dB" : engine.windowsTrimDb.toFixed(1) + " dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 110; Layout.preferredHeight: 58; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
+                VuMeter { objectName: "masterVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 122; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 5; rowSpacing: 5
                     ModKey { objectName: "masterEqBtn"; Layout.fillWidth: true; label: "RTA EQ"; tint: Theme.orange; lit: engine.mastering().eqOn; onClicked: page.go("rtaeq") }                       // RTA EQ: the main (master) equaliser
                     ModKey { objectName: "enhancerBtn"; Layout.fillWidth: true; label: "ENHANCE"; tint: Theme.emerald; lit: engine.mastering().on; onClicked: page.Window.window.openEnhancer() }   // AMFB VOLUME ENHANCER

@@ -19,7 +19,6 @@ class Settings : public QObject {
   Q_PROPERTY(bool confirmDestructive READ confirmDestructive WRITE setConfirmDestructive NOTIFY changed)
   Q_PROPERTY(bool tooltips READ tooltips WRITE setTooltips NOTIFY changed)
   Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY changed)
-  Q_PROPERTY(QString mixerStyle READ mixerStyle WRITE setMixerStyle NOTIFY changed)   // MIXER look: "daw" (default: flat strips, ten insert slots each) or "console"
   Q_PROPERTY(bool colorMotion READ colorMotion WRITE setColorMotion NOTIFY changed)   // the AURORA colour behind the pages moves (off: it stays still, for slow computers)   // the console's look: dark (stage) or light (daylight); Theme.qml and the Qt palette follow
   Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)   // the system is auto on: the remembered device, else AUTO DETECT, at every start (default on)
   Q_PROPERTY(QVariantMap lastDevice READ lastDevice NOTIFY changed)              // backend, in, out, rate, frames, inChannels, outChannels
@@ -36,6 +35,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
+  Q_PROPERTY(bool mixerSimple READ mixerSimple WRITE setMixerSimple NOTIFY changed)   // MIXER strips: SIMPLE (name, tone, pan, MUTE / SOLO, fader) or FULL (every key and readout)
   Q_PROPERTY(bool rackCompactDefault READ rackCompactDefault WRITE setRackCompactDefault NOTIFY changed)
   Q_PROPERTY(bool channelPanelDefault READ channelPanelDefault WRITE setChannelPanelDefault NOTIFY changed)
   Q_PROPERTY(QVariantList dataFiles READ dataFiles NOTIFY changed)              // [{name, path, exists, bytes}]
@@ -54,7 +54,6 @@ class Settings : public QObject {
   bool confirmDestructive() const { return s_.value("general/confirm", true).toBool(); } void setConfirmDestructive(bool v) { set("general/confirm", v); }
   bool tooltips() const { return s_.value("general/tooltips", true).toBool(); } void setTooltips(bool v) { set("general/tooltips", v); }
   bool darkTheme() const { return s_.value("ui/dark", true).toBool(); } void setDarkTheme(bool v) { set("ui/dark", v); }
-  QString mixerStyle() const { const QString v = s_.value("ui/mixerStyle", "daw").toString(); return v == "console" ? v : QStringLiteral("daw"); } void setMixerStyle(const QString& v) { set("ui/mixerStyle", v == "console" ? v : QStringLiteral("daw")); }
   bool colorMotion() const { return s_.value("ui/colorMotion", true).toBool(); } void setColorMotion(bool v) { set("ui/colorMotion", v); }
   bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }
@@ -74,6 +73,7 @@ class Settings : public QObject {
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }
+  bool mixerSimple() const { return s_.value("mixer/simple", true).toBool(); } void setMixerSimple(bool v) { set("mixer/simple", v); }
   bool channelPanelDefault() const { return s_.value("mixer/channelPanel", true).toBool(); } void setChannelPanelDefault(bool v) { set("mixer/channelPanel", v); }
   QVariantList dataFiles() const;
   QStringList vstDirs() const { return s_.value("vst3/dirs").toStringList(); }
