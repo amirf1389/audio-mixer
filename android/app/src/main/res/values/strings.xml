@@ -450,4 +450,6 @@
     <string name="set_start_phone_mixer_sub">Standalone: the app opens straight into this phone\'s own mixer (inputs, two song decks, effects, master and recording). No computer needed. HOME stays one step back.</string>
     <string name="shortcut_phone_mixer">Phone mixer</string>
     <string name="shortcut_phone_mixer_long">Phone mixer (standalone)</string>
+    <string name="mode_phone">THIS PHONE</string>
+    <string name="mode_console">CONSOLE (PC)</string>
 </resources>

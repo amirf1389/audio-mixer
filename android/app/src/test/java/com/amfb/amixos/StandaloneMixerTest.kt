@@ -43,4 +43,21 @@ class StandaloneMixerTest {
     }
 
     @Test fun deckClock() { assertEquals("0:00", DeckPlayer.clock(0)); assertEquals("1:05", DeckPlayer.clock(65_000_000)); assertEquals("12:00", DeckPlayer.clock(720_000_000)); assertEquals("0:00", DeckPlayer.clock(-5)) }
+
+    /** DUAL MODE: both mixer screens carry THIS PHONE | CONSOLE; switching goes to the other screen and is remembered for the MIXER tab */
+    @Test fun dualModeSwitchesAndRemembers() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val phone = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
+        assertTrue(texts(phone.window.decorView).containsAll(listOf("THIS PHONE", "CONSOLE (PC)")))
+        assertEquals("phone", Prefs.remote(ctx).getString("mixerMode", ""))
+        assertEquals(LocalMixerActivity::class.java, Nav.mixerTarget(phone))
+        phone.window.decorView.findViewWithTag<View>("mode_console").performClick()
+        assertEquals(RemoteActivity::class.java.name, shadowOf(phone).nextStartedActivity?.component?.className)
+        assertEquals("console", Prefs.remote(ctx).getString("mixerMode", ""))
+        val remote = Robolectric.buildActivity(RemoteActivity::class.java).setup().get()
+        assertTrue(texts(remote.window.decorView).containsAll(listOf("THIS PHONE", "CONSOLE (PC)")))
+        assertEquals(RemoteActivity::class.java, Nav.mixerTarget(remote))
+        remote.window.decorView.findViewWithTag<View>("mode_phone").performClick()
+        assertEquals(LocalMixerActivity::class.java.name, shadowOf(remote).nextStartedActivity?.component?.className)
+    }
 }
