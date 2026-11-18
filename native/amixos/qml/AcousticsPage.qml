@@ -73,7 +73,8 @@ Item {
                 Lab { text: page.t("SPL OFFSET") } Num { text: measure.splOffset.toFixed(1); onEditingFinished: measure.splOffset = parseFloat(text) || 0 } } }
         RowLayout { id: calRow; visible: false; Layout.fillWidth: true; spacing: 6
             Num { id: calPath; Layout.fillWidth: true; placeholderText: page.t("path of the microphone calibration file (.txt / .cal: frequency dB per line)") }
-            Btn { label: page.t("LOAD"); on: calPath.text.length > 2; onClicked: if (measure.loadCalibration(calPath.text)) calRow.visible = false } }
+            Btn { label: page.t("LOAD"); on: calPath.text.length > 2; onClicked: if (measure.loadCalibration(calPath.text)) calRow.visible = false }
+            Btn { label: page.t("SAVE"); on: measure.calibrated; onClicked: measure.saveCalibration(calPath.text) } }
         Text { Layout.fillWidth: true; text: measure.message; visible: measure.message.length > 0; color: measure.state === "measuring" ? Theme.amber : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight }
         Rectangle { objectName: "measureInfo"; visible: measure.info.lines !== undefined && measure.state !== "measuring"; Layout.fillWidth: true; implicitHeight: infoCol.implicitHeight + 10; radius: 5; color: Theme.ov(0.05); border.color: measure.info.ok ? Theme.lineSoft : Theme.amber
             Column { id: infoCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5; spacing: 1
@@ -133,10 +134,13 @@ Item {
                 RowLayout { spacing: 6
                     Repeater { model: ["LENGTH", "WIDTH", "HEIGHT (m)", "RT60 (s)", "SPEAKER X", "Y", "Z", "LISTENER X", "Y", "Z"]
                         delegate: RowLayout { spacing: 3; Lab { text: page.t(modelData) } Num { implicitWidth: 46; text: page.rm[index]; onEditingFinished: { const a = page.rm.slice(); a[index] = parseFloat(text) || a[index]; page.rm = a; page.roomData = measure.room(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]); roomPlot.requestPaint() } } } }
-                    Item { Layout.fillWidth: true } }
+                    Item { Layout.fillWidth: true }
+                    // ROOM CORRECTION: cuts on the predicted modal peaks; the filters go to AUTO EQ's SET ON THE EQ / EXPORT
+                    Btn { objectName: "roomCorrectBtn"; label: page.t("CORRECTION CURVE"); on: true; onColor: Theme.cyan
+                        onClicked: { const a = page.rm; if (!page.roomData.freq) page.roomData = measure.room(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]); measure.roomCorrection(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], 6, 12); roomPlot.requestPaint() } } }
                 RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
                     Plot { Canvas { id: roomPlot; anchors.fill: parent; anchors.margins: 6
-                            onPaint: { const ctx = getContext("2d"), d = page.roomData; page.axes(ctx, width, height, 20, 400, -30, 20); page.curve(ctx, width, height, d.freq, d.db, 20, 400, -30, 20, Theme.cyan, 2)
+                            onPaint: { const ctx = getContext("2d"), d = page.roomData; page.axes(ctx, width, height, 20, 400, -30, 20); page.curve(ctx, width, height, d.freq, d.db, 20, 400, -30, 20, Theme.cyan, 2); if (measure.eqCurve.room) page.curve(ctx, width, height, measure.eqCurve.freq, measure.eqCurve.corrected, 20, 400, -30, 20, Theme.emerald, 2)
                                 if (d.modes) { ctx.strokeStyle = Theme.orange; ctx.lineWidth = 1; for (let i = 0; i < d.modes.length; i++) { if (d.modes[i].kind !== "axial") continue; const x = page.fx(d.modes[i].freq, 20, 400, width); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 10); ctx.stroke() } } } }
                         Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8; text: page.t("PREDICTED BASS AT THE LISTENER (0 dB = mean)   ORANGE ticks: axial modes"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     Rectangle { Layout.preferredWidth: 210; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true

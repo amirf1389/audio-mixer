@@ -40,6 +40,15 @@ int main() {
     std::size_t b2 = 0; for (std::size_t i = 0; i < rt.freq.size(); ++i) if (std::fabs(std::log2(rt.freq[i] / 2000)) < std::fabs(std::log2(rt.freq[b2] / 2000))) b2 = i; CHECK(rt.db[b] - rt.db[b2] > 20); CHECK(std::fabs(a.alignTo(94) + rt.db[b] - 94) < 0.01); }
   // 7. calibration file
   { Calibration c; CHECK(parseCalibration("* mic cal\n20 -3.5\n100, 0.0\n10000\t1.2\n", c) && c.freq.size() == 3); Response x = r; applyCalibration(x, c); CHECK(std::fabs((x.magDb[0] - r.magDb[0]) - 3.5) < 0.01); applySplOffset(x, 94); CHECK(x.magDb[0] > r.magDb[0] + 90); }
+  // 7b. ROOM CORRECTION: cuts only, at the predicted peaks, never narrower than a mode; the corrected prediction is flatter. Calibration written back reads the same.
+  { Room rm; rm.L = 5.2; rm.W = 3.9; rm.H = 2.6; rm.rt60 = 0.45; rm.sx = 0.6; rm.sy = 0.5; rm.sz = 1.0; rm.lx = 2.6; rm.ly = 3.1; rm.lz = 1.2;
+    const std::vector<Filter> f = roomCorrection(rm, 6, 12, 300); CHECK(!f.empty() && f.size() <= 6);
+    for (const Filter& x : f) { CHECK(x.gainDb < 0 && x.gainDb >= -12.0001); CHECK(x.freq >= 20 && x.freq <= 300); CHECK(x.q <= x.freq / (2.2 / rm.rt60) + 1e-9 && x.q >= 0.7 - 1e-9); }
+    const Response pred = roomResponse(rm, 48, 20, 400), fixed = applyFilters(pred, f);
+    double peakBefore = -1e9, peakAfter = -1e9; for (std::size_t i = 0; i < pred.freq.size(); ++i) if (pred.freq[i] <= 300) { peakBefore = std::max(peakBefore, pred.magDb[i]); peakAfter = std::max(peakAfter, fixed.magDb[i]); }
+    CHECK(peakAfter < peakBefore - 2);
+    Calibration c; c.freq = {20, 1000, 20000}; c.db = {-2.5, 0, 1.25}; Calibration back; CHECK(parseCalibration(formatCalibration(c, "test mic"), back) && back.freq.size() == 3 && std::fabs(back.db[0] + 2.5) < 1e-6 && std::fabs(back.freq[2] - 20000) < 1e-6);
+    std::printf("measure_test: room correction %zu cuts, highest peak %.1f -> %.1f dB\n", f.size(), peakBefore, peakAfter); }
   // 8. waterfall and spectrogram shapes
   { Grid w = waterfall(ir, 12); CHECK(w.y.size() >= 8 && w.db[0].size() == w.x.size()); std::vector<float> s = tone(fs, 440, 0.5, 0.3); Grid sg = spectrogram(s.data(), s.size(), fs); CHECK(sg.y.size() > 10 && sg.db[0].size() == sg.x.size()); }
   std::printf("measure_test: sweep response within 0.5 dB, delay 10 ms, THD, THD+N, IMD, RT60 (T20 / T30 / Topt), room modes, auto EQ halves the error, RTA 1/48, calibration, waterfall OK\n");

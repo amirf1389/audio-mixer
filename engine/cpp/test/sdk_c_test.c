@@ -1,4 +1,5 @@
 /* The C SDK from plain C: version, devices JSON, an offline mixer processing a tone through a fader and the master meter, a null runtime. */
+#include <stdatomic.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,8 +11,10 @@
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #c); return 1; } } while (0)
 
+static atomic_int g_blocks; static int g_frames, g_strips;
+static void on_block(void* user, const float* const* strips, int n, const float* l, const float* r, int frames, double rate) { (void)user; (void)strips; (void)l; (void)r; (void)rate; g_frames = frames; g_strips = n; atomic_fetch_add(&g_blocks, 1); }
 int main(void) {
-  CHECK(amix_api_version() == 6 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  CHECK(amix_api_version() == 7 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
   { amix_set_dirs("/tmp/amix-sdk-paths/data", "/tmp/amix-sdk-paths/cache", NULL); char* pj = amix_paths_json(); CHECK(pj && strstr(pj, "\"data\":\"/tmp/amix-sdk-paths/data\"") && strstr(pj, "\"downloads\":\"/tmp/amix-sdk-paths/cache/downloads\"") && strstr(pj, "\"os\":")); amix_free(pj); }
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);
@@ -29,6 +32,18 @@ int main(void) {
   amix_config cfg; memset(&cfg, 0, sizeof cfg); cfg.backend = "null"; cfg.in_device = ""; cfg.out_device = ""; cfg.sample_rate = 48000; cfg.frames = 128; cfg.in_channels = 2; cfg.out_channels = 2;
   char err[256]; CHECK(amix_rt_open(rt, &cfg, err, sizeof err) == 0 && amix_rt_running(rt) && strcmp(amix_rt_backend(rt), "null") == 0 && fabs(amix_rt_sample_rate(rt) - 48000) < 1e-6);
   amix_rt_set_gain(rt, 0, -3); amix_rt_set_eq(rt, 0, 0, 1, 1000, 1.0, 3); amix_rt_set_master(rt, 0); amix_rt_levels(rt, &lv);
+  { /* API 7: the open device, its latency in plain words, the ASIO list (none here), and the block callback on the audio thread */
+    int ci = -1, co = -1; long li = -1, lo = -1; char* j;
+    amix_rt_channels(rt, &ci, &co); CHECK(ci == 2 && co == 2);
+    amix_rt_latency(rt, &li, &lo); CHECK(li == 0 && lo == 0);   /* the null device reports none */
+    j = amix_rt_latency_json(rt); CHECK(strstr(j, "\"running\":true") && strstr(j, "\"level\":") && strstr(j, "\"advice\":[\"") && strstr(j, "\"blockMs\":2.67")); amix_free(j);
+    j = amix_asio_drivers_json(); CHECK(strcmp(j, "[]") == 0); amix_free(j);   /* ASIO is Windows-only */
+    j = amix_rt_sample_format(rt); CHECK(j && strlen(j) > 0); amix_free(j);
+    j = amix_rt_output_names_json(rt); CHECK(j[0] == '['); amix_free(j);
+    amix_rt_set_block_callback(rt, on_block, NULL);
+    { struct timespec ts = {0, 200000000}; nanosleep(&ts, NULL); }
+    amix_rt_set_block_callback(rt, NULL, NULL); { const int seen = atomic_load(&g_blocks); struct timespec ts = {0, 50000000}; nanosleep(&ts, NULL); CHECK(seen > 5 && atomic_load(&g_blocks) <= seen + 1); CHECK(g_frames == 128); CHECK(g_strips == 8); }
+  }
   { /* network audio: send to this machine and receive it back on the network inputs */
     char e[128] = ""; char* j;
     CHECK(amix_rt_net_receive_start(rt, "127.0.0.1", 47318, 2, 24, 48000, 20, NULL, e, sizeof e) == 0);
@@ -75,6 +90,6 @@ int main(void) {
     CHECK(amix_mixer_insert(fm, -1, 0, "drive") == 0 && amix_mixer_insert(fm, -1, 0, "") == 0 && amix_mixer_insert(fm, 0, 0, NULL) == 0);
     CHECK(strcmp(ij = amix_mixer_insert_json(fm, 0, 0), "null") == 0); amix_free(ij);
     amix_mixer_process(fm, fin, 512, oL, oR); d = 0; for (int i = 0; i < 512; ++i) d += fabs(oL[i] - dL[i]); CHECK(d < 1e-3); amix_mixer_destroy(fm); }
-  printf("sdk_c_test: C API version %s, offline mixer, null runtime, licence JSON, hi-res audio, inserts OK\n", amix_version());
+  printf("sdk_c_test: C API version %s, offline mixer, null runtime, ASIO list, latency, block callback, licence JSON, hi-res audio, inserts OK\n", amix_version());
   return 0;
 }

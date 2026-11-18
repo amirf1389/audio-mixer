@@ -29,7 +29,10 @@ import com.amfb.amixos.remote.MiniJson
  *  MASTER: fader, limiter and its own rack. What is chosen is kept for next time. Rate and buffer come from the phone's audio HAL. */
 class LocalMixerActivity : AppCompatActivity() {
     companion object {
-        const val STRIPS = 2
+        /** the engine's strips: 0-1 the inputs (mic / interface), 2-3 DECK A (left, right), 4-5 DECK B */
+        const val STRIPS = 6
+        const val INPUTS = 2
+        fun deckStrip(d: Int) = INPUTS + 2 * d
         /** the rack of a strip (-1 = master) as kept in prefs: one entry per slot, "kind" or "" */
         fun rackKey(strip: Int) = if (strip < 0) "rackMaster" else "rack$strip"
         fun paramKey(strip: Int, slot: Int) = "fx_${if (strip < 0) "m" else strip.toString()}_$slot"
@@ -41,6 +44,16 @@ class LocalMixerActivity : AppCompatActivity() {
     /** the native engine; null when it cannot load (the JVM tests): the screen is still drawn */
     private val engine: Engine? by lazy { runCatching { Engine(STRIPS, rate.toDouble()) }.getOrNull()?.also { applyAll(it) } }
     private var loop: AudioLoop? = null
+    /** the mixer's real rate: the native stream may run at the device's own rate */
+    private fun mixRate(): Double { val st = if (loop?.path == "aaudio") runCatching { engine?.nativeState() }.getOrNull() else null; return (st?.getOrNull(8)?.takeIf { it > 0 } ?: rate).toDouble() }
+    /** THE TWO DECKS: a song file each, on strips 3-4 and 5-6 */
+    private val decks: List<DeckPlayer> by lazy { engine?.let { e -> (0..1).map { d -> DeckPlayer(this, e, d, deckStrip(d), ::mixRate).also { it.listener = object : DeckPlayer.Listener { override fun changed(deck: DeckPlayer) { ui.post { showDecks() } } } } } } ?: emptyList() }
+    private var pickFor = 0
+    private val pickFile = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { u -> if (u != null) loadDeck(pickFor, u, true) }
+    private val deckViews = HashMap<Int, DeckViews>()
+    private class DeckViews(val title: TextView, val time: TextView, val seek: SeekBar, val play: PadButton, val loop: PadButton)
+    // MASTER RECORDER: the stereo master to a file (FLAC 24-bit, the recorder's folder)
+    @Volatile private var recWriter: HiRes.Writer? = null; private var recThread: Thread? = null; private var recFile: java.io.File? = null; private lateinit var recBtn: PadButton
     private val ui = Handler(Looper.getMainLooper())
     private val accent by lazy { getColor(R.color.accent) }; private val cyan by lazy { getColor(R.color.cyan) }; private val dim by lazy { getColor(R.color.dim) }
     private lateinit var body: LinearLayout; private lateinit var status: TextView; private lateinit var startBtn: PadButton
@@ -54,7 +67,7 @@ class LocalMixerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         runCatching { Engine.setDirs(filesDir.absolutePath, cacheDir.absolutePath, cacheDir.absolutePath) }
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 20, 20, 16); setBackgroundColor(Color.parseColor("#0B0F15")) }
-        setContentView(Nav.wrap(this, body, null))
+        setContentView(Nav.wrap(this, body, Nav.Tab.MIXER))   // the MIXER tab, THIS PHONE mode
         render()
         ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
     }
@@ -63,10 +76,12 @@ class LocalMixerActivity : AppCompatActivity() {
      *  OUTPUT keys, then the desk: one strip per channel and the MASTER strip on the right, like the console's own mixer */
     fun render() {
         body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear()
+        body.addView(Nav.modeBar(this, true))   // DUAL MODE: THIS PHONE | CONSOLE
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
         startBtn = PadButton(this, getString(if (loop == null) R.string.start else R.string.stop), ConsoleUi.GREEN, 14f).apply { on = loop != null; layoutParams = LinearLayout.LayoutParams(300, 96); setOnClickListener { if (loop == null) startAudio() else stopAudio() } }
-        head.addView(startBtn); body.addView(head)
+        recBtn = PadButton(this, getString(if (recWriter != null) R.string.lm_rec_stop else R.string.lm_rec), ConsoleUi.RED, 14f).apply { on = recWriter != null; layoutParams = LinearLayout.LayoutParams(220, 96).apply { setMargins(0, 0, 12, 0) }; setOnClickListener { toggleRec() } }
+        head.addView(recBtn); head.addView(startBtn); body.addView(head)
         status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }; body.addView(status); showStatus()
         // ---- INPUT / OUTPUT: two keys that open the device lists, and MONO / STEREO
         // each row: a LAMP (stopped / not open / no signal / live / clipping), the device, what it is doing and a level bar under it
@@ -102,8 +117,13 @@ class LocalMixerActivity : AppCompatActivity() {
         body.addView(chRow); body.addView(inRow)
         // ---- THE DESK
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+        // ---- DECKS: two song players (a card each: the file, time, seek, LOAD / PLAY / STOP / LOOP); their channels are on the desk
+        val deckRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 8) }
+        for (d in 0..1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d == 0) 0 else 6, 0, if (d == 0) 6 else 0, 0) } })
+        body.addView(deckRow)
         for (s in 0 until inChannels()) desk.addView(stripView(s))
-        desk.addView(stripView(-1)); body.addView(desk)
+        for (d in 0..1) desk.addView(deckStripView(d))
+        desk.addView(stripView(-1)); body.addView(desk); showDecks()
     }
     private val faders = HashMap<Int, FaderView>()
 
@@ -190,9 +210,11 @@ class LocalMixerActivity : AppCompatActivity() {
     /** puts the saved levels, pans, mutes, limiter and racks onto a fresh engine */
     private fun applyAll(e: Engine) {
         val p = prefs(); val two = inChannels() == 2
-        for (s in 0 until STRIPS) { e.setGain(s, p.getFloat("db$s", if (s == 1 && !two) -60f else 0f).toDouble()); e.setPan(s, p.getFloat("pan$s", if (two) (if (s == 0) -1f else 1f) else 0f).toDouble()); e.setMute(s, p.getBoolean("mute$s", false)) }
+        for (s in 0 until INPUTS) { e.setGain(s, p.getFloat("db$s", if (s == 1 && !two) -60f else 0f).toDouble()); e.setPan(s, p.getFloat("pan$s", if (two) (if (s == 0) -1f else 1f) else 0f).toDouble()); e.setMute(s, p.getBoolean("mute$s", false)) }
+        for (d in 0..1) { val l = deckStrip(d); val db = p.getFloat("deckDb$d", 0f).toDouble(); val mu = p.getBoolean("deckMute$d", false)   // a deck: its left and right on their own strips
+            e.setGain(l, db); e.setGain(l + 1, db); e.setPan(l, -1.0); e.setPan(l + 1, 1.0); e.setMute(l, mu); e.setMute(l + 1, mu) }
         e.setMaster(p.getFloat("masterDb", 0f).toDouble()); e.setLimiter(p.getBoolean("limiter", true), -0.5, 100.0)
-        for (s in listOf(-1) + (0 until STRIPS)) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty() && e.insert(s, slot, k) == 0)
+        for (s in listOf(-1) + (0 until INPUTS)) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty() && e.insert(s, slot, k) == 0)
             p.getString(paramKey(s, slot), "").orEmpty().split(';').filter { '=' in it }.forEach { e.insertSet(s, slot, it.substringBefore('='), it.substringAfter('=').toDoubleOrNull() ?: 0.0) } }
     }
 
@@ -228,7 +250,7 @@ class LocalMixerActivity : AppCompatActivity() {
         if (::startBtn.isInitialized) { startBtn.text = getString(R.string.stop); startBtn.on = true }
         ui.postDelayed({ showStatus() }, 400)
     }
-    private fun stopAudio() { loop?.stop(); loop = null; if (::startBtn.isInitialized) { startBtn.text = getString(R.string.start); startBtn.on = false }; showStatus() }
+    private fun stopAudio() { decks.forEach { it.pause() }; loop?.stop(); loop = null; if (::startBtn.isInitialized) { startBtn.text = getString(R.string.start); startBtn.on = false }; showStatus() }
     private fun showStatus() {
         if (!::status.isInitialized) return
         val l = loop; val ch = runCatching { Engine.aaudioInChannels() }.getOrDefault(0)
@@ -269,10 +291,86 @@ class LocalMixerActivity : AppCompatActivity() {
     }
     private fun showMeters() {
         showIo()
+        showDeckTimes()
         val p = loop?.lastPeaks ?: return
         fun lvl(v: Float) = (((if (v > 1e-6f) 20 * Math.log10(v.toDouble()) else -120.0) + 60) / 60 * 1000).toInt().coerceIn(0, 1000)
-        for (s in 0 until STRIPS) faders[s]?.apply { level = lvl(p.getOrElse(s) { 0f }); clip = p.getOrElse(s) { 0f } >= 1f }
+        for (s in 0 until INPUTS) faders[s]?.apply { level = lvl(p.getOrElse(s) { 0f }); clip = p.getOrElse(s) { 0f } >= 1f }
+        for (d in 0..1) faders[100 + d]?.apply { val l = deckStrip(d); val m = maxOf(p.getOrElse(l) { 0f }, p.getOrElse(l + 1) { 0f }); level = lvl(m); clip = m >= 1f }
         faders[-1]?.apply { val m = maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }); level = lvl(m); clip = m >= 1f }
     }
-    override fun onDestroy() { stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
+    override fun onDestroy() { stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
+
+    // ---- DECKS
+    private fun loadDeck(d: Int, u: android.net.Uri, fresh: Boolean) {
+        if (fresh) runCatching { contentResolver.takePersistableUriPermission(u, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }   // the deck comes back next time
+        val name = runCatching { contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull() ?: u.lastPathSegment.orEmpty()
+        prefs().edit().putString("deckUri$d", u.toString()).putString("deckTitle$d", name).apply()
+        decks.getOrNull(d)?.load(u, name); showDecks()
+    }
+    private fun deckCard(d: Int): View {
+        val c = card(); val letter = if (d == 0) "A" else "B"
+        c.addView(TextView(this).apply { text = getString(R.string.lm_deck, letter); setTextColor(cyan); textSize = 11f; letterSpacing = 0.15f; typeface = Typeface.DEFAULT_BOLD })
+        val title = TextView(this).apply { setTextColor(Color.WHITE); textSize = 12f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }; c.addView(title)
+        val time = TextView(this).apply { setTextColor(dim); textSize = 10f; typeface = Typeface.MONOSPACE }; c.addView(time)
+        val seek = SeekBar(this).apply { max = 1000; setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, v: Int, user: Boolean) {}
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) { decks.getOrNull(d)?.let { k -> if (k.durationUs > 0) k.seek(k.durationUs * sb.progress / 1000) } } }) }
+        c.addView(seek)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun btn(t: String, col: Int, f: () -> Unit) = PadButton(this, t, col, 11f).apply { layoutParams = LinearLayout.LayoutParams(0, 76, 1f).apply { setMargins(2, 4, 2, 0) }; setOnClickListener { f() } }.also { row.addView(it) }
+        btn(getString(R.string.lm_deck_load), cyan) { pickFor = d; runCatching { pickFile.launch(arrayOf("audio/*")) } }
+        val play = btn("▶", ConsoleUi.GREEN) { val k = decks.getOrNull(d) ?: return@btn; if (k.playing) k.pause() else { if (loop == null) startAudio(); k.play() } }
+        btn("■", ConsoleUi.RED) { decks.getOrNull(d)?.stop() }
+        val lp = btn(getString(R.string.lm_deck_loop), ConsoleUi.AMBER) { decks.getOrNull(d)?.let { k -> k.loop = !k.loop; prefs().edit().putBoolean("deckLoop$d", k.loop).apply(); showDecks() } }
+        c.addView(row)
+        deckViews[d] = DeckViews(title, time, seek, play, lp)
+        // the deck chosen last time comes back (if Android still lets the app read it)
+        val saved = prefs().getString("deckUri$d", null)
+        if (saved != null && decks.getOrNull(d)?.loaded == false) { decks[d].loop = prefs().getBoolean("deckLoop$d", false); runCatching { loadDeck(d, android.net.Uri.parse(saved), false) } }
+        return c
+    }
+    private fun showDecks() { for (d in 0..1) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d)
+        v.title.text = when { k == null -> getString(R.string.lm_no_engine); k.error.isNotEmpty() -> getString(R.string.lm_deck_error, k.error); k.loaded -> k.title; else -> getString(R.string.lm_deck_empty) }
+        v.play.text = if (k?.playing == true) "❚❚" else "▶"; v.play.on = k?.playing == true; v.loop.on = k?.loop == true }
+        showDeckTimes() }
+    private fun showDeckTimes() { for (d in 0..1) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d) ?: continue
+        val pos = k.positionUs; v.time.text = DeckPlayer.clock(pos) + " / " + DeckPlayer.clock(k.durationUs)
+        if (!v.seek.isPressed && k.durationUs > 0) v.seek.progress = (pos * 1000 / k.durationUs).toInt() } }
+    /** a deck's channel on the desk: one stereo strip (its left and right strips together): name, MUTE, fader with meter, level */
+    private fun deckStripView(d: Int): View {
+        val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
+        val col = ConsoleUi.strip(this, color, 0, false).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
+        col.addView(TextView(this).apply { text = getString(R.string.lm_deck, if (d == 0) "A" else "B"); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
+        col.addView(TextView(this).apply { text = getString(R.string.lm_sub_deck); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        col.addView(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("deckMute$d", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
+            setOnClickListener { val v = !p.getBoolean("deckMute$d", false); p.edit().putBoolean("deckMute$d", v).apply(); engine?.setMute(l, v); engine?.setMute(l + 1, v); on = v } })
+        val readout = ConsoleUi.dbReadout(this); fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
+        val db0 = p.getFloat("deckDb$d", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
+        col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat("deckDb$d", set.toFloat()).apply(); show(db); engine?.setGain(l, set); engine?.setGain(l + 1, set) } }.also { faders[100 + d] = it })
+        col.addView(readout); return col
+    }
+
+    // ---- MASTER RECORDER: the master as it is heard, to FLAC 24-bit in the recorder's folder (TOOLS → RECORDER lists it)
+    private fun toggleRec() { if (recWriter != null) stopRec() else startRec() }
+    private fun startRec() {
+        val e = engine ?: return; if (loop == null) startAudio()
+        val dir = java.io.File(getExternalFilesDir(null) ?: filesDir, "recordings").apply { mkdirs() }
+        val f = java.io.File(dir, "mix_" + java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US).format(java.util.Date()) + ".flac")
+        val rateNow = mixRate().toInt(); val w = runCatching { HiRes.open(f.path, 2, rateNow, "flac24", "tpdf") }.getOrNull()
+        if (w == null) { status.text = getString(R.string.rec_cannot_write, runCatching { HiRes.lastError() }.getOrDefault("")); return }
+        recWriter = w; recFile = f; e.recArm(true)
+        recThread = kotlin.concurrent.thread(name = "amix-master-rec", isDaemon = true) { val buf = FloatArray(2 * 4096)
+            while (recWriter != null) { val n = e.recPop(buf, 4096); if (n > 0) recWriter?.write(buf, n) else Thread.sleep(10) } }
+        recBtn.text = getString(R.string.lm_rec_stop); recBtn.on = true; window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+    private fun stopRec() {
+        val w = recWriter ?: return; engine?.recArm(false); recWriter = null; recThread?.join(1000); recThread = null
+        val buf = FloatArray(2 * 4096); engine?.let { e -> while (true) { val n = e.recPop(buf, 4096); if (n <= 0) break; w.write(buf, n) } }   // what is left
+        val dropped = engine?.recDropped() ?: 0L; w.finish()
+        if (::recBtn.isInitialized) { recBtn.text = getString(R.string.lm_rec); recBtn.on = false }; window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        status.text = getString(R.string.lm_rec_saved, recFile?.name.orEmpty()) + if (dropped > 0) " · " + getString(R.string.lm_rec_dropped, dropped) else ""
+    }
 }

@@ -45,6 +45,8 @@ class HomeActivity : AppCompatActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // STANDALONE MODE: opened from the launcher with "Open the phone mixer at start" on, the phone's own mixer comes up (HOME stays behind it)
+        if (savedInstanceState == null && intent?.action == android.content.Intent.ACTION_MAIN && Prefs.startInPhoneMixer(this)) startActivity(android.content.Intent(this, LocalMixerActivity::class.java))
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 40, 32, 32) }
         box.addView(TextView(this).apply { text = "AMF X1"; setTextColor(getColor(R.color.accent)); textSize = 28f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.18f })
         box.addView(TextView(this).apply { text = getString(R.string.home_by) + "   ·   " + (runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""); setTextColor(getColor(R.color.dim)); textSize = 12f; letterSpacing = 0.2f; setPadding(0, 0, 0, 24) })

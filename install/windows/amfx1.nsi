@@ -161,6 +161,23 @@ Section "AmF X1" SecMain
   ; THE INSTALL ID: written once per fresh install (an update over an installed console keeps it). The console compares it with the one it
   ; last saw; a new id means this is a new install, so it starts from the factory console (no master left at -inf from before).
   IfFileExists "$INSTDIR\install.id" idDone 0
+  ; A CLEAN INSTALL (no install.id: not an update): what an earlier install of this user left (settings in the registry, the console, scenes,
+  ; presets, caches, network tokens) is removed, as the uninstaller does; the licence key and the edition are kept. The console also runs a
+  ; full factory reset on its first start (install.id is new to it).
+  SetShellVarContext current
+  DeleteRegKey HKCU "Software\AMFB Audio\A mix OS"
+  RMDir /r "$LOCALAPPDATA\AMFB Audio\AmF X1"
+  StrCpy $8 "$APPDATA\AMFB Audio"
+  IfFileExists "$8\AmF X1\*.*" 0 cleanDone
+    CreateDirectory "$8\amfx1-keep"
+    Rename "$8\AmF X1\license.json" "$8\amfx1-keep\license.json"
+    Rename "$8\AmF X1\edition.json" "$8\amfx1-keep\edition.json"
+    RMDir /r "$8\AmF X1"
+    CreateDirectory "$8\AmF X1"
+    Rename "$8\amfx1-keep\license.json" "$8\AmF X1\license.json"
+    Rename "$8\amfx1-keep\edition.json" "$8\AmF X1\edition.json"
+    RMDir "$8\amfx1-keep"
+  cleanDone:
   ${GetTime} "" "L" $0 $1 $2 $3 $4 $5 $6
   CreateDirectory "$INSTDIR"
   FileOpen $7 "$INSTDIR\install.id" w

@@ -27,7 +27,9 @@ static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/sysopt.hpp"
+#include "audiomixer/latency.hpp"
 static void warmSystemInfo();   // SYSTEM OPTIMIZATION: looks the hardware up on a background thread (defined with systemInfo)
+static const am::sysopt::CpuInfo& cpuOnce();
 #include <QGuiApplication>
 #include <QTimer>
 #include <QDir>
@@ -69,7 +71,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
-  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate();
+  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate(); oneVoice_ = settings_.value("audio/oneVoice", true).toBool();
   sysFast_ = settings_.value("sys/fastCores", true).toBool(); sysEco_ = settings_.value("sys/ecoBackground", true).toBool(); sysTrim_ = settings_.value("sys/trimMinimised", true).toBool();
   am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -190,6 +192,7 @@ void Engine::setDeviceEnabled(const QString& backend, const QString& id, bool on
   emit devicesChanged();
 }
 bool Engine::open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels) {
+  if (!opening_) { oneVoiceActed_ = false; ov_.reset(); if (!oneVoiceNote_.isEmpty()) { oneVoiceNote_.clear(); emit oneVoiceChanged(); } }   // ONE VOICE looks again on every device
   if (opening_) return false;   // a start is already under way (asked again from the interface while it waits): nothing is stopped or replaced under it
   for (const QString& dev : {inDevice, outDevice}) if (!dev.isEmpty() && dev != "-" && !deviceEnabled(backend, dev)) { status_ = QStringLiteral("That device is switched OFF on CONNECTIONS: switch it ON to use it."); emit stateChanged(); return false; }
   stop();
@@ -728,6 +731,59 @@ QVariantMap Engine::setInputSource(const QString& source) {
   status_ = (app ? QStringLiteral("INPUT: APP SOUND (%1 only) on CH 1-2. A service that protects its stream (DRM) may come through silent: Windows does not give its sound to other programs · ").arg(appSourceName())
              : music ? QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1, so no loop on these headphones / speakers) · ") : QStringLiteral("INPUT: MIC on CH 1-2 · ")) + status_;
   emit stateChanged(); return m;
+}
+// ---- LOW LATENCY SOUND DETECTION
+QVariantMap Engine::latencyReport() const {
+  QVariantMap m; if (!rt_) { m["running"] = false; m["verdict"] = QStringLiteral("Start the sound card to measure its latency."); return m; }
+  am::latency::Input in; in.backend = curBackend_; in.exclusive = rt_->exclusive(); in.rate = sampleRate() > 0 ? sampleRate() : 48000; in.blockFrames = blockFrames_ > 0 ? blockFrames_ : 256;
+  rt_->latencyFrames(in.inFrames, in.outFrames); in.hasInput = devIn_ > 0;
+  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["id"].toString() == QString::fromStdString(curOut_) && d["kind"].toString() == "bluetooth") in.bluetoothOut = true; }
+  in.hybrid = cpuOnce().topo.classes > 1; in.fastCores = sysFast_;
+  const am::Snapshot sn = rt_->snapshot(); in.xruns = sn.xruns; in.maxBlockUs = sn.maxBlockUs;
+  const am::latency::Report r = am::latency::assess(in);
+  m["running"] = true; m["inMs"] = r.inMs; m["outMs"] = r.outMs; m["blockMs"] = r.blockMs; m["totalMs"] = r.totalMs; m["reported"] = r.reported;
+  m["level"] = QString::fromStdString(r.levelName); m["verdict"] = QString::fromStdString(r.verdict);
+  QStringList adv; for (const auto& a : r.advice) adv << QString::fromStdString(a); m["advice"] = adv; m["roundTrip"] = lastRoundTrip_;
+  return m;
+}
+// the test: a click mixed into the master (after whatever source was there) and input 1 recorded raw for 0.8 s, block by block in step
+struct RoundTripProbe : am::Runtime::ExtraSource, am::Runtime::Tap {
+  std::vector<float> click, rec; std::size_t clickAt = 0; std::atomic<std::size_t> outPos{0}, inPos{0};
+  am::Runtime::ExtraSource* prevExtra = nullptr; am::Runtime::Tap* prevTap = nullptr; int prevRaw = -1;
+  void render(float* L, float* R, std::size_t frames, double rate) override {
+    if (prevExtra) prevExtra->render(L, R, frames, rate);
+    const std::size_t p = outPos.load(); for (std::size_t i = 0; i < frames; ++i) { const std::size_t k = p + i; if (k >= clickAt && k < clickAt + click.size()) { L[i] += click[k - clickAt]; R[i] += click[k - clickAt]; } }
+    outPos.store(p + frames); }
+  void onBlock(const float* const* strips, int n, const float* L, const float* R, std::size_t frames, double rate) override {
+    if (prevTap) prevTap->onBlock(strips, n, L, R, frames, rate);
+    const std::size_t p = inPos.load(); if (n > 0 && strips[0]) for (std::size_t i = 0; i < frames && p + i < rec.size(); ++i) rec[p + i] = strips[0][i];
+    inPos.store(p + frames); }
+};
+QVariantMap Engine::startRoundTrip() {
+  if (!rt_) return {{"ok", false}, {"note", QStringLiteral("Start the sound card first.")}};
+  if (devIn_ <= 0) return {{"ok", false}, {"note", QStringLiteral("The round trip needs an input: switch AUTO INPUT on, or open the interface with its inputs.")}};
+  if (rtProbe_) return {{"ok", false}, {"note", QStringLiteral("A round trip test is already running.")}};
+  const double rate = sampleRate() > 0 ? sampleRate() : 48000;
+  auto p = std::make_shared<RoundTripProbe>(); p->click = am::latency::testClick(rate); p->clickAt = static_cast<std::size_t>(0.1 * rate); p->rec.assign(static_cast<std::size_t>(0.8 * rate), 0.f);
+  p->prevExtra = rt_->extraSource(); p->prevTap = rt_->tap(); p->prevRaw = rt_->tapRawStrip();
+  rtProbe_ = p; rt_->setTapRawStrip(0); rt_->setTap(p.get()); rt_->setExtraSource(p.get());
+  lastRoundTrip_ = QVariantMap{{"state", "running"}};
+  QTimer::singleShot(900, this, [this] { finishRoundTrip(0); });
+  return {{"ok", true}};
+}
+void Engine::finishRoundTrip(int tries) {
+  auto p = rtProbe_; if (!p) return;
+  if (p->inPos.load() < p->rec.size() && tries < 20 && rt_) { QTimer::singleShot(100, this, [this, tries] { finishRoundTrip(tries + 1); }); return; }   // not all recorded yet
+  if (rt_) { rt_->setExtraSource(p->prevExtra); rt_->setTap(p->prevTap); rt_->setTapRawStrip(p->prevRaw); }
+  QTimer::singleShot(200, this, [p] {});   // keeps the probe alive a moment longer, past any block that still holds the old pointers
+  rtProbe_.reset();
+  const double rate = sampleRate() > 0 ? sampleRate() : 48000; double conf = 0;
+  const long at = am::latency::findDelay(p->click.data(), p->click.size(), p->rec.data(), std::min(p->rec.size(), p->inPos.load()), &conf);
+  QVariantMap r;
+  if (at < 0 || conf < 0.3) { r["state"] = "none"; r["note"] = QStringLiteral("The click did not come back: connect output 1 to input 1 with a cable (or hold the microphone near the speaker, volume up) and try again."); r["confidence"] = conf; }
+  else { const double ms = (at - static_cast<long>(p->clickAt)) * 1000.0 / rate; r["state"] = "done"; r["ms"] = ms; r["confidence"] = conf;
+    r["note"] = QStringLiteral("Round trip measured: %1 ms (%2), from the output through the converters and back in.").arg(ms, 0, 'f', 1).arg(QString::fromLatin1(am::latency::levelName(am::latency::levelOf(ms)))); }
+  lastRoundTrip_ = r; emit stateChanged();
 }
 QVariantMap Engine::setAutoInput(bool on) {
   setMicAtStart(on);
@@ -1634,6 +1690,10 @@ QVariantMap Engine::systemInfo() const {
   r["npuFound"] = n.found; r["npuName"] = q(n.name); r["npuVendor"] = q(n.vendor);
   r["ramTotalMb"] = static_cast<qulonglong>(m.totalMb); r["ramFreeMb"] = static_cast<qulonglong>(m.availMb); r["ramLoadPct"] = m.loadPct;
   r["processMb"] = static_cast<qulonglong>(m.processMb); r["privateMb"] = static_cast<qulonglong>(m.privateMb);
+  { const am::sysopt::Sensors z = am::sysopt::sensors();   // PROCESSOR PANEL: what the computer exposes now (nothing invented where it does not)
+    r["loadOk"] = z.loadOk; r["cpuLoadPct"] = z.loadPct; r["clockOk"] = z.clockOk; r["mhz"] = z.mhz; r["perfPct"] = z.perfPct;
+    QVariantList tl; for (double t : z.tempsC) tl << t; r["temps"] = tl; r["maxTempC"] = z.maxTempC;
+    r["powerOk"] = z.powerOk; r["watts"] = z.watts; r["powerFrom"] = q(z.powerFrom); r["ac"] = z.ac; r["batteryPct"] = z.batteryPct; r["saver"] = z.saver; }
   r["audio"] = q(am::sysopt::audioThreadNote()); { const am::sysopt::AudioTune at = am::sysopt::audioThreadState(); r["audioState"] = at.state; r["audioHighQoS"] = at.highQoS; } r["fastCores"] = sysFast_; r["eco"] = sysEco_; r["trim"] = sysTrim_; r["lastTrim"] = lastTrim_;
   QStringList tips;   // English keys: the page translates them
   if (c.emulated) tips << "This x64 build of the mixing console runs on an ARM64 processor through Windows emulation (Prism). It works; emulation costs some extra CPU. A native ARM64 build would remove that cost.";
@@ -1643,11 +1703,18 @@ QVariantMap Engine::systemInfo() const {
   r["tips"] = tips;
   return r;
 }
+void Engine::setOneVoice(bool on) { if (on == oneVoice_) return; oneVoice_ = on; settings_.setValue("audio/oneVoice", on); ov_.reset(); emit oneVoiceChanged(); }
+void Engine::undoOneVoice() { if (!oneVoiceActed_) return; setInputRoute(0, 0); oneVoiceNote_.clear(); ov_.reset(); emit oneVoiceChanged(); }   // oneVoiceActed_ stays: not again on this device
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
 void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
+    // ONE VOICE: the same mono microphone on inputs 1 and 2 (not on the null test device): CH 1 off, the voice heard once on CH 2
+    if (oneVoice_ && !oneVoiceActed_ && rt_->backendName() != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {
+      oneVoiceActed_ = true; setInputRoute(0, -1);
+      oneVoiceNote_ = QStringLiteral("Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.");
+      emit oneVoiceChanged(); }
     const double vuA = 1.0 - std::exp(-timer_.interval() / 65.0);   // a VU reaches 99 % of a step in 300 ms: a one-pole with tau = 65 ms, run at the timer rate
     if (++dynTick_ >= 3) { dynTick_ = 0; for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].dyn.push(s.strips[i].inPk > 1e-6 ? 20.0 * std::log10(s.strips[i].inPk) : -120.0); }   // ten a second: the input, before EQ and dynamics
     bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard
@@ -1699,13 +1766,20 @@ am::dsp::ChannelParams Engine::dspFromJson(const QJsonObject& o) {
   for (int b = 0; b < am::dsp::kEqBands && b < eq.size(); ++b) { const QJsonObject e = eq[b].toObject(); p.eq[static_cast<std::size_t>(b)] = {static_cast<FilterType>(std::clamp(e.value("t").toInt(0), 0, 8)), std::clamp(e.value("f").toDouble(1000), 10.0, 24000.0), std::clamp(e.value("q").toDouble(1), 0.1, 36.0), std::clamp(e.value("g").toDouble(0), -24.0, 24.0)}; }
   return p;
 }
-void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
+int Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   if (o.contains("name")) s.name = o.value("name").toString().left(24); s.db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0); s.mute = o.value("mute").toBool(); { const QJsonObject sp = o.value("spatial").toObject(); s.spOn = sp.value("on").toBool(); s.spAz = sp.value("az").toDouble(0); s.spEl = std::clamp(sp.value("el").toDouble(0), -90.0, 90.0); s.spDist = std::clamp(sp.value("dist").toDouble(1), 0.3, 20.0); s.spSpread = std::clamp(sp.value("spread").toDouble(0), 0.0, 1.0); } s.solo = o.value("solo").toBool();
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
   s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0); s.toneOn = o.value("toneOn").toBool(true); s.automix = o.value("automix").toBool(); s.autoPol = o.value("autoPol").toBool(); s.amWeight = std::clamp(o.value("amWeight").toDouble(1), 0.25, 4.0);
   const QJsonArray pl = o.value("plugins").toArray(); for (int k = 0; k < kPluginSlots; ++k) { if (k < pl.size()) { const QJsonObject e = pl[k].toObject(); const QString kind = e.value("kind").toString().left(1024); if (s.plugins[k].kind != kind) s.plugins[k].vst.reset(); s.plugins[k].kind = kind; s.plugins[k].bypass = e.value("bypass").toBool(); s.plugins[k].state = e.value("state").toString(); } else s.plugins[k] = PluginUi{}; }
+  // TEN PER CHANNEL: a desk saved with plug-ins past slot 10 has them moved up into free slots, in order; what still does not fit is named in the note
+  QStringList dropped;
+  for (int k = kPluginsPerChannel; k < kPluginSlots; ++k) { if (s.plugins[k].kind.isEmpty()) continue;
+    int free = -1; for (int j = 0; j < kPluginsPerChannel; ++j) if (s.plugins[j].kind.isEmpty()) { free = j; break; }
+    if (free >= 0) { s.plugins[free].kind = s.plugins[k].kind; s.plugins[free].bypass = s.plugins[k].bypass; s.plugins[free].state = s.plugins[k].state; } else dropped << s.plugins[k].kind.section('|', 0, 0);
+    s.plugins[k] = PluginUi{}; }
+  return static_cast<int>(dropped.size());
 }
 QJsonObject Engine::consoleJson() const {
   QJsonArray arr; for (const StripUi& s : strips_) arr << stripJson(s);
@@ -1727,7 +1801,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   if (root.contains("amps")) { for (auto& a : ampUi_) a.clear(); for (const QJsonValue& v : root.value("amps").toArray()) { const QJsonObject a = v.toObject(); const int o = a.value("out").toInt(-1); if (o >= 0 && o < 64) { QVariantMap m = a.toVariantMap(); m.remove("out"); ampUi_[o] = m; if (rt_) rt_->setAmp(o, ampFromMap(m)); } } emit ampChanged(); }
   if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(true); mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
   const QJsonArray arr = root.value("strips").toArray();
-  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && ((recallSafe_ >> i) & 1u)) continue; stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); }
+  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && ((recallSafe_ >> i) & 1u)) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
@@ -1752,9 +1826,13 @@ void Engine::freshInstallReset() {
   const QString id = QString::fromUtf8(f.read(64)).trimmed(); if (id.isEmpty()) return;
   const QString seen = settings_.value("install/id").toString();
   if (seen == id) return;
-  if (!seen.isEmpty() || settings_.contains("console/state")) { settings_.remove("console/state"); startNote_ = QStringLiteral("New install: the console starts from its factory state."); }
+  // FIRST START AFTER A NEW INSTALL: a full factory reset (main.cpp calls Settings::factoryReset: settings, console, scenes, presets,
+  // arrangement, driver locks and network tokens; the licence and the edition stay), then markInstallSeen() so it happens once
+  installId_ = id; freshInstall_ = !seen.isEmpty() || settings_.contains("console/state") || settings_.contains("general/setupDone");
+  if (freshInstall_) { settings_.remove("console/state"); startNote_ = QStringLiteral("New install: everything starts from the factory state (the licence is kept)."); }
   settings_.setValue("install/id", id); settings_.sync();
 }
+void Engine::markInstallSeen() { if (installId_.isEmpty()) return; settings_.setValue("install/id", installId_); settings_.sync(); freshInstall_ = false; }
 void Engine::load() {
   const QJsonObject root = QJsonDocument::fromJson(settings_.value("console/state").toString().toUtf8()).object();
   if (!root.isEmpty()) {

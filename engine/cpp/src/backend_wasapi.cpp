@@ -68,7 +68,7 @@ const GUID kIidUnknown = {0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0
 const GUID kIidAgile = {0x94ea2b94, 0xe9cc, 0x49e0, {0xc0, 0xff, 0xee, 0x64, 0xca, 0x8f, 0x5b, 0x90}};
 const GUID kIidActivateHandler = {0x41D949AB, 0x9862, 0x444A, {0x80, 0xF6, 0xC2, 0x61, 0x33, 0x4D, 0xA5, 0xEB}};
 // the completion handler: agile (called on any MTA thread), signals an event; the result is read from the operation afterwards
-class ActivateDone : public IActivateAudioInterfaceCompletionHandler {
+class ActivateDone final : public IActivateAudioInterfaceCompletionHandler {
  public:
   HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
   ~ActivateDone() { if (done) CloseHandle(done); }
@@ -95,7 +95,9 @@ HRESULT activateProcessLoopback(IAudioClient** ac, std::string& err, DWORD pid =
   HRESULT ar = E_FAIL; IUnknown* unk = nullptr;
   if (SUCCEEDED(r)) { r = op->GetActivateResult(&ar, &unk); if (SUCCEEDED(r)) r = ar; }
   if (SUCCEEDED(r) && unk) r = unk->QueryInterface(kIidAudioClient, reinterpret_cast<void**>(ac));
-  if (unk) unk->Release(); if (op) op->Release(); h->Release();
+  if (unk) unk->Release();
+  if (op) op->Release();
+  h->Release();
   if (FAILED(r)) err = hr(pid ? "app sound (process loopback)" : "computer sound (process loopback)", r) + (pid && r == E_INVALIDARG ? ": that program has closed" : "");
   return r;
 }
@@ -133,6 +135,11 @@ class WasapiBackend : public Backend {
   }
   void stop() override { stop_ = true; if (ev_) SetEvent(ev_); if (thread_.joinable()) thread_.join(); if (out_) out_->Stop(); if (in_) in_->Stop(); }
   std::uint64_t xruns() const override { return xruns_; }
+  // LOW LATENCY: Windows' stream latency plus the stream's buffer, each direction (GetStreamLatency leaves the buffer out)
+  void latencyFrames(long& in, long& out) const override {
+    in = out = 0; const double rate = cfg_.sampleRate > 0 ? cfg_.sampleRate : 48000;
+    auto of = [&](IAudioClient* c) -> long { if (!c) return 0; REFERENCE_TIME lat = 0; UINT32 buf = 0; c->GetStreamLatency(&lat); c->GetBufferSize(&buf); return static_cast<long>(lat * rate / 1e7) + static_cast<long>(buf); };
+    out = of(out_); in = of(in_); }
  private:
   static WAVEFORMATEXTENSIBLE makeFormat(int ch, double rate, const Sample& s) {
     WAVEFORMATEXTENSIBLE f; std::memset(&f, 0, sizeof f);

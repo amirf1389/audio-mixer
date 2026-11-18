@@ -158,6 +158,19 @@ class DaemonClient(val ep: Endpoint) {
     fun sample(id: Int, gainDb: Double? = null) = control(buildMap { put("op", "sample"); put("id", id); if (gainDb != null) put("gainDb", gainDb) })
     fun samplesStop() = control(mapOf("op" to "sample", "stop" to true))
     fun samplesGain(db: Double) = control(mapOf("op" to "sample", "gainDb" to db))
+    // 1000 CUSTOM PADS (the console's file, shared) and 1000 SOUND EFFECTS
+    data class Pad(val n: Int, val source: String, val name: String, val gainDb: Double, val color: Int, val custom: Boolean) { val kind: String get() = when { source.isEmpty() -> "empty"; source.startsWith("sample:") -> "sample"; source.startsWith("sfx:") -> "sfx"; else -> "file" } }
+    data class PadPage(val version: Int, val pads: List<Pad>)
+    data class Sfx(val id: Int, val name: String, val family: String, val seconds: Double)
+    fun pads(from: Int, to: Int): PadPage { val o = getObj("/api/pads?from=$from&to=$to")
+        return PadPage(o.int("version"), (o["pads"] as? List<*>).orEmpty().mapNotNull { @Suppress("UNCHECKED_CAST") (it as? Map<String, Any?>)?.let { m -> Pad(m.int("n"), m.str("source"), m.str("name"), m.num("gainDb"), m.int("color"), m["custom"] == true) } }) }
+    fun sfx(): List<Sfx> = (getObj("/api/sfx")["effects"] as? List<*>).orEmpty().mapNotNull { @Suppress("UNCHECKED_CAST") (it as? Map<String, Any?>)?.let { m -> Sfx(m.int("id"), m.str("name"), m.str("family"), m.num("seconds")) } }
+    fun playPad(n: Int) = control(mapOf("op" to "pad", "n" to n))
+    fun playSfx(id: Int) = control(mapOf("op" to "sfx", "id" to id))
+    /** change a pad: any of source ("sample:N", "sfx:N", ""), name, gainDb, color; files are chosen on the computer */
+    fun setPad(n: Int, source: String? = null, name: String? = null, gainDb: Double? = null, color: Int? = null) = control(buildMap { put("op", "padSet"); put("n", n)
+        if (source != null) put("source", source); if (name != null) put("name", name); if (gainDb != null) put("gainDb", gainDb); if (color != null) put("color", color) })
+    fun resetPad(n: Int) = control(mapOf("op" to "padReset", "n" to n))
     // ---- MASTERING: the master chain (on, low, air, thr, ratio, attack, release, makeup, drive, gain)
     fun mastering(values: Map<String, Any>) = control(mapOf("op" to "mastering") + values)
     fun masteringNow(): Map<String, Any?> = getObj("/api/state").obj("mastering")

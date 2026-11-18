@@ -32,7 +32,9 @@
 #include "audiomixer/runtime.hpp"
 #include "plugin/plugin.hpp"
 #include "rta.hpp"
-#include "pads.hpp"
+#include "audiomixer/onevoice.hpp"
+#include "samples/pad_player.hpp"
+#include "samples/padbank.hpp"
 #include "audiomixer/master_chain.hpp"
 #include "httpd.hpp"
 #include "json.hpp"
@@ -46,7 +48,7 @@ class Daemon {
   // PLUG-INS: makes one plug-in from a rack slot's kind ("vst3:<module>|<class>", "vst2:<module>", "fx:<effect>") at the engine's rate;
   // the network extension gives the real loaders, tests a stand-in. Empty: racks are listed but not played.
   using PluginFactory = std::function<std::unique_ptr<host::Plugin>(const std::string& kind, double rate, int maxBlock, std::string& err)>;
-  struct Options { PluginFactory pluginFactory; std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; };   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
+  struct Options { PluginFactory pluginFactory; std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; std::string padsFile; };   // padsFile: the 1000 CUSTOM PADS shared with the console (<data>/pads.json; "" = in memory)   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);
@@ -124,7 +126,10 @@ class Daemon {
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
-  Pads pads_;   // the console's SAMPLE PADS while the service plays (op sample)
+  mutable OneVoice ov_; mutable bool ovActed_ = false; mutable std::string ovNote_;   // ONE VOICE (onevoice.hpp): the same microphone on inputs 1 and 2, CH 1 to no input
+  pads::Player pads_;   // the SAMPLE PADS, the 1000 SOUND EFFECTS and the 1000 CUSTOM PADS while the service plays (ops sample, pad)
+  std::unique_ptr<pads::Bank> bank_;   // what each custom pad plays: the file the console writes too
+  json::Value padsJson(const httpd::Request& r);
   DeviceConfig lastCfg_;   // the device opened last (ENGINE CONTROL on the phones reopens it at another rate / buffer)
   // ROUTING, kept here so the phones show it and a fresh device gets it: per strip the device input it reads (-1 none), per output its source
   int inRoute_[kMaxStrips] = {}; int outRoute_[Runtime::kMaxOutputs] = {}; bool routesInit_ = false; void initRoutes();

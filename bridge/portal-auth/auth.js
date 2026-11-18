@@ -28,6 +28,7 @@ function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
     CREATE TABLE IF NOT EXISTS customers (id TEXT PRIMARY KEY, email_hash TEXT, data TEXT NOT NULL, status TEXT NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, updated_by TEXT);
     CREATE INDEX IF NOT EXISTS customers_email ON customers (email_hash);
     CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL, updated INTEGER NOT NULL, by TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS customer_notes (id TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE, data TEXT NOT NULL, at INTEGER NOT NULL, by TEXT NOT NULL);`);
   const keyOf = label => crypto.createHmac('sha256', String(secret)).update(label).digest();
   const jwtKey = keyOf('jwt-hs256');
@@ -111,12 +112,15 @@ function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
   const bearer = req => { const m = /^Bearer ([A-Za-z0-9_.-]{20,4096})$/.exec(String(req.headers.authorization || '')); return m ? verify(m[1]) : null; };
 
   // ── CRM ──
-  const fields = b => ({ name: clean(b.name, 120), email: clean(b.email, 254).toLowerCase(), phone: clean(b.phone, 40), company: clean(b.company, 120), country: clean(b.country, 60), tags: clean(b.tags, 200) });
-  const rowOut = r => { let d; try { d = dec(r.data); } catch (_) { d = { name: '(unreadable: encrypted with another key)', email: '', phone: '', company: '', country: '', tags: '' }; } return { id: r.id, ...d, status: r.status, created: r.created, updated: r.updated, updatedBy: r.updated_by || '' }; };
+  // FOLLOW-UP: a calendar day (YYYY-MM-DD) to get back to the customer, or '' for none
+  const okDay = d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d + 'T00:00:00Z')) && new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) === d;
+  const fields = b => ({ name: clean(b.name, 120), email: clean(b.email, 254).toLowerCase(), phone: clean(b.phone, 40), company: clean(b.company, 120), country: clean(b.country, 60), tags: clean(b.tags, 200), followUp: clean(b.followUp, 10) });
+  const rowOut = r => { let d; try { d = dec(r.data); } catch (_) { d = { name: '(unreadable: encrypted with another key)', email: '', phone: '', company: '', country: '', tags: '' }; } if (d.followUp === undefined) d.followUp = ''; return { id: r.id, ...d, status: r.status, created: r.created, updated: r.updated, updatedBy: r.updated_by || '' }; };
   function saveCustomer(b, by, id) {
     const f = fields(b || {}); const status = STATUSES.includes(b && b.status) ? b.status : 'lead';
     if (!f.name) return { ok: false, status: 400, error: 'a name is needed' };
     if (f.email && !okEmail(f.email)) return { ok: false, status: 400, error: 'that e-mail does not look right' };
+    if (f.followUp && !okDay(f.followUp)) return { ok: false, status: 400, error: 'the follow-up date is a day like 2026-12-01' };
     const now = Date.now();
     if (id) {
       const r = db.prepare('UPDATE customers SET email_hash = ?, data = ?, status = ?, updated = ?, updated_by = ? WHERE id = ?').run(emailHash(f.email), enc(f), status, now, String(by || ''), String(id));
@@ -144,6 +148,19 @@ function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
     const nid = newId('note'); db.prepare('INSERT INTO customer_notes (id, customer_id, data, at, by) VALUES (?, ?, ?, ?, ?)').run(nid, String(id), enc({ text: t }), Date.now(), String(by || ''));
     db.prepare('UPDATE customers SET updated = ?, updated_by = ? WHERE id = ?').run(Date.now(), String(by || ''), String(id));
     return { ok: true, id: nid };
+  }
+  /** FOLLOW-UPS: the customers whose follow-up day is today, and those whose day has passed (oldest first); today is the caller's day */
+  function due(today) {
+    if (!okDay(today)) today = new Date().toISOString().slice(0, 10);
+    const all = listCustomers().filter(c => c.followUp && c.status !== 'lost').sort((a, b) => a.followUp.localeCompare(b.followUp));
+    return { today, dueToday: all.filter(c => c.followUp === today), overdue: all.filter(c => c.followUp < today) };
+  }
+  // BACKUP: a consistent copy of the whole database (VACUUM INTO), the CRM still encrypted with its key (which is not in the copy)
+  const getMeta = k => { const r = db.prepare('SELECT v FROM meta WHERE k = ?').get(k); try { return r ? JSON.parse(r.v) : null; } catch (_) { return null; } };
+  const setMeta = (k, v) => db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run(k, JSON.stringify(v));
+  function backup(dest, by) {
+    db.exec('VACUUM INTO ' + "'" + String(dest).replace(/'/g, "''") + "'");
+    const at = Date.now(); setMeta('lastBackup', { at, by: String(by || '') }); return { ok: true, at };
   }
   const stats = () => { const o = { total: 0 }; for (const s of STATUSES) o[s] = 0; for (const r of db.prepare('SELECT status, COUNT(*) AS n FROM customers GROUP BY status').all()) { o[r.status] = r.n; o.total += r.n; } return o; };
 
@@ -181,9 +198,9 @@ function createPortalAuth({ dbFile, secret, crmSecret = '' }) {
     return { ok: true, settings: getSettings(), changed: put.map(p => p[0]) };
   }
   const settingsSchema = () => Object.fromEntries(Object.entries(SETTINGS).map(([k, d]) => [k, { ...d }]));
-  const dbInfo = () => { const page = db.prepare('PRAGMA page_count').get(), size = db.prepare('PRAGMA page_size').get(); return { bytes: (page.page_count || 0) * (size.page_size || 0), staff: staffCount(), customers: db.prepare('SELECT COUNT(*) AS n FROM customers').get().n, notes: db.prepare('SELECT COUNT(*) AS n FROM customer_notes').get().n, integrity: db.prepare('PRAGMA quick_check').get().quick_check }; };
+  const dbInfo = () => { const page = db.prepare('PRAGMA page_count').get(), size = db.prepare('PRAGMA page_size').get(); return { bytes: (page.page_count || 0) * (size.page_size || 0), staff: staffCount(), customers: db.prepare('SELECT COUNT(*) AS n FROM customers').get().n, notes: db.prepare('SELECT COUNT(*) AS n FROM customer_notes').get().n, integrity: db.prepare('PRAGMA quick_check').get().quick_check, lastBackup: getMeta('lastBackup') }; };
 
-  return { getSettings, setSettings, settingsSchema, dbInfo, staffCount, addStaff, listStaff, setStaffDisabled, setPassword, checkPassword, endSessions, login, sign, verify, bearer, saveCustomer, listCustomers, getCustomer, findByEmail, deleteCustomer, addNote, stats, STATUSES, close: () => db.close() };
+  return { getSettings, setSettings, settingsSchema, dbInfo, staffCount, addStaff, listStaff, setStaffDisabled, setPassword, checkPassword, endSessions, login, sign, verify, bearer, saveCustomer, listCustomers, getCustomer, findByEmail, deleteCustomer, addNote, stats, due, backup, STATUSES, close: () => db.close() };
 }
 
 module.exports = { createPortalAuth, STATUSES };

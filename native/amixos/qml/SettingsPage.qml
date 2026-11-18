@@ -38,6 +38,8 @@ Flickable {
                 Rectangle { id: gb140; implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: Qt.rgba(0.235, 0.784, 0.859, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb140.color) } GradientStop { position: 1; color: Theme.btnBottom(gb140.color) } } border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("START NOW", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.startLastDevice() } } }
             Opt { label: i18n.t("Default sample rate", i18n.lang); Choice { options: [{t: "44.1k", v: 44100}, {t: "48k", v: 48000}, {t: "88.2k", v: 88200}, {t: "96k", v: 96000}, {t: "192k", v: 192000}]; value: settings.defaultRate; onPicked: function (v) { settings.defaultRate = v } } }
             Opt { label: i18n.t("Default buffer", i18n.lang); hint: (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms per block at the default rate", i18n.lang); Choice { options: [{t: "64", v: 64}, {t: "128", v: 128}, {t: "256", v: 256}, {t: "512", v: 512}, {t: "1024", v: 1024}]; value: settings.defaultFrames; onPicked: function (v) { settings.defaultFrames = v } } }
+            Opt { label: i18n.t("Mixer look", i18n.lang); hint: i18n.t("DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips", i18n.lang); Choice { objectName: "mixerLookChoice"; options: [{t: "DAW", v: "daw"}, {t: "CONSOLE", v: "console"}]; value: settings.mixerStyle; onPicked: function (v) { settings.mixerStyle = v } } }
+            Opt { label: i18n.t("One voice", i18n.lang); hint: i18n.t("When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)", i18n.lang); Toggle { objectName: "oneVoiceToggle"; on: engine.oneVoice; onToggled: function (v) { engine.oneVoice = v } } }
             Opt { label: i18n.t("Clip point", i18n.lang); hint: i18n.t("The meters' clip lamp lights at this level (dBFS)", i18n.lang); Slider { from: -12; to: 0; stepSize: 0.1; value: settings.clipDb; onMoved: settings.clipDb = value; implicitWidth: 200 } Text { text: settings.clipDb.toFixed(1) + i18n.t(" dBFS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
             Opt { label: i18n.t("Peak hold", i18n.lang); hint: i18n.t("How long the peak line stays before falling", i18n.lang); Choice { options: [{t: "OFF", v: 0}, {t: "0.5 s", v: 500}, {t: "1.4 s", v: 1400}, {t: "3 s", v: 3000}, {t: "∞", v: 999999}]; value: settings.peakHoldMs; onPicked: function (v) { settings.peakHoldMs = v } } }
         }
@@ -94,6 +96,7 @@ Flickable {
         }
         Panel {
             id: sysPanel
+            objectName: "sysPanel"
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("System optimization", i18n.lang).toUpperCase()
             subtitle: i18n.t("What this computer is, and how the mixing console keeps the sound steady while it uses less of the processor and memory. Only the mixing console's own threads and memory are changed, never other programs.", i18n.lang)
@@ -106,6 +109,18 @@ Flickable {
                     : i18n.t("%1 performance cores + %2 efficiency cores", i18n.lang).arg(sysPanel.sys.perfCores).arg(sysPanel.sys.effCores))
                    + "  ·  " + i18n.t("%1 processor threads", i18n.lang).arg(sysPanel.sys.logical) }
             Line { k: i18n.t("Instruction sets", i18n.lang).toUpperCase(); v: [sysPanel.sys.avx2 ? "AVX2" : "", sysPanel.sys.fma ? "FMA" : "", sysPanel.sys.avx512 ? "AVX-512" : "", sysPanel.sys.neon ? "NEON" : ""].filter(function (x) { return x !== "" }).join(" · ") || "—" }
+            // PROCESSOR NOW: load, clock, temperature and power, only what Windows exposes on this computer (never a guess, no driver touched)
+            Line { k: i18n.t("Processor now", i18n.lang).toUpperCase()
+                v: (sysPanel.sys.loadOk ? i18n.t("load %1 %", i18n.lang).arg(sysPanel.sys.cpuLoadPct.toFixed(0)) : i18n.t("load: measuring…", i18n.lang))
+                   + "  ·  " + (sysPanel.sys.clockOk ? i18n.t("clock %1 GHz", i18n.lang).arg((sysPanel.sys.mhz / 1000).toFixed(2)) + (sysPanel.sys.perfPct > 0 ? " (" + sysPanel.sys.perfPct.toFixed(0) + " %)" : "") : i18n.t("clock not exposed", i18n.lang)) }
+            Line { k: i18n.t("Temperature", i18n.lang).toUpperCase()
+                v: sysPanel.sys.temps && sysPanel.sys.temps.length ? i18n.t("%1 °C (hottest of %2 sensors)", i18n.lang).arg(sysPanel.sys.maxTempC.toFixed(0)).arg(sysPanel.sys.temps.length)
+                   : i18n.t("not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)", i18n.lang) }
+            Line { k: i18n.t("Power", i18n.lang).toUpperCase()
+                v: (sysPanel.sys.powerOk ? i18n.t("%1 W (%2)", i18n.lang).arg(sysPanel.sys.watts.toFixed(1)).arg(i18n.t(sysPanel.sys.powerFrom, i18n.lang)) + "  ·  " : "")
+                   + (sysPanel.sys.ac === 1 ? i18n.t("on mains power", i18n.lang) : sysPanel.sys.ac === 0 ? i18n.t("on battery", i18n.lang) : i18n.t("power source not reported", i18n.lang))
+                   + (sysPanel.sys.batteryPct >= 0 ? "  ·  " + i18n.t("battery %1 %", i18n.lang).arg(sysPanel.sys.batteryPct) : "")
+                   + (sysPanel.sys.saver ? "  ·  " + i18n.t("battery saver on: the sound may need a larger buffer", i18n.lang) : "") }
             Line { k: i18n.t("AI accelerator", i18n.lang).toUpperCase(); v: sysPanel.sys.npuFound ? sysPanel.sys.npuName : i18n.t("no AI accelerator found", i18n.lang) }
             Line { k: i18n.t("Memory (RAM)", i18n.lang).toUpperCase(); v: (sysPanel.sys.ramTotalMb - sysPanel.sys.ramFreeMb) + " / " + sysPanel.sys.ramTotalMb + " MB (" + sysPanel.sys.ramLoadPct + " %)  ·  " + i18n.t("used by the mixing console", i18n.lang) + " " + sysPanel.sys.processMb + " MB" + (sysPanel.sys.lastTrim !== "" ? "  ·  " + i18n.t("last memory release", i18n.lang) + " " + sysPanel.sys.lastTrim : "") }
             Line { k: i18n.t("Sound engine", i18n.lang).toUpperCase()

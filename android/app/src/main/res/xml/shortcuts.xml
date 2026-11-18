@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon: PHONE MIXER opens the standalone mixer on this phone (no computer needed) -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="phone_mixer" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_phone_mixer" android:shortcutLongLabel="@string/shortcut_phone_mixer_long">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.amfb.amixos" android:targetClass="com.amfb.amixos.LocalMixerActivity" />
+    </shortcut>
+</shortcuts>

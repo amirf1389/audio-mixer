@@ -24,6 +24,16 @@
   <div id="alert" class="alert d-none" role="alert"></div>
   <div class="row g-3 mb-3" id="stats"></div>
 
+  <section id="dueSec" class="mb-3 d-none" aria-labelledby="dueTitle">
+    <div class="bg-body border rounded p-3">
+      <h2 class="h6 mb-2" id="dueTitle"><i class="fa-solid fa-calendar-check me-1 text-warning" aria-hidden="true"></i>Follow-ups <span class="badge text-bg-warning" id="dueCount">0</span></h2>
+      <div class="row g-3">
+        <div class="col-md-6"><div class="small text-secondary text-uppercase mb-1">Due today</div><ul class="list-group list-group-flush small" id="dueToday"></ul></div>
+        <div class="col-md-6"><div class="small text-danger text-uppercase mb-1">Overdue</div><ul class="list-group list-group-flush small" id="dueLate"></ul></div>
+      </div>
+    </div>
+  </section>
+
   <section id="custSec">
     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
       <h1 class="h5 mb-0 me-auto">Customers</h1>
@@ -68,7 +78,20 @@
         <div class="col-md-4"><label class="form-label small" for="cCountry">Country</label><input id="cCountry" class="form-control form-control-sm" maxlength="60"></div>
         <div class="col-md-4"><label class="form-label small" for="cStatus">Status</label><select id="cStatus" class="form-select form-select-sm"></select></div>
         <div class="col-md-4"><label class="form-label small" for="cTags">Tags</label><input id="cTags" class="form-control form-control-sm" maxlength="200"></div>
+        <div class="col-md-4"><label class="form-label small" for="cFollow">Follow up on</label><input id="cFollow" type="date" class="form-control form-control-sm"></div>
       </form>
+      <div id="keyBox" class="mt-3 d-none">
+        <h3 class="h6">Licence keys</h3>
+        <div class="table-responsive"><table class="table table-sm small align-middle mb-2"><thead><tr><th>Key</th><th>Plan</th><th>Ends</th><th>Computers</th><th>State</th></tr></thead><tbody id="keyRows"></tbody></table></div>
+        <p id="keyNone" class="small text-secondary">No key for this e-mail yet.</p>
+        <div class="row g-2 align-items-end">
+          <div class="col-4 col-md-3"><label class="form-label small" for="kPlan">Plan</label><select id="kPlan" class="form-select form-select-sm"><option value="basic">BASIC</option><option value="pro">PRO</option><option value="studio">STUDIO</option><option value="master">MASTER</option></select></div>
+          <div class="col-4 col-md-3"><label class="form-label small" for="kDays">Days (0 = no end)</label><input id="kDays" type="number" min="0" max="3650" class="form-control form-control-sm"></div>
+          <div class="col-4 col-md-2"><label class="form-label small" for="kSeats">Computers</label><input id="kSeats" type="number" min="1" max="4" class="form-control form-control-sm"></div>
+          <div class="col-12 col-md-4"><button id="kIssue" class="btn btn-outline-warning btn-sm w-100" type="button"><i class="fa-solid fa-key me-1" aria-hidden="true"></i>Issue a key</button></div>
+        </div>
+        <div id="kOut" class="alert alert-success small mt-2 mb-0 d-none" role="status"><div>New key <b id="kId"></b>: copy it now, it is not shown again.</div><code id="kKey" class="d-block text-break user-select-all mt-1"></code><div id="kPk" class="mt-1"></div></div>
+      </div>
       <div id="noteBox" class="mt-3 d-none">
         <h3 class="h6">Notes</h3>
         <div class="input-group input-group-sm mb-2"><input id="noteText" class="form-control" maxlength="4000" placeholder="Call, e-mail, order…" aria-label="New note"><button id="noteAdd" class="btn btn-outline-warning" type="button">Add note</button></div>

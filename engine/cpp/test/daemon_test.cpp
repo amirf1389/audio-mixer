@@ -228,6 +228,20 @@ int main() {
       CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", auth, status, body) && status == 200);
       const Value sl = Value::parse(body, ok)["samples"]; CHECK(ok && sl.size() == 100 && sl.at(0)["id"].asInt() == 1 && !sl.at(0)["name"].asString().empty());
       CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/samples", "", {}, status, body) && (status == 401 || status == 429)); }
+    // 1000 CUSTOM PADS and 1000 SOUND EFFECTS: listed, changed and played from a remote; a file is never chosen from a phone
+    { CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/sfx", "", auth, status, body) && status == 200);
+      const Value fx = Value::parse(body, ok); CHECK(ok && fx["effects"].size() == 1000 && fx["families"].size() == 20 && fx["effects"].at(999)["name"].asString() == "Bell 50");
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/pads?from=95&to=104", "", auth, status, body) && status == 200);
+      const Value pd = Value::parse(body, ok); CHECK(ok && pd["count"].asInt() == 1000 && pd["pads"].size() == 10 && pd["pads"].at(0)["n"].asInt() == 95 && pd["pads"].at(6)["source"].asString() == "sfx:1");
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/pads", "", {}, status, body) && (status == 401 || status == 429));
+      const double pv = d.state()["padsVersion"].asNumber();
+      CHECK(ctl("{\"op\":\"padSet\",\"n\":500,\"source\":\"sfx:999\",\"gainDb\":-3,\"color\":5}") == 200 && d.state()["padsVersion"].asNumber() > pv);
+      CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/pads?from=500&to=500", "", auth, status, body) && status == 200);
+      { const Value one = Value::parse(body, ok)["pads"].at(0); CHECK(one["source"].asString() == "sfx:999" && one["name"].asString() == "Bell 49" && one["gainDb"].asNumber() == -3 && one["custom"].asBool()); }
+      CHECK(ctl("{\"op\":\"padSet\",\"n\":500,\"source\":\"file:C:/Windows/win.ini\"}") == 400 && ctl("{\"op\":\"padSet\",\"n\":1001,\"source\":\"sfx:1\"}") == 400 && ctl("{\"op\":\"padSet\",\"n\":3,\"source\":\"sfx:5000\"}") == 400);
+      CHECK(ctl("{\"op\":\"padReset\",\"n\":500}") == 200);
+      const int pc = ctl("{\"op\":\"pad\",\"n\":500}"); CHECK(pc == 200 || pc == 400); const int sc = ctl("{\"op\":\"sfx\",\"id\":42}"); CHECK(sc == 200 || sc == 400);
+      CHECK(ctl("{\"op\":\"pad\",\"n\":0}") == 400 && ctl("{\"op\":\"sfx\",\"id\":1001}") == 400); }
     // INPUT while phones are linked: the service reopens its sound card with the microphone; with no sound card open it says so
     { const int code = ctl("{\"op\":\"input\",\"in\":\"\"}"); CHECK(code == 200 || code == 400);
       if (code == 200) { CHECK(d.status()["inChannels"].asInt() == 2 && d.status()["running"].asBool()); } }

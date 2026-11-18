@@ -7,8 +7,9 @@
     <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:theme="@style/Theme.AmFX1" android:supportsRtl="true" android:networkSecurityConfig="@xml/network_security_config">
         <activity android:name=".HomeActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-        <activity android:name=".LocalMixerActivity" android:exported="false" />
+        <activity android:name=".LocalMixerActivity" android:exported="true" />   <!-- exported: the launcher's PHONE MIXER shortcut opens it -->
         <activity android:name=".ToolsActivity" android:exported="false" />
         <activity android:name=".RecorderActivity" android:exported="false" />
         <activity android:name=".MixdownActivity" android:exported="false" />

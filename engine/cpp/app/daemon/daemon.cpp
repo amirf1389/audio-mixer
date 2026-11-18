@@ -1,7 +1,9 @@
 // amixos-daemon: see daemon.hpp. The console model (names, gains, sends ...) lives here so that /api/state can answer without a round trip
 // to the audio thread; every change goes to the Runtime's lock-free control ring and is mirrored in the model under m_.
 #include "daemon.hpp"
+#include "audiomixer/latency.hpp"
 #include "samples/samples.hpp"
+#include "samples/sfx.hpp"
 #include "audiomixer/bluetooth.hpp"
 #include "paths/paths.hpp"
 
@@ -39,6 +41,7 @@ Daemon::Daemon(Options o) : opt_(std::move(o)) {
   if (opt_.strips > kMaxStrips) opt_.strips = kMaxStrips;
   strips_.resize(static_cast<std::size_t>(opt_.strips));
   for (std::size_t i = 0; i < strips_.size(); ++i) strips_[i].name = "CH " + std::to_string(i + 1);
+  bank_ = std::make_unique<pads::Bank>(opt_.padsFile);
 }
 Daemon::~Daemon() { stop(); }
 
@@ -109,9 +112,10 @@ bool Daemon::start(std::string& err) {
         if (!err.empty()) { ack.set("controlError", err); ws.send(ack.dump()); } else if (hasSeq) ws.send(ack.dump());
       }
       ws.close(); });
-    unsigned long long sent = 0; unsigned rtaTick = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
+    unsigned long long sent = 0; unsigned rtaTick = 0, padsTick = 0;   // LIVE SYNC: the console state goes out on connect and whenever any remote changed it (at most 20 times a second)
     while (running_ && ws.open()) {
       if (link->kick) { ws.send("{\"kicked\":true,\"holdSeconds\":" + std::to_string(link->tokenId == "master" ? 0 : kHoldSeconds) + "}"); break; }   // DISCONNECT from the console
+      if (++padsTick % 20 == 0 && bank_->reloadIfChanged()) ++version_;   // the console changed a CUSTOM PAD (it saves the shared file): the phones hear of it within a second
       const unsigned long long v = version_.load();
       if (v != sent) { json::Value m = json::Value::object(); m.set("state", state()); m.set("wsControl", true); if (!ws.send(m.dump())) break; sent = v; }
       if (!ws.send(meters().dump())) break;
@@ -244,6 +248,12 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     json::Value a = json::Value::array(); for (const auto& s : samples::list()) { json::Value v = json::Value::object(); v.set("id", s.id); v.set("name", s.name); v.set("category", s.category); v.set("seconds", s.seconds); a.push(v); }
     json::Value o = json::Value::object(); o.set("samples", a); o.set("gainDb", pads_.gainDb.load()); o.set("voices", pads_.active.load()); res.body = o.dump(); return res; }
+  if (r.method == "GET" && (r.path == "/api/pads" || r.path == "/api/sfx")) {   // the 1000 CUSTOM PADS (?from=&to=) and the 1000 SOUND EFFECTS (any valid token)
+    const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    if (r.path == "/api/sfx") { json::Value fam = json::Value::array(); for (const auto& f : sfx::families()) fam.push(f);
+      json::Value a = json::Value::array(); for (int id = 1; id <= sfx::kCount; ++id) { const sfx::Info in = sfx::info(id); json::Value v = json::Value::object(); v.set("id", id); v.set("name", in.name); v.set("family", in.family); v.set("seconds", in.seconds); a.push(v); }
+      json::Value o = json::Value::object(); o.set("families", fam); o.set("perFamily", sfx::kPerFamily); o.set("effects", a); res.body = o.dump(); return res; }
+    res.body = padsJson(r).dump(); return res; }
   if (r.method == "GET" && r.path == "/api/rta") {   // the analyzer now (any valid token)
     const std::string role = roleOf(r, false); if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     res.body = rtaJson(true).dump(); return res; }
@@ -330,7 +340,9 @@ json::Value Daemon::status() const {
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running());
   if (rt_) { const Snapshot s = rt_->snapshot(); o.set("blocks", static_cast<double>(s.blocks)); o.set("frames", static_cast<double>(s.frames)); o.set("xruns", static_cast<double>(s.xruns));
     // CONSOLE STATUS on the remotes: the device's rate, the DSP load of the last block and its worst, the connected remotes
-    o.set("inDevice", lastCfg_.inDevice); o.set("outDevice", lastCfg_.outDevice); o.set("bufferFrames", static_cast<int>(lastCfg_.frames)); o.set("inChannels", lastCfg_.inChannels); o.set("outChannels", lastCfg_.outChannels);
+    o.set("inDevice", lastCfg_.inDevice); o.set("outDevice", lastCfg_.outDevice); o.set("bufferFrames", static_cast<int>(lastCfg_.frames)); { long li = 0, lo = 0; if (rt_) rt_->latencyFrames(li, lo); am::latency::Input L; L.backend = rt_ ? rt_->backendName() : std::string(); L.exclusive = rt_ && rt_->exclusive(); L.rate = rt_ ? rt_->sampleRate() : 48000; L.blockFrames = static_cast<int>(lastCfg_.frames); L.inFrames = li; L.outFrames = lo; L.hasInput = lastCfg_.inChannels > 0;
+      const am::latency::Report lr = am::latency::assess(L); o.set("latencyMs", std::round(lr.totalMs * 10) / 10); o.set("latencyLevel", lr.levelName); o.set("latencyReported", lr.reported); }   // LOW LATENCY: what the phone shows
+    o.set("inChannels", lastCfg_.inChannels); o.set("outChannels", lastCfg_.outChannels);
     o.set("rate", rt_->sampleRate()); o.set("loadPct", std::round(s.loadPct * 10) / 10); o.set("maxBlockUs", std::round(s.maxBlockUs)); o.set("blockUs", std::round(s.blockUs)); }
   else { o.set("blocks", 0); o.set("frames", 0); o.set("xruns", 0); }
   o.set("remotes", watchers_.load());
@@ -440,6 +452,12 @@ void Daemon::pollVolume() {
   if (v == winVol_.load()) return;
   std::lock_guard<std::mutex> g(m_); winVol_ = v; if (rt_) applyMaster(*rt_); ++version_;   // a move of the Windows slider reaches every remote
 }
+json::Value Daemon::padsJson(const httpd::Request& r) {
+  bank_->reloadIfChanged();
+  auto q = [&](const char* k, int d) { const std::string v = r.param(k); return v.empty() ? d : std::atoi(v.c_str()); };
+  json::Value o = bank_->toJson(std::max(1, q("from", 1)), std::min(pads::kPads, q("to", pads::kPads))); o.set("gainDb", pads_.gainDb.load()); o.set("voices", pads_.active.load()); return o;
+}
+
 json::Value Daemon::state() const {
   std::lock_guard<std::mutex> g(m_);
   json::Value o = json::Value::object();
@@ -459,7 +477,7 @@ json::Value Daemon::state() const {
   o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
-  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("routing", routingJson());
+  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
     m.set("on", mp_.on); m.set("low", mp_.lowDb); m.set("air", mp_.airDb); m.set("thr", mp_.thrDb); m.set("ratio", mp_.ratio); m.set("attack", mp_.attackMs); m.set("release", mp_.releaseMs);
     m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); o.set("mastering", m); }
@@ -471,6 +489,9 @@ json::Value Daemon::meters() const {
   json::Value o = json::Value::object();
   if (!rt_) { o.set("running", false); return o; }
   const Snapshot s = rt_->snapshot();
+  if (!ovActed_ && backend_ != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {   // ONE VOICE (the phones see the routing change and the note)
+    ovActed_ = true; const_cast<Daemon*>(this)->inRoute_[0] = -1; rt_->setInputRoute(0, -1); ++const_cast<Daemon*>(this)->version_;
+    ovNote_ = "Inputs 1 and 2 carry the same microphone: CH 1 is set to no input so the voice is heard once, on CH 2."; }
   json::Value strips = json::Value::array();
   for (int i = 0; i < opt_.strips; ++i) {
     const auto& m = s.strips[i]; json::Value v = json::Value::object();
@@ -580,6 +601,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
     initRoutes(); for (int i = 0; i < opt_.strips; ++i) rt->setInputRoute(i, inRoute_[i]); for (int o = 0; o < Runtime::kMaxOutputs; ++o) rt->setOutputRoute(o, outRoute_[o]);   // the routing as kept
+    ovActed_ = false; ov_.reset(); ovNote_.clear();   // ONE VOICE looks again on every device
     lastCfg_ = cfg; rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }
@@ -602,8 +624,25 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "sample") {   // a SAMPLE PAD (the console's 100 one-shots) into the master: {id 1..100} or {stop: true}; gainDb sets the pads' level
     if (cmd.has("gainDb")) pads_.gainDb.store(std::max(-40.0, std::min(12.0, cmd["gainDb"].asNumber(-6))));
     if (cmd["stop"].asBool(false)) { pads_.stopAll(); return ok; }
-    if (cmd.has("id")) { if (!rt_) { err = "no sound card open"; return {}; } if (!pads_.trigger(cmd["id"].asInt(0))) { err = "id: 1..100"; return {}; } }
+    if (cmd.has("id")) { if (!rt_) { err = "no sound card open"; return {}; } const int id = cmd["id"].asInt(0); if (id < 1 || id > 100) { err = "id: 1..100"; return {}; }
+      if (!pads_.play("sample:" + std::to_string(id), 0, 0, err)) return {}; }
     ok.set("voices", pads_.active.load()); return ok; }
+  if (op == "pad") {   // a CUSTOM PAD {n 1..1000}: plays what the pad holds at the pad's gain (on top of the pads' level)
+    if (!rt_) { err = "no sound card open"; return {}; }
+    bank_->reloadIfChanged(); const int n = cmd["n"].asInt(0); if (n < 1 || n > pads::kPads) { err = "n: 1..1000"; return {}; }
+    const pads::Pad p = bank_->at(n); if (!pads_.play(p.source, n, p.gainDb, err)) return {};
+    ok.set("n", n); ok.set("voices", pads_.active.load()); return ok; }
+  if (op == "sfx") {   // a SOUND EFFECT straight from the list {id 1..1000} (to try one before putting it on a pad)
+    if (!rt_) { err = "no sound card open"; return {}; } const int id = cmd["id"].asInt(0); if (id < 1 || id > sfx::kCount) { err = "id: 1..1000"; return {}; }
+    if (!pads_.play("sfx:" + std::to_string(id), 0, 0, err)) return {}; ok.set("voices", pads_.active.load()); return ok; }
+  if (op == "padSet" || op == "padReset") {   // change a CUSTOM PAD from a remote: {n, source "sample:N" | "sfx:N" | "", name, gainDb, color} or back to its default; a file is chosen on the computer only
+    bank_->reloadIfChanged(); const int n = cmd["n"].asInt(0); if (n < 1 || n > pads::kPads) { err = "n: 1..1000"; return {}; }
+    if (op == "padReset") bank_->resetPad(n);
+    else { pads::Pad p = bank_->at(n); if (cmd.has("source")) { p.source = cmd["source"].asString(); if (!cmd.has("name")) p.name.clear(); }
+      if (cmd.has("name")) p.name = cmd["name"].asString(); if (cmd.has("gainDb")) p.gainDb = cmd["gainDb"].asNumber(p.gainDb); if (cmd.has("color")) p.color = cmd["color"].asInt(p.color);
+      if (!bank_->set(n, p, p.source == bank_->at(n).source, err)) return {}; }   // an unchanged file pad can be renamed / levelled from a phone
+    if (!bank_->save(err)) return {};
+    const pads::Pad now = bank_->at(n); ok.set("n", n); ok.set("source", now.source); ok.set("name", now.name); ok.set("gainDb", now.gainDb); ok.set("color", now.color); ok.set("padsVersion", bank_->version()); return ok; }
   if (op == "mastering") {   // the master chain from a remote: any of on, low, air (dB), thr (dB), ratio, attack, release (ms), makeup, drive (0..1), gain (dB)
     auto num = [&](const char* k, double& v, double lo, double hi) { if (cmd.has(k)) v = std::max(lo, std::min(hi, cmd[k].asNumber(v))); };
     if (cmd.has("on")) mp_.on = cmd["on"].asBool(mp_.on);

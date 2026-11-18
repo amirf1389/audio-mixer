@@ -41,6 +41,26 @@ Item {
                     Item { Layout.fillWidth: true }
                     Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } } }
+            // LOW LATENCY: the open device's latency in plain words (LOW / OK / HIGH), the figures, what would lower it, and a ROUND TRIP test
+            Card { Layout.columnSpan: 2; objectName: "latencyCard"
+                property var rep: engine.latencyReport()
+                Timer { interval: 1500; repeat: true; running: page.visible && engine.uiAwake; onTriggered: parent.rep = engine.latencyReport() }
+                Connections { target: engine; function onStateChanged() { latencyCard.rep = engine.latencyReport() } }
+                id: latencyCard
+                RowLayout { spacing: 10; Head { text: i18n.t("LOW LATENCY", i18n.lang) }
+                    Rectangle { visible: latencyCard.rep.running === true; radius: 6; implicitWidth: lvl.implicitWidth + 16; implicitHeight: 20
+                        color: latencyCard.rep.level === "LOW LATENCY" ? Theme.emerald : latencyCard.rep.level === "OK" ? Theme.amber : Theme.danger
+                        Text { id: lvl; anchors.centerIn: parent; text: latencyCard.rep.level === "LOW LATENCY" ? i18n.t("LOW LATENCY", i18n.lang) : latencyCard.rep.level === "OK" ? i18n.t("OK", i18n.lang) : i18n.t("HIGH", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
+                    Item { Layout.fillWidth: true }
+                    Btn { objectName: "roundTripBtn"; label: latencyCard.rep.roundTrip && latencyCard.rep.roundTrip.state === "running" ? i18n.t("MEASURING…", i18n.lang) : i18n.t("ROUND TRIP TEST", i18n.lang); enabled: engine.running
+                        onClicked: { const r = engine.startRoundTrip(); if (r && !r.ok && r.note) rtNote.text = i18n.t(r.note, i18n.lang); latencyCard.rep = engine.latencyReport() } } }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; text: latencyCard.rep.verdict ? latencyCard.rep.verdict : "" }
+                Text { Layout.fillWidth: true; visible: latencyCard.rep.running === true; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8
+                    text: latencyCard.rep.running ? i18n.t("IN", i18n.lang) + " " + Number(latencyCard.rep.inMs).toFixed(1) + " ms  ·  " + i18n.t("OUT", i18n.lang) + " " + Number(latencyCard.rep.outMs).toFixed(1) + " ms  ·  " + i18n.t("BLOCK", i18n.lang) + " " + Number(latencyCard.rep.blockMs).toFixed(2) + " ms" : "" }
+                Repeater { model: latencyCard.rep.advice ? latencyCard.rep.advice : []; delegate: Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; text: "• " + modelData } }
+                Text { id: rtNote; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8
+                    text: latencyCard.rep.roundTrip && latencyCard.rep.roundTrip.note ? latencyCard.rep.roundTrip.note : i18n.t("ROUND TRIP: connect output 1 to input 1 with a cable (or hold the microphone near the speaker) and press the button: a short sweep plays and its return is timed.", i18n.lang) }
+            }
             // AUDIO ACCESS: what the console may open, each switch ON / OFF. Moved here from SETTINGS (next to the devices it acts on) and
             // applied at once: a running sound card restarts with the new rule; a stopped one only refreshes the device list (nothing starts).
             Card { Layout.columnSpan: 2; objectName: "audioAccessCard"

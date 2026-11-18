@@ -74,6 +74,10 @@ class Measure : public QObject {
   Q_INVOKABLE QString exportFilters(const QString& path, bool json);                     // REW / miniDSP / Equalizer APO text, or JSON; returns the path ("" on failure)
   Q_INVOKABLE int applyFilters(int strip);                                               // the filters onto the strip's EQ bands (peaking); returns how many
   Q_INVOKABLE bool loadCalibration(const QString& path);
+  Q_INVOKABLE QString saveCalibration(const QString& path);   // the loaded calibration written back as "freq dB" text ("" = <data>/mic-calibration.txt); returns the path, "" on failure
+  /** ROOM CORRECTION from the ROOM prediction: cuts on the modal peaks only (no boosts: a null cannot be filled), no narrower than a mode;
+   *  the filters become the current EQ (SET ON THE EQ / EXPORT of AUTO EQ apply them) and eqCurve shows the corrected prediction */
+  Q_INVOKABLE bool roomCorrection(double L, double W, double H, double rt60, double sx, double sy, double sz, double lx, double ly, double lz, int maxFilters, double maxCutDb);
   Q_INVOKABLE void clearCalibration() { cal_ = am::measure::Calibration(); emit changed(); }
  signals:
   void changed();

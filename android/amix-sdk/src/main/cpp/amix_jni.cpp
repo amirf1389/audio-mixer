@@ -3,15 +3,27 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "amix.h"
 #include "amix_hires.h"
+#include "sdk/amix_decks.hpp"
 
 namespace {
 amix_mixer* mixerOf(jlong h) { return reinterpret_cast<amix_mixer*>(h); }
 jstring str(JNIEnv* env, char* s) { jstring j = env->NewStringUTF(s ? s : ""); amix_free(s); return j; }
+using namespace amix_decks;
+std::mutex g_sideM; std::map<amix_mixer*, std::unique_ptr<Side>> g_side;
+Side* sideOf(amix_mixer* m) { std::lock_guard<std::mutex> g(g_sideM); auto& p = g_side[m]; if (!p) p.reset(new Side()); return p.get(); }
+
 }  // namespace
 
 extern "C" {
@@ -21,7 +33,7 @@ JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_pathsJson(JNIEnv* env, jcl
 JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_devicesJson(JNIEnv* env, jclass) { return str(env, amix_devices_json()); }
 JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_licenseJson(JNIEnv* env, jclass) { return str(env, amix_license_json()); }
 JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_create(JNIEnv*, jclass, jint strips, jdouble rate) { return reinterpret_cast<jlong>(amix_mixer_create(strips, rate)); }
-JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_destroy(JNIEnv*, jclass, jlong h) { amix_mixer_destroy(mixerOf(h)); }
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_destroy(JNIEnv*, jclass, jlong h) { { std::lock_guard<std::mutex> g(g_sideM); g_side.erase(mixerOf(h)); } amix_mixer_destroy(mixerOf(h)); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setGain(JNIEnv*, jclass, jlong h, jint s, jdouble db) { amix_mixer_set_gain(mixerOf(h), s, db); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setPan(JNIEnv*, jclass, jlong h, jint s, jdouble pan) { amix_mixer_set_pan(mixerOf(h), s, pan); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setMute(JNIEnv*, jclass, jlong h, jint s, jboolean on) { amix_mixer_set_mute(mixerOf(h), s, on ? 1 : 0); }
@@ -38,7 +50,12 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_process(JNIEnv* env, jclass, 
     ptrs[static_cast<std::size_t>(s)] = bufs[static_cast<std::size_t>(s)].data();
   }
   std::vector<float> L(static_cast<std::size_t>(frames)), R(static_cast<std::size_t>(frames)), inter(static_cast<std::size_t>(frames) * 2);
+  Side* sd = sideOf(m);   // the decks play here too (the Java fallback loop), and the master can be recorded
+  { if (sd->dL.size() < 4 * static_cast<std::size_t>(frames)) { sd->dL.assign(4 * static_cast<std::size_t>(frames), 0.f); }
+    float* bl[2] = {sd->dL.data(), sd->dL.data() + frames}; float* br[2] = {sd->dL.data() + 2 * frames, sd->dL.data() + 3 * frames};
+    readDecks(sd, ptrs.data(), n, frames, bl, br); }
   const int done = amix_mixer_process(m, ptrs.data(), frames, L.data(), R.data());
+  recordMaster(sd, L.data(), R.data(), done);
   for (int i = 0; i < done; ++i) { inter[static_cast<std::size_t>(2 * i)] = L[static_cast<std::size_t>(i)]; inter[static_cast<std::size_t>(2 * i + 1)] = R[static_cast<std::size_t>(i)]; }
   if (out && env->GetArrayLength(out) >= 2 * done) env->SetFloatArrayRegion(out, 0, 2 * done, inter.data());
   return done;
@@ -68,6 +85,7 @@ namespace {
 struct NativeLoop {
   amix_mixer* m = nullptr; AAudioStream* in = nullptr; AAudioStream* out = nullptr;
   std::vector<float> mic, inL, inR, L, R; std::vector<const float*> ptrs; int inCh = 1; std::atomic<bool> disconnected{false}; std::atomic<int> underruns{0};
+  Side* side = nullptr; std::vector<float> dk;   // the decks and the recorder of this mixer; 4 deck blocks (A L, B L, A R, B R)
 };
 NativeLoop* g_loop = nullptr;
 aaudio_data_callback_result_t onOut(AAudioStream*, void* user, void* audio, int32_t frames) {
@@ -78,7 +96,9 @@ aaudio_data_callback_result_t onOut(AAudioStream*, void* user, void* audio, int3
   if (l->inCh == 2) { for (int i = 0; i < frames; ++i) { l->inL[static_cast<std::size_t>(i)] = i < got ? l->mic[2 * static_cast<std::size_t>(i)] : 0.f; l->inR[static_cast<std::size_t>(i)] = i < got ? l->mic[2 * static_cast<std::size_t>(i) + 1] : 0.f; } }
   else { for (int i = 0; i < frames; ++i) l->inL[static_cast<std::size_t>(i)] = i < got ? l->mic[static_cast<std::size_t>(i)] : 0.f; }
   const int n = static_cast<int>(l->ptrs.size()); for (int s = 0; s < n; ++s) l->ptrs[static_cast<std::size_t>(s)] = s == 0 ? l->inL.data() : (s == 1 && l->inCh == 2) ? l->inR.data() : nullptr;   // input 1 on strip 1, input 2 on strip 2
+  if (l->side) { const std::size_t c = l->L.size(); float* bl[2] = {l->dk.data(), l->dk.data() + c}; float* br[2] = {l->dk.data() + 2 * c, l->dk.data() + 3 * c}; readDecks(l->side, l->ptrs.data(), n, frames, bl, br); }   // the decks on their strips
   const int done = amix_mixer_process(l->m, l->ptrs.data(), frames, l->L.data(), l->R.data());
+  if (l->side) recordMaster(l->side, l->L.data(), l->R.data(), done);
   for (int i = 0; i < frames; ++i) { o[2 * i] = i < done ? l->L[static_cast<std::size_t>(i)] : 0.f; o[2 * i + 1] = i < done ? l->R[static_cast<std::size_t>(i)] : 0.f; }
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
@@ -110,6 +130,7 @@ extern "C" {
 JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic, jint outDev, jint inDev, jint bursts, jint inChannels) {
   closeLoop(); amix_mixer* m = mixerOf(h); if (!m) return 0;
   NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->inCh = inChannels == 2 && amix_mixer_strips(m) >= 2 ? 2 : 1; l->mic.assign(2 * cap, 0.f); l->inL.assign(cap, 0.f); l->inR.assign(cap, 0.f); l->L.assign(cap, 0.f); l->R.assign(cap, 0.f); l->ptrs.assign(static_cast<std::size_t>(amix_mixer_strips(m)), nullptr);
+  l->side = sideOf(m); l->dk.assign(4 * cap, 0.f);   // made here, never in the callback
   l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, outDev);
   if (!l->out && outDev > 0) l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, 0);   // the chosen output is gone: the system route
   if (!l->out) { delete l; return 0; }
@@ -183,4 +204,30 @@ JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_fxCatalogJson(JNIEnv* env,
 JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_insert(JNIEnv* env, jclass, jlong h, jint strip, jint slot, jstring kind) { const std::string k = utf(env, kind); return amix_mixer_insert(mixerOf(h), strip, slot, k.c_str()); }
 JNIEXPORT jstring JNICALL Java_com_amfb_amixos_Engine_insertJson(JNIEnv* env, jclass, jlong h, jint strip, jint slot) { return str(env, amix_mixer_insert_json(mixerOf(h), strip, slot)); }
 JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_insertSet(JNIEnv* env, jclass, jlong h, jint strip, jint slot, jstring id, jdouble v) { const std::string k = utf(env, id); return amix_mixer_insert_set(mixerOf(h), strip, slot, k.c_str(), v); }
+}
+
+// ---- DECKS and the MASTER RECORDER (see Side above). Called from Kotlin worker threads, never from the audio callback.
+extern "C" {
+// which strips deck d plays on (left strip; the right is the next one); -1 = off
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_deckRoute(JNIEnv*, jclass, jlong h, jint d, jint stripL) { if (d < 0 || d > 1 || !h) return; sideOf(mixerOf(h))->deck[d].stripL.store(stripL); }
+// decoded frames (interleaved stereo at srcRate) for deck d, resampled to dstRate; returns the frames now waiting (ring + not yet fitted)
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_deckPush(JNIEnv* env, jclass, jlong h, jint d, jfloatArray data, jint frames, jdouble srcRate, jdouble dstRate) {
+  if (d < 0 || d > 1 || !h) return -1; Deck& k = sideOf(mixerOf(h))->deck[d];
+  std::vector<float> in; if (data && frames > 0 && env->GetArrayLength(data) >= 2 * frames) { in.resize(2 * static_cast<std::size_t>(frames)); env->GetFloatArrayRegion(data, 0, 2 * frames, in.data()); }
+  return static_cast<jint>(deckPushFrames(k, in.empty() ? nullptr : in.data(), in.empty() ? 0 : frames, srcRate, dstRate));
+}
+// drops what is buffered (seek, stop, a new file): done by the reader in its next block, or here when no block runs
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_deckFlush(JNIEnv*, jclass, jlong h, jint d) {
+  if (d < 0 || d > 1 || !h) return; Side* sd = sideOf(mixerOf(h)); deckFlushNow(*sd, d);
+}
+JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_deckPlayed(JNIEnv*, jclass, jlong h, jint d) { if (d < 0 || d > 1 || !h) return 0; return static_cast<jlong>(sideOf(mixerOf(h))->deck[d].played.load()); }
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_deckResetPlayed(JNIEnv*, jclass, jlong h, jint d) { if (d < 0 || d > 1 || !h) return; sideOf(mixerOf(h))->deck[d].played.store(0); }
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_recArm(JNIEnv*, jclass, jlong h, jboolean on) { if (!h) return; Side* sd = sideOf(mixerOf(h)); if (on) { sd->rec.r.store(sd->rec.w.load()); sd->recDropped.store(0); } sd->recording.store(on); }
+// the recorded master taken out (interleaved stereo), at most maxFrames; returns the frames copied
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_recPop(JNIEnv* env, jclass, jlong h, jfloatArray out, jint maxFrames) {
+  if (!h || !out || maxFrames <= 0 || env->GetArrayLength(out) < 2 * maxFrames) return 0; Side* sd = sideOf(mixerOf(h));
+  std::vector<float> tmp(2 * static_cast<std::size_t>(maxFrames)); const std::size_t n = sd->rec.popInter(tmp.data(), static_cast<std::size_t>(maxFrames));
+  if (n) env->SetFloatArrayRegion(out, 0, static_cast<jsize>(2 * n), tmp.data()); return static_cast<jint>(n);
+}
+JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_recDropped(JNIEnv*, jclass, jlong h) { return h ? static_cast<jlong>(sideOf(mixerOf(h))->recDropped.load()) : 0; }
 }

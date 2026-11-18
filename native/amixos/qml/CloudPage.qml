@@ -12,12 +12,8 @@ Flickable {
     function t(s) { return i18n.t(s, i18n.lang) }
     readonly property var upcoming: [
         "Single AmF X1.exe with the interface built in",
-        "Phase correction and AUTO MIX switches on every channel",
         "Firmware update check for audio interfaces (download only, never flashed from the console)",
-        "Processor load, temperature and power panel",
-        "Sample player on a channel: click, switch on, choose the sample",
-        "Room correction curve and microphone calibration files on ACOUSTICS",
-        "Online store for extensions",
+        "VU meters fed by the Hybrid extension's own meters",
         "CASCADE: two consoles as one desk"
     ]
     component Card: Rectangle { id: cd; property string title; property color tone: Theme.cyan; default property alias body: cdCol.data

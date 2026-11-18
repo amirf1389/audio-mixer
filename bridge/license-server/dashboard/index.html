@@ -49,7 +49,7 @@
     <section class="stats" id="stats" aria-label="Totals"></section>
 
     <section class="card" id="expCard">
-      <h2>Ending within 30 days</h2>
+      <div class="bar"><h2 id="expTitle">Ending within 30 days</h2><button id="expCsv" type="button" class="ghost">Download as CSV</button></div>
       <div class="scroll"><table><thead><tr><th>Customer</th><th>Plan</th><th>Ends</th><th>Days left</th></tr></thead><tbody id="expRows"></tbody></table></div>
       <p id="expNone" class="muted" hidden>No licence ends in the next 30 days.</p>
     </section>

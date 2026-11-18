@@ -80,9 +80,12 @@ function buildIo({ out = path.join(ENGINE, 'cpp', 'build') } = {}) {
   fs.mkdirSync(out, { recursive: true });
   const c = path.join(ENGINE, 'cpp'), inc = '-I' + path.join(c, 'include'), exe = path.join(out, 'runtime_test'), steps = [];
   const hasAlsa = fs.existsSync('/usr/include/alsa/asoundlib.h');
-  const srcs = [path.join(c, 'src', 'engine.cpp'), path.join(c, 'src', 'runtime.cpp'), path.join(c, 'src', 'backend_null.cpp'), path.join(c, 'test', 'runtime_test.cpp')];
+  // the runtime's portable sources, read from the engine's own CMake list (set(RUNTIME_SRC ...)) so this check never falls behind it
+  const cm = fs.readFileSync(path.join(c, 'CMakeLists.txt'), 'utf8'), m = /set\(RUNTIME_SRC([^)]*)\)/.exec(cm);
+  const portable = m ? m[1].trim().split(/\s+/).filter(Boolean) : ['src/runtime.cpp', 'src/backend_null.cpp'];
+  const srcs = [path.join(c, 'src', 'engine.cpp'), ...portable.map(f => path.join(c, f)), path.join(c, 'app', 'paths', 'paths.cpp'), path.join(c, 'test', 'runtime_test.cpp')];   // the runtime links the paths library (driver_intel)
   if (hasAlsa) srcs.push(path.join(c, 'src', 'backend_alsa.cpp'));
-  let r = run(cxx, ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O2', '-pthread', inc, ...(hasAlsa ? ['-DAM_HAVE_ALSA'] : []), '-o', exe, ...srcs, ...(hasAlsa ? ['-lasound'] : [])]);
+  let r = run(cxx, ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O2', '-pthread', inc, '-I' + path.join(c, 'app'), ...(hasAlsa ? ['-DAM_HAVE_ALSA'] : []), '-o', exe, ...srcs, ...(hasAlsa ? ['-lasound'] : [])]);
   if (!r.ok) return { ok: false, detail: r.out.slice(-1200) };
   r = run(exe, []); steps.push(r.out);
   if (!r.ok) return { ok: false, detail: steps.join('\n') };

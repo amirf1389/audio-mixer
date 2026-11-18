@@ -68,6 +68,7 @@ class RemoteActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("remote", Context.MODE_PRIVATE)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0F141C")); setPadding(24, 24, 24, 24) }
+        root.addView(Nav.modeBar(this, false))   // DUAL MODE: THIS PHONE | CONSOLE
         val title = TextView(this).apply { text = getString(R.string.home_mixer).uppercase(); setTextColor(Color.parseColor("#EA580C")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
         root.addView(title)
         // THE CONSOLE BAR: every paired console (and new ones on this Wi-Fi): tap one to switch to it

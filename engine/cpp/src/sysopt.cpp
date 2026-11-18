@@ -8,6 +8,8 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <chrono>
+#include <cmath>
 
 #if defined(_WIN32)
 #  ifndef NOMINMAX
@@ -16,6 +18,8 @@
 #  include <windows.h>
 #  include <malloc.h>
 #  include <setupapi.h>
+#  include <pdh.h>
+#  include <pdhmsg.h>
 #else
 #  include <fstream>
 #  include <sstream>
@@ -199,6 +203,60 @@ MemInfo memory() {
   return m;
 }
 
+// PROCESSOR PANEL (Windows): pdh.dll is opened at run time, so the program needs no import of it and works where it is missing
+namespace {
+struct Pdh {
+  HMODULE dll = nullptr; HANDLE q = nullptr; HANDLE perf = nullptr, freq = nullptr, temp = nullptr, power = nullptr; bool primed = false;
+  decltype(&PdhCollectQueryData) collect = nullptr; decltype(&PdhGetFormattedCounterArrayW) array = nullptr;
+  Pdh() {
+    dll = LoadLibraryExW(L"pdh.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32); if (!dll) return;
+    auto open = reinterpret_cast<decltype(&PdhOpenQueryW)>(reinterpret_cast<void*>(GetProcAddress(dll, "PdhOpenQueryW")));
+    auto add = reinterpret_cast<decltype(&PdhAddEnglishCounterW)>(reinterpret_cast<void*>(GetProcAddress(dll, "PdhAddEnglishCounterW")));
+    collect = reinterpret_cast<decltype(&PdhCollectQueryData)>(reinterpret_cast<void*>(GetProcAddress(dll, "PdhCollectQueryData")));
+    array = reinterpret_cast<decltype(&PdhGetFormattedCounterArrayW)>(reinterpret_cast<void*>(GetProcAddress(dll, "PdhGetFormattedCounterArrayW")));
+    if (!open || !add || !collect || !array || open(nullptr, 0, &q) != 0) { q = nullptr; return; }
+    if (add(q, L"\\Processor Information(_Total)\\% Processor Performance", 0, &perf) != 0) perf = nullptr;
+    if (add(q, L"\\Processor Information(_Total)\\Processor Frequency", 0, &freq) != 0) freq = nullptr;
+    if (add(q, L"\\Thermal Zone Information(*)\\Temperature", 0, &temp) != 0) temp = nullptr;
+    if (add(q, L"\\Power Meter(*)\\Power", 0, &power) != 0) power = nullptr;
+  }
+  // every instance of a counter as doubles (empty when the counter or its values are not there)
+  std::vector<double> values(HANDLE c) const {
+    std::vector<double> out; if (!c || !array) return out;
+    DWORD bytes = 0, n = 0; if (array(c, PDH_FMT_DOUBLE, &bytes, &n, nullptr) != static_cast<PDH_STATUS>(PDH_MORE_DATA) || bytes == 0) return out;
+    std::vector<unsigned char> buf(bytes); auto* it = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buf.data());
+    if (array(c, PDH_FMT_DOUBLE, &bytes, &n, it) != 0) return out;
+    for (DWORD i = 0; i < n; ++i) if (it[i].FmtValue.CStatus == 0 && std::isfinite(it[i].FmtValue.doubleValue)) out.push_back(it[i].FmtValue.doubleValue);
+    return out;
+  }
+};
+std::uint64_t ft64(const FILETIME& f) { return (static_cast<std::uint64_t>(f.dwHighDateTime) << 32) | f.dwLowDateTime; }
+}  // namespace
+
+Sensors sensors() {
+  static std::mutex m; std::lock_guard<std::mutex> g(m);
+  static Pdh pdh; static std::uint64_t lastIdle = 0, lastTotal = 0;
+  Sensors s;
+  FILETIME idle, kern, user;   // kernel time includes idle time
+  if (GetSystemTimes(&idle, &kern, &user)) {
+    const std::uint64_t i = ft64(idle), t = ft64(kern) + ft64(user);
+    static double lastLoad = -1;   // two readings inside one system tick: the previous load stands (no new interval to measure yet)
+    if (lastTotal && t > lastTotal) { lastLoad = std::clamp(100.0 * (1.0 - static_cast<double>(i - lastIdle) / static_cast<double>(t - lastTotal)), 0.0, 100.0); lastIdle = i; lastTotal = t; }
+    else if (!lastTotal) { lastIdle = i; lastTotal = t; }
+    if (lastLoad >= 0) { s.loadOk = true; s.loadPct = lastLoad; }
+  }
+  if (pdh.q && pdh.collect(pdh.q) == 0) {
+    if (!pdh.primed) { pdh.primed = true; Sleep(120); pdh.collect(pdh.q); }   // rate counters need two samples
+    const std::vector<double> f = pdh.values(pdh.freq), p = pdh.values(pdh.perf);
+    if (!f.empty() && f[0] > 0) { s.clockOk = true; s.perfPct = p.empty() ? 0 : p[0]; s.mhz = s.perfPct > 0 ? f[0] * s.perfPct / 100.0 : f[0]; }
+    for (double k : pdh.values(pdh.temp)) { const double c = k - 273.15; if (c > 1 && c < 130) s.tempsC.push_back(c); }   // the counter is in kelvin; 0 K readings are zones with no sensor
+    double mw = 0; for (double v : pdh.values(pdh.power)) mw += v; if (mw > 0) { s.powerOk = true; s.watts = mw / 1000.0; s.powerFrom = "power meter"; }
+  }
+  for (double c : s.tempsC) s.maxTempC = std::max(s.maxTempC, c);
+  SYSTEM_POWER_STATUS ps; if (GetSystemPowerStatus(&ps)) { s.ac = ps.ACLineStatus == 1 ? 1 : ps.ACLineStatus == 0 ? 0 : -1; s.batteryPct = ps.BatteryLifePercent <= 100 ? ps.BatteryLifePercent : -1; s.saver = ps.SystemStatusFlag == 1; }
+  return s;
+}
+
 static bool threadPower(bool control, bool eco) {
   static const auto set = k32<FnSetThreadInfo>("SetThreadInformation"); if (!set) return false;
   PowerState p{1, control ? 1u : 0u, eco ? 1u : 0u};
@@ -287,6 +345,35 @@ MemInfo memory() {
   const std::string st = readFile("/proc/self/status");
   m.processMb = static_cast<std::uint64_t>(kbField(st, "VmRSS:")) >> 10; m.privateMb = static_cast<std::uint64_t>(kbField(st, "RssAnon:")) >> 10;
   return m;
+}
+
+// PROCESSOR PANEL (Linux / Android): /proc/stat, cpufreq, thermal zones, RAPL, power_supply; files that are not there or not readable are skipped
+Sensors sensors() {
+  static std::mutex m; std::lock_guard<std::mutex> g(m);
+  static unsigned long long lastIdle = 0, lastTotal = 0, lastUj = 0; static auto lastAt = std::chrono::steady_clock::now();
+  Sensors s;
+  { std::istringstream st(readFile("/proc/stat")); std::string cpu; unsigned long long v[10] = {}; st >> cpu;
+    if (cpu == "cpu") { for (auto& x : v) st >> x; const unsigned long long idle = v[3] + v[4]; unsigned long long total = 0; for (int k = 0; k < 8; ++k) total += v[k];
+      static double lastLoad = -1;   // two readings inside one jiffy: the previous load stands
+      if (lastTotal && total > lastTotal) { lastLoad = std::clamp(100.0 * (1.0 - static_cast<double>(idle - lastIdle) / static_cast<double>(total - lastTotal)), 0.0, 100.0); lastIdle = idle; lastTotal = total; }
+      else if (!lastTotal) { lastIdle = idle; lastTotal = total; }
+      if (lastLoad >= 0) { s.loadOk = true; s.loadPct = lastLoad; } } }
+  { double sum = 0; int n = 0;
+    for (int c = 0; c < 256; ++c) { const std::string f = readFile("/sys/devices/system/cpu/cpu" + std::to_string(c) + "/cpufreq/scaling_cur_freq"); if (f.empty()) { if (c > 0) break; continue; } const double khz = std::atof(f.c_str()); if (khz > 0) { sum += khz; ++n; } }
+    if (n) { s.clockOk = true; s.mhz = sum / n / 1000.0; } }
+  for (int z = 0; z < 64; ++z) { const std::string t = readFile("/sys/class/thermal/thermal_zone" + std::to_string(z) + "/temp"); if (t.empty()) { if (z > 8) break; continue; }
+    const double c = std::atof(t.c_str()) / 1000.0; if (c > 1 && c < 130) s.tempsC.push_back(c); }
+  for (double c : s.tempsC) s.maxTempC = std::max(s.maxTempC, c);
+  { const std::string e = readFile("/sys/class/powercap/intel-rapl:0/energy_uj"); const auto now = std::chrono::steady_clock::now();   // the processor package's energy (often root only)
+    if (!e.empty()) { const unsigned long long uj = std::strtoull(e.c_str(), nullptr, 10); const double dt = std::chrono::duration<double>(now - lastAt).count();
+      if (lastUj && uj > lastUj && dt > 0.05) { s.powerOk = true; s.watts = static_cast<double>(uj - lastUj) / 1e6 / dt; s.powerFrom = "processor package"; } lastUj = uj; }
+    lastAt = now; }
+  if (DIR* d = opendir("/sys/class/power_supply")) {
+    while (dirent* e = readdir(d)) { if (e->d_name[0] == '.') continue; const std::string b = std::string("/sys/class/power_supply/") + e->d_name + "/", type = readFile(b + "type");
+      if (type.rfind("Battery", 0) == 0) { const std::string c = readFile(b + "capacity"); if (!c.empty()) s.batteryPct = std::atoi(c.c_str()); }
+      else if (type.rfind("Mains", 0) == 0 || type.rfind("USB", 0) == 0) { const std::string o = readFile(b + "online"); if (!o.empty()) s.ac = std::max(s.ac, o[0] == '1' ? 1 : 0); } }
+    closedir(d); }
+  return s;
 }
 
 void prepareAudioTuning() {}

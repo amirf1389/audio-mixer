@@ -33,6 +33,7 @@ std::vector<double> thdPercent(const Impulse& ir, const std::vector<double>& fre
 struct Calibration { std::vector<double> freq, db; };
 bool parseCalibration(const std::string& text, Calibration& out);                         // "freq dB" per line (comments #, *, ;), as mic makers ship them
 void applyCalibration(Response& r, const Calibration& c);                                 // subtracts the mic's deviation
+std::string formatCalibration(const Calibration& c, const std::string& note = "");            // the same "freq dB" text back (a header line with # first)
 void applySplOffset(Response& r, double offsetDb);                                        // dBFS -> dB SPL: offset = SPL of a known reference - its dBFS
 
 struct Stepped { double freq = 1000, amplitude = 0, thdPercent = 0, thdnPercent = 0, imdPercent = 0; };
@@ -62,6 +63,9 @@ Response roomResponse(const Room& r, int pointsPerOctave = 24, double fLo = 20, 
 struct Filter { double freq, q, gainDb; };
 struct AutoEqOptions { int maxFilters = 10; double fLo = 20, fHi = 400; double maxBoostDb = 6, maxCutDb = 15, minDb = 1.0; double qMin = 0.7, qMax = 10; };
 std::vector<Filter> autoEq(const Response& measured, const Response& target, const AutoEqOptions& o);   // target: same freq grid (use flatTarget / houseTarget)
+/** ROOM CORRECTION from the room's prediction (roomResponse): CUTS only, on the modal peaks (a null is a cancellation that no EQ can fill, so
+ *  nothing is boosted), each no narrower than the mode's own bandwidth (about 2.2 / RT60 Hz), at most maxCutDb, below fHi (the modal region) */
+std::vector<Filter> roomCorrection(const Room& r, int maxFilters = 6, double maxCutDb = 12, double fHi = 300);
 Response flatTarget(const Response& like, double levelDb);
 Response houseTarget(const Response& like, double levelDb, double bassLiftDb = 4, double kneeHz = 120);   // a gentle bass lift below the knee
 Response applyFilters(const Response& r, const std::vector<Filter>& f);

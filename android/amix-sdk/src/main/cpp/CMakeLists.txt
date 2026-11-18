@@ -8,14 +8,14 @@ set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../..)   # android/amix-sdk/src/ma
 file(GLOB HIRES_FLAC_SRC ${ROOT}/engine/cpp/app/hires/flac/src/*.c)
 list(REMOVE_ITEM HIRES_FLAC_SRC ${ROOT}/engine/cpp/app/hires/flac/src/win_utf8_io.c)
 add_library(amix SHARED
-  ${ROOT}/engine/cpp/src/engine.cpp ${ROOT}/engine/cpp/src/runtime.cpp ${ROOT}/engine/cpp/src/backend_null.cpp ${ROOT}/engine/cpp/src/devices.cpp ${ROOT}/engine/cpp/src/driver_intel.cpp
+  ${ROOT}/engine/cpp/src/engine.cpp ${ROOT}/engine/cpp/src/runtime.cpp ${ROOT}/engine/cpp/src/backend_null.cpp ${ROOT}/engine/cpp/src/devices.cpp ${ROOT}/engine/cpp/src/driver_intel.cpp ${ROOT}/engine/cpp/src/latency.cpp
   ${ROOT}/engine/cpp/app/license/license.cpp ${ROOT}/engine/cpp/app/license/crypto.cpp ${ROOT}/engine/cpp/app/paths/paths.cpp
   ${ROOT}/engine/cpp/app/net/rtp.cpp ${ROOT}/engine/cpp/app/net/sock.cpp ${ROOT}/engine/cpp/app/net/aoip.cpp ${ROOT}/engine/cpp/app/net/midi.cpp   # network audio (AES67) and MIDI: the C SDK links them
   ${ROOT}/engine/cpp/app/sdk/amix_c.cpp
   # HIGH-RESOLUTION AUDIO (engine/cpp/app/hires): r8brain resampling, dr_wav / dr_flac reading, libFLAC writing. libsoxr (LGPL) is not built in here.
   # the AmF X1 rack effects (engine/cpp/app/fx) as inserts on the phone mixer; the sample player and file reading they use
   ${ROOT}/engine/cpp/app/fx/fx.cpp ${ROOT}/engine/cpp/app/fx/fx_ms.cpp ${ROOT}/engine/cpp/app/fx/fx_dyn.cpp ${ROOT}/engine/cpp/app/fx/fx_more.cpp ${ROOT}/engine/cpp/app/fx/fx_iamf.cpp ${ROOT}/engine/cpp/app/fx/fx_frame.cpp ${ROOT}/engine/cpp/app/fx/presets.cpp
-  ${ROOT}/engine/cpp/app/samples/samples.cpp ${ROOT}/engine/cpp/app/arrange/arrange.cpp ${ROOT}/engine/cpp/app/arrange/decode.cpp ${ROOT}/engine/cpp/app/arrange/ffmpeg_dyn.cpp
+  ${ROOT}/engine/cpp/app/samples/samples.cpp ${ROOT}/engine/cpp/app/samples/sfx.cpp ${ROOT}/engine/cpp/app/samples/padbank.cpp ${ROOT}/engine/cpp/app/arrange/arrange.cpp ${ROOT}/engine/cpp/app/arrange/decode.cpp ${ROOT}/engine/cpp/app/arrange/ffmpeg_dyn.cpp
   ${ROOT}/engine/cpp/app/sdk/amix_hires_c.cpp ${ROOT}/engine/cpp/app/hires/hires.cpp ${ROOT}/engine/cpp/app/hires/r8brain/r8bbase.cpp ${HIRES_FLAC_SRC}
   amix_jni.cpp)
 target_include_directories(amix PRIVATE ${ROOT}/engine/cpp/app/hires/flac/include ${ROOT}/engine/cpp/app/hires/flac ${ROOT}/engine/cpp/app/hires/flac/src)

@@ -21,6 +21,7 @@
 #include <deque>
 #include <mutex>
 #include <thread>
+#include "audiomixer/onevoice.hpp"
 #include "audiomixer/dynamics.hpp"
 #include <vector>
 
@@ -78,6 +79,8 @@ class Engine : public QObject {
   ~Engine() override;
 
   bool running() const { return rt_ && rt_->running(); }
+  bool freshInstall() const { return freshInstall_; }   // the first start after a new install (main runs the full factory reset)
+  void markInstallSeen();   // after that reset: this install counts as seen, so it happens once
   QString status() const { return startNote_.isEmpty() ? status_ : status_ + (status_.isEmpty() ? QString() : QStringLiteral(" · ")) + startNote_; }   // the start note rides along until the master is moved
   QString backend() const { return rt_ ? QString::fromStdString(rt_->backendName()) : QString(); }
   int strips() const { return kStrips; }
@@ -113,6 +116,9 @@ class Engine : public QObject {
   // front (15 with ECO), 4 fps behind another app (Chrome, a game), 1 fps minimised. The sound is never throttled: only the screen.
   Q_INVOKABLE void setUiActivity(int level);   // 2 in front, 1 behind another window, 0 minimised / hidden
   Q_PROPERTY(bool ecoUi READ ecoUi WRITE setEcoUi NOTIFY ecoUiChanged)
+  // ONE VOICE: when inputs 1 and 2 carry the same mono microphone, CH 1 is set to no input so the voice is heard once (on by default)
+  Q_PROPERTY(bool oneVoice READ oneVoice WRITE setOneVoice NOTIFY oneVoiceChanged)
+  Q_PROPERTY(QString oneVoiceNote READ oneVoiceNote NOTIFY oneVoiceChanged)   // what it did on this device ("" = nothing)
   Q_PROPERTY(bool uiAwake READ uiAwake NOTIFY ecoUiChanged)   // the window is in front: animations and fast page polls run only then
   bool uiAwake() const { return uiLevel_ >= 2; }
   bool ecoUi() const { return ecoUi_; }
@@ -271,6 +277,11 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap systemInfo() const;
   Q_INVOKABLE void setSysOpt(const QString& key, bool on);
   Q_INVOKABLE QVariantMap trimMemoryNow();
+  // LOW LATENCY SOUND DETECTION (audiomixer/latency.hpp): the open sound card's latency in plain words, with what would lower it;
+  // ROUND TRIP: a click out, back in on input 1 (a loop cable, or the microphone near the speaker), timed by cross-correlation
+  Q_INVOKABLE QVariantMap latencyReport() const;
+  Q_INVOKABLE QVariantMap startRoundTrip();
+  Q_INVOKABLE QVariantMap roundTripResult() const { return lastRoundTrip_; }
   Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -320,7 +331,11 @@ class Engine : public QObject {
   void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
+  bool oneVoice() const { return oneVoice_; } void setOneVoice(bool on); QString oneVoiceNote() const { return oneVoiceNote_; }
+  Q_INVOKABLE void undoOneVoice();   // CH 1 back on input 1, and the rule rests until the next device opens
+  bool oneVoice_ = true, oneVoiceActed_ = false; QString oneVoiceNote_; am::OneVoice ov_;
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
+  bool freshInstall_ = false; QString installId_;
   QString startNote_;
   int digitalOut_ = -1;        // the first output of the S/PDIF / optical / coaxial pair the driver names (0-based), -1 none
   QVariantList absent_;       // endpoints that exist but are not available now (unplugged / disabled)
@@ -551,7 +566,8 @@ class Engine : public QObject {
   // stage on, removing it switches it off) or a VST3 reference ("vst3:<path>"), kept for the VST3 host that is not built yet (shown as pending).
   static constexpr int kPluginSlots = 64;   // the rack's capacity; what an edition may fill: pluginSlotLimit() (all editions 64 = unlimited in practice)
   Q_PROPERTY(int pluginSlotLimit READ pluginSlotLimit NOTIFY licenseChanged)
-  int pluginSlotLimit() const { return kPluginSlots; }   // every edition, BASIC included, may fill the whole rack
+  static constexpr int kPluginsPerChannel = 10;   // TEN PLUG-INS PER CHANNEL: the ten insert slots every strip shows (the storage stays 64 wide)
+  int pluginSlotLimit() const { return kPluginsPerChannel; }   // every edition, BASIC included
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
   Q_INVOKABLE int addToRack(int strip, const QString& kind);
@@ -670,6 +686,7 @@ class Engine : public QObject {
  signals:
   void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
   void ecoUiChanged();
+  void oneVoiceChanged();
   void compTargetChanged();
   void stateChanged();
   void ampChanged();
@@ -741,7 +758,7 @@ class Engine : public QObject {
   QJsonObject stripJson(const StripUi& s) const;
   static QJsonObject dspJson(const am::dsp::ChannelParams& p);
   static am::dsp::ChannelParams dspFromJson(const QJsonObject& o);
-  static void stripFromJson(StripUi& s, const QJsonObject& o);
+  static int stripFromJson(StripUi& s, const QJsonObject& o);   // returns how many plug-ins did not fit in the ten slots
   QJsonObject consoleJson() const;
   void applyConsoleJson(const QJsonObject& root, bool respectSafe);
   std::vector<SceneUi> scenes_; int currentScene_ = -1; int selected_ = 0; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;
@@ -769,6 +786,7 @@ class Engine : public QObject {
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  QVariantMap lastRoundTrip_; std::shared_ptr<struct RoundTripProbe> rtProbe_; void finishRoundTrip(int tries);
   bool sysFast_ = true, sysEco_ = true, sysTrim_ = true; QString lastTrim_; void minimisedTrim();
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();

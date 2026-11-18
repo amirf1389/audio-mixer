@@ -57,6 +57,24 @@ Limits, stated plainly:
 The C++ classes are in `engine/cpp/app/net` (`am::net::Sender`, `Receiver`, `Discovery`, `Aoip`, `RtpMidi`, `MidiPorts`, `MidiMap`),
 tested by `engine/cpp/test/net_test.cpp` with a real stream through UDP on the test machine.
 
+### ASIO, the open device and latency (API version 7)
+
+ASIO is a Windows-only standard (the Steinberg ASIO SDK, used under its licence). On Windows, open an ASIO interface with `amix_rt_open`
+and `backend = "asio"`, with `in_device` / `out_device` set to the driver name. Elsewhere the ASIO list is empty and the other backends
+work as before.
+
+| Call | What it gives |
+| --- | --- |
+| `amix_asio_drivers_json()` | Every ASIO driver: name, input / output channels, rates, `wrapper` (ASIO4ALL, FlexASIO and the like, not the device's own driver), `family`, `probeError` (busy in another program, unplugged). Each driver is loaded once to read it, so do not call it while one of your ASIO streams is open. |
+| `amix_rt_channels(rt, &in, &out)` | The open device's channel counts. |
+| `amix_rt_latency(rt, &in, &out)` | The input / output latency the driver reports, in frames, buffer included (ASIO `getLatencies`; WASAPI stream latency plus buffer; DirectSound its periods). 0 = not reported. |
+| `amix_rt_latency_json(rt)` | The same in plain words: `level` (`LOW LATENCY` under 10 ms, `OK` 10-20 ms, `HIGH` above), `verdict`, and `advice` (exclusive mode, ASIO, a smaller or larger buffer, wired instead of Bluetooth). |
+| `amix_rt_sample_format(rt)` | What the device itself carries, e.g. `in 24-bit integer · out 32-bit integer`. |
+| `amix_rt_output_names_json(rt)` | The driver's own output channel names, when it reports them (ASIO). |
+| `amix_rt_set_block_callback(rt, fn, user)` | `fn` runs on the audio thread once per block, with each strip's input and the stereo master. Never block, allocate or lock in it. Pass `NULL` to detach, and detach before `amix_rt_destroy`. |
+
+On Android the same low-latency idea goes through AAudio: USB audio interfaces work there without drivers (see `android-sdk.md`).
+
 ## Bindings
 
 - **Perl** (`bindings/perl/Audio-AmixOS`): XS over the C API. `AMIX_LIB=../../build perl Makefile.PL && make && make test`.

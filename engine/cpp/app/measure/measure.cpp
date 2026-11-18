@@ -193,6 +193,33 @@ std::vector<Filter> autoEq(const Response& measured, const Response& target, con
   }
   return out;
 }
+std::vector<Filter> roomCorrection(const Room& r, int maxFilters, double maxCutDb, double fHi) {
+  const double hi = std::max(40.0, std::min(400.0, fHi)), rt = std::max(0.1, std::min(5.0, r.rt60)), cutMax = std::max(1.0, std::min(24.0, maxCutDb));
+  const int nMax = std::max(1, std::min(10, maxFilters));
+  Response cur = roomResponse(r, 48, 20, 400);
+  double mean = 0; int n = 0; for (std::size_t i = 0; i < cur.freq.size(); ++i) if (cur.freq[i] <= hi) { mean += cur.magDb[i]; ++n; } mean = n ? mean / n : 0;
+  const double modeBw = 2.2 / rt;   // a mode's half-power bandwidth in Hz: a cut is never narrower than the resonance it tames
+  std::vector<Filter> out;
+  for (int it = 0; it < nMax; ++it) {
+    std::size_t worst = 0; double over = 0;   // the highest PEAK above the mean (nulls are left alone: EQ cannot fill a cancellation)
+    for (std::size_t i = 0; i < cur.freq.size(); ++i) if (cur.freq[i] >= 20 && cur.freq[i] <= hi && cur.magDb[i] - mean > over) { over = cur.magDb[i] - mean; worst = i; }
+    if (over < 1.5) break;
+    std::size_t lo = worst, up = worst;   // where the peak falls to half its height on each side
+    while (lo > 0 && cur.freq[lo] > 20 && cur.magDb[lo] - mean > over * 0.5) --lo;
+    while (up + 1 < cur.freq.size() && cur.freq[up] < hi && cur.magDb[up] - mean > over * 0.5) ++up;
+    const double bw = std::max(0.05, std::log2(cur.freq[up] / cur.freq[lo]));
+    double q = 1.0 / (2 * std::sinh(std::log(2.0) / 2 * bw)); q = std::max(0.7, std::min({16.0, q, cur.freq[worst] / modeBw}));
+    const Filter f{cur.freq[worst], q, -std::min(cutMax, over * 0.85)};
+    if (f.gainDb > -0.1) break;
+    out.push_back(f); cur = applyFilters(cur, {f});
+  }
+  return out;
+}
+std::string formatCalibration(const Calibration& c, const std::string& note) {
+  std::string s = "# AmF X1 microphone calibration" + (note.empty() ? std::string() : " · " + note) + "\n# frequency (Hz)  deviation (dB)\n";
+  for (std::size_t i = 0; i < c.freq.size() && i < c.db.size(); ++i) { char b[64]; std::snprintf(b, sizeof b, "%.3f\t%.3f\n", c.freq[i], c.db[i]); s += b; }
+  return s;
+}
 std::string exportFiltersText(const std::vector<Filter>& f) { std::string s = "Filter Settings file\n\nRoom EQ V5.20\nDated: AmF X1 ACOUSTICS auto EQ\n\nNotes: parametric filters, peaking, for miniDSP / Equalizer APO / any PEQ\n\nEqualiser: Generic\n"; for (std::size_t i = 0; i < f.size(); ++i) { char b[128]; std::snprintf(b, sizeof b, "Filter %2zu: ON  PK       Fc %8.2f Hz  Gain %6.2f dB  Q %6.3f\n", i + 1, f[i].freq, f[i].gainDb, f[i].q); s += b; } return s; }
 std::string exportFiltersJson(const std::vector<Filter>& f) { std::string s = "{\"type\":\"peaking\",\"filters\":["; for (std::size_t i = 0; i < f.size(); ++i) { char b[128]; std::snprintf(b, sizeof b, "%s{\"freq\":%.2f,\"q\":%.3f,\"gainDb\":%.2f}", i ? "," : "", f[i].freq, f[i].q, f[i].gainDb); s += b; } return s + "]}"; }
 

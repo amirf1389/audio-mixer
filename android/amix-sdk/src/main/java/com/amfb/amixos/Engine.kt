@@ -31,6 +31,16 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     fun insertSet(strip: Int, slot: Int, id: String, value: Double): Int = insertSet(handle, strip, slot, id, value)
     /** [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen, outDeviceId, inDeviceId, sampleRate] */
     fun nativeState(): IntArray = IntArray(9).also { aaudioState(it) }
+    // DECKS (two file players on strip pairs) and the MASTER RECORDER: see amix_jni.cpp. Called from worker threads, never the UI thread.
+    fun deckRoute(deck: Int, stripL: Int) = deckRoute(handle, deck, stripL)
+    /** decoded interleaved stereo at [srcRate], resampled to [dstRate]; returns the frames now waiting to be played */
+    fun deckPush(deck: Int, data: FloatArray?, frames: Int, srcRate: Double, dstRate: Double): Int = deckPush(handle, deck, data, frames, srcRate, dstRate)
+    fun deckFlush(deck: Int) = deckFlush(handle, deck)
+    fun deckPlayed(deck: Int): Long = deckPlayed(handle, deck)
+    fun deckResetPlayed(deck: Int) = deckResetPlayed(handle, deck)
+    fun recArm(on: Boolean) = recArm(handle, on)
+    fun recPop(out: FloatArray, maxFrames: Int): Int = recPop(handle, out, maxFrames)
+    fun recDropped(): Long = recDropped(handle)
     fun peaks(): FloatArray { peaks(handle, peakBuf); return peakBuf.copyOf() }
     /** each strip's INPUT level before fader, mute and effects (linear peak, 0..1+): the input indicator */
     fun inputPeaks(): FloatArray = FloatArray(strips).also { inputPeaks(handle, it) }
@@ -71,5 +81,13 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         @JvmStatic external fun aaudioStop()
         @JvmStatic private external fun aaudioState(out: IntArray)
         @JvmStatic private external fun inputPeaks(handle: Long, out: FloatArray)
+        @JvmStatic private external fun deckRoute(handle: Long, deck: Int, stripL: Int)
+        @JvmStatic private external fun deckPush(handle: Long, deck: Int, data: FloatArray?, frames: Int, srcRate: Double, dstRate: Double): Int
+        @JvmStatic private external fun deckFlush(handle: Long, deck: Int)
+        @JvmStatic private external fun deckPlayed(handle: Long, deck: Int): Long
+        @JvmStatic private external fun deckResetPlayed(handle: Long, deck: Int)
+        @JvmStatic private external fun recArm(handle: Long, on: Boolean)
+        @JvmStatic private external fun recPop(handle: Long, out: FloatArray, maxFrames: Int): Int
+        @JvmStatic private external fun recDropped(handle: Long): Long
     }
 }

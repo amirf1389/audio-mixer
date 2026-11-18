@@ -128,15 +128,20 @@ class ScreenshotTest {
         shot(a.window.decorView.rootView, "phone-engine-control")
         a.reopen(null, if (before > 0) before else 256); repeat(20) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idle() }
     }
-    @Test fun samplePads() {   // the console's 100 pads on the phone; a tap plays one on the console
+    @Test fun samplePads() {   // the console's 1000 pads on the phone; a tap plays one on the console; an effect put on a pad shows there; the built-in 100
         val c = liveClient() ?: return
         val a = Robolectric.buildActivity(SamplePadsActivity::class.java).setup().resume().get(); idle(1500)
-        org.junit.Assert.assertEquals(100, a.samples.size)
+        org.junit.Assert.assertEquals(100, a.samples.size); org.junit.Assert.assertEquals(50, a.pads.size); org.junit.Assert.assertEquals(1000, a.effects.size)
         val pad = findGrid(a.window.decorView.rootView)!!.getChildAt(2)
         pad.performClick(); var voices = 0; repeat(20) { if (voices == 0) { Thread.sleep(50); voices = (c.control(mapOf("op" to "sample"))["voices"] as Number).toInt() } }
-        println("PADS: pad ${a.lastPlayed} tapped, the console plays $voices voice(s)")
-        org.junit.Assert.assertEquals(3, a.lastPlayed); org.junit.Assert.assertTrue("the console plays the pad", voices > 0)
+        println("PADS: pad ${a.lastPad} tapped, the console plays $voices voice(s)")
+        org.junit.Assert.assertEquals(3, a.lastPad); org.junit.Assert.assertTrue("the console plays the pad", voices > 0)
         shot(a.window.decorView.rootView, "phone-sample-pads"); c.samplesStop()
+        // an effect on pad 3 (as a long press does), seen by the console's file, then put back
+        a.selPad = 3; a.putOnPad("sfx:260", "Laser 10"); repeat(20) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idle() }
+        org.junit.Assert.assertEquals("sfx:260", c.pads(3, 3).pads[0].source); c.resetPad(3)
+        a.view = "EFFECTS"; a.showTabs(); idle(300); findGrid(a.window.decorView.rootView)!!.getChildAt(0).performClick(); idle(300)
+        org.junit.Assert.assertEquals(1, a.lastSfx); shot(a.window.decorView.rootView, "phone-sound-effects"); c.samplesStop()
     }
     @Test fun mastering() {   // the console's master chain on the phone: what the console has shows; a move reaches it
         val c = liveClient() ?: return

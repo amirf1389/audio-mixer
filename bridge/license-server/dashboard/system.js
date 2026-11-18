@@ -30,7 +30,8 @@
     for (const [k, v, ic] of cards) { const c = el('div', 'col-6 col-md-4 col-xl-2'), card = el('div', 'bg-body border rounded p-2 h-100'); const i = el('i', 'fa-solid ' + ic + ' text-warning me-1'); i.setAttribute('aria-hidden', 'true');
       const t = el('div', 'small text-secondary text-uppercase'); t.append(i, document.createTextNode(k)); card.append(t, el('div', 'fs-5 fw-bold' + (String(v).startsWith('BROKEN') ? ' text-danger' : ''), String(v))); c.append(card); box.append(c); }
     dl($('srv'), [['Node', s.server.node], ['System', s.server.platform], ['Running for', dur(s.server.uptimeS)], ['Started', when(s.server.upSince)], ['Memory', s.server.memoryMB + ' MB'],
-      ['Licence file', bytes(s.data.licenceFileBytes)], ['Activity file', bytes(s.data.auditFileBytes)], ['Staff database', bytes(s.data.db.bytes) + ' · ' + s.data.db.integrity], ['Notes', s.data.db.notes]]);
+      ['Licence file', bytes(s.data.licenceFileBytes)], ['Activity file', bytes(s.data.auditFileBytes)], ['Staff database', bytes(s.data.db.bytes) + ' · ' + s.data.db.integrity], ['Notes', s.data.db.notes],
+      ['Last backup', s.data.db.lastBackup ? new Date(s.data.db.lastBackup.at).toLocaleString() + ' · ' + s.data.db.lastBackup.by : 'never']]);
     dl($('cfg'), [['Shared sign-in with OTA', s.config.sharedSignIn ? 'on' : 'off (PORTAL_DB / PORTAL_JWT_SECRET not set)'], ['Customer data key', s.config.crmKey], ['Licence data key', s.config.dataKey],
       ['Behind a proxy', s.config.trustProxy ? 'yes (X-Forwarded-For trusted)' : 'no'], ['Update feed', s.config.updateFeed], ['Computers per key', s.config.maxDevices], ['Plans', s.config.plans.join(', ')]]);
   }
@@ -97,6 +98,14 @@
     ev.preventDefault();
     try { const r = await fetch('crm/export.csv', { headers: { authorization: 'Bearer ' + token }, credentials: 'omit' }); if (!r.ok) throw new Error('export refused (' + r.status + ')');
       const url = URL.createObjectURL(await r.blob()), a = el('a'); a.href = url; a.download = 'amfx1-customers.csv'; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch (e) { say(e.message); }
+  });
+  // BACKUP: a copy of the staff / CRM database (the CRM inside stays encrypted; keep the file somewhere safe)
+  $('backup').addEventListener('click', async () => {
+    try { const r = await fetch('system/backup', { headers: { authorization: 'Bearer ' + token }, credentials: 'omit', cache: 'no-store' }); if (!r.ok) throw new Error('backup refused (' + r.status + ')');
+      const name = (/filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '') || [])[1] || 'amfx1-portal.db';
+      const url = URL.createObjectURL(await r.blob()), a = el('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      say('Backup downloaded: ' + name + '. Keep it safe: it holds the staff accounts and the (encrypted) customers.', 'success'); overview().catch(() => {});
+    } catch (e) { say(e.message); }
   });
   $('refresh').addEventListener('click', () => overview().catch(e => say(e.message)));
   $('staffTabBtn').addEventListener('shown.bs.tab', () => loadStaff().catch(e => say(e.message)));

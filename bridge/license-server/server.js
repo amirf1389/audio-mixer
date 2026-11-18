@@ -361,22 +361,36 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
       you: c.state.staff ? { kind: 'staff', ...c.state.staff } : { kind: 'admin token' } });
   });
   app.get('/admin/settings', admin, limit('adm', 120), c => c.json(200, { ok: true, settings: staffAuth().getSettings(), schema: staffAuth().settingsSchema() }));
-  app.put('/admin/settings', admin, limit('adm', 60), async c => { const r = staffAuth().setSettings(await c.body(), who(c)); if (r.ok && r.changed.length) audit.add('settings.change', '', c.ip, r.changed.join(',') + ' by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+  app.put('/admin/settings', admin, limit('settings', 60), async c => { const r = staffAuth().setSettings(await c.body(), who(c)); if (r.ok && r.changed.length) audit.add('settings.change', '', c.ip, r.changed.join(',') + ' by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
   app.post('/admin/staff/:id/end-sessions', admin, limit('adm', 120), c => { const ok = staffAuth().endSessions(c.params.id); if (ok) audit.add('staff.end-sessions', c.params.id, c.ip, 'by ' + who(c)); return ok ? c.json(200, { ok: true }) : c.json(404, { ok: false, error: 'no such account' }); });
-  app.get('/admin/crm/export.csv', admin, limit('adm', 20), c => {   // a spreadsheet of the customers; cells that a spreadsheet would run as a formula are quoted as text
-    const cell = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
-    const rows = staffAuth().listCustomers().map(x => [x.name, x.company, x.email, x.phone, x.country, x.tags, x.status, new Date(x.created).toISOString(), new Date(x.updated).toISOString()].map(cell).join(','));
+  const cell = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };   // a cell a spreadsheet would run as a formula is quoted as text
+  app.get('/admin/crm/export.csv', admin, limit('export', 20), c => {   // a spreadsheet of the customers
+    const rows = staffAuth().listCustomers().map(x => [x.name, x.company, x.email, x.phone, x.country, x.tags, x.status, x.followUp, new Date(x.created).toISOString(), new Date(x.updated).toISOString()].map(cell).join(','));
     audit.add('crm.export', '', c.ip, rows.length + ' rows by ' + who(c));
-    return c.send(200, '\ufeff' + ['name,company,email,phone,country,tags,status,created,updated', ...rows].join('\r\n') + '\r\n', { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="amfx1-customers.csv"' });
+    return c.send(200, '\ufeff' + ['name,company,email,phone,country,tags,status,follow-up,created,updated', ...rows].join('\r\n') + '\r\n', { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="amfx1-customers.csv"' });
   });
   app.get('/admin/crm/stats', admin, limit('adm', 120), c => c.json(200, { ok: true, stats: staffAuth().stats(), statuses: staffAuth().STATUSES }));
   app.get('/admin/crm/customers', admin, limit('adm', 120), c => c.json(200, { ok: true, customers: staffAuth().listCustomers({ q: c.query.get('q') || '', status: c.query.get('status') || '' }) }));
   app.post('/admin/crm/customers', admin, limit('adm', 120), async c => { const r = staffAuth().saveCustomer(await c.body(), who(c)); if (r.ok) audit.add('crm.add', r.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
   app.get('/admin/crm/customers/:id', admin, limit('adm', 120), c => { const cu = staffAuth().getCustomer(c.params.id); if (!cu) return c.json(404, { ok: false, error: 'no such customer' });
-    const keys = cu.email ? listLicenses({ file: dataFile, secret }).filter(l => String(l.email || '').toLowerCase() === cu.email).map(l => ({ id: l.id, plan: l.plan, expires: l.expires, revoked: !!l.revoked })) : [];
+    const keys = cu.email ? listLicenses({ file: dataFile, secret }).filter(l => String(l.email || '').toLowerCase() === cu.email).map(l => ({ id: l.id, plan: l.plan, issued: l.issued, expires: l.expires, revoked: !!l.revoked, state: l.state, trial: l.trial, seats: l.seats, devices: l.devices.length })) : [];
     return c.json(200, { ok: true, customer: { ...cu, licences: keys } }); });
   app.put('/admin/crm/customers/:id', admin, limit('adm', 120), async c => { const r = staffAuth().saveCustomer(await c.body(), who(c), c.params.id); if (r.ok) audit.add('crm.edit', r.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
   app.delete('/admin/crm/customers/:id', admin, limit('adm', 120), c => { const r = staffAuth().deleteCustomer(c.params.id); if (r.ok) audit.add('crm.delete', c.params.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
+  // ISSUE A KEY FROM A CUSTOMER: the customer's name and e-mail, the plan / days / seats from Settings unless the form changes them
+  app.post('/admin/crm/customers/:id/licence', admin, limit('issue', 60), async c => {
+    const cu = staffAuth().getCustomer(c.params.id); if (!cu) return c.json(404, { ok: false, error: 'no such customer' });
+    if (!cu.email) return c.json(400, { ok: false, error: 'the customer needs an e-mail first: the key is listed under it' });
+    const b = await c.body(), st = staffAuth().getSettings();
+    const body = { name: cu.company ? cu.name + ' · ' + cu.company : cu.name, email: cu.email, note: 'issued from the CRM by ' + who(c),
+      plan: b.plan || st.defaultPlan, days: b.days === undefined ? st.defaultDays : b.days, seats: b.seats === undefined ? st.defaultSeats : b.seats, ...(b.term ? { term: b.term } : {}), ...(b.trial === true ? { trial: true } : {}) };
+    const built = buildPayload(body); if (built.error) return c.json(400, { ok: false, error: built.error });
+    const key = signKey(built.payload, privateKey), rec = recordIssue({ payload: built.payload, email: body.email, note: body.note, file: dataFile, secret }) || {};
+    audit.add('license.issue', built.payload.id, c.ip, `${built.payload.plan} seats=${built.payload.seats} crm=${cu.id} by ${who(c)}`);
+    staffAuth().addNote(cu.id, `Licence ${built.payload.id} issued: ${built.payload.plan.toUpperCase()}, ${built.payload.seats} computer(s), ${built.payload.expires ? 'ends ' + new Date(built.payload.expires).toISOString().slice(0, 10) : 'no end'}.`, who(c));
+    return c.json(200, { ok: true, id: built.payload.id, plan: built.payload.plan, expires: built.payload.expires, seats: built.payload.seats, key, productKey: rec.productKey || null });
+  });
+  app.get('/admin/crm/due', admin, limit('adm', 120), c => c.json(200, { ok: true, ...staffAuth().due(String(c.query.get('today') || '')) }));   // today: the browser's own day
   app.post('/admin/crm/customers/:id/notes', admin, limit('adm', 120), async c => { const r = staffAuth().addNote(c.params.id, (await c.body()).text, who(c)); if (r.ok) audit.add('crm.note', c.params.id, c.ip, 'by ' + who(c)); return out(c, { status: r.ok ? 200 : r.status, ...r }); });
 
   app.post('/admin/licenses', admin, limit('adm', 120), issue);
@@ -389,6 +403,20 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
     for (const x of l) if (x.plan) plans[x.plan] = (plans[x.plan] || 0) + 1;
     return c.json(200, { ok: true, total: l.length, active: by('active'), expired: by('expired'), revoked: by('revoked'), devices: l.reduce((n, x) => n + x.devices.length, 0), plans,
       expiringSoon: l.filter(x => x.state === 'active' && x.expires && x.expires - Date.now() < 30 * 86400000).length, upSince: started, node: process.version });
+  });
+  app.get('/admin/licenses/ending.csv', admin, limit('export', 20), c => {   // ENDING SOON as a spreadsheet: active keys that end within the warning days, the nearest first
+    const d = Number(c.query.get('days')), days = Number.isInteger(d) && d >= 1 && d <= 3650 ? d : staffAuth().getSettings().expiringWarnDays, now = Date.now();
+    const soon = listLicenses({ file: dataFile, secret }).filter(l => l.state === 'active' && l.expires && l.expires - now < days * 86400000).sort((a, b) => a.expires - b.expires);
+    const rows = soon.map(l => [l.id, l.name, l.email, String(l.plan || '').toUpperCase(), l.trial ? 'trial' : '', new Date(l.expires).toISOString().slice(0, 10), Math.max(0, Math.ceil((l.expires - now) / 86400000)), l.devices.length + '/' + (l.seats || 1)].map(cell).join(','));
+    audit.add('license.export-ending', '', c.ip, rows.length + ' rows, ' + days + ' days by ' + who(c));
+    return c.send(200, '\ufeff' + ['id,customer,email,plan,trial,ends,days left,computers', ...rows].join('\r\n') + '\r\n', { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="amfx1-ending-soon.csv"', 'cache-control': 'no-store' });
+  });
+  // BACKUP of the staff / CRM database (admin token or a signed-in staff account; audited). The CRM inside stays encrypted: its key is not in the file.
+  app.get('/admin/system/backup', admin, limit('backup', 6), c => {
+    const tmp = path.join(require('node:os').tmpdir(), 'amfx1-portal-backup-' + crypto.randomBytes(8).toString('hex') + '.db');
+    try { const r = staffAuth().backup(tmp, who(c)); const data = fs.readFileSync(tmp); audit.add('system.backup', '', c.ip, data.length + ' bytes by ' + who(c));
+      return c.send(200, data, { 'content-type': 'application/vnd.sqlite3', 'content-disposition': `attachment; filename="amfx1-portal-${new Date(r.at).toISOString().slice(0, 10)}.db"`, 'cache-control': 'no-store' });
+    } finally { try { fs.unlinkSync(tmp); } catch (_) { /* already gone */ } }
   });
   app.get('/admin/audit', admin, limit('adm', 120), c => c.json(200, { ok: true, entries: audit.list(c.query.get('limit')) }));
   app.get('/admin/audit/verify', admin, limit('adm', 120), c => c.json(200, { ok: true, chain: audit.verify() }));
@@ -419,8 +447,8 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
       productKeys: { made: all.filter(l => l.productKey).length, redeemed: all.filter(l => l.redeems > 0).length, neverUsed: all.filter(l => l.productKey && !l.redeems).length },
       last24h: { redeemed: log.filter(e => what(e) === 'license.redeem' && when(e) >= since).length, refused: log.filter(e => what(e) === 'license.redeem.refused' && when(e) >= since).length } });
   });
-  app.post('/admin/portal/refresh', admin, limit('adm', 30), async c => { upd.at = 0; upd.body = null; audit.add('portal.refresh', '', c.ip); return c.json(200, { ok: true }); });
-  app.post('/admin/licenses/:id/product-key', admin, limit('adm', 60), async c => { const r = renewProductKey({ id: c.params.id, file: dataFile });
+  app.post('/admin/portal/refresh', admin, limit('refresh', 30), async c => { upd.at = 0; upd.body = null; audit.add('portal.refresh', '', c.ip); return c.json(200, { ok: true }); });
+  app.post('/admin/licenses/:id/product-key', admin, limit('issue', 60), async c => { const r = renewProductKey({ id: c.params.id, file: dataFile });
     if (!r.ok) return c.json(r.status, { ok: false, error: r.error }); audit.add('license.productkey.new', r.id, c.ip); return c.json(200, { ok: true, id: r.id, productKey: r.productKey }); });
   const portal = path.join(__dirname, 'portal');
   app.get('/portal', c => c.send(301, '', { location: '/portal/' }));
