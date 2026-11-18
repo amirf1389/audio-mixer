@@ -1244,7 +1244,7 @@ int main(int argc, char* argv[]) {
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           settings.setMixerStyle("console"); engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
           settings.setMixerStyle("daw"); engine.setPlugin(0, 0, "fx:reverb"); engine.setPlugin(0, 1, "fx:delay"); engine.setPlugin(1, 0, "fx:opto"); engine.setPlugin(1, 1, "fx:deesser"); engine.setPluginBypass(1, 1, true); engine.setPlugin(2, 0, "fx:tubeamp");
-          win->setProperty("current", "home"); settle(300); win->setProperty("current", "mixer"); settle(1200); win->grabWindow().save(shots + "/mixer-daw.png");
+          win->setProperty("current", "home"); settle(300); win->setProperty("current", "mixer"); settle(1200); win->grabWindow().save(shots + "/mixer-daw.png"); settings.setMixerStyle("console");
           for (const auto& [st, sl] : {std::pair<int, int>{0, 0}, {0, 1}, {1, 0}, {1, 1}, {2, 0}}) engine.setPlugin(st, sl, "");
           std::printf("amixos --shots: samples-pads, samples-effects, settings-processor, acoustics-room-correction, mixer-automix, mixer-daw\n"); }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
@@ -1529,7 +1529,7 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(0, 9, "fx:reverb"); const bool tenth = engine.plugins(0)[9].toMap().value("kind").toString() == "fx:reverb";
         engine.setPlugin(0, 10, "fx:delay"); const bool eleventhRefused = engine.plugins(0).size() <= 10 || engine.plugins(0)[10].toMap().value("kind").toString().isEmpty();
         engine.setPlugin(0, 9, ""); settings.setMixerStyle("console"); { QElapsedTimer t; t.start(); while (t.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }
-        const bool backToConsole = find(root, "stripFader") != nullptr && !find(root, "dawStrip0"); settings.setMixerStyle("daw");
+        const bool backToConsole = find(root, "stripFader") != nullptr && !find(root, "dawStrip0"); settings.setMixerStyle("console");   // the default look again
         std::printf("amixos --smoke: DAW LOOK strip 1 %d, insert slots %d, console strips not built %d, 10th plug-in in %d, 11th refused %d, CONSOLE look back %d (limit %d)\n", strip != nullptr, nSlots, consoleHidden, tenth, eleventhRefused, backToConsole, engine.pluginSlotLimit());
         if (!strip || nSlots != 10 || !tenth || !eleventhRefused || !backToConsole || engine.pluginSlotLimit() != 10) std::exit(87); }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());

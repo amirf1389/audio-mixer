@@ -202,7 +202,7 @@ Item {
                 }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Repeater {   // THE LOOK of the faders view: DAW or CONSOLE (also on SETTINGS)
-                    model: [["daw", "DAW"], ["console", "CONSOLE"]]
+                    model: [["console", "CONSOLE"], ["daw", "DAW"]]
                     delegate: Rectangle { objectName: "mixerLook_" + modelData[0]; readonly property bool on: settings.mixerStyle === modelData[0]
                         implicitWidth: lkT.implicitWidth + 14; implicitHeight: 20; radius: 7; color: on ? Theme.accent : Theme.ov(0.06); border.color: on ? Theme.accent : Theme.lineSoft
                         Text { id: lkT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
