@@ -53,6 +53,7 @@
 #include "Samples.h"
 #include "paths/paths.hpp"
 #include "samples/samples.hpp"
+#include "Links.h"
 #include <QHostAddress>
 #include <QSettings>
 #include <QIcon>
@@ -179,6 +180,8 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("access", &access);
   qml.rootContext()->setContextProperty("osc", &osc);
   qml.rootContext()->setContextProperty("media", &media);
+  if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
+  Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("samples", &samples);
   qml.rootContext()->setContextProperty("updater", &update);
   QObject::connect(&update, &Update::revocations, &engine, [&](const QString& l) { engine.storeRevocations(l); });   // the newest revocation list the licence server signs
@@ -1243,6 +1246,8 @@ int main(int argc, char* argv[]) {
           measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+          for (const char* u : {"https://www.tiktok.com/@amfb.audio/live", "https://www.deezer.com/en/album/302127", "https://tidal.com/browse/track/12345678", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "https://youtu.be/dQw4w9WgXcQ"}) links.add(QString::fromLatin1(u), QString());
+          win->setProperty("current", "streaming"); settle(800); win->grabWindow().save(shots + "/streaming.png");
           engine.setPlugin(0, 0, "fx:preamp"); engine.setPlugin(0, 1, "fx:regulator"); engine.setPlugin(0, 2, "fx:reverb"); engine.setPlugin(0, 3, "fx:protect"); engine.setPluginBypass(0, 2, true);   // THE RACK with effects in
           settle(900); win->grabWindow().save(shots + "/mixer-rack.png"); for (int sl = 0; sl < 4; ++sl) engine.setPlugin(0, sl, "");
           std::printf("amixos --shots: samples-pads, samples-effects, settings-processor, acoustics-room-correction, mixer-automix, mixer-daw\n"); }
@@ -1509,6 +1514,18 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // STREAMING LINKS: a pasted link is recognised, kept once, opened by its app address or its https address; anything else is refused; 360 AUDIO is off by default
+        while (!links.list().isEmpty()) links.remove(0);
+        const bool added = links.add(" https://open.spotify.com/intl-de/track/4uLU6hMCjMI75M1A2tKUQC?si=x ", "Opener"), twice = links.add("spotify:track:4uLU6hMCjMI75M1A2tKUQC", "");
+        const bool bad = links.add("https://open.spotify.com.evil.example/track/4uLU6hMCjMI75M1A2tKUQC", "") || links.add("javascript:alert(1)", "") || links.add("http://youtu.be/dQw4w9WgXcQ", "");
+        const bool tik = links.add("https://www.tiktok.com/@amfb.audio/live", "");
+        const bool inApp = links.open(1, true) && links.lastOpened() == "spotify:track:4uLU6hMCjMI75M1A2tKUQC", inWeb = links.open(0, true) && links.lastOpened() == "https://www.tiktok.com/@amfb.audio/live";   // TikTok has no app address: https
+        const int n = static_cast<int>(links.list().size()); while (!links.list().isEmpty()) links.remove(0);
+        const bool off360 = !QSettings().contains("spatial/enabled") ? !settings.spatialEnabled() : true;
+        std::printf("amixos --smoke: STREAMING LINKS added %d, the same link twice refused %d, look-alike / script / http refused %d, TikTok %d, opens the app address %d, https where there is none %d (%d kept); 360 AUDIO off by default %d\n", added, !twice, !bad, tik, inApp, inWeb, n, off360);
+        if (!added || twice || bad || !tik || !inApp || !inWeb || n != 2 || !off360) std::exit(90);
+        const bool preset = engine.masteringPresets().contains("SHORT VIDEO / LIVE"); engine.applyMasteringPreset("SHORT VIDEO / LIVE"); const bool applied = engine.mastering().value("preset").toString() == "SHORT VIDEO / LIVE"; engine.applyMasteringPreset("TRANSPARENT");
+        if (!preset || !applied) { std::fprintf(stderr, "amixos --smoke: the SHORT VIDEO / LIVE mastering preset (%d, %d)\n", preset, applied); std::exit(91); } }
       if (auto* dw = qobject_cast<QQuickWindow*>(qml.rootObjects().first())) {   // THE MIXER STRIPS: the easy keys beside every fader; ten plug-ins per channel at most
         dw->setProperty("current", "mixer"); { QElapsedTimer t; t.start(); while (t.elapsed() < 800) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }
         // the strips are made by a Repeater: they are children in the item tree (not QObject children of the window), so the tree is searched

@@ -27,6 +27,7 @@ qt_add_executable(amixos
     src/Osc.cpp src/Osc.h
     src/Media.cpp src/Media.h
     src/Samples.cpp src/Samples.h
+    src/Links.cpp src/Links.h
     src/Update.cpp src/Update.h
     src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
@@ -80,6 +81,7 @@ qt_add_qml_module(amixos
         qml/FramePage.qml
         qml/MediaPage.qml
         qml/SamplesPage.qml
+        qml/StreamingPage.qml
         qml/SoundCardPage.qml
         qml/DspModeSwitch.qml
         qml/ScorePage.qml
