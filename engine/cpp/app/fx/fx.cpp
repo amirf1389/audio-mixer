@@ -524,6 +524,7 @@ void ShortProtect::process(float* L, float* R, std::size_t n) {
     if (!cut_ && over_ >= tripAfter) { cut_ = true; trips_.fetch_add(1); }
     if (cut_ && safe_ >= holdFor) { cut_ = false; over_ = 0; }
     g_ += ((cut_ ? 0.0 : 1.0) - g_) * (cut_ ? aCut : aBack);
+    if (!cut_ && g_ > 0.999) g_ = 1;   // back: exactly unity again, so the sound is untouched bit for bit
     if (g_ < 0.9999) { L[i] = static_cast<float>(l * g_); R[i] = static_cast<float>(r * g_); } }
   tripped_ = cut_;
 }
