@@ -2187,5 +2187,17 @@
 "Back to the normal level (0 dB)": "De volta ao nível normal (0 dB)",
 "BACK: where this fader was before the last move": "VOLTAR: onde este fader estava antes do último movimento",
 "Mixer look": "Aparência do mixer",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: faixas planas com dez slots de inserção e botões de acesso rápido ao lado de cada fader. CONSOLE: as faixas físicas da mesa de som"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: faixas planas com dez slots de inserção e botões de acesso rápido ao lado de cada fader. CONSOLE: as faixas físicas da mesa de som",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / ÁUDIO DIGITAL: ENTRADA + SAÍDA JUNTAS",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Lê a entrada do próprio dispositivo e reproduz na saída do mesmo ao mesmo tempo (microfone ou entrada de linha, alto-falantes ou saída digital no mesmo dispositivo USB). Suas entradas são direcionadas para as primeiras faixas de canal.",
+"WINDOWS SOUND": "SOM DO WINDOWS",
+"SOUND SETTINGS": "CONFIGURAÇÕES DE SOM",
+"PLAYBACK DEVICES": "DISPOSITIVOS DE REPRODUÇÃO",
+"RECORDING DEVICES": "DISPOSITIVOS DE GRAVAÇÃO",
+"MICROPHONE PRIVACY": "PRIVACIDADE DO MICROFONE",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "REPRODUÇÃO (ALTO-FALANTES, FONES DE OUVIDO, SAÍDA DIGITAL)",
+"RECORDING (MICROPHONES, LINE IN)": "GRAVAÇÃO (MICROFONES, ENTRADA DE LINHA)",
+"No device of this kind in Windows.": "Não há nenhum dispositivo desse tipo no Windows.",
+"MAKE DEFAULT": "DEFINIR COMO PADRÃO",
+"enhancements off": "melhorias desativadas"
 }

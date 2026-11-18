@@ -2191,5 +2191,16 @@
 "Back to the normal level (0 dB)": "Normal seviyeye (0 dB) geri dön",
 "BACK: where this fader was before the last move": "GERİ: Bu fader’ın son hareketinden önceki konumu",
 "Mixer look": "Mikser görünümü",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: On adet ekleme yuvası bulunan düz şeritler ve her faderın yanında kolay erişimli düğmeler. KONSOL: Donanım masası şeritleri"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: On adet ekleme yuvası bulunan düz şeritler ve her faderın yanında kolay erişimli düğmeler. KONSOL: Donanım masası şeritleri",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / DİJİTAL SES: GİRİŞ + ÇIKIŞ BİRLİKTE",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Cihazın kendi girişini okur ve aynı anda kendi çıkışına ses verir (aynı USB cihazındaki mikrofon veya hat girişi ile hoparlörler veya dijital çıkış). Girişleri ilk kanal şeritlerine yönlendirilir.",
+"WINDOWS SOUND": "WINDOWS SES",
+"SOUND SETTINGS": "SES AYARLARI",
+"PLAYBACK DEVICES": "OYNATMA CİHAZLARI",
+"RECORDING DEVICES": "KAYIT CİHAZLARI",
+"MICROPHONE PRIVACY": "MİKROFON GİZLİLİĞİ",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "ÇALMA (HOPARLÖRLER, KULAKLIKLAR, DİJİTAL ÇIKIŞ)",
+"RECORDING (MICROPHONES, LINE IN)": "KAYIT (MİKROFONLAR, HAT GİRİŞİ)",
+"No device of this kind in Windows.": "Windows'ta bu tür bir aygıt yoktur.",
+"enhancements off": "geliştirmeler kapalı"
 }

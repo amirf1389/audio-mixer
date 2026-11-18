@@ -2155,5 +2155,18 @@
 "Quieter: -1 dB": "Ít ồn hơn: -1 dB",
 "Back to the normal level (0 dB)": "Quay trở lại mức bình thường (0 dB)",
 "BACK: where this fader was before the last move": "TRỞ LẠI: vị trí của thanh trượt này trước lần di chuyển gần nhất",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: các dải phẳng có mười khe cắm và các nút điều khiển tiện lợi bên cạnh mỗi thanh trượt. BÀN TRỘN: các dải phần cứng trên bàn trộn"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: các dải phẳng có mười khe cắm và các nút điều khiển tiện lợi bên cạnh mỗi thanh trượt. BÀN TRỘN: các dải phần cứng trên bàn trộn",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / ÂM THANH SỐ: CỔNG NHẬP VÀ CỔNG XUẤT KẾT HỢP",
+"OPEN INPUT + OUTPUT": "MỞ ĐẦU VÀO + ĐẦU RA",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Tính năng này đọc tín hiệu đầu vào từ chính thiết bị và phát ra qua đầu ra của chính thiết bị đó cùng lúc (micro hoặc đầu vào line-in, loa hoặc đầu ra kỹ thuật số trên cùng một thiết bị USB). Các tín hiệu đầu vào này được chuyển đến các dải kênh đầu tiên.",
+"WINDOWS SOUND": "ÂM THANH TRÊN WINDOWS",
+"SOUND SETTINGS": "CÀI ĐẶT ÂM THANH",
+"VOLUME MIXER": "Bộ trộn âm lượng",
+"PLAYBACK DEVICES": "THIẾT BỊ PHÁT LẠI",
+"RECORDING DEVICES": "THIẾT BỊ GHI ÂM",
+"MICROPHONE PRIVACY": "QUYỀN RIÊNG TƯ LIÊN QUAN ĐẾN MICRO",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "PHÁT LẠI (LOA, TAI NGHE, CỔNG RA KỸ THUẬT SỐ)",
+"RECORDING (MICROPHONES, LINE IN)": "GHI ÂM (MICRO, CỔNG LINE IN)",
+"No device of this kind in Windows.": "Trong Windows không có thiết bị nào thuộc loại này.",
+"enhancements off": "tắt các tính năng nâng cao"
 }

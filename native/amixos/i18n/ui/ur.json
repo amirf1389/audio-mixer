@@ -2252,5 +2252,19 @@
 "Back to the normal level (0 dB)": "واپس معمول کی سطح (0 dB) پر",
 "BACK: where this fader was before the last move": "واپس: جہاں یہ فیڈر آخری حرکت سے پہلے تھا",
 "Mixer look": "مکسر کا انداز",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: فلیٹ پٹیوں کے ساتھ دس انسرٹ سلاٹس اور ہر فیڈر کے پاس آسان بٹن۔   CONSOLE: ہارڈویئر ڈیسک کی پٹیاں۔"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: فلیٹ پٹیوں کے ساتھ دس انسرٹ سلاٹس اور ہر فیڈر کے پاس آسان بٹن۔   CONSOLE: ہارڈویئر ڈیسک کی پٹیاں۔",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "یو ایس بی / ڈیجیٹل آڈیو: ان پٹ اور آؤٹ پٹ ایک ساتھ",
+"OPEN INPUT + OUTPUT": "ان پٹ + آؤٹ پٹ کھولیں",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "یہ آلہ ایک ہی وقت میں اپنا ان پٹ پڑھتا ہے اور اپنی آؤٹ پٹ پر چلاتا ہے (ایک ہی USB ڈیوائس پر مائیکروفون یا لائن ان، اسپیکرز یا ڈیجیٹل آؤٹ)۔ اس کے ان پٹس پہلے چینل سٹرپس کی طرف جاتے ہیں۔",
+"WINDOWS SOUND": "ونڈوز ساؤنڈ",
+"SOUND SETTINGS": "آواز کی ترتیبات",
+"VOLUME MIXER": "والیوم مکسر",
+"PLAYBACK DEVICES": "پلے بیک ڈیوائسز",
+"RECORDING DEVICES": "ریکارڈنگ آلات",
+"MICROPHONE PRIVACY": "مائیکروفون کی رازداری",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "پلے بیک (سپیکرز، ہیڈفونز، ڈیجیٹل آؤٹ)",
+"RECORDING (MICROPHONES, LINE IN)": "ریکارڈنگ (مائیکروفونز، لائن ان)",
+"No device of this kind in Windows.": "ونڈوز میں اس قسم کا کوئی آلہ نہیں ہے۔",
+"MAKE DEFAULT": "ڈیفالٹ بنائیں",
+"enhancements off": "بہتریاں بند"
 }

@@ -2167,5 +2167,18 @@
 "Back to the normal level (0 dB)": "Ritorno al livello normale (0 dB)",
 "BACK: where this fader was before the last move": "INDIETRO: posizione in cui si trovava questo fader prima dell'ultima operazione",
 "Mixer look": "Aspetto del mixer",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: strisce piatte con dieci slot di inserimento e pulsanti di facile utilizzo accanto a ciascun fader. CONSOLE: le strisce hardware da banco"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: strisce piatte con dieci slot di inserimento e pulsanti di facile utilizzo accanto a ciascun fader. CONSOLE: le strisce hardware da banco",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / AUDIO DIGITALE: INGRESSO + USCITA INSIEME",
+"OPEN INPUT + OUTPUT": "APRI INGRESSO + USCITA",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Legge il segnale in ingresso del dispositivo stesso e lo riproduce contemporaneamente sull'uscita dello stesso dispositivo (microfono o ingresso di linea, altoparlanti o uscita digitale sullo stesso dispositivo USB). I suoi ingressi vengono indirizzati ai primi canali.",
+"WINDOWS SOUND": "SUONI DI WINDOWS",
+"SOUND SETTINGS": "IMPOSTAZIONI AUDIO",
+"PLAYBACK DEVICES": "DISPOSITIVI DI RIPRODUZIONE",
+"RECORDING DEVICES": "DISPOSITIVI DI REGISTRAZIONE",
+"MICROPHONE PRIVACY": "PRIVACY RELATIVA AI MICROFONI",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "RIPRODUZIONE (ALTOPARLANTI, CUFFIE, USCITA DIGITALE)",
+"RECORDING (MICROPHONES, LINE IN)": "REGISTRAZIONE (MICROFONI, INGRESSO DI LINEA)",
+"No device of this kind in Windows.": "In Windows non esiste alcun dispositivo di questo tipo.",
+"MAKE DEFAULT": "IMPOSTA COME PREDEFINITO",
+"enhancements off": "miglioramenti disattivati"
 }

@@ -2154,5 +2154,19 @@
 "Quieter: -1 dB": "Leiser: -1 dB",
 "Back to the normal level (0 dB)": "Zurück zum Normalpegel (0 dB)",
 "BACK: where this fader was before the last move": "ZURÜCK: Die Position, an der sich dieser Fader vor der letzten Bewegung befand",
-"Mixer look": "Mixer-Design"
+"Mixer look": "Mixer-Design",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / DIGITALES AUDIO: EINGANG + AUSGANG ZUSAMMEN",
+"OPEN INPUT + OUTPUT": "EINGANG + AUSGANG ÖFFNEN",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Liest die eigenen Eingänge des Geräts aus und gibt gleichzeitig über die eigenen Ausgänge wieder (Mikrofon- oder Line-Eingang, Lautsprecher oder digitaler Ausgang am selben USB-Gerät). Die Eingänge werden an die ersten Kanalzüge weitergeleitet.",
+"WINDOWS SOUND": "WINDOWS-SOUND",
+"SOUND SETTINGS": "TONEINSTELLUNGEN",
+"VOLUME MIXER": "LAUTSTÄRKEMISCHER",
+"PLAYBACK DEVICES": "WIEDERGABEGERÄTE",
+"RECORDING DEVICES": "AUFZEICHNUNGSGERÄTE",
+"MICROPHONE PRIVACY": "DATENSCHUTZ BEI MIKROFONEN",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "WIEDERGABE (LAUTSPRECHER, KOPFHÖRER, DIGITALER AUSGANG)",
+"RECORDING (MICROPHONES, LINE IN)": "AUFNAHME (MIKROFONE, LINE-IN)",
+"No device of this kind in Windows.": "In Windows gibt es kein Gerät dieser Art.",
+"MAKE DEFAULT": "ALS STANDARD FESTLEGEN",
+"enhancements off": "Erweiterungen deaktiviert"
 }

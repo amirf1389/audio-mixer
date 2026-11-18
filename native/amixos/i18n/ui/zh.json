@@ -2141,5 +2141,19 @@
 "Back to the normal level (0 dB)": "恢复到正常电平（0 dB）",
 "BACK: where this fader was before the last move": "BACK：该推子在上一次移动前的位置",
 "Mixer look": "调音台外观",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW：带十个插入插槽的扁平条形面板，每个推子旁均配有便捷按钮。调音台：硬件控制台条形面板"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW：带十个插入插槽的扁平条形面板，每个推子旁均配有便捷按钮。调音台：硬件控制台条形面板",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / 数字音频：输入与输出合二为一",
+"OPEN INPUT + OUTPUT": "打开输入 + 输出",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "同时读取设备自身的输入信号，并将其播放至设备自身的输出端口（同一台USB设备上的麦克风或线路输入端口，以及扬声器或数字输出端口）。其输入信号将传输至第一个通道条。",
+"WINDOWS SOUND": "Windows 声音",
+"SOUND SETTINGS": "声音设置",
+"VOLUME MIXER": "音量混音器",
+"PLAYBACK DEVICES": "播放设备",
+"RECORDING DEVICES": "录音设备",
+"MICROPHONE PRIVACY": "麦克风隐私",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "播放（扬声器、耳机、数字输出）",
+"RECORDING (MICROPHONES, LINE IN)": "录音（麦克风、线路输入）",
+"No device of this kind in Windows.": "Windows 中没有此类设备。",
+"MAKE DEFAULT": "设为默认值",
+"enhancements off": "关闭增强功能"
 }

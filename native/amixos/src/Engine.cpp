@@ -151,7 +151,13 @@ void Engine::annotateAsio(QVariantMap& m, bool probed) {
   if (in + out == 0 && !seen.isEmpty()) { m["lastSeen"] = true; m["seenIn"] = seen["in"]; m["seenOut"] = seen["out"]; m["seenRate"] = seen["rate"]; m["seenWhen"] = seen["when"]; }
   else m["lastSeen"] = false;
 }
-void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); if (m["backend"].toString() == "asio") annotateAsio(m, true); devices_ << m; } emit devicesChanged(); }
+void Engine::simulateDevices(const QVariantList& devices) { simulated_ = true; devices_.clear(); for (const QVariant& v : devices) { QVariantMap m = v.toMap(); if (!m.contains("kind")) m["kind"] = QString::fromStdString(am::classifyDevice(m["backend"].toString().toStdString(), m["name"].toString().toStdString(), -1, m["inChannels"].toInt() > 0 && m["outChannels"].toInt() == 0)); if (m["backend"].toString() == "asio") annotateAsio(m, true); devices_ << m; }
+  winEndpoints_.clear();   // the simulated list also stands in for Windows' endpoints (WINDOWS SOUND card)
+  for (const QVariant& v : devices_) { const QVariantMap m = v.toMap(); if (m["backend"].toString() != "wasapi" || m["id"].toString().startsWith("loopback:")) continue;
+    for (const bool out : {true, false}) { const int ch = (out ? m["outChannels"] : m["inChannels"]).toInt(); if (ch <= 0) continue;
+      winEndpoints_ << QVariantMap{{"id", m["id"]}, {"name", m["name"]}, {"flow", out ? "out" : "in"}, {"state", "active"}, {"kind", m["kind"]}, {"channels", ch}, {"rate", m["defaultRate"].toDouble() > 0 ? m["defaultRate"] : QVariant(48000.0)},
+        {"bits", m.value("bits", 24)}, {"isDefault", out ? m["defaultOut"].toBool() : m["defaultIn"].toBool()}, {"isDefaultComm", false}, {"enhancementsOff", m.value("enhancementsOff", -1)}, {"bus", m.value("bus")}}; } }
+  emit devicesChanged(); }
 bool Engine::guarded(std::function<bool()> work, int timeoutMs) {
   struct St { std::atomic<bool> done{false}; bool ok = false; }; auto st = std::make_shared<St>();
   std::thread([st, work = std::move(work)] { st->ok = work(); st->done.store(true); }).detach();
@@ -165,6 +171,9 @@ void Engine::refreshDevices() {
   scanning_ = true; emit busyChanged();
   auto found = std::make_shared<std::vector<am::DeviceInfo>>(); auto eps = std::make_shared<std::vector<am::EndpointInfo>>();
   guarded([found, eps] { *eps = am::listEndpoints(); *found = am::listDevices(); return true; }, 8000);
+  winEndpoints_.clear();   // WINDOWS SOUND: every endpoint as Windows has it (default, format, enhancements), for the SOUND CARD page
+  for (const am::EndpointInfo& ep : *eps) winEndpoints_ << QVariantMap{{"id", QString::fromStdString(ep.id)}, {"name", QString::fromStdString(ep.name)}, {"flow", QString::fromStdString(ep.flow)}, {"state", QString::fromStdString(ep.state)}, {"kind", QString::fromStdString(ep.kind)},
+    {"channels", ep.channels}, {"rate", ep.rate}, {"bits", ep.bits}, {"isDefault", ep.isDefault}, {"isDefaultComm", ep.isDefaultComm}, {"enhancementsOff", ep.enhancementsOff}, {"bus", QString::fromStdString(ep.bus)}};
   absent_.clear();   // endpoints that exist but cannot be opened now: headphones on an empty jack, a device switched off in Windows
   for (const am::EndpointInfo& ep : *eps) if (ep.state != "active") absent_ << QVariantMap{{"name", QString::fromStdString(ep.name)}, {"flow", QString::fromStdString(ep.flow)}, {"state", QString::fromStdString(ep.state)}, {"kind", QString::fromStdString(ep.kind)}};
   if (timedOut_) { found = std::make_shared<std::vector<am::DeviceInfo>>(am::listDevices(false)); status_ = QStringLiteral("A driver did not answer the scan in 8 s: the list is shown without loading ASIO drivers (channel counts assumed 2 / 2). SOFT RESTART scans again."); qWarning("device scan timed out: the list was built without probing ASIO drivers"); }
@@ -172,7 +181,7 @@ void Engine::refreshDevices() {
   devices_.clear();
   for (const am::DeviceInfo& d : *found) {
     QVariantMap m; m["backend"] = QString::fromStdString(d.backend); m["id"] = QString::fromStdString(d.id); m["name"] = QString::fromStdString(d.name);
-    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["kind"] = QString::fromStdString(d.kind);
+    m["inChannels"] = d.inChannels; m["outChannels"] = d.outChannels; m["defaultRate"] = d.defaultRate; m["defaultIn"] = d.defaultIn; m["defaultOut"] = d.defaultOut; m["kind"] = QString::fromStdString(d.kind); m["group"] = QString::fromStdString(d.group); m["bus"] = QString::fromStdString(d.bus);
     { static const QStringList wired{"digital", "line", "interface", "dac", "wrapper", "virtual", "app"};   // a cable or a converter: a brand in the name ("JBL", "Bose", "wireless") does not make it Bluetooth
       m["bluetooth"] = d.kind == "bluetooth" || (!wired.contains(m["kind"].toString()) && looksBluetooth(m["name"].toString())); } m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
@@ -625,7 +634,37 @@ QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am:
 
 // ---- driver intelligence
 static QVariantMap attemptMap(const am::drv::Attempt& a) { QVariantMap m; m["mode"] = QString::fromStdString(a.mode); m["backend"] = QString::fromStdString(a.backend); m["in"] = QString::fromStdString(a.inDevice); m["out"] = QString::fromStdString(a.outDevice); m["exclusive"] = a.exclusive; m["why"] = QString::fromStdString(a.why); m["fromLock"] = a.fromLock; m["pinned"] = a.pinned; return m; }
-static std::vector<am::DeviceInfo> devInfos(const QVariantList& l) { std::vector<am::DeviceInfo> v; for (const QVariant& x : l) { const QVariantMap m = x.toMap(); am::DeviceInfo d; d.backend = m["backend"].toString().toStdString(); d.id = m["id"].toString().toStdString(); d.name = m["name"].toString().toStdString(); d.inChannels = m["inChannels"].toInt(); d.outChannels = m["outChannels"].toInt(); d.defaultIn = m["defaultIn"].toBool(); d.defaultOut = m["defaultOut"].toBool(); d.defaultRate = m["defaultRate"].toDouble(); v.push_back(d); } return v; }
+static std::vector<am::DeviceInfo> devInfos(const QVariantList& l) { std::vector<am::DeviceInfo> v; for (const QVariant& x : l) { const QVariantMap m = x.toMap(); am::DeviceInfo d; d.backend = m["backend"].toString().toStdString(); d.id = m["id"].toString().toStdString(); d.name = m["name"].toString().toStdString(); d.inChannels = m["inChannels"].toInt(); d.outChannels = m["outChannels"].toInt(); d.defaultIn = m["defaultIn"].toBool(); d.defaultOut = m["defaultOut"].toBool(); d.defaultRate = m["defaultRate"].toDouble(); d.kind = m["kind"].toString().toStdString(); d.group = m["group"].toString().toStdString(); d.bus = m["bus"].toString().toStdString(); v.push_back(d); } return v; }
+// IN + OUT TOGETHER: the devices whose input and output are one piece of hardware (USB first), and opening both sides of one at once
+QVariantList Engine::duplexDevices() const {
+  QVariantList l;
+  for (const am::DuplexPair& p : am::duplexPairs(devInfos(devices_), "wasapi")) { QVariantMap m; m["name"] = QString::fromStdString(p.name); m["inId"] = QString::fromStdString(p.inId); m["outId"] = QString::fromStdString(p.outId);
+    m["inName"] = QString::fromStdString(p.inName); m["outName"] = QString::fromStdString(p.outName); m["inChannels"] = p.inChannels; m["outChannels"] = p.outChannels; m["rate"] = p.rate; m["usb"] = p.usb; m["kind"] = QString::fromStdString(p.kind);
+    m["running"] = rt_ != nullptr && backend() == QStringLiteral("wasapi") && inDevName_ == m["inName"].toString() && outDevName_ == m["outName"].toString(); l << m; }
+  return l;
+}
+bool Engine::openDuplex(const QString& inId, const QString& outId, int frames) {
+  for (const QVariant& v : duplexDevices()) { const QVariantMap m = v.toMap(); if (m["inId"].toString() != inId || m["outId"].toString() != outId) continue;
+    // the person asked for this device's own input: it is opened whatever AUTO INPUT says (that switch is about inputs nobody chose)
+    const int in = std::clamp(m["inChannels"].toInt(), 1, kStrips), out = std::clamp(m["outChannels"].toInt(), 2, 32); const double rate = m["rate"].toDouble() > 8000 ? m["rate"].toDouble() : 48000.0;
+    const bool ok = open("wasapi", inId, outId, rate, frames > 0 ? frames : 256, in, out);
+    if (ok) { for (int i = 0; i < kStrips; ++i) if (i < in && inRoute_[i] < 0) setInputRoute(i, i);   // its inputs on the first strips (a strip set to "no input" earlier gets its input back)
+      lastRoute_ = QStringLiteral("IN + OUT TOGETHER: %1 · %2 input(s) and %3 output(s) of the same device  ·  ").arg(m["name"].toString()).arg(in).arg(out) + lastRoute_; }
+    emit stateChanged(); return ok; }
+  status_ = QStringLiteral("That device is not in the list any more: RESCAN (is it still plugged in?)"); emit stateChanged(); return false;
+}
+// WINDOWS SOUND from the console: Windows' default device, and its own settings pages
+bool Engine::setWindowsDefault(const QString& id, bool alsoCalls) {
+  std::string err; const bool ok = am::setDefaultEndpoint(id.toStdString(), alsoCalls, err); QString name = id;
+  for (const QVariant& v : winEndpoints_) if (v.toMap()["id"].toString() == id) name = v.toMap()["name"].toString();
+  winNote_ = ok ? QStringLiteral("Windows' default device is now %1.").arg(name) : QStringLiteral("Not changed: %1.").arg(QString::fromStdString(err));
+  if (ok && !simulated_) refreshDevices();
+  emit devicesChanged(); return ok;
+}
+bool Engine::openWindowsSound(const QString& page) {
+  std::string err; const bool ok = am::openSoundSettings(page.toStdString(), err);
+  winNote_ = ok ? QStringLiteral("Opened in Windows.") : QStringLiteral("Not opened: %1.").arg(QString::fromStdString(err)); emit devicesChanged(); return ok;
+}
 bool Engine::openBluetooth(const QString& backend, const QString& inId, const QString& outId, int frames) {
   auto find = [&](const QString& b, const QString& id) { for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"].toString() == b && d["id"].toString() == id) return d; } return QVariantMap(); };
   const QVariantMap out = find(backend, outId); if (out.isEmpty()) { btNote_ = QStringLiteral("That Bluetooth output is not in the list any more: RESCAN (is it still connected?)"); status_ = btNote_; emit stateChanged(); return false; }

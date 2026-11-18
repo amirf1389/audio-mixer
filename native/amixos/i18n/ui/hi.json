@@ -2258,5 +2258,19 @@
 "Back to the normal level (0 dB)": "सामान्य स्तर (0 dB) पर वापस",
 "BACK: where this fader was before the last move": "पिछला: जहाँ यह फेडर पिछली चाल से पहले था",
 "Mixer look": "मिक्सर लुक",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: फ्लैट स्ट्रिप्स जिनमें दस इन्सर्ट स्लॉट्स और प्रत्येक फेडर के बगल में आसान बटन होते हैं।   CONSOLE: हार्डवेयर-डेस्क स्ट्रिप्स"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: फ्लैट स्ट्रिप्स जिनमें दस इन्सर्ट स्लॉट्स और प्रत्येक फेडर के बगल में आसान बटन होते हैं।   CONSOLE: हार्डवेयर-डेस्क स्ट्रिप्स",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "यूएसबी / डिजिटल ऑडियो: इनपुट + आउटपुट एक साथ",
+"OPEN INPUT + OUTPUT": "इनपुट + आउटपुट खोलें",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "यह डिवाइस अपने स्वयं के इनपुट को पढ़ता है और एक ही समय में अपने स्वयं के आउटपुट पर प्ले करता है (माइक्रोफोन या लाइन इन, स्पीकर्स या डिजिटल आउट, सभी एक ही USB डिवाइस पर)। इसके इनपुट्स पहले चैनल स्ट्रिप्स में जाते हैं।",
+"WINDOWS SOUND": "विंडोज साउंड",
+"SOUND SETTINGS": "ध्वनि सेटिंग्स",
+"VOLUME MIXER": "वॉल्यूम मिक्सर",
+"PLAYBACK DEVICES": "प्लेबैक डिवाइस",
+"RECORDING DEVICES": "रिकॉर्डिंग उपकरण",
+"MICROPHONE PRIVACY": "माइक्रोफ़ोन गोपनीयता",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "प्लेबैक (स्पीकर, हेडफ़ोन, डिजिटल आउट)",
+"RECORDING (MICROPHONES, LINE IN)": "रिकॉर्डिंग (माइक्रोफोन, लाइन इन)",
+"No device of this kind in Windows.": "विंडोज में इस प्रकार का कोई डिवाइस नहीं है।",
+"MAKE DEFAULT": "डिफ़ॉल्ट करें",
+"enhancements off": "सुधार बंद"
 }

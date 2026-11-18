@@ -2157,5 +2157,16 @@
 "Quieter: -1 dB": "Cichsze: -1 dB",
 "Back to the normal level (0 dB)": "Powrót do normalnego poziomu (0 dB)",
 "BACK: where this fader was before the last move": "POWRÓT: pozycja tego suwaka przed ostatnią zmianą",
-"Mixer look": "Wygląd miksera"
+"Mixer look": "Wygląd miksera",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / CYFROWE AUDIO: WEJŚCIE I WYJŚCIE RAZEM",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Odczytuje sygnał z własnego wejścia urządzenia i jednocześnie odtwarza go na własnym wyjściu (wejście mikrofonowe lub liniowe, głośniki lub wyjście cyfrowe w tym samym urządzeniu USB). Sygnały z jego wejść trafiają do pierwszych pasków kanałowych.",
+"WINDOWS SOUND": "DŹWIĘK W SYSTEMIE WINDOWS",
+"SOUND SETTINGS": "USTAWIENIA DŹWIĘKU",
+"PLAYBACK DEVICES": "URZĄDZENIA DO ODTWARZANIA",
+"RECORDING DEVICES": "URZĄDZENIA NAGRYWAJĄCE",
+"MICROPHONE PRIVACY": "OCHRONA PRYWATNOŚCI W ZWIĄZKU Z UŻYCIEM MIKROFONU",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "ODTWARZANIE (GŁOŚNIKI, SŁUCHAWKI, WYJŚCIE CYFROWE)",
+"No device of this kind in Windows.": "W systemie Windows nie ma żadnego urządzenia tego typu.",
+"MAKE DEFAULT": "USTAL JAKO DOMYŚLNE",
+"enhancements off": "wyłączone ulepszenia"
 }

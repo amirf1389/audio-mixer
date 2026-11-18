@@ -2176,5 +2176,18 @@
 "Quieter: -1 dB": "أكثر هدوءًا: -1 ديسيبل",
 "Back to the normal level (0 dB)": "العودة إلى المستوى الطبيعي (0 ديسيبل)",
 "BACK: where this fader was before the last move": "العودة: المكان الذي كان فيه هذا المنزلق قبل الحركة الأخيرة",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: شرائط مسطحة مزودة بعشر فتحات إدخال وأزرار سهلة الاستخدام بجانب كل منزلق. وحدة التحكم: شرائط وحدة التحكم المادية"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: شرائط مسطحة مزودة بعشر فتحات إدخال وأزرار سهلة الاستخدام بجانب كل منزلق. وحدة التحكم: شرائط وحدة التحكم المادية",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / الصوت الرقمي: مدخل ومخرج معًا",
+"OPEN INPUT + OUTPUT": "فتح المدخلات + المخرجات",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "يقرأ الإدخال الخاص بالجهاز ويقوم بالتشغيل عبر مخرجه في الوقت نفسه (الميكروفون أو مدخل الخط، أو السماعات أو المخرج الرقمي على نفس جهاز USB). وتُوجه مدخلاته إلى شرائط القنوات الأولى.",
+"WINDOWS SOUND": "صوت ويندوز",
+"SOUND SETTINGS": "إعدادات الصوت",
+"PLAYBACK DEVICES": "أجهزة التشغيل",
+"RECORDING DEVICES": "أجهزة التسجيل",
+"MICROPHONE PRIVACY": "خصوصية الميكروفون",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "التشغيل (مكبرات الصوت، سماعات الرأس، مخرج رقمي)",
+"RECORDING (MICROPHONES, LINE IN)": "التسجيل (الميكروفونات، مدخل الخط)",
+"No device of this kind in Windows.": "لا يوجد جهاز من هذا النوع في نظام ويندوز.",
+"MAKE DEFAULT": "تعيين كقيمة افتراضية",
+"enhancements off": "إيقاف التحسينات"
 }

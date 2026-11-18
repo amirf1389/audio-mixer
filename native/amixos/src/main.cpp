@@ -1510,6 +1510,20 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // IN + OUT TOGETHER and WINDOWS SOUND, on a simulated Windows device list: the USB device's two sides are found as one, listed first; the pages are a fixed list
+        const QVariantList keepDev = engine.devices();
+        engine.simulateDevices({QVariantMap{{"backend", "wasapi"}, {"id", "o1"}, {"name", "Speakers (Realtek(R) Audio)"}, {"inChannels", 0}, {"outChannels", 2}, {"defaultRate", 48000.0}, {"defaultOut", true}, {"enhancementsOff", 0}},
+                                QVariantMap{{"backend", "wasapi"}, {"id", "i1"}, {"name", "Microphone Array (Realtek(R) Audio)"}, {"inChannels", 2}, {"outChannels", 0}, {"defaultRate", 48000.0}, {"defaultIn", true}},
+                                QVariantMap{{"backend", "wasapi"}, {"id", "o2"}, {"name", "Speakers (USB Audio CODEC)"}, {"inChannels", 0}, {"outChannels", 2}, {"defaultRate", 48000.0}, {"bus", "USB"}, {"enhancementsOff", 1}},
+                                QVariantMap{{"backend", "wasapi"}, {"id", "i2"}, {"name", "Microphone (USB Audio CODEC)"}, {"inChannels", 2}, {"outChannels", 0}, {"defaultRate", 48000.0}, {"bus", "USB"}},
+                                QVariantMap{{"backend", "wasapi"}, {"id", "o3"}, {"name", "Digital Audio (S/PDIF) (USB Audio CODEC)"}, {"inChannels", 0}, {"outChannels", 2}, {"defaultRate", 48000.0}, {"bus", "USB"}}});
+        const QVariantList dp = engine.duplexDevices(), we = engine.windowsEndpoints();
+        const bool pairOk = dp.size() == 2 && dp[0].toMap()["usb"].toBool() && dp[0].toMap()["name"].toString() == "USB Audio CODEC" && dp[0].toMap()["inId"].toString() == "i2" && dp[0].toMap()["outId"].toString() == "o2";
+        const bool gone = !engine.openDuplex("nope", "nope", 256), badPage = !engine.openWindowsSound("../evil"), badDef = !engine.setWindowsDefault("loopback:system", false);
+        if (!shots.isEmpty()) if (auto* sw = qobject_cast<QQuickWindow*>(qml.rootObjects().first())) { sw->setProperty("current", "asio"); QElapsedTimer t; t.start(); while (t.elapsed() < 900) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); sw->grabWindow().save(shots + "/soundcard-usb-windows.png"); }
+        std::printf("amixos --smoke: IN + OUT TOGETHER %d device(s), USB first and paired %d; WINDOWS SOUND %d endpoints listed; gone device %d, unknown page %d and a non-device default %d refused\n", int(dp.size()), pairOk, int(we.size()), gone, badPage, badDef);
+        engine.simulateDevices(keepDev); engine.refreshDevices();
+        if (!pairOk || we.size() != 5 || !gone || !badPage || !badDef) std::exit(89); }
       if (auto* dw = qobject_cast<QQuickWindow*>(qml.rootObjects().first())) {   // DAW LOOK (the default): every strip shows its ten insert slots; ten plug-ins per channel at most
         settings.setMixerStyle("daw"); dw->setProperty("current", "mixer"); { QElapsedTimer t; t.start(); while (t.elapsed() < 800) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }
         // the strips are made by a Repeater: they are children in the item tree (not QObject children of the window), so the tree is searched
@@ -1529,7 +1543,7 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(0, 9, "fx:reverb"); const bool tenth = engine.plugins(0)[9].toMap().value("kind").toString() == "fx:reverb";
         engine.setPlugin(0, 10, "fx:delay"); const bool eleventhRefused = engine.plugins(0).size() <= 10 || engine.plugins(0)[10].toMap().value("kind").toString().isEmpty();
         engine.setPlugin(0, 9, ""); settings.setMixerStyle("console"); { QElapsedTimer t; t.start(); while (t.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }
-        const bool backToConsole = find(root, "stripFader") != nullptr && !find(root, "dawStrip0"); settings.setMixerStyle("daw");
+        const bool backToConsole = find(root, "stripFader") != nullptr && !find(root, "dawStrip0");   // the CONSOLE look is the default: left on
         std::printf("amixos --smoke: DAW LOOK strip 1 %d, insert slots %d, console strips not built %d, 10th plug-in in %d, 11th refused %d, CONSOLE look back %d (limit %d)\n", strip != nullptr, nSlots, consoleHidden, tenth, eleventhRefused, backToConsole, engine.pluginSlotLimit());
         if (!strip || nSlots != 10 || !tenth || !eleventhRefused || !backToConsole || engine.pluginSlotLimit() != 10) std::exit(87); }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());

@@ -2169,5 +2169,18 @@
 "Back to the normal level (0 dB)": "Повернення до нормального рівня (0 дБ)",
 "BACK: where this fader was before the last move": "НАЗАД: положення цього фейдера до останнього переміщення",
 "Mixer look": "Зовнішній вигляд міксера",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: плоскі панелі з десятьма слотами для вставних ефектів та зручними кнопками поруч із кожним фейдером. КОНСОЛЬ: апаратні панелі"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: плоскі панелі з десятьма слотами для вставних ефектів та зручними кнопками поруч із кожним фейдером. КОНСОЛЬ: апаратні панелі",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / ЦИФРОВИЙ АУДІОСИГНАЛ: ВХІД І ВИХІД ОДНОЧАСНО",
+"OPEN INPUT + OUTPUT": "ВІДКРИТИ ВХІД + ВИХІД",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Зчитує сигнал з власного входу пристрою та одночасно відтворює його через власний вихід (мікрофон або лінійний вхід, динаміки або цифровий вихід на тому самому USB-пристрої). Сигнали з його входів надходять на перші канали.",
+"WINDOWS SOUND": "ЗВУК У WINDOWS",
+"SOUND SETTINGS": "НАЛАШТУВАННЯ ЗВУКУ",
+"VOLUME MIXER": "РЕГУЛЯТОР ГУЧНОСТІ",
+"PLAYBACK DEVICES": "ПРИСТРОЇ ДЛЯ ВІДТВОРЕННЯ",
+"RECORDING DEVICES": "ЗАПИСУЮЧІ ПРИСТРОЇ",
+"MICROPHONE PRIVACY": "КОНФІДЕНЦІЙНІСТЬ ВИКОРИСТАННЯ МІКРОФОНА",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "ВІДТВОРЕННЯ (ДИНАМІКИ, НАВУШНИКИ, ЦИФРОВИЙ ВИХІД)",
+"RECORDING (MICROPHONES, LINE IN)": "ЗАПИС (МІКРОФОНИ, ЛІНІЙНИЙ ВХІД)",
+"No device of this kind in Windows.": "У Windows немає пристроїв такого типу.",
+"MAKE DEFAULT": "ВСТАНОВИТИ ЯК СТАНДАРТ"
 }

@@ -111,6 +111,25 @@ int main() {
     // the S/PDIF pair of an ASIO interface
     expect(am::digitalOutputPair({"Out 1", "Out 2", "Out 3", "Out 4", "S/PDIF Out L", "S/PDIF Out R"}) == 4, "S/PDIF on outputs 5-6");
     expect(am::digitalOutputPair({"Analog 1", "Analog 2", "SPDIF 1", "SPDIF 2", "ADAT 1", "ADAT 2"}) == 2, "SPDIF on 3-4, ADAT ignored");
+    {   // IN + OUT TOGETHER: a USB device's input and output are found as one; app sound, Bluetooth and unpaired devices are not; USB first
+      auto dev = [](const char* id, const char* name, int in, int out, const char* kind, const char* group = "", const char* bus = "") { am::DeviceInfo d; d.backend = "wasapi"; d.id = id; d.name = name; d.inChannels = in; d.outChannels = out; d.kind = kind; d.group = group; d.bus = bus; return d; };
+      const std::vector<am::DeviceInfo> list = {
+        dev("o1", "Speakers (Realtek(R) Audio)", 0, 2, "speakers"), dev("i1", "Microphone Array (Realtek(R) Audio)", 2, 0, "microphone"),
+        dev("o2", "Speakers (USB Audio CODEC)", 0, 2, "speakers"), dev("i2", "Microphone (USB Audio CODEC)", 2, 0, "microphone"),
+        dev("o3", "Digital Output (2- UMC204HD 192k)", 0, 4, "digital", "c-77", "USB"), dev("i3", "Line (UMC204HD 192k)", 2, 0, "line", "c-77", "USB"),
+        dev("o4", "Headphones (WH-1000XM4)", 0, 2, "bluetooth"), dev("i4", "Headset (WH-1000XM4)", 1, 0, "bluetooth"),
+        dev("loopback:system", "Computer sound", 2, 0, "app"), dev("o5", "DELL U2720Q (NVIDIA High Definition Audio)", 0, 2, "digital")};
+      const std::vector<am::DuplexPair> pairs = am::duplexPairs(list);
+      expect(pairs.size() == 3, "three in + out devices");
+      if (pairs.size() == 3) {
+        expect(pairs[0].usb && pairs[1].usb && !pairs[2].usb, "USB devices first");
+        expect(pairs[0].name == "USB Audio CODEC" && pairs[0].inId == "i2" && pairs[0].outId == "o2", "paired by the name in brackets");
+        expect(pairs[1].inId == "i3" && pairs[1].outId == "o3" && pairs[1].outChannels == 4 && pairs[1].name == "UMC204HD 192k", "paired by the hardware group, Windows' numbering dropped");
+        expect(pairs[2].inId == "i1" && pairs[2].outId == "o1", "the built-in card last"); }
+      expect(am::duplexPairs(list, "asio").empty(), "another backend: none");
+      expect(am::soundSettingsTarget("sound") == "ms-settings:sound" && am::soundSettingsTarget("recording") == "control.exe mmsys.cpl,,1" && am::soundSettingsTarget("../evil").empty(), "settings pages: a fixed list");
+      std::string e; expect(!am::openSoundSettings("nope", e) && e == "no such settings page", "unknown page refused");
+    }
     expect(am::digitalOutputPair({"Out 1", "Out 2", "ADAT 1", "ADAT 2"}) == -1, "ADAT is not a speaker pair");
     expect(am::digitalOutputPair({"S/PDIF L", "S/PDIF R"}) == -1, "outputs 1-2 already carry the mix");
     expect(am::digitalOutputPair({"Line 1", "Line 2", "Line 3", "Optical L", "Optical R"}) == 3, "an optical pair starting on an odd output");

@@ -2165,5 +2165,15 @@
 "Back to the normal level (0 dB)": "Kembali ke paras biasa (0 dB)",
 "BACK: where this fader was before the last move": "BALIK: di mana fader ini berada sebelum pergerakan terakhir",
 "Mixer look": "Penampilan pengadun",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: jalur rata dengan sepuluh slot sisipan dan butang mudah di sebelah setiap fader. KONSOL: jalur meja perkakasan"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: jalur rata dengan sepuluh slot sisipan dan butang mudah di sebelah setiap fader. KONSOL: jalur meja perkakasan",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / AUDIO DIGITAL: INPUT + OUTPUT BERSAMA",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Membaca input peranti itu sendiri dan memainkannya ke outputnya sendiri pada masa yang sama (mikrofon atau input baris, pembesar suara atau output digital pada peranti USB yang sama). Inputnya disalurkan ke jalur saluran pertama.",
+"SOUND SETTINGS": "TETAPAN SUARA",
+"PLAYBACK DEVICES": "Peranti Main Balik",
+"RECORDING DEVICES": "Peranti Rakaman",
+"MICROPHONE PRIVACY": "KERAHSIAAN MIKROFON",
+"RECORDING (MICROPHONES, LINE IN)": "RAKAMAN (MIKROFON, LINE IN)",
+"No device of this kind in Windows.": "Tiada peranti seperti ini dalam Windows.",
+"MAKE DEFAULT": "JADIKAN DEFAULT",
+"enhancements off": "penambahbaikan dimatikan"
 }

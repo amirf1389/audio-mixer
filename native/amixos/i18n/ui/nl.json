@@ -2151,5 +2151,18 @@
 "Back to the normal level (0 dB)": "Terug naar het normale niveau (0 dB)",
 "BACK: where this fader was before the last move": "TERUG: de positie van deze fader vóór de laatste beweging",
 "Mixer look": "Uiterlijk van de mixer",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: platte strips met tien insert-slots en handige knoppen naast elke fader. CONSOLE: de hardware-strips op de mengtafel"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: platte strips met tien insert-slots en handige knoppen naast elke fader. CONSOLE: de hardware-strips op de mengtafel",
+"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / DIGITALE AUDIO: INVOER + UITVOER SAMEN",
+"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Leest de eigen ingang van het apparaat en speelt tegelijkertijd af via de eigen uitgang (microfoon- of lijningang, luidsprekers of digitale uitgang op hetzelfde USB-apparaat). De ingangen zijn gekoppeld aan de eerste kanaalstrips.",
+"WINDOWS SOUND": "WINDOWS-GELUID",
+"SOUND SETTINGS": "GELUIDSINSTELLINGEN",
+"VOLUME MIXER": "VOLUMEMIXER",
+"PLAYBACK DEVICES": "AFSPEELAPPARATEN",
+"RECORDING DEVICES": "OPNAMEAPPARATEN",
+"MICROPHONE PRIVACY": "PRIVACY MET BETREKKING TOT MICROFOONS",
+"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "AFSPELEN (LUIDSPREKERS, KOPTELEFOON, DIGITALE UITGANG)",
+"RECORDING (MICROPHONES, LINE IN)": "OPNAME (MICROFOONS, LINE IN)",
+"No device of this kind in Windows.": "In Windows bestaat er geen dergelijk apparaat.",
+"MAKE DEFAULT": "ALS STANDAARD INSTELLEN",
+"enhancements off": "verbeteringen uitgeschakeld"
 }
