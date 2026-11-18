@@ -144,3 +144,6 @@ build-win/
 screenshots-*/
 third_party/
 android/.robolectric/
+
+# website zip packages: made at release time by scripts/make-zips.js
+releases/zip/

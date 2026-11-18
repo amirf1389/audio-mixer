@@ -17,6 +17,8 @@
 #include "Engine.h"
 #include "vst3/vst3_host.hpp"
 #include "vst2/vst2_host.hpp"
+#include "zip/zipstore.hpp"
+#include <QStandardPaths>
 
 Settings::Settings(Engine* engine, QObject* parent) : QObject(parent), engine_(engine) {
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
@@ -149,4 +151,25 @@ bool Settings::openPluginBuilder() {
   if (!QFileInfo::exists(exe)) { note(QStringLiteral("The Plug-in Builder is not installed next to the console.")); return false; }
   const bool ok = QProcess::startDetached(exe, {}); note(ok ? QStringLiteral("Plug-in Builder opened: export a plug-in there, then RESCAN on PLUGINS.") : QStringLiteral("The Plug-in Builder did not start."));
   return ok;
+}
+
+QString Settings::systemUser() const { QString u = QString::fromLocal8Bit(qgetenv("USERNAME")); if (u.isEmpty()) u = QString::fromLocal8Bit(qgetenv("USER")); if (u.isEmpty()) u = QDir::home().dirName(); return u; }
+QString Settings::userDownloads() const { const QString d = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation); return QDir::toNativeSeparators(d.isEmpty() ? QDir::homePath() + "/Downloads" : d); }
+QVariantMap Settings::exportZip(const QString& toDir) {
+  QVariantMap r; r["ok"] = false; r["user"] = systemUser();
+  const QString folder = toDir.trimmed().isEmpty() ? userDownloads() : toDir.trimmed(); r["folder"] = QDir::toNativeSeparators(folder);
+  // only these files of the data folder, by name: what the user made. Nothing else there (licence, tokens, clock, log) is ever read for an export.
+  static const char* const kFiles[] = {"autosave.json", "arrangement.json", "pads.json"};
+  std::vector<am::zip::Entry> entries; QStringList names; qint64 bytes = 0;
+  for (const char* n : kFiles) { QFile f(dataFolder() + "/" + QString::fromLatin1(n)); if (!f.exists() || f.size() > static_cast<qint64>(am::zip::kMaxFileBytes) || !f.open(QIODevice::ReadOnly)) continue;
+    const QByteArray b = f.readAll(); entries.push_back({std::string("console/") + n, std::string(b.constData(), static_cast<std::size_t>(b.size()))}); names << QString::fromLatin1(n); bytes += b.size(); }
+  if (entries.empty()) { r["error"] = QStringLiteral("There is nothing to export yet: the console has not saved anything."); return r; }
+  const QString stamp = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+  const QByteArray readme = ("AmF X1 export, " + stamp + "\r\n\r\nThe console's saved state (with its scenes), the sample pads and the arrangement.\r\n"
+                             "To bring them back: close the console and copy the files of the console folder into its data folder.\r\n\r\nFiles: " + names.join(", ") + "\r\n").toUtf8();
+  entries.insert(entries.begin(), {"README.txt", std::string(readme.constData(), static_cast<std::size_t>(readme.size()))});
+  if (!QDir().mkpath(folder)) { r["error"] = QStringLiteral("The folder cannot be used: %1").arg(folder); return r; }
+  QString path = folder + "/AmF-X1-export-" + stamp + ".zip"; for (int k = 2; QFile::exists(path) && k < 1000; ++k) path = folder + "/AmF-X1-export-" + stamp + "-" + QString::number(k) + ".zip";   // never over an earlier export
+  std::string err; if (!am::zip::writeZip(path.toStdString(), entries, err)) { r["error"] = QString::fromStdString(err); return r; }
+  r["ok"] = true; r["path"] = QDir::toNativeSeparators(path); r["files"] = names; r["bytes"] = bytes; return r;
 }

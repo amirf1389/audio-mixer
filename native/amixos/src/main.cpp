@@ -54,6 +54,7 @@
 #include "paths/paths.hpp"
 #include "samples/samples.hpp"
 #include "Links.h"
+#include "zip/zipstore.hpp"
 #include <QHostAddress>
 #include <QSettings>
 #include <QIcon>
@@ -1522,6 +1523,15 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // EXPORT: a .zip with only the console's own files, in the folder asked for, never over an earlier one
+        const QString dir = QDir::tempPath() + "/amixos-smoke-export"; QDir(dir).removeRecursively(); engine.saveNow();
+        { QFile f(settings.dataFolder() + "/daemon.tokens.json"); const bool had = f.exists(); if (!had && f.open(QIODevice::WriteOnly)) { f.write("{\"secret\":1}"); f.close(); }
+          const QVariantMap a1 = settings.exportZip(dir), a2 = settings.exportZip(dir); std::vector<am::zip::Listed> got; std::string err; const bool read = am::zip::listZip(a1["path"].toString().toStdString(), got, err);
+          bool crc = !got.empty(), leak = false, state = false; for (const auto& g : got) { crc = crc && g.crcOk; if (g.name.find("token") != std::string::npos || g.name.find("clock") != std::string::npos || g.name.find("audit") != std::string::npos) leak = true; if (g.name == "console/autosave.json") state = true; }
+          if (!had) QFile::remove(settings.dataFolder() + "/daemon.tokens.json");
+          std::printf("amixos --smoke: EXPORT %d files in a .zip that reads back %d with the saved state %d, nothing secret in it %d, a second export beside the first %d, user \"%s\"\n", int(got.size()), read && crc, state, !leak, a2["ok"].toBool() && a2["path"] != a1["path"], qPrintable(settings.systemUser()));
+          if (!a1["ok"].toBool() || !read || !crc || !state || leak || !a2["ok"].toBool() || a2["path"] == a1["path"] || settings.systemUser().isEmpty()) std::exit(94); }
+        QDir(dir).removeRecursively(); }
       { // PLUG-IN DOWNLOADS: only well-formed entries of the list are offered; a file there counts as installed and REMOVE deletes only that file
         const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* file, const char* url, double size) { QJsonObject f; f["name"] = file; f["url"] = url; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "win-x64-native", "linux-deb", "linux-tar", "macos", "android-apk", "win-x86-native"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = "Test plug-in"; o["version"] = "1.0"; o["files"] = files; return o; };
         const char* good = "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/Test.vst3";

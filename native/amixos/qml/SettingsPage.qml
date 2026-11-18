@@ -48,6 +48,18 @@ Flickable {
             Opt { label: i18n.t("Peak hold", i18n.lang); hint: i18n.t("How long the peak line stays before falling", i18n.lang); Choice { options: [{t: "OFF", v: 0}, {t: "0.5 s", v: 500}, {t: "1.4 s", v: 1400}, {t: "3 s", v: 3000}, {t: "∞", v: 999999}]; value: settings.peakHoldMs; onPicked: function (v) { settings.peakHoldMs = v } } }
         }
         Panel {
+            objectName: "exportPanel"; Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; property var res: ({})
+            title: i18n.t("EXPORT", i18n.lang)
+            subtitle: i18n.t("Your scenes, sample pads and arrangement in one .zip file (it opens in Windows, WinZip and WinRAR). No licence, password or network token goes into it.", i18n.lang)
+            Opt { label: i18n.t("Export to Downloads", i18n.lang); hint: i18n.t("Signed in to this computer as", i18n.lang) + " " + settings.systemUser() + "  ·  " + settings.userDownloads()
+                Rectangle { id: exBtn; objectName: "exportBtn"; implicitWidth: exT.implicitWidth + 24; implicitHeight: 26; radius: 9; color: exH.hovered ? Theme.ov(0.16) : Theme.ov(0.09); border.color: Theme.emerald
+                    Text { id: exT; anchors.centerIn: parent; text: i18n.t("EXPORT .ZIP", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.6 }
+                    HoverHandler { id: exH; cursorShape: Qt.PointingHandCursor }
+                    MouseArea { anchors.fill: parent; onClicked: { let p = exBtn.parent; while (p && p.objectName !== "exportPanel") p = p.parent; if (p) p.res = settings.exportZip("") } } } }
+            Text { objectName: "exportNote"; visible: res.ok !== undefined; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: res.ok ? Theme.emerald : Theme.danger
+                text: res.ok ? i18n.t("Saved:", i18n.lang) + " " + res.path + "  (" + (res.files ? res.files.length : 0) + " " + i18n.t("files", i18n.lang) + ", " + Math.max(1, Math.round((res.bytes || 0) / 1024)) + " KB)" : i18n.t(res.error || "", i18n.lang) }
+        }
+        Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("FACTORY RESET", i18n.lang)
             subtitle: i18n.t("Back to the state the console left the factory in. The licence stays.", i18n.lang)

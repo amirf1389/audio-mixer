@@ -210,6 +210,7 @@ pages.push(page({
   intro: `AmF X1 ${esc(SHOWN)}. Beta builds are for testers: please report anything that does not work.`,
   jsonld: [{ ...SOFTWARE, offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', description: 'Basic edition' } }],
   body: `<section class="block"><div class="wrap">
+<p class="note">Not sure which file is yours? <a href="/get" rel="nofollow">Get the download for this device</a>: the site looks at what your browser says your system is (Windows, Android or Linux) and hands you that one as a .zip, which opens in Windows itself, WinZip and WinRAR. Nothing about you is stored.</p>
 <h2>All downloads</h2>
 <p class="sub">Choose the file for your system. The SHA-256 checksum lets you confirm the file is exactly the one published here.</p>
 <div class="table-wrap"><table class="dl-table"><thead><tr><th>Package</th><th>File</th><th>SHA-256</th><th></th></tr></thead><tbody>

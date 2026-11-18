@@ -86,6 +86,12 @@ class Settings : public QObject {
   Q_INVOKABLE bool openPluginBuilder();   // starts "AmF X1 Plugin Builder" next to the console (a separate program); its exports show up here after RESCAN
   Q_INVOKABLE bool openDiagnostics();     // the separate AmF X1 Diagnostics program (speakers, headphones, microphones, drivers)
   Q_INVOKABLE QString vstUserFolder();                // the console's own plug-in folder (<data>/vst): created, and saved among the scanned folders, the first time it is asked for
+  // EXPORT: the console's own things (its saved state with the scenes, the sample pads, the arrangement) in one .zip in the signed-in user's
+  // Downloads folder. Only those files: no licence, no network tokens, no log. toDir = "" means that Downloads folder.
+  // Returns {ok, path, folder, user, files, bytes, error}.
+  Q_INVOKABLE QVariantMap exportZip(const QString& toDir = QString());
+  Q_INVOKABLE QString systemUser() const;             // the name of the user signed in to this computer (shown beside the export)
+  Q_INVOKABLE QString userDownloads() const;          // that user's Downloads folder
   Q_INVOKABLE bool openVstFolder(const QString& dir = QString());   // shows a plug-in folder in the system's file manager; "" = the console's own
   QString dataFolder() const; QVariantMap folders() const;
   QString message() const { return msg_; }
