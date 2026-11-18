@@ -47,7 +47,7 @@ function downloads() {
 const DL = downloads();
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const NAV = [['/', 'Home'], ['/features', 'Features'], ['/extensions', 'Extensions'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'Buy']];
+const NAV = [['/', 'Home'], ['/features', 'Features'], ['/extensions', 'Extensions'], ['/plugins', 'Plug-ins'], ['/updates', 'Updates'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'Buy']];
 
 function page({ slug, title, description, h1, intro, crumbs = true, body, jsonld = [], hero = null, changefreq = 'monthly', priority = '0.7' }) {
   const url = SITE + (slug === '/' ? '/' : slug);
@@ -367,6 +367,72 @@ ${byGroup.map(([g, l]) => `<h2 class="mt">${esc(title(g))}</h2>\n<div class="gri
 // 404
 const notFound = page({ slug: '/404', title: 'Page not found — AmF X1', h1: 'Page not found', description: 'This page does not exist.', intro: 'The page you asked for does not exist.', crumbs: false,
   body: `<section class="block"><div class="wrap"><p><a href="/">Go to the home page</a> or <a href="/download">download AmF X1</a>.</p></div></section>` });
+// UPDATES, PLUG-INS and the read-only API: all three come from the same files the console's signed update list is made from
+// (releases/features.json, releases/plugins.json with the files in releases/plugins/, releases/update.json), so the website, the API and
+// the console never disagree. The API is plain JSON files under /api/v1/ (no server code): a CDN in front of the site can cache them.
+function releaseFeed() { try { return (JSON.parse(fs.readFileSync(path.join(ROOT, 'releases', 'features.json'), 'utf8')).features || []).filter(f => f && f.version && Array.isArray(f.items)); } catch (_) { return []; } }
+function pluginFeed() {
+  let list = []; try { list = JSON.parse(fs.readFileSync(path.join(ROOT, 'releases', 'plugins.json'), 'utf8')).plugins || []; } catch (_) { list = []; }
+  const crypto = require('node:crypto'), out = [];
+  for (const p of list) { const files = {};
+    for (const [key, name] of Object.entries(p.files || {})) { const f = path.join(ROOT, 'releases', 'plugins', name);
+      if (!/^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,74}\.vst3$/i.test(name) || name.includes('..') || !fs.existsSync(f)) continue;   // the same rule the console applies to a file name
+      files[key] = { name, url: `${SITE}/releases/plugins/${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex') }; }
+    if (/^[a-z0-9][a-z0-9._-]{0,47}$/.test(String(p.id)) && Object.keys(files).length) out.push({ id: p.id, name: String(p.name || p.id), version: String(p.version || ''), note: String(p.note || ''), files }); }
+  return out;
+}
+const KIND = line => { const m = /^(NEW|ENHANCED|FIXED|SECURITY|REMOVED) · (.*)$/.exec(line); return m ? [m[1], m[2]] : ['', line]; };
+{
+  const feed = releaseFeed(), latest = feed[0];
+  pages.push(page({
+    slug: '/updates', title: `Updates and patch notes — AmF X1 ${SHOWN}`, h1: 'Updates and patch notes', changefreq: 'weekly', priority: '0.8',
+    description: `What changed in each AmF X1 release: new features, enhancements, fixes and security changes. The latest is ${latest ? latest.version : SHOWN}.`,
+    intro: `Every release of AmF X1, newest first. The console finds an update by itself and checks it against AMFB Audio's signature before it offers it.`,
+    body: `<section class="block"><div class="wrap">
+<h2>How an update reaches your console</h2>
+<div class="grid">
+${card('1', 'A signed list', 'Each release is described in one list, signed with AMFB Audio&#39;s key. The console accepts nothing whose signature does not match.')}
+${card('2', 'A checked download', 'The installer comes over https and is compared with the size and SHA-256 in the signed list. A file that does not match is deleted.')}
+${card('3', 'You decide', 'The console tells you an update is ready. INSTALL AND RESTART is your choice; nothing installs behind your back.')}
+</div>
+<p class="note mt">Offline? Copy the update folder to a USB stick and use LOCAL UPDATE in the console: the same signature and checksum checks apply.</p>
+${feed.map(f => `<h2 class="mt" id="v${esc(f.version)}">${esc(f.title || 'Release ' + f.version)}</h2>
+<p class="sub">Version ${esc(f.version)}${f.date ? ' · ' + esc(f.date) : ''}</p>
+<ul>${f.items.map(i => { const [k, t] = KIND(String(i)); return `<li>${k ? `<strong>${esc(k.charAt(0) + k.slice(1).toLowerCase())}:</strong> ` : ''}${esc(t)}</li>`; }).join('')}</ul>`).join('\n')}
+<h2 class="mt">For developers</h2>
+<p>The same notes as JSON: <a href="/api/v1/features.json">/api/v1/features.json</a>. The current version: <a href="/api/v1/version.json">/api/v1/version.json</a>. The signed update list the console reads: <a href="/api/v1/update.json">/api/v1/update.json</a>.</p>
+</div></section>`,
+  }));
+  const plug = pluginFeed();
+  pages.push(page({
+    slug: '/plugins', title: 'Plug-in downloads — AmF X1', h1: 'Plug-in downloads', changefreq: 'weekly', priority: '0.7',
+    description: `Plug-ins from AMFB Audio for the AmF X1 console (${plug.length} listed). Each download is listed with its size and SHA-256 and is offered inside the console from a signed list.`,
+    intro: `Plug-ins from AMFB Audio for the racks of AmF X1. In the console: STORE, then DOWNLOADS. The files are also here, each with its size and checksum.`,
+    body: `<section class="block"><div class="wrap">
+${plug.length ? `<div class="grid">${plug.map(p => card(esc(p.version || 'Plug-in'), esc(p.name), `${esc(p.note)}${p.note ? '<br>' : ''}${Object.values(p.files).map(f => `<a href="${esc(f.url.replace(SITE, ''))}" download>${esc(f.name)}</a> · ${humanSize(f.size)}<br><code>${f.sha256}</code>`).join('<br>')}`)).join('\n')}</div>`
+  : '<p class="note">No plug-in is published for download yet. The console already includes its built-in effects: see <a href="/extensions">Extensions and effects</a>.</p>'}
+<h2 class="mt">How a plug-in download is checked</h2>
+<p>The console offers only the plug-ins in AMFB Audio&#39;s signed list. A download comes over https, is compared with the size and SHA-256 in that list, and is saved into the console&#39;s own plug-in folder. Nothing is run by the download, and a file that does not match is deleted.</p>
+<p>Plug-ins you already own load too: ADD VST on the STORE page takes their folder.</p>
+<h2 class="mt">For developers</h2>
+<p>The list as JSON: <a href="/api/v1/plugins.json">/api/v1/plugins.json</a>.</p>
+</div></section>`,
+  }));
+}
+// the read-only API: plain JSON files, written by a full build
+function writeApi() {
+  const dir = path.join(OUT, 'api', 'v1'); fs.mkdirSync(dir, { recursive: true }); const written = [];
+  const put = (name, obj) => { const f = path.join(dir, name); fs.writeFileSync(f, JSON.stringify(obj, null, 2) + '\n'); written.push(f); };
+  const feed = releaseFeed();
+  put('version.json', { product: 'AmF X1', version: VERSION, shown: SHOWN, released: feed[0] && feed[0].version === VERSION ? feed[0].date : null, download: SITE + '/download', notes: SITE + '/updates' });
+  put('features.json', { product: 'AmF X1', features: feed });
+  put('plugins.json', { product: 'AmF X1', plugins: pluginFeed() });
+  const signed = path.join(ROOT, 'releases', 'update.json');   // the signed list exactly as it is: a copy, never re-made here (only the vendor key can sign it)
+  if (fs.existsSync(signed)) { const f = path.join(dir, 'update.json'); fs.copyFileSync(signed, f); written.push(f); }
+  put('index.json', { product: 'AmF X1', api: 'v1', readOnly: true, endpoints: { version: '/api/v1/version.json', features: '/api/v1/features.json', plugins: '/api/v1/plugins.json', update: '/api/v1/update.json' } });
+  return written;
+}
+
 notFound.html = notFound.html.replace('<meta name="robots" content="index, follow, max-image-preview:large">', '<meta name="robots" content="noindex">').replace(/<link rel="canonical"[^>]*>\n/, '');
 
 // --only <slug>: write that one page and add it to the sitemap, leaving every other page as it is (a full build is a release step)
@@ -387,8 +453,9 @@ function build() {
   fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `  <url><loc>${u.loc}</loc><lastmod>${today}</lastmod><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`).join('\n')}\n</urlset>\n`);
   fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /request-license\nDisallow: /releases/\n\nSitemap: ${SITE}/sitemap.xml\n`);
   written.push(path.join(OUT, 'sitemap.xml'), path.join(OUT, 'robots.txt'));
+  written.push(...writeApi());
   return written;
 }
 
 if (require.main === module) for (const f of (arg('--only') ? buildOnly(arg('--only')) : build())) console.log(path.relative(ROOT, f));
-module.exports = { build, buildOnly, storeCatalog, pages, FAQ, SITE };
+module.exports = { build, buildOnly, storeCatalog, releaseFeed, pluginFeed, writeApi, pages, FAQ, SITE };
