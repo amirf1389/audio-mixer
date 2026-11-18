@@ -28,14 +28,6 @@ QtObject {
     readonly property color danger: dark ? "#ef4466" : "#dc2626"
     readonly property color violet: dark ? "#8b5cf6" : "#6d28d9"
     readonly property color pink: dark ? "#f472b6" : "#db2777"
-    // THE ANALOG DESK: brushed metal panels, recessed wells, lettering printed on the metal
-    readonly property color metal: dark ? "#2e3035" : "#c9cdd3"
-    readonly property color metalLit: dark ? "#3a3d43" : "#dfe2e7"       // the selected channel
-    readonly property color metalEdge: dark ? "#55585f" : "#f4f5f7"
-    readonly property color metalShade: dark ? "#141517" : "#8f949c"
-    readonly property color well: dark ? "#0d0e10" : "#1b1c20"
-    readonly property color engrave: dark ? "#e6e2d6" : "#1c1d20"
-    readonly property color engraveShade: dark ? "#000000" : "#ffffff"
     readonly property string product: "AmF X1"
     readonly property string vendor: "AMFB Audio"
     readonly property string mono: "JetBrains Mono, DejaVu Sans Mono, Consolas, monospace"

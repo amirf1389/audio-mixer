@@ -18,52 +18,30 @@ Item {
     property int rackBank: 0                           // which ten slots of the rack are shown (PRO and up have more than ten)
     property bool rack: settings.rackDefault           // the PLUGIN RACK of the selected channel, under the action bar
     property bool rackCompact: settings.rackCompactDefault   // one line of chips instead of the cards
-    component ModKey: Rectangle { id: mk; property string label; property bool lit: false; property color tint: Theme.cyan; readonly property color ht: Theme.harm(tint); property color litText: "#101010"; signal clicked()
-        implicitWidth: 56; implicitHeight: 24; radius: 2; border.width: 1; border.color: mkH.hovered ? Theme.amber : "#08090a"
-        gradient: Gradient { GradientStop { position: 0; color: mk.lit ? Qt.lighter(mk.ht, 1.3) : "#4b4e54" } GradientStop { position: 0.5; color: mk.lit ? mk.ht : "#2c2e33" } GradientStop { position: 1; color: mk.lit ? Qt.darker(mk.ht, 1.5) : "#1b1c20" } }
-        Rectangle { visible: mk.lit; anchors.centerIn: parent; width: parent.width + 6; height: parent.height + 6; radius: 5; z: -1; color: Qt.rgba(mk.ht.r, mk.ht.g, mk.ht.b, 0.28) }
-        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 1; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, mk.lit ? 0.35 : 0.10) }
-        Text { anchors.centerIn: parent; text: i18n.t(mk.label, i18n.lang); color: mk.lit ? mk.litText : Qt.lighter(mk.ht, 1.3); font.family: Theme.sans; font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.5 }
+    component ModKey: Rectangle { id: mk; property string label; property bool lit: false; property color tint: Theme.cyan; readonly property color ht: Theme.harm(tint); property color litText: "#000"; signal clicked()
+        implicitWidth: 56; implicitHeight: 24; radius: 8; color: lit ? ht : Theme.ov(0.06); border.width: 1; border.color: lit ? Qt.rgba(ht.r, ht.g, ht.b, 0.9) : (mkH.hovered ? Qt.rgba(ht.r, ht.g, ht.b, 0.55) : Theme.lineSoft)
+        gradient: Gradient { GradientStop { position: 0; color: mk.lit ? Qt.rgba(mk.ht.r, mk.ht.g, mk.ht.b, 0.85) : Theme.ov(mkH.hovered ? 0.11 : 0.07) } GradientStop { position: 1; color: mk.lit ? Qt.rgba(mk.ht.r, mk.ht.g, mk.ht.b, 0.62) : Theme.ov(0.03) } }
+        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 7; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, mk.lit ? 0.30 : 0.06) }
+        Text { anchors.centerIn: parent; text: i18n.t(mk.label, i18n.lang); color: mk.lit ? mk.litText : Qt.rgba(mk.ht.r, mk.ht.g, mk.ht.b, 0.85); font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 0.5 }
         HoverHandler { id: mkH; cursorShape: Qt.PointingHandCursor }
         MouseArea { anchors.fill: parent; onClicked: mk.clicked() } }
     component ModPanel: Rectangle { id: mp; property color tint: Theme.orange; default property alias body: mpCol.data
-        radius: 2; border.width: 1; border.color: "#0a0a0b"   // a metal module of the desk: its colour is a painted line under the top screws
-        gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: Theme.metalEdge } GradientStop { position: 0.03; color: Theme.metal } GradientStop { position: 0.97; color: Theme.metal } GradientStop { position: 1; color: Theme.metalShade } }
-        Repeater { model: 4; Rectangle { x: index % 2 ? mp.width - 11 : 4; y: index < 2 ? 4 : mp.height - 11; width: 7; height: 7; radius: 3.5; border.color: "#0a0a0b"
-            gradient: Gradient { GradientStop { position: 0; color: "#9a9da3" } GradientStop { position: 1; color: "#4a4d52" } }
-            Rectangle { anchors.centerIn: parent; width: 5; height: 1; color: "#1a1b1d"; rotation: 25 + index * 47 } } }
-        Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: 6; width: parent.width - 34; height: 3; radius: 1; color: mp.tint }
-        ColumnLayout { id: mpCol; anchors.fill: parent; anchors.margins: 9; anchors.topMargin: 16; anchors.bottomMargin: 14; spacing: 6 } }
+        radius: 14; color: Theme.card; border.width: 1; border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.65)
+        Rectangle { anchors.fill: parent; radius: parent.radius   // the module's glow: strong at the top, fading down
+            gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.30) } GradientStop { position: 0.28; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.07) } GradientStop { position: 1; color: Qt.rgba(mp.tint.r, mp.tint.g, mp.tint.b, 0.12) } } }
+        Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: 1; width: parent.width * 0.6; height: 3; radius: 2; color: mp.tint; opacity: 0.9 }
+        ColumnLayout { id: mpCol; anchors.fill: parent; anchors.margins: 9; anchors.topMargin: 10; spacing: 6 } }
     component Lamp: Rectangle { property color tint: Theme.emerald; property bool lit: true; width: 7; height: 7; radius: 4; color: lit ? tint : Theme.ov(0.15)
         Rectangle { anchors.centerIn: parent; width: 13; height: 13; radius: 7; color: Qt.rgba(parent.tint.r, parent.tint.g, parent.tint.b, 0.25); visible: parent.lit } }
-    component ReadPill: Rectangle { property alias text: rpT.text; property color tint: Theme.amber; Layout.fillWidth: true; implicitHeight: 18; radius: 1; color: "#060607"; border.color: "#000"
-        Text { id: rpT; anchors.centerIn: parent; color: Qt.lighter(parent.tint, 1.15); font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
+    component ReadPill: Rectangle { property alias text: rpT.text; property color tint: Theme.amber; Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: Qt.rgba(tint.r, tint.g, tint.b, 0.12); border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.45)
+        Text { id: rpT; anchors.centerIn: parent; color: parent.tint; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
 
-    // ---- THE ANALOG CONSOLE LOOK: a metal channel strip the way a hardware desk is built ----
-    // a screw head in a panel corner
-    component Screw: Rectangle { property real turn: 30; width: 7; height: 7; radius: 3.5; border.color: "#0a0a0b"; border.width: 1
-        gradient: Gradient { GradientStop { position: 0; color: "#9a9da3" } GradientStop { position: 1; color: "#4a4d52" } }
-        Rectangle { anchors.centerIn: parent; width: 5; height: 1; color: "#1a1b1d"; rotation: parent.turn } }
-    // a lit square key: dark cap with coloured lettering when off, glowing in its colour when on
-    component AKey: Rectangle { id: ak; property string t; property bool on: false; property color hue: Theme.accent; property int strip: 0; signal hit()
-        implicitWidth: 20; implicitHeight: 20; radius: 2; border.width: 1; border.color: "#08090a"
-        gradient: Gradient { GradientStop { position: 0; color: ak.on ? Qt.lighter(ak.hue, 1.35) : "#4b4e54" } GradientStop { position: 0.5; color: ak.on ? ak.hue : "#2c2e33" } GradientStop { position: 1; color: ak.on ? Qt.darker(ak.hue, 1.5) : "#1b1c20" } }
-        Rectangle { visible: ak.on; anchors.centerIn: parent; width: parent.width + 6; height: parent.height + 6; radius: 5; z: -1; color: Qt.rgba(ak.hue.r, ak.hue.g, ak.hue.b, 0.30) }   // the lamp's glow on the panel
-        Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 1; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, ak.on ? 0.35 : 0.10) }
-        Text { anchors.centerIn: parent; text: ak.t; color: ak.on ? "#101010" : Qt.lighter(ak.hue, 1.25); font.family: Theme.sans; font.pixelSize: 8; font.bold: true }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = ak.strip; ak.hit() } } }
-    // an LED ladder: green to 0 VU, yellow above, red at the top; the segments are a printed mask over one bar (nothing repaints with the level)
-    component LedLadder: Rectangle { id: ll; property real db: -120; property bool clip: false; property real floorDb: -60; property real topDb: 10
-        implicitWidth: 9; radius: 1; color: "#060607"; border.color: "#000"; border.width: 1
-        readonly property real lvl: Math.max(0, Math.min(1, (db - floorDb) / (topDb - floorDb)))
-        Item { x: 2; width: parent.width - 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 2; height: (parent.height - 4) * ll.lvl; clip: true
-            Rectangle { width: parent.width; height: ll.height - 4; anchors.bottom: parent.bottom
-                gradient: Gradient { GradientStop { position: 0; color: "#ff3b30" } GradientStop { position: 0.14; color: "#ff3b30" } GradientStop { position: 0.15; color: "#ffcc00" } GradientStop { position: 0.36; color: "#ffcc00" } GradientStop { position: 0.37; color: "#34d058" } GradientStop { position: 1; color: "#1f9d3f" } } } }
-        Canvas { anchors.fill: parent; onPaint: { const c = getContext("2d"); c.reset(); c.fillStyle = "#060607"; for (let y = height - 2; y > 2; y -= 5) c.fillRect(1, y - 1, width - 2, 1.5) } onHeightChanged: requestPaint() }
-        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: -7; width: 5; height: 5; radius: 2.5; color: ll.clip ? "#ff3b30" : "#3a1512"; border.color: "#000" } }
-    // ONE CHANNEL STRIP of the analog desk, top to bottom: the channel number between two screws, the input, the ten INSERT points (click an
-    // empty one: add an effect or a VST; a filled one: its editor; its lamp or a right-click: bypass), the PAN knob, the lit MUTE / SOLO / REC /
-    // AUTO MIX keys, the long fader with its printed scale, an LED ladder and the easy keys, the level window and the name on a tape strip
+    component DawChip: Rectangle { property string t; property bool on: false; property color hue: Theme.accent; property int strip: 0; signal hit()
+        implicitWidth: 20; implicitHeight: 16; radius: 2; color: on ? hue : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: on ? hue : (Theme.dark ? "#3a3e47" : "#c9ced8")
+        Text { anchors.centerIn: parent; text: parent.t; color: parent.on ? "#0b0d10" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = parent.strip; parent.hit() } } }
+    // ONE DAW STRIP: the colour tab and name, the input, TEN INSERT SLOTS (click an empty one: add an effect or a VST; click a filled one: its
+    // editor; the dot or a right-click: bypass), pan, MUTE / SOLO / REC / AUTO MIX, the fader with its IN / OUT meter, the level and the name plate
     component DawStrip: Rectangle {
         id: ds
         property int idx: 0
@@ -75,105 +53,98 @@ Item {
         readonly property bool selected: page.sel === idx
         readonly property bool locked: idx >= engine.licensedChannels
         objectName: "dawStrip" + idx
-        radius: 2; clip: true; border.width: 1; border.color: selected ? Theme.amber : "#0a0a0b"
-        gradient: Gradient { orientation: Gradient.Horizontal   // brushed metal: a light edge on the left, a dark one on the right
-            GradientStop { position: 0; color: Theme.metalEdge } GradientStop { position: 0.04; color: ds.selected ? Theme.metalLit : Theme.metal } GradientStop { position: 0.96; color: ds.selected ? Theme.metalLit : Theme.metal } GradientStop { position: 1; color: Theme.metalShade } }
+        radius: 3; clip: true
+        color: Theme.dark ? (selected ? "#2c2f36" : "#23252a") : (selected ? "#e4e7ed" : "#eef0f3")
+        border.color: selected ? Theme.accent : (Theme.dark ? "#30333a" : "#d5d9e0"); border.width: selected ? 1.5 : 1
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton; onPressed: function (m) { engine.selectedStrip = ds.idx; m.accepted = false } }
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 5; anchors.topMargin: 4; anchors.bottomMargin: 4; spacing: 3
-            // THE CHANNEL NUMBER between two screws
-            Item { Layout.fillWidth: true; implicitHeight: 13
-                Screw { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; turn: 20 + ds.idx * 37 }
-                Screw { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; turn: 70 + ds.idx * 53 }
-                Text { anchors.centerIn: parent; text: ds.idx + 1; color: Theme.engrave; font.family: Theme.sans; font.pixelSize: 11; font.bold: true; style: Text.Sunken; styleColor: Theme.engraveShade } }
-            // INPUT: which socket feeds this channel
-            Rectangle { Layout.fillWidth: true; implicitHeight: 14; radius: 1; color: Theme.well; border.color: "#000"
+            anchors.fill: parent; anchors.margins: 4; spacing: 3
+            // NAME + COLOUR TAB
+            Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 2; color: Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.22 : 0.30)
+                Rectangle { width: 3; height: parent.height; radius: 1; color: ds.sc }
+                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: chNo.left; anchors.verticalCenter: parent.verticalCenter; text: ds.st ? ds.st.name : ""; elide: Text.ElideRight
+                    color: Theme.ink; font.family: Theme.sans; font.pixelSize: 9; font.bold: true }
+                Text { id: chNo; anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: ds.idx + 1; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } }
+            // INPUT
+            Rectangle { Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
                 readonly property int route: engine.inputRoutes[ds.idx] !== undefined ? engine.inputRoutes[ds.idx] : -1
-                Text { anchors.centerIn: parent; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideMiddle; font.family: Theme.mono; font.pixelSize: 7; font.bold: true
-                    text: parent.route >= 0 ? (engine.running ? engine.inputLabel(parent.route) : i18n.t("IN ", i18n.lang) + (parent.route + 1)) : i18n.t("NO INPUT", i18n.lang); color: parent.route >= 0 ? "#5ee08a" : "#7a7d84" }
+                Text { anchors.centerIn: parent; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideMiddle; font.family: Theme.mono; font.pixelSize: 7
+                    text: parent.route >= 0 ? (engine.running ? engine.inputLabel(parent.route) : i18n.t("IN ", i18n.lang) + (parent.route + 1)) : i18n.t("NO INPUT", i18n.lang); color: parent.route >= 0 ? Theme.emerald : Theme.dim }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = ds.idx; page.go("routing") } } }
-            // TEN INSERT POINTS
-            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("INSERTS", i18n.lang); color: Theme.engrave; opacity: 0.8; font.family: Theme.sans; font.pixelSize: 6; font.bold: true; font.letterSpacing: 1.5 }
-            ColumnLayout { Layout.fillWidth: true; spacing: 1
-                Repeater { model: ds.pl
-                    delegate: Rectangle { objectName: "dawSlot" + ds.idx + "_" + index
-                        readonly property bool empty: !modelData.kind
-                        Layout.fillWidth: true; implicitHeight: 14; radius: 1; border.width: 1; border.color: slotHover.hovered ? Theme.amber : "#000"
-                        color: empty ? Theme.well : modelData.pending ? "#3a2f10" : modelData.bypass ? "#1c1d20" : "#26282d"
-                        HoverHandler { id: slotHover }
-                        Text { visible: parent.empty; anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: slotHover.hovered ? "+" : index + 1; color: slotHover.hovered ? Theme.amber : "#55585f"; font.family: Theme.mono; font.pixelSize: 7 }
-                        Text { visible: !parent.empty; anchors.left: parent.left; anchors.leftMargin: 4; anchors.right: pwr.left; anchors.rightMargin: 2; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
-                            text: parent.empty ? "" : i18n.t(modelData.name ?? "", i18n.lang); color: modelData.bypass ? "#7a7d84" : "#ece8dc"; font.family: Theme.sans; font.pixelSize: 8; font.bold: true; font.strikeout: !parent.empty && modelData.bypass }
-                        Rectangle { id: pwr; visible: !parent.empty; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; width: 6; height: 6; radius: 3; border.color: "#000"
-                            color: modelData.pending ? "#ffcc00" : modelData.bypass ? "#1d3a25" : "#34d058"
-                            MouseArea { anchors.fill: parent; anchors.margins: -3; onClicked: { engine.selectedStrip = ds.idx; engine.setPluginBypass(ds.idx, index, !modelData.bypass) } } }
-                        MouseArea { anchors.fill: parent; anchors.rightMargin: parent.empty ? 0 : 12; acceptedButtons: Qt.LeftButton | Qt.RightButton; cursorShape: Qt.PointingHandCursor
-                            onClicked: function (m) { engine.selectedStrip = ds.idx
-                                if (parent.empty || m.button === Qt.RightButton) { if (!parent.empty && m.button === Qt.RightButton) { engine.setPluginBypass(ds.idx, index, !modelData.bypass); return } chooser.slot = index; chooser.popup(); return }
-                                if (modelData.pending) { engine.retryPlugins(); return }
-                                if (modelData.builtIn) page.go(modelData.kind === "miceq" ? "miceq" : modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp")
-                                else plugEd.openFor(ds.idx, index, modelData.kind, modelData.name) } } } } }
-            // PAN: a round knob with a pointer line (drag up / down or the wheel; double-click: centre)
-            Item { Layout.fillWidth: true; implicitHeight: 50
+            // TEN INSERT SLOTS
+            Text { text: i18n.t("INSERTS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true; font.letterSpacing: 1 }
+            Repeater { model: ds.pl
+                delegate: Rectangle { objectName: "dawSlot" + ds.idx + "_" + index
+                    readonly property bool empty: !modelData.kind
+                    Layout.fillWidth: true; implicitHeight: 15; radius: 2
+                    color: empty ? (Theme.dark ? "#1b1d21" : "#e2e5eb") : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : modelData.bypass ? (Theme.dark ? "#272a30" : "#dde1e7") : Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.20 : 0.28)
+                    border.color: slotHover.hovered ? Theme.accent : "transparent"
+                    HoverHandler { id: slotHover }
+                    Rectangle { visible: !parent.empty; width: 2; height: parent.height - 4; x: 1; y: 2; radius: 1; color: modelData.bypass ? Theme.dim : ds.sc }
+                    Text { anchors.left: parent.left; anchors.leftMargin: 6; anchors.right: pwr.left; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
+                        text: parent.empty ? (slotHover.hovered ? "+" : "") : i18n.t(modelData.name ?? "", i18n.lang); color: parent.empty ? Theme.dim : modelData.bypass ? Theme.dim : Theme.ink
+                        font.family: Theme.sans; font.pixelSize: 8; font.strikeout: !parent.empty && modelData.bypass }
+                    Rectangle { id: pwr; visible: !parent.empty; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 4
+                        color: modelData.pending ? Theme.amber : modelData.bypass ? "transparent" : Theme.emerald; border.color: modelData.bypass ? Theme.dim : "transparent"
+                        MouseArea { anchors.fill: parent; anchors.margins: -3; onClicked: { engine.selectedStrip = ds.idx; engine.setPluginBypass(ds.idx, index, !modelData.bypass) } } }
+                    MouseArea { anchors.fill: parent; anchors.rightMargin: parent.empty ? 0 : 12; acceptedButtons: Qt.LeftButton | Qt.RightButton; cursorShape: Qt.PointingHandCursor
+                        onClicked: function (m) { engine.selectedStrip = ds.idx
+                            if (parent.empty || m.button === Qt.RightButton) { if (!parent.empty && m.button === Qt.RightButton) { engine.setPluginBypass(ds.idx, index, !modelData.bypass); return } chooser.slot = index; chooser.popup(); return }
+                            if (modelData.pending) { engine.retryPlugins(); return }
+                            if (modelData.builtIn) page.go(modelData.kind === "miceq" ? "miceq" : modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp")
+                            else plugEd.openFor(ds.idx, index, modelData.kind, modelData.name) } } } }
+            // PAN
+            // PAN: a bar from the centre (drag; double-click: centre)
+            Rectangle { id: panBar; objectName: "dawPan" + ds.idx; Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
                 readonly property real pan: ds.st ? ds.st.pan : 0
-                Text { x: 2; y: 22; text: "L"; color: Theme.engrave; font.family: Theme.sans; font.pixelSize: 7; font.bold: true }
-                Text { anchors.right: parent.right; anchors.rightMargin: 2; y: 22; text: "R"; color: Theme.engrave; font.family: Theme.sans; font.pixelSize: 7; font.bold: true }
-                Knob { objectName: "dawPan" + ds.idx; anchors.horizontalCenter: parent.horizontalCenter; y: 0; size: 30; cap: "#17181b"; ink: "#f2efe6"; tint: ds.sc; defaultValue: 0.5
-                    value: (parent.pan + 1) / 2; label: "PAN"; valueText: ""
-                    onMoved: function (v) { engine.selectedStrip = ds.idx; engine.setPan(ds.idx, Math.abs(v - 0.5) < 0.02 ? 0 : v * 2 - 1) } }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: -2; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; color: Theme.engrave
-                    text: Math.abs(parent.pan) < 0.01 ? "C" : (parent.pan < 0 ? "L" : "R") + Math.round(Math.abs(parent.pan) * 100) } }
+                Rectangle { width: Math.abs(panBar.pan) * (parent.width / 2 - 2); height: parent.height - 6; y: 3; x: panBar.pan < 0 ? parent.width / 2 - width : parent.width / 2; radius: 1; color: ds.sc; opacity: 0.85 }
+                Rectangle { width: 1; height: parent.height; x: parent.width / 2; color: Theme.dim }
+                Text { anchors.centerIn: parent; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; color: Theme.ink
+                    text: Math.abs(panBar.pan) < 0.01 ? "C" : (panBar.pan < 0 ? "L" : "R") + Math.round(Math.abs(panBar.pan) * 100) }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.SizeHorCursor
+                    function setAt(x) { engine.setPan(ds.idx, Math.max(-1, Math.min(1, (x / width) * 2 - 1))) }
+                    onPressed: function (m) { engine.selectedStrip = ds.idx; setAt(m.x) } onPositionChanged: function (m) { if (pressed) setAt(m.x) } onDoubleClicked: engine.setPan(ds.idx, 0) } }
             // MUTE / SOLO / REC / AUTO MIX
-            RowLayout { Layout.fillWidth: true; spacing: 3
-                AKey { Layout.fillWidth: true; strip: ds.idx; t: "M"; on: !!(ds.st && ds.st.mute); hue: "#ff3b30"; onHit: engine.setMute(ds.idx, !(ds.st && ds.st.mute)) }
-                AKey { Layout.fillWidth: true; strip: ds.idx; t: "S"; on: !!(ds.st && ds.st.solo); hue: "#ffcc00"; onHit: engine.setSolo(ds.idx, !(ds.st && ds.st.solo)) }
-                AKey { Layout.fillWidth: true; strip: ds.idx; t: "R"; on: !!(ds.st && ds.st.armed); hue: "#ff6b81"; onHit: engine.setArmed(ds.idx, !(ds.st && ds.st.armed)) }
-                AKey { Layout.fillWidth: true; strip: ds.idx; t: "AM"; on: !!(ds.st && ds.st.automix); hue: "#4fc3f7"; onHit: engine.setAutomix(ds.idx, !(ds.st && ds.st.automix), ds.st ? ds.st.amWeight : 1) } }
-            // THE FADER with its printed scale, the LED ladder (the level after the fader) and the EASY KEYS for everyone (a beginner, anyone who
-            // finds dragging hard): LOUDER and QUIETER (1 dB a press), 0 (the normal level) and BACK (where the fader was before the last move)
-            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; Layout.topMargin: 6; spacing: 3
+            RowLayout { Layout.fillWidth: true; spacing: 2
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "M"; on: !!(ds.st && ds.st.mute); hue: Theme.danger; onHit: engine.setMute(ds.idx, !(ds.st && ds.st.mute)) }
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "S"; on: !!(ds.st && ds.st.solo); hue: Theme.amber; onHit: engine.setSolo(ds.idx, !(ds.st && ds.st.solo)) }
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "R"; on: !!(ds.st && ds.st.armed); hue: "#fb7185"; onHit: engine.setArmed(ds.idx, !(ds.st && ds.st.armed)) }
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "AM"; on: !!(ds.st && ds.st.automix); hue: Theme.cyan; onHit: engine.setAutomix(ds.idx, !(ds.st && ds.st.automix), ds.st ? ds.st.amWeight : 1) } }
+            // FADER with its IN / OUT meter
+            // FADER with its IN / OUT meter, and beside it the EASY BUTTONS for everyone (a beginner, a first-time user, anyone who finds dragging hard):
+            // LOUDER and QUIETER (1 dB a press), 0 (back to the normal level) and BACK (where the fader was before the last move); each says what it does
+            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
                 readonly property real db: ds.st ? ds.st.db : 0
                 property real settled: 0; property real before: 0
                 Component.onCompleted: { settled = db; before = db }   // the level the strip opens with is the first "before"
                 onDbChanged: settleT.restart()
                 Timer { id: settleT; interval: 700; onTriggered: { const p = parent; if (Math.abs(p.db - p.settled) > 0.05) { p.before = p.settled; p.settled = p.db } } }
-                Fader { objectName: "dawFader"; Layout.fillHeight: true; printed: true; showLevels: false; value: ds.st ? ds.st.db : 0; remoteHot: remote.touched(ds.idx, remote.pulse)
-                    onMoved: function (db) { engine.setGain(ds.idx, db) } }
-                LedLadder { Layout.fillHeight: true; Layout.topMargin: 8; db: ds.mt ? ds.mt.peakDb : -120; clip: ds.mt ? ds.mt.clip : false }
+                Fader { objectName: "dawFader"; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: ds.st ? ds.st.db : 0; remoteHot: remote.touched(ds.idx, remote.pulse)
+                    inDb: ds.mt ? ds.mt.inDb : -120; outDb: ds.mt ? ds.mt.peakDb : -120; clip: ds.mt ? ds.mt.clip : false; onMoved: function (db) { engine.setGain(ds.idx, db) } }
                 ColumnLayout { Layout.fillHeight: true; spacing: 3
                     Item { Layout.fillHeight: true }
                     Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
-                        delegate: Rectangle { objectName: "dawEasy_" + modelData[1] + ds.idx; implicitWidth: 24; implicitHeight: 24; radius: 2; border.width: 1; border.color: easyMa.containsMouse ? Theme.amber : "#08090a"
+                        delegate: Rectangle { objectName: "dawEasy_" + modelData[1] + ds.idx; implicitWidth: 26; implicitHeight: 24; radius: 4
                             readonly property bool can: modelData[1] !== "back" || Math.abs(parent.parent.before - parent.parent.settled) > 0.05
-                            opacity: can ? 1 : 0.4
-                            gradient: Gradient { GradientStop { position: 0; color: easyMa.pressed ? "#1b1c20" : "#4b4e54" } GradientStop { position: 1; color: easyMa.pressed ? "#2c2e33" : "#1b1c20" } }
-                            Text { anchors.centerIn: parent; text: modelData[0]; color: "#f2efe6"; font.pixelSize: 11; font.bold: true }
+                            color: easyMa.pressed ? Theme.accent : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: easyMa.containsMouse ? Theme.accent : (Theme.dark ? "#3a3e47" : "#c9ced8"); opacity: can ? 1 : 0.4
+                            Text { anchors.centerIn: parent; text: modelData[0]; color: easyMa.pressed ? "#0b0d10" : Theme.ink; font.pixelSize: 12; font.bold: true }
                             ToolTip.visible: easyMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: i18n.t(modelData[2], i18n.lang)
                             MouseArea { id: easyMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: parent.can
                                 onClicked: { const f = parent.parent.parent; engine.selectedStrip = ds.idx
                                     // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
                                     const now = f.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : f.before
                                     settleT.stop(); f.before = now; f.settled = to; engine.setGain(ds.idx, to) } } } }
-                    Item { Layout.preferredHeight: 4 } } }
-            // THE LEVEL in a small window
-            Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 46; implicitHeight: 14; radius: 1; color: "#060607"; border.color: "#000"
-                Text { anchors.centerIn: parent; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: ds.st && ds.st.db > 0 ? "#ff8a3d" : "#ffcc00"
-                    text: !ds.st ? "" : ds.st.db <= -90 ? "-inf" : (ds.st.db > 0 ? "+" : "") + ds.st.db.toFixed(1) } }
-            // THE NAME on a strip of tape, the channel's colour beside it
-            Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 1; color: "#efe9d6"; border.color: "#000"; opacity: ds.st && ds.st.effectiveMute ? 0.55 : 1
-                Rectangle { width: 5; height: parent.height - 2; x: 1; y: 1; color: ds.sc }
-                Text { anchors.fill: parent; anchors.leftMargin: 9; anchors.rightMargin: 3; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-                    text: ds.st ? ds.st.name : ""; color: "#1a1a1a"; font.family: Theme.sans; font.pixelSize: 9; font.bold: true } }
-            Item { Layout.fillWidth: true; implicitHeight: 7
-                Screw { anchors.left: parent.left; turn: 110 + ds.idx * 29 }
-                Screw { anchors.right: parent.right; turn: 5 + ds.idx * 61 } } }
+                    Item { Layout.preferredHeight: 6 } } }
+            Text { Layout.alignment: Qt.AlignHCenter; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: ds.st && ds.st.db > 0 ? Theme.amber : Theme.ink
+                text: !ds.st ? "" : ds.st.db <= -90 ? "-inf" : (ds.st.db > 0 ? "+" : "") + ds.st.db.toFixed(1) }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 4; radius: 2; color: ds.sc; opacity: ds.st && ds.st.effectiveMute ? 0.35 : 1 } }
         // beyond the licence: locked, a click opens LICENSE
-        Rectangle { anchors.fill: parent; z: 10; radius: 2; color: Qt.rgba(0, 0, 0, 0.72); visible: ds.locked
+        Rectangle { anchors.fill: parent; z: 10; radius: 3; color: Qt.rgba(0, 0, 0, 0.72); visible: ds.locked
             Text { anchors.centerIn: parent; text: "⊘  " + i18n.t("UNLOCK ›", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
             MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
     }
-    // THE LOOK: the analog desk on the faders view; the send views keep the send strips
-    readonly property bool daw: sendView === 0
+    // THE LOOK: DAW (flat strips, ten insert slots on each, the default) or CONSOLE (the hardware-desk strips); the send views keep the console strips
+    readonly property bool daw: settings.mixerStyle === "daw" && sendView === 0
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
     property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
     // STRIP SECTIONS: what each strip shows (SETTINGS popover); off = a leaner strip. The fader, M/S, name and meters always stay.
@@ -229,6 +200,13 @@ Item {
                         MouseArea { anchors.fill: parent; onClicked: page.bank = index }
                     }
                 }
+                Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
+                Repeater {   // THE LOOK of the faders view: DAW or CONSOLE (also on SETTINGS)
+                    model: [["daw", "DAW"], ["console", "CONSOLE"]]
+                    delegate: Rectangle { objectName: "mixerLook_" + modelData[0]; readonly property bool on: settings.mixerStyle === modelData[0]
+                        implicitWidth: lkT.implicitWidth + 14; implicitHeight: 20; radius: 7; color: on ? Theme.accent : Theme.ov(0.06); border.color: on ? Theme.accent : Theme.lineSoft
+                        Text { id: lkT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: settings.mixerStyle = modelData[0] } } }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Repeater {
                     model: ["FADERS", "AUX SENDS", "FX SENDS"]
@@ -440,7 +418,7 @@ Item {
         // PLUGIN RACK: the insert slots of the selected channel (10 on BASIC, unlimited on PRO / STUDIO / MASTER), one card each. A built-in stage lights up when inserted; right-click or
         // BYP bypasses; ‹ › reorder; OPEN goes to the stage's page; a VST3 reference waits (amber) for the VST3 host.
         Rectangle {
-            visible: page.rack && page.rackCompact && !page.daw
+            visible: page.rack && page.rackCompact
             Layout.fillWidth: true; implicitHeight: 30; radius: 8; color: Theme.card; border.color: "#a78bfa"
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 4
@@ -460,7 +438,7 @@ Item {
             }
         }
         Rectangle {
-            visible: page.rack && !page.rackCompact && !page.daw
+            visible: page.rack && !page.rackCompact
             Layout.fillWidth: true; implicitHeight: 74; radius: 8; color: Theme.card; border.color: "#a78bfa"
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
@@ -500,8 +478,8 @@ Item {
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle {
-                Layout.fillWidth: true; Layout.fillHeight: true; radius: page.daw ? 3 : Theme.radius; color: page.daw ? "#08090a" : Theme.card; border.color: page.daw ? "#000" : Theme.line; clip: true
-                // THE ANALOG DESK: metal strips side by side on a black frame
+                Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
+                // DAW LOOK: flat strips, the ten insert slots of each channel on the strip itself
                 Flickable {
                     objectName: "dawStrips"; visible: page.daw
                     anchors.fill: parent; anchors.margins: 8
@@ -509,7 +487,7 @@ Item {
                     flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; clip: true
                     Row { id: dawRow; spacing: 2; height: parent.height
                         Repeater { model: page.daw ? engine.strips : 0
-                            delegate: DawStrip { idx: index; height: dawRow.height; visible: page.bank === 2 || Math.floor(index / 16) === page.bank; width: visible ? 104 : 0 } } } }
+                            delegate: DawStrip { idx: index; height: dawRow.height; visible: page.bank === 2 || Math.floor(index / 16) === page.bank; width: visible ? 100 : 0 } } } }
                 Flickable {
                     visible: !page.daw
                     anchors.fill: parent; anchors.margins: 8
@@ -775,27 +753,27 @@ Item {
                 readonly property var lim: { engine.stripTick; return engine.masterLimiter() }
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Lamp { tint: engine.masterMuted || engine.masterDb <= -60 ? Theme.danger : Theme.emerald; lit: engine.running }
-                    Text { text: i18n.t("MASTER", i18n.lang); color: Theme.engrave; style: Text.Sunken; styleColor: Theme.engraveShade; font.family: Theme.sans; font.pixelSize: 12; font.bold: true; font.letterSpacing: 3 }
+                    Text { text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 3 }
                     Item { Layout.fillWidth: true }
                     Text { text: "L R"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
                 // the display: loudness big, the fader level under it
-                Rectangle { Layout.fillWidth: true; implicitHeight: 40; radius: 1; color: "#060607"; border.color: "#000"
+                Rectangle { Layout.fillWidth: true; implicitHeight: 44; radius: 9; color: Theme.deep; border.color: Qt.rgba(0.235, 0.784, 0.859, 0.35)
                     Column { anchors.centerIn: parent; spacing: 0
                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: (masterMod.lufs <= -119 ? "—" : masterMod.lufs.toFixed(1)); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 18; font.bold: true }
                         Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t("LUFS SHORT-TERM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 } } }
                 // GAIN MODE on: the Windows volume trims the master; shown here so the level heard is never a surprise
                 Text { objectName: "winTrimLine"; visible: engine.windowsGainMode && engine.windowsVolume >= 0; Layout.alignment: Qt.AlignHCenter
                     text: "WIN " + engine.windowsVolume + "% · " + (engine.windowsTrimDb <= -119 ? "OFF" : engine.windowsTrimDb === 0 ? "0 dB" : engine.windowsTrimDb.toFixed(1) + " dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                VuMeter { objectName: "masterVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 120; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
+                VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 110; Layout.preferredHeight: 58; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 5; rowSpacing: 5
                     ModKey { objectName: "masterEqBtn"; Layout.fillWidth: true; label: "RTA EQ"; tint: Theme.orange; lit: engine.mastering().eqOn; onClicked: page.go("rtaeq") }                       // RTA EQ: the main (master) equaliser
                     ModKey { objectName: "enhancerBtn"; Layout.fillWidth: true; label: "ENHANCE"; tint: Theme.emerald; lit: engine.mastering().on; onClicked: page.Window.window.openEnhancer() }   // AMFB VOLUME ENHANCER
                     ModKey { objectName: "masterMuteBtn"; Layout.fillWidth: true; label: "MUTE"; tint: Theme.danger; litText: "#fff"; lit: engine.masterMuted; onClicked: engine.masterMuted = !engine.masterMuted }
                     ModKey { objectName: "analyzerBtn"; Layout.fillWidth: true; label: "ANALYZER"; tint: Theme.cyan; onClicked: page.Window.window.openAnalyzer() } }   // AMFB MASTER ANALYZER
                 RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
-                    Fader { showLevels: false; printed: true; Layout.fillHeight: true; value: engine.masterDb; remoteHot: remote.touched(-1, remote.pulse); inDb: engine.telv("masterRmsDb", page.tick) === undefined ? -120 : engine.telv("masterRmsDb", page.tick); outDb: engine.telv("masterPeakDb", page.tick) === undefined ? -120 : engine.telv("masterPeakDb", page.tick); clip: engine.telv("masterClip", page.tick) === true; onMoved: function (db) { engine.setMaster(db) } }
-                    LedLadder { Layout.fillHeight: true; Layout.topMargin: 8; topDb: 0; db: engine.telv("masterLDb", page.tick) === undefined ? -120 : engine.telv("masterLDb", page.tick); clip: !!engine.telv("masterClip", page.tick) }
-                    LedLadder { Layout.fillHeight: true; Layout.topMargin: 8; topDb: 0; db: engine.telv("masterRDb", page.tick) === undefined ? -120 : engine.telv("masterRDb", page.tick); clip: !!engine.telv("masterClip", page.tick) } }
+                    Fader { showLevels: false; Layout.fillHeight: true; value: engine.masterDb; remoteHot: remote.touched(-1, remote.pulse); inDb: engine.telv("masterRmsDb", page.tick) === undefined ? -120 : engine.telv("masterRmsDb", page.tick); outDb: engine.telv("masterPeakDb", page.tick) === undefined ? -120 : engine.telv("masterPeakDb", page.tick); clip: engine.telv("masterClip", page.tick) === true; onMoved: function (db) { engine.setMaster(db) } }
+                    MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 10; peakDb: engine.telv("masterLDb", page.tick); rmsDb: engine.telv("masterRmsDb", page.tick); clip: engine.telv("masterClip", page.tick) }
+                    MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 10; peakDb: engine.telv("masterRDb", page.tick); rmsDb: engine.telv("masterRmsDb", page.tick); clip: engine.telv("masterClip", page.tick) } }
                 ReadPill { tint: Theme.amber; text: Theme.dbText(engine.masterDb) + i18n.t(" dB", i18n.lang) }
                 ReadPill { tint: masterMod.lim.on ? Theme.emerald : Theme.amber; text: masterMod.lim.on ? i18n.t("LIMIT ", i18n.lang) + Number(masterMod.lim.ceiling).toFixed(1) + i18n.t(" dBFS", i18n.lang) : i18n.t("LIMITER OFF", i18n.lang) }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 9; visible: engine.windowsSoundAvailable && (engine.windowsMuted || engine.masterDb <= -60); color: Qt.rgba(1, 0.165, 0.373, 0.18); border.color: Theme.danger   // -inf = everything off, Windows' own sound included
@@ -809,35 +787,35 @@ Item {
                 Layout.preferredWidth: 134; Layout.fillHeight: true; tint: Theme.emerald
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Lamp { tint: page.mon.mute ? Theme.danger : Theme.emerald; lit: engine.running }
-                    Text { text: i18n.t("MONITOR", i18n.lang); color: Theme.engrave; style: Text.Sunken; styleColor: Theme.engraveShade; font.family: Theme.sans; font.pixelSize: 12; font.bold: true; font.letterSpacing: 2 }
+                    Text { text: i18n.t("MONITOR", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 2 }
                     Item { Layout.fillWidth: true }
                     Text { text: "◖◗"; font.pixelSize: 12 } }
-                Text { text: i18n.t("CONTROL ROOM · SOURCE", i18n.lang); color: Theme.engrave; opacity: 0.75; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 }
+                Text { text: i18n.t("CONTROL ROOM · SOURCE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 }
                 GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 3; rowSpacing: 3
                     Repeater { model: 9
-                        delegate: Rectangle { Layout.columnSpan: index === 0 ? 4 : 1; Layout.fillWidth: true; implicitHeight: 18; radius: 2; border.width: 1; border.color: "#08090a"
+                        delegate: Rectangle { Layout.columnSpan: index === 0 ? 4 : 1; Layout.fillWidth: true; implicitHeight: 18; radius: 9
                             readonly property bool lit: page.mon.source === index
-                            gradient: Gradient { GradientStop { position: 0; color: lit ? "#7ef0a6" : "#4b4e54" } GradientStop { position: 0.5; color: lit ? "#34d058" : "#2c2e33" } GradientStop { position: 1; color: lit ? "#1f8a3c" : "#1b1c20" } }
-                            Text { anchors.centerIn: parent; text: index === 0 ? i18n.t("MASTER", i18n.lang) : "B" + index; color: parent.lit ? "#101010" : "#d8d5cc"; font.family: Theme.sans; font.pixelSize: 7; font.bold: true }
+                            color: lit ? Theme.emerald : Theme.ov(0.07); border.color: lit ? Qt.lighter(Theme.emerald, 1.3) : Qt.rgba(0.063, 0.725, 0.506, 0.35)
+                            Text { anchors.centerIn: parent; text: index === 0 ? i18n.t("MASTER", i18n.lang) : "B" + index; color: parent.lit ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMonitor(index, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) } } } }
                 RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 6
-                    Fader { showLevels: false; printed: true; Layout.fillHeight: true; value: page.mon.db; outDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", page.tick), engine.telv("monitorRDb", page.tick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
-                    LedLadder { Layout.fillHeight: true; Layout.topMargin: 8; topDb: 0; db: engine.telv("monitorLDb", page.tick) === undefined ? -120 : engine.telv("monitorLDb", page.tick) }
-                    LedLadder { Layout.fillHeight: true; Layout.topMargin: 8; topDb: 0; db: engine.telv("monitorRDb", page.tick) === undefined ? -120 : engine.telv("monitorRDb", page.tick) } }
+                    Fader { showLevels: false; Layout.fillHeight: true; value: page.mon.db; outDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", page.tick), engine.telv("monitorRDb", page.tick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
+                    MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : engine.telv("monitorLDb", page.tick); rmsDb: -120 }
+                    MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: engine.telv("monitorRDb", page.tick) === undefined ? -120 : engine.telv("monitorRDb", page.tick); rmsDb: -120 } }
                 ReadPill { tint: Theme.amber; text: Theme.dbText(page.mon.db) + i18n.t(" dB", i18n.lang) + (page.mon.dim ? i18n.t(" · DIM", i18n.lang) : "") }
                 // DIM / MONO / SYNC: one segmented row
-                Rectangle { Layout.fillWidth: true; implicitHeight: 24; radius: 2; color: "#0d0e10"; border.color: "#000"
+                Rectangle { Layout.fillWidth: true; implicitHeight: 24; radius: 12; color: Theme.ov(0.05); border.color: Theme.lineSoft
                     RowLayout { anchors.fill: parent; anchors.margins: 2; spacing: 2
                         Repeater { model: [{ k: "dim", t: "DIM", c: Theme.amber }, { k: "mono", t: "MONO", c: Theme.cyan }, { k: "sync", t: "SYNC", c: Theme.emerald }]
-                            delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: 1
+                            delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: 10
                                 readonly property bool lit: modelData.k === "dim" ? page.mon.dim : modelData.k === "mono" ? page.mon.mono : page.mon.sync
-                                color: lit ? modelData.c : "#2c2e33"
-                                Text { anchors.centerIn: parent; text: i18n.t(modelData.t, i18n.lang); color: parent.lit ? "#101010" : "#d8d5cc"; font.family: Theme.sans; font.pixelSize: 7; font.bold: true }
+                                color: lit ? modelData.c : "transparent"
+                                Text { anchors.centerIn: parent; text: i18n.t(modelData.t, i18n.lang); color: parent.lit ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                     onClicked: { if (modelData.k === "dim") engine.setMonitor(page.mon.source, page.mon.db, !page.mon.dim, page.mon.mono, page.mon.mute); else if (modelData.k === "mono") engine.setMonitor(page.mon.source, page.mon.db, page.mon.dim, !page.mon.mono, page.mon.mute); else engine.setMonitorSync(!page.mon.sync) } }
                                 ToolTip.visible: modelData.k === "sync" && segH.hovered; ToolTip.text: i18n.t("SYNC: the master fader and the monitor fader move together", i18n.lang); HoverHandler { id: segH } } } } }
                 ModKey { Layout.fillWidth: true; implicitHeight: 28; label: page.mon.mute ? "MONITOR MUTED" : "MUTE"; tint: Theme.danger; litText: "#fff"; lit: page.mon.mute; onClicked: engine.setMonitor(page.mon.source, page.mon.db, page.mon.dim, page.mon.mono, !page.mon.mute) }
-                Text { Layout.fillWidth: true; text: i18n.t("After the master meters: the show is not affected", i18n.lang); color: Theme.engrave; opacity: 0.7; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter }
+                Text { Layout.fillWidth: true; text: i18n.t("After the master meters: the show is not affected", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter }
             }
         }
     }

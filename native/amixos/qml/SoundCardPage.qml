@@ -44,7 +44,7 @@ Item {
             // LOW LATENCY: the open device's latency in plain words (LOW / OK / HIGH), the figures, what would lower it, and a ROUND TRIP test
             Card { Layout.columnSpan: 2; objectName: "latencyCard"
                 property var rep: engine.latencyReport()
-                Timer { interval: 1500; repeat: true; running: page.visible && engine.uiAwake; onTriggered: latencyCard.rep = engine.latencyReport() }
+                Timer { interval: 1500; repeat: true; running: page.visible && engine.uiAwake; onTriggered: parent.rep = engine.latencyReport() }
                 Connections { target: engine; function onStateChanged() { latencyCard.rep = engine.latencyReport() } }
                 id: latencyCard
                 RowLayout { spacing: 10; Head { text: i18n.t("LOW LATENCY", i18n.lang) }
