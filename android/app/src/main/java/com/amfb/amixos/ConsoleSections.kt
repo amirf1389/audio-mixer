@@ -47,16 +47,23 @@ abstract class ConsoleSection : AppCompatActivity() {
     protected fun label(t: String, color: Int = dim, size: Float = 12f) = TextView(this).apply { text = t; setTextColor(color); textSize = size }
 }
 
-/** SAMPLE PADS: the console's 100 built-in one-shots, by category; a tap plays it on the console (through its master, also while the
- *  phones run the sound). STOP ALL and the pads' level. */
+/** SAMPLE PADS: the console's 1000 CUSTOM PADS (20 banks of 50), its 1000 SOUND EFFECTS (20 families of 50) and the 100 BUILT-IN one-shots.
+ *  A tap plays on the console (through its master, also while the phones run the sound); a long press on a pad edits it (name, level, colour,
+ *  an effect or a built-in sample, empty, reset); a long press on an effect puts it on the pad being edited. The pads are the console's own
+ *  file: a change made on the computer shows here within two seconds and a change made here shows on the computer. Audio files are
+ *  chosen on the computer. STOP ALL and the pads' level. */
 class SamplePadsActivity : ConsoleSection() {
     override val titleRes = R.string.pads_title
-    internal var samples: List<DaemonClient.Sample> = emptyList(); private var cat = ""; private lateinit var grid: GridLayout; private lateinit var cats: LinearLayout
-    internal var lastPlayed = 0
+    internal var samples: List<DaemonClient.Sample> = emptyList(); internal var pads: List<DaemonClient.Pad> = emptyList(); internal var effects: List<DaemonClient.Sfx> = emptyList()
+    internal var view = "PADS"; internal var bank = 0; internal var family = ""; internal var selPad = 1; internal var version = -1
+    private var cat = ""; private lateinit var grid: GridLayout; private lateinit var tabs: LinearLayout; private lateinit var sub: LinearLayout
+    internal var lastPlayed = 0; internal var lastPad = 0; internal var lastSfx = 0
     private val colors = mapOf("Drums" to "#EA580C", "Percussion" to "#FBBF24", "Bass" to "#A78BFA", "Leads" to "#22D3EE", "Pads" to "#34D399", "Keys" to "#60A5FA", "FX" to "#F472B6")
+    private val padColors = listOf("#F59E0B", "#22D3EE", "#34D399", "#A78BFA", "#F472B6", "#FB7185", "#38BDF8", "#94A3B8")
+    private val poll = object : Runnable { override fun run() { checkPads(); ui.postDelayed(this, 2000) } }
     override fun build() {
-        cats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        root.addView(HorizontalScrollView(this).apply { addView(cats); isHorizontalScrollBarEnabled = false })
+        tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; root.addView(HorizontalScrollView(this).apply { addView(tabs); isHorizontalScrollBarEnabled = false })
+        sub = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; root.addView(HorizontalScrollView(this).apply { addView(sub); isHorizontalScrollBarEnabled = false })
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         row.addView(Button(this).apply { text = getString(R.string.pads_stop); setOnClickListener { send { it.samplesStop() } } })
         val lvl = label(getString(R.string.pads_level, "-6.0")); row.addView(lvl)
@@ -67,21 +74,72 @@ class SamplePadsActivity : ConsoleSection() {
                 override fun onStartTrackingTouch(s: SeekBar) {}; override fun onStopTrackingTouch(s: SeekBar) {} }) })
         grid = GridLayout(this).apply { columnCount = 4 }
         root.addView(grid)
+        showTabs()
         val c = client ?: return
-        io.execute { val l = runCatching { c.samples() }.getOrElse { e -> ui.post { note.text = e.message }; emptyList() }
-            ui.post { samples = l; note.text = if (l.isEmpty()) getString(R.string.pads_none) else getString(R.string.pads_help); showCats(); showPads() } }
+        io.execute { val l = runCatching { c.samples() }.getOrElse { e -> ui.post { note.text = e.message }; emptyList() }; val fx = runCatching { c.sfx() }.getOrElse { emptyList() }
+            val pg = runCatching { c.pads(1, 50) }.getOrNull()
+            ui.post { samples = l; effects = fx; if (family.isEmpty()) family = fx.firstOrNull()?.family.orEmpty(); if (pg != null) { pads = pg.pads; version = pg.version }
+                note.text = if (l.isEmpty()) getString(R.string.pads_none) else getString(R.string.pads_help); showTabs() } }
     }
-    private fun showCats() { cats.removeAllViews()
-        for (k in listOf("") + samples.map { it.category }.distinct()) cats.addView(Button(this).apply { text = if (k.isEmpty()) "ALL" else k.uppercase(); alpha = if (k == cat) 1f else 0.55f
-            setOnClickListener { cat = k; showCats(); showPads() } }) }
-    internal fun showPads() { grid.removeAllViews(); val w = (resources.displayMetrics.widthPixels - 48) / 4
-        for (s in samples.filter { cat.isEmpty() || it.category == cat }) {
-            val col = Color.parseColor(colors[s.category] ?: "#94A3B8")
-            grid.addView(TextView(this).apply { text = "${s.id}\n${s.name}"; setTextColor(Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; maxLines = 3
-                background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.argb(70, Color.red(col), Color.green(col), Color.blue(col))); setStroke(3, col) }
-                layoutParams = GridLayout.LayoutParams().apply { width = w - 12; height = (w * 0.8).toInt(); setMargins(6, 6, 6, 6) }
-                setOnClickListener { v -> lastPlayed = s.id; v.alpha = 0.5f; v.animate().alpha(1f).setDuration(250).start(); if (Prefs.haptics(this@SamplePadsActivity)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
-                    send { it.sample(s.id) } } }) }
+    override fun onResume() { super.onResume(); ui.postDelayed(poll, 2000) }
+    override fun onPause() { ui.removeCallbacks(poll); super.onPause() }
+    /** the pads changed on the computer (or another phone): the bank on screen is read again */
+    private fun checkPads() { val c = client ?: return; if (view != "PADS") return; val b = bank
+        io.execute { val pg = runCatching { c.pads(b * 50 + 1, b * 50 + 50) }.getOrNull() ?: return@execute; ui.post { if (bank == b && pg.version != version) { pads = pg.pads; version = pg.version; showGrid() } } } }
+    internal fun loadBank(b: Int) { bank = b; val c = client ?: return
+        io.execute { val pg = runCatching { c.pads(b * 50 + 1, b * 50 + 50) }.getOrElse { e -> ui.post { note.text = e.message }; null } ?: return@execute; ui.post { if (bank == b) { pads = pg.pads; version = pg.version; showTabs() } } } }
+    private fun chip(t: String, on: Boolean, click: () -> Unit) = Button(this).apply { text = t; alpha = if (on) 1f else 0.55f; isAllCaps = true; setOnClickListener { click() } }
+    internal fun showTabs() {
+        tabs.removeAllViews()
+        for ((k, r) in listOf("PADS" to R.string.pads_tab_pads, "EFFECTS" to R.string.pads_tab_fx, "BUILT-IN" to R.string.pads_tab_builtin)) tabs.addView(chip(getString(r), view == k) { view = k; if (k == "PADS") loadBank(bank); showTabs() })
+        sub.removeAllViews()
+        when (view) {
+            "PADS" -> for (b in 0 until 20) sub.addView(chip("${b * 50 + 1}-${b * 50 + 50}", b == bank) { loadBank(b) })
+            "EFFECTS" -> for (f in effects.map { it.family }.distinct()) sub.addView(chip(f, f == family) { family = f; showTabs() })
+            else -> for (k in listOf("") + samples.map { it.category }.distinct()) sub.addView(chip(if (k.isEmpty()) "ALL" else k, k == cat) { cat = k; showTabs() })
+        }
+        showGrid()
+    }
+    private fun tile(top: String, bottom: String, colHex: String, faint: Boolean, w: Int) = TextView(this).apply {
+        text = "$top\n$bottom"; setTextColor(if (faint) dim else Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; maxLines = 3
+        val col = Color.parseColor(colHex); background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.argb(if (faint) 20 else 70, Color.red(col), Color.green(col), Color.blue(col))); setStroke(3, if (faint) Color.argb(80, Color.red(col), Color.green(col), Color.blue(col)) else col) }
+        layoutParams = GridLayout.LayoutParams().apply { width = w - 12; height = (w * 0.8).toInt(); setMargins(6, 6, 6, 6) } }
+    private fun flash(v: android.view.View) { v.alpha = 0.5f; v.animate().alpha(1f).setDuration(250).start(); if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+    internal fun showGrid() { grid.removeAllViews(); val w = (resources.displayMetrics.widthPixels - 48) / 4
+        when (view) {
+            "PADS" -> for (p in pads) grid.addView(tile("${p.n}${if (p.custom) " ✎" else ""}", if (p.kind == "empty") getString(R.string.pads_empty) else p.name, padColors.getOrElse(p.color) { "#94A3B8" }, p.kind == "empty", w).apply {
+                if (p.n == selPad) (background as GradientDrawable).setStroke(6, Color.WHITE)
+                setOnClickListener { v -> lastPad = p.n; selPad = p.n; flash(v); if (p.kind != "empty") send { it.playPad(p.n) } else note.text = getString(R.string.pads_empty_help) }
+                setOnLongClickListener { selPad = p.n; editPad(p); true } })
+            "EFFECTS" -> for (e in effects.filter { it.family == family }) grid.addView(tile("#${e.id}", e.name, "#22D3EE", false, w).apply {
+                setOnClickListener { v -> lastSfx = e.id; flash(v); send { it.playSfx(e.id) } }
+                setOnLongClickListener { putOnPad("sfx:${e.id}", e.name); true } })
+            else -> for (s in samples.filter { cat.isEmpty() || it.category == cat }) grid.addView(tile("${s.id}", s.name, colors[s.category] ?: "#94A3B8", false, w).apply {
+                setOnClickListener { v -> lastPlayed = s.id; flash(v); send { it.sample(s.id) } }
+                setOnLongClickListener { putOnPad("sample:${s.id}", s.name); true } })
+        }
+    }
+    /** a long press on an effect or a built-in sample: it goes on the pad being edited */
+    internal fun putOnPad(source: String, name: String) { val n = selPad
+        send { it.setPad(n, source = source); ui.post { note.text = getString(R.string.pads_put, name, n) } } }
+    /** EDIT a pad: name, level, colour; EMPTY, RESET; an effect is put on it from EFFECTS (long press) */
+    private fun editPad(p: DaemonClient.Pad) {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(40, 20, 40, 0) }
+        val name = android.widget.EditText(this).apply { setText(p.name); setSingleLine(); filters = arrayOf(android.text.InputFilter.LengthFilter(48)) }; box.addView(name)
+        if (p.kind == "file") box.addView(label(getString(R.string.pads_file_note)))
+        val gl = label(getString(R.string.pads_gain, String.format("%+.1f", p.gainDb))); box.addView(gl)
+        val gain = SeekBar(this).apply { max = 104; progress = ((p.gainDb + 40) * 2).toInt().coerceIn(0, 104)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener { override fun onProgressChanged(s: SeekBar, v: Int, u: Boolean) { gl.text = getString(R.string.pads_gain, String.format("%+.1f", v / 2.0 - 40)) }
+                override fun onStartTrackingTouch(s: SeekBar) {}; override fun onStopTrackingTouch(s: SeekBar) {} }) }; box.addView(gain)
+        var color = p.color; val sw = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun paint() { for (i in 0 until sw.childCount) (sw.getChildAt(i).background as GradientDrawable).setStroke(if (i == color) 6 else 0, Color.WHITE) }
+        padColors.forEachIndexed { i, h -> sw.addView(android.view.View(this).apply { background = GradientDrawable().apply { cornerRadius = 8f; setColor(Color.parseColor(h)) }
+            layoutParams = LinearLayout.LayoutParams(64, 48).apply { setMargins(4, 8, 4, 8) }; setOnClickListener { color = i; paint() } }) }; paint(); box.addView(sw)
+        box.addView(label(getString(R.string.pads_edit_help)))
+        android.app.AlertDialog.Builder(this).setTitle(getString(R.string.pads_edit_title, p.n)).setView(box)
+            .setPositiveButton(R.string.pads_save) { _, _ -> val nm = name.text.toString().trim(); val g = gain.progress / 2.0 - 40; send { it.setPad(p.n, name = nm, gainDb = g, color = color); ui.post { loadBank(bank) } } }
+            .setNeutralButton(R.string.pads_reset) { _, _ -> send { it.resetPad(p.n); ui.post { loadBank(bank) } } }
+            .setNegativeButton(R.string.pads_clear) { _, _ -> send { it.setPad(p.n, source = ""); ui.post { loadBank(bank) } } }.show()
     }
 }
 

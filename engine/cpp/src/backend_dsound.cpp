@@ -90,6 +90,7 @@ class DsoundBackend : public Backend {
   }
   void stop() override { if (!running_.exchange(false)) return; if (worker_.joinable()) worker_.join(); if (out_) out_->Stop(); if (in_) in_->Stop(); }
   std::uint64_t xruns() const override { return xruns_; }
+  void latencyFrames(long& in, long& out) const override { const long q = static_cast<long>(frames_) * kPeriods; in = nIn_ > 0 ? q : 0; out = nOut_ > 0 ? q : 0; }   // its queued periods (Windows' own engine adds more)
   const std::string& outputName() const { return outName_; }
   const std::string& inputName() const { return inName_; }
 

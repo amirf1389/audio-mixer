@@ -1,5 +1,9 @@
 // The C SDK over the engine (sdk/c/include/amix.h): thin, allocation-free in the audio path, strings as malloc'd JSON.
 #define AMIX_BUILD_DLL
+#include <cstdio>
+#include <atomic>
+#include "audiomixer/driver_intel.hpp"
+#include "audiomixer/latency.hpp"
 #include "net/aoip.hpp"
 #include "net/midi.hpp"
 #include <thread>
@@ -41,7 +45,12 @@ struct amix_mixer {
   explicit amix_mixer(int n, double rate) : mixer(n, rate), fs(rate), fx(static_cast<std::size_t>(n) + 1) {}
   std::unique_ptr<am::fx::Effect>* slot(int strip, int s) { const int k = strip < 0 ? mixer.strips() : strip; if (k < 0 || k > mixer.strips() || s < 0 || s >= AMIX_MAX_INSERTS) return nullptr; return &fx[static_cast<std::size_t>(k)][static_cast<std::size_t>(s)]; }
 };
-struct amix_rt { am::Runtime rt; std::string backend; am::net::Aoip net; explicit amix_rt(int n) : rt(n), net(rt) {} };
+// the C block callback as a Runtime tap (the SDK's own; the network sender has its own slot)
+struct SdkTap : am::Runtime::Tap {
+  std::atomic<amix_block_fn> fn{nullptr}; std::atomic<void*> user{nullptr};
+  void onBlock(const float* const* strips, int n, const float* L, const float* R, std::size_t frames, double rate) override { if (amix_block_fn f = fn.load()) f(user.load(), strips, n, L, R, static_cast<int>(frames), rate); }
+};
+struct amix_rt { am::Runtime rt; std::string backend; am::net::Aoip net; SdkTap tap; int frames = 256; explicit amix_rt(int n) : rt(n), net(rt) {} };
 
 extern "C" {
 
@@ -134,7 +143,7 @@ int amix_rt_open(amix_rt* r, const amix_config* c, char* err, size_t errLen) {
   if (err && errLen) err[0] = 0;
   if (!r || !c) return -1;
   am::DeviceConfig cfg; cfg.backend = c->backend && *c->backend ? c->backend : "auto"; cfg.inDevice = c->in_device ? c->in_device : ""; cfg.outDevice = c->out_device ? c->out_device : "";
-  cfg.sampleRate = c->sample_rate > 0 ? c->sample_rate : 48000; cfg.frames = c->frames > 0 ? static_cast<unsigned>(c->frames) : 256; cfg.inChannels = c->in_channels > 0 ? c->in_channels : 2; cfg.outChannels = c->out_channels > 0 ? c->out_channels : 2; cfg.exclusive = c->exclusive != 0;
+  cfg.sampleRate = c->sample_rate > 0 ? c->sample_rate : 48000; cfg.frames = c->frames > 0 ? static_cast<unsigned>(c->frames) : 256; r->frames = static_cast<int>(cfg.frames); cfg.inChannels = c->in_channels > 0 ? c->in_channels : 2; cfg.outChannels = c->out_channels > 0 ? c->out_channels : 2; cfg.exclusive = c->exclusive != 0;
   std::string e; r->rt.stop();
   if (!r->rt.open(cfg, e) || !r->rt.start(e)) { if (err && errLen) { std::strncpy(err, e.c_str(), errLen - 1); err[errLen - 1] = 0; } return -2; }
   r->backend = r->rt.backendName(); return 0;
@@ -213,4 +222,34 @@ void amix_midi_action_default(int status, int d1, int d2, amix_midi_action* out)
 }
 char* amix_midi_inputs_json(void) { std::string o = "["; bool first = true; for (const auto& p : am::net::midiInputs()) { if (!first) o += ","; first = false; o += "{\"id\":" + jstr(p.id) + ",\"name\":" + jstr(p.name) + "}"; } return dup(o + "]"); }
 
+}  // extern "C"
+
+// ---- API 7: ASIO details, the open device, latency, the block callback
+extern "C" {
+char* amix_asio_drivers_json(void) {
+  std::string o = "["; bool first = true;
+  for (const am::DeviceInfo& d : am::listDevices()) {
+    if (d.backend != "asio") continue; if (!first) o += ","; first = false;
+    std::string rates = "["; for (std::size_t i = 0; i < d.sampleRates.size(); ++i) rates += (i ? "," : "") + std::to_string(static_cast<long long>(d.sampleRates[i]));
+    o += "{\"name\":" + jstr(d.name) + ",\"inChannels\":" + std::to_string(d.inChannels) + ",\"outChannels\":" + std::to_string(d.outChannels) + ",\"defaultRate\":" + std::to_string(static_cast<long long>(d.defaultRate))
+       + ",\"rates\":" + rates + "],\"wrapper\":" + (am::drv::isWrapper(d.name) ? "true" : "false") + ",\"family\":" + jstr(am::drv::family(d.name)) + ",\"probeError\":" + jstr(d.probeError) + "}";
+  }
+  return dup(o + "]");
+}
+void amix_rt_channels(const amix_rt* r, int* in, int* out) { if (in) *in = r ? r->rt.inputChannels() : 0; if (out) *out = r ? r->rt.outputChannels() : 0; }
+void amix_rt_latency(const amix_rt* r, long* in, long* out) { long a = 0, b = 0; if (r) r->rt.latencyFrames(a, b); if (in) *in = a; if (out) *out = b; }
+char* amix_rt_latency_json(const amix_rt* r) {
+  if (!r || !r->rt.running()) return dup("{\"running\":false}");
+  am::latency::Input in; in.backend = r->rt.backendName(); in.exclusive = r->rt.exclusive(); in.rate = r->rt.sampleRate(); in.blockFrames = r->frames > 0 ? r->frames : 256;
+  r->rt.latencyFrames(in.inFrames, in.outFrames); in.hasInput = r->rt.inputChannels() > 0; const am::Snapshot sn = r->rt.snapshot(); in.xruns = sn.xruns; in.maxBlockUs = sn.maxBlockUs;
+  const am::latency::Report rep = am::latency::assess(in);
+  char b[256]; std::snprintf(b, sizeof b, "{\"running\":true,\"inMs\":%.2f,\"outMs\":%.2f,\"blockMs\":%.2f,\"totalMs\":%.2f,\"reported\":%s,\"level\":", rep.inMs, rep.outMs, rep.blockMs, rep.totalMs, rep.reported ? "true" : "false");
+  std::string o = b; o += jstr(rep.levelName) + ",\"verdict\":" + jstr(rep.verdict) + ",\"advice\":["; for (std::size_t i = 0; i < rep.advice.size(); ++i) o += (i ? "," : "") + jstr(rep.advice[i]);
+  return dup(o + "]}");
+}
+char* amix_rt_sample_format(const amix_rt* r) { return dup(r ? r->rt.sampleFormat() : std::string()); }
+char* amix_rt_output_names_json(const amix_rt* r) { std::string o = "["; if (r) { const auto n = r->rt.outputNames(); for (std::size_t i = 0; i < n.size(); ++i) o += (i ? "," : "") + jstr(n[i]); } return dup(o + "]"); }
+void amix_rt_set_block_callback(amix_rt* r, amix_block_fn fn, void* user) {
+  if (!r) return; r->tap.user.store(user); r->tap.fn.store(fn); r->rt.setTap(fn ? &r->tap : nullptr);
+}
 }  // extern "C"

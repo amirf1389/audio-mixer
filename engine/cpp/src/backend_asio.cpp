@@ -194,6 +194,7 @@ class AsioBackend : public Backend {
   void stop() override { if (drv_ && running_.exchange(false)) { while (inCallback_.load()) std::this_thread::yield(); drv_->stop(); } }
   std::uint64_t xruns() const override { return xruns_; }
   const std::string& driverName() const { return driverName_; }
+  void latencyFrames(long& in, long& out) const override { in = inLatency_; out = outLatency_; }   // ASIO reports them with the buffer included
   long inputLatency() const { return inLatency_; }     // frames, as the driver reports them
   long outputLatency() const { return outLatency_; }
   std::uint64_t resets() const { return resets_; }

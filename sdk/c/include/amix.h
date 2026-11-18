@@ -24,7 +24,7 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 6   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h)
+#define AMIX_API_VERSION 7   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h); 7: ASIO details, latency, block callback
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
 #define AMIX_MAX_INSERTS 4
@@ -120,6 +120,21 @@ AMIX_API void     amix_rt_set_input_route(amix_rt*, int strip, int device_input)
 AMIX_API void     amix_rt_set_output_route(amix_rt*, int device_output, int source); /* 0 off, 1 master L, 2 master R, 3 monitor L, 4 monitor R, 5.. bus k L/R */
 AMIX_API void     amix_rt_clear_clips(amix_rt*);
 AMIX_API void     amix_rt_levels(const amix_rt*, amix_levels* out);
+
+/* ---- ASIO AND THE OPEN DEVICE (API 7). Open an ASIO interface with amix_rt_open and backend "asio", in_device / out_device = the driver
+ * name from amix_asio_drivers_json. ASIO exists on Windows only (the Steinberg ASIO SDK, used under its licence); elsewhere the list is []. */
+AMIX_API char* amix_asio_drivers_json(void);   /* [{"name","inChannels","outChannels","defaultRate","rates":[..],"wrapper":bool,"family","probeError"}]
+                                                  wrapper: ASIO4ALL / FlexASIO and the like (not the device's own driver); probeError: why it
+                                                  could not be read now (busy in another program, unplugged); the list loads each driver once */
+AMIX_API void  amix_rt_channels(const amix_rt*, int* in_channels, int* out_channels);   /* the open device's channels (0 while closed) */
+AMIX_API void  amix_rt_latency(const amix_rt*, long* in_frames, long* out_frames);      /* as the driver reports them, buffer included; 0 = not reported */
+AMIX_API char* amix_rt_latency_json(const amix_rt*);   /* {"inMs","outMs","blockMs","totalMs","reported","level":"LOW LATENCY"|"OK"|"HIGH","verdict","advice":[..]} */
+AMIX_API char* amix_rt_sample_format(const amix_rt*);  /* what the device carries, e.g. "in 24-bit integer · out 32-bit integer" */
+AMIX_API char* amix_rt_output_names_json(const amix_rt*);   /* the driver's own output channel names (ASIO), [] when it does not tell */
+/* BLOCK CALLBACK: called on the audio thread once per block with each strip's input (before the fader; NULL where a strip has none) and
+ * the stereo master. Never block, allocate or lock in it. NULL detaches; detach before amix_rt_destroy. */
+typedef void (*amix_block_fn)(void* user, const float* const* strips, int n_strips, const float* master_l, const float* master_r, int frames, double sample_rate);
+AMIX_API void  amix_rt_set_block_callback(amix_rt*, amix_block_fn fn, void* user);
 
 /* ---- network audio over IP: the open AES67 profile (RTP, L16 / L24 big-endian, 1 ms packets, SAP / SDP announcements) ----
  * SEND: the master as channels 1 / 2 of one stream (1 channel = the mono sum; more than 2 = the strips before their faders follow).

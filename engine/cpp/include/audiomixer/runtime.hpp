@@ -57,6 +57,8 @@ class Backend {
   virtual double inputSilentSeconds() const { return 0.0; }
   // the driver's own name for each output channel ("Out 1", "S/PDIF Out L" ...), when it tells (ASIO); empty when it does not
   virtual std::vector<std::string> outputNames() const { return {}; }
+  // LOW LATENCY: the input and output latency the driver reports, in frames (buffer included); 0 / 0 when it says nothing
+  virtual void latencyFrames(long& in, long& out) const { in = 0; out = 0; }
 };
 std::vector<std::string> availableBackends();                 // the ones built into this binary, "null" last
 std::unique_ptr<Backend> createBackend(const std::string& name);   // nullptr when it is not built in
@@ -124,6 +126,7 @@ class Runtime {
   std::string sampleFormat() const;
   std::vector<std::string> outputNames() const;   // see Backend::outputNames
   double inputSilentSeconds() const;   // see Backend::inputSilentSeconds; 0 when nothing is open
+  void latencyFrames(long& in, long& out) const;   // see Backend::latencyFrames (audiomixer/latency.hpp turns it into a report)
   // the integer word length the device takes on its output: 16 or 24 (dither at that depth), 0 for 32-bit integer / float (no dither:
   // a 32-bit converter's LSB is far below its own noise). From sampleFormat(): ASIO / WASAPI exclusive report the driver's own type.
   int deviceOutputBits() const;   // the open device's own sample format ("" when nothing is open); the engine itself mixes in 64-bit float
@@ -198,6 +201,8 @@ class Runtime {
   // after its chain and meters (what the show hears, before the monitor section). Must not block or allocate. nullptr detaches.
   struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0; };
   void setTap(Tap* t) { tap_.store(t); }
+  ExtraSource* extraSource() const { return extra_.load(); }   // so a short test (the ROUND TRIP click) can borrow the slot and give it back
+  Tap* tap() const { return tap_.load(); }
   // TEST TONE: a 1 kHz sine at -20 dBFS on outputs 1-2 for the given time, with a short fade in and out, added after the monitor level
   // (so it is heard whatever the faders say). For the Test button of the audio settings: "does sound come out of this device?"
   void testTone(double seconds = 1.0) { const long n = static_cast<long>((seconds < 0.1 ? 0.1 : seconds > 5 ? 5 : seconds) * sampleRate()); toneTotal_.store(n); toneLeft_.store(n); }
@@ -214,6 +219,7 @@ class Runtime {
   // MEASUREMENT: the taps see this one strip as it comes from the device (before its trim, EQ, dynamics and inserts) instead of after them,
   // so a measuring microphone is not coloured by the channel's own processing. -1 = off (the default). What the mix hears does not change.
   void setTapRawStrip(int strip) { tapRaw_.store(strip); }
+  int tapRawStrip() const { return tapRaw_.load(); }
   Snapshot snapshot() const;
   void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:

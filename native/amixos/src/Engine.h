@@ -271,6 +271,11 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap systemInfo() const;
   Q_INVOKABLE void setSysOpt(const QString& key, bool on);
   Q_INVOKABLE QVariantMap trimMemoryNow();
+  // LOW LATENCY SOUND DETECTION (audiomixer/latency.hpp): the open sound card's latency in plain words, with what would lower it;
+  // ROUND TRIP: a click out, back in on input 1 (a loop cable, or the microphone near the speaker), timed by cross-correlation
+  Q_INVOKABLE QVariantMap latencyReport() const;
+  Q_INVOKABLE QVariantMap startRoundTrip();
+  Q_INVOKABLE QVariantMap roundTripResult() const { return lastRoundTrip_; }
   Q_INVOKABLE QVariantMap secureInputPreview(const QString& backend, const QString& in, const QString& out, int inChannels);   // what SECURE INPUT would open: {in, inChannels, exclusive, note}   // every device with inputs, [{backend, id, name, kind, allowed, defaultIn}]
   Q_PROPERTY(bool bluetoothAudio READ bluetoothAudio WRITE setBluetoothAudio NOTIFY devicesChanged)
   bool bluetoothAudio() const { return settings_.value("audio/bluetooth", true).toBool(); } void setBluetoothAudio(bool v) { settings_.setValue("audio/bluetooth", v); refreshDevices(); }
@@ -769,6 +774,7 @@ class Engine : public QObject {
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  QVariantMap lastRoundTrip_; std::shared_ptr<struct RoundTripProbe> rtProbe_; void finishRoundTrip(int tries);
   bool sysFast_ = true, sysEco_ = true, sysTrim_ = true; QString lastTrim_; void minimisedTrim();
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();

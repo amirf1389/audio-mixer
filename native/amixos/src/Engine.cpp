@@ -27,7 +27,9 @@ static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/sysopt.hpp"
+#include "audiomixer/latency.hpp"
 static void warmSystemInfo();   // SYSTEM OPTIMIZATION: looks the hardware up on a background thread (defined with systemInfo)
+static const am::sysopt::CpuInfo& cpuOnce();
 #include <QGuiApplication>
 #include <QTimer>
 #include <QDir>
@@ -728,6 +730,59 @@ QVariantMap Engine::setInputSource(const QString& source) {
   status_ = (app ? QStringLiteral("INPUT: APP SOUND (%1 only) on CH 1-2. A service that protects its stream (DRM) may come through silent: Windows does not give its sound to other programs · ").arg(appSourceName())
              : music ? QStringLiteral("INPUT: COMPUTER SOUND on CH 1-2 (every app but AmF X1, so no loop on these headphones / speakers) · ") : QStringLiteral("INPUT: MIC on CH 1-2 · ")) + status_;
   emit stateChanged(); return m;
+}
+// ---- LOW LATENCY SOUND DETECTION
+QVariantMap Engine::latencyReport() const {
+  QVariantMap m; if (!rt_) { m["running"] = false; m["verdict"] = QStringLiteral("Start the sound card to measure its latency."); return m; }
+  am::latency::Input in; in.backend = curBackend_; in.exclusive = rt_->exclusive(); in.rate = sampleRate() > 0 ? sampleRate() : 48000; in.blockFrames = blockFrames_ > 0 ? blockFrames_ : 256;
+  rt_->latencyFrames(in.inFrames, in.outFrames); in.hasInput = devIn_ > 0;
+  for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["id"].toString() == QString::fromStdString(curOut_) && d["kind"].toString() == "bluetooth") in.bluetoothOut = true; }
+  in.hybrid = cpuOnce().topo.classes > 1; in.fastCores = sysFast_;
+  const am::Snapshot sn = rt_->snapshot(); in.xruns = sn.xruns; in.maxBlockUs = sn.maxBlockUs;
+  const am::latency::Report r = am::latency::assess(in);
+  m["running"] = true; m["inMs"] = r.inMs; m["outMs"] = r.outMs; m["blockMs"] = r.blockMs; m["totalMs"] = r.totalMs; m["reported"] = r.reported;
+  m["level"] = QString::fromStdString(r.levelName); m["verdict"] = QString::fromStdString(r.verdict);
+  QStringList adv; for (const auto& a : r.advice) adv << QString::fromStdString(a); m["advice"] = adv; m["roundTrip"] = lastRoundTrip_;
+  return m;
+}
+// the test: a click mixed into the master (after whatever source was there) and input 1 recorded raw for 0.8 s, block by block in step
+struct RoundTripProbe : am::Runtime::ExtraSource, am::Runtime::Tap {
+  std::vector<float> click, rec; std::size_t clickAt = 0; std::atomic<std::size_t> outPos{0}, inPos{0};
+  am::Runtime::ExtraSource* prevExtra = nullptr; am::Runtime::Tap* prevTap = nullptr; int prevRaw = -1;
+  void render(float* L, float* R, std::size_t frames, double rate) override {
+    if (prevExtra) prevExtra->render(L, R, frames, rate);
+    const std::size_t p = outPos.load(); for (std::size_t i = 0; i < frames; ++i) { const std::size_t k = p + i; if (k >= clickAt && k < clickAt + click.size()) { L[i] += click[k - clickAt]; R[i] += click[k - clickAt]; } }
+    outPos.store(p + frames); }
+  void onBlock(const float* const* strips, int n, const float* L, const float* R, std::size_t frames, double rate) override {
+    if (prevTap) prevTap->onBlock(strips, n, L, R, frames, rate);
+    const std::size_t p = inPos.load(); if (n > 0 && strips[0]) for (std::size_t i = 0; i < frames && p + i < rec.size(); ++i) rec[p + i] = strips[0][i];
+    inPos.store(p + frames); }
+};
+QVariantMap Engine::startRoundTrip() {
+  if (!rt_) return {{"ok", false}, {"note", QStringLiteral("Start the sound card first.")}};
+  if (devIn_ <= 0) return {{"ok", false}, {"note", QStringLiteral("The round trip needs an input: switch AUTO INPUT on, or open the interface with its inputs.")}};
+  if (rtProbe_) return {{"ok", false}, {"note", QStringLiteral("A round trip test is already running.")}};
+  const double rate = sampleRate() > 0 ? sampleRate() : 48000;
+  auto p = std::make_shared<RoundTripProbe>(); p->click = am::latency::testClick(rate); p->clickAt = static_cast<std::size_t>(0.1 * rate); p->rec.assign(static_cast<std::size_t>(0.8 * rate), 0.f);
+  p->prevExtra = rt_->extraSource(); p->prevTap = rt_->tap(); p->prevRaw = rt_->tapRawStrip();
+  rtProbe_ = p; rt_->setTapRawStrip(0); rt_->setTap(p.get()); rt_->setExtraSource(p.get());
+  lastRoundTrip_ = QVariantMap{{"state", "running"}};
+  QTimer::singleShot(900, this, [this] { finishRoundTrip(0); });
+  return {{"ok", true}};
+}
+void Engine::finishRoundTrip(int tries) {
+  auto p = rtProbe_; if (!p) return;
+  if (p->inPos.load() < p->rec.size() && tries < 20 && rt_) { QTimer::singleShot(100, this, [this, tries] { finishRoundTrip(tries + 1); }); return; }   // not all recorded yet
+  if (rt_) { rt_->setExtraSource(p->prevExtra); rt_->setTap(p->prevTap); rt_->setTapRawStrip(p->prevRaw); }
+  QTimer::singleShot(200, this, [p] {});   // keeps the probe alive a moment longer, past any block that still holds the old pointers
+  rtProbe_.reset();
+  const double rate = sampleRate() > 0 ? sampleRate() : 48000; double conf = 0;
+  const long at = am::latency::findDelay(p->click.data(), p->click.size(), p->rec.data(), std::min(p->rec.size(), p->inPos.load()), &conf);
+  QVariantMap r;
+  if (at < 0 || conf < 0.3) { r["state"] = "none"; r["note"] = QStringLiteral("The click did not come back: connect output 1 to input 1 with a cable (or hold the microphone near the speaker, volume up) and try again."); r["confidence"] = conf; }
+  else { const double ms = (at - static_cast<long>(p->clickAt)) * 1000.0 / rate; r["state"] = "done"; r["ms"] = ms; r["confidence"] = conf;
+    r["note"] = QStringLiteral("Round trip measured: %1 ms (%2), from the output through the converters and back in.").arg(ms, 0, 'f', 1).arg(QString::fromLatin1(am::latency::levelName(am::latency::levelOf(ms)))); }
+  lastRoundTrip_ = r; emit stateChanged();
 }
 QVariantMap Engine::setAutoInput(bool on) {
   setMicAtStart(on);

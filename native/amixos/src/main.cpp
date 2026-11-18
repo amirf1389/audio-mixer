@@ -166,6 +166,7 @@ int main(int argc, char* argv[]) {
   // SAMPLE PADS while phones are linked: the console's engine is stopped and the remote service plays, so the pads are sent there
   samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
   samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
+  samples.remoteSend = [&](const QVariantMap& cmd) { return remote.send(cmd); };   // CUSTOM PADS and SOUND EFFECTS while phones are linked
   engine.remoteInput = [&](const QString& in) { return remote.send(QVariantMap{{"op", "input"}, {"in", in}}); };   // INPUT while phones are linked
   engine.remoteInProcess = [&] { return remote.inProcess(); };
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
@@ -518,6 +519,15 @@ int main(int argc, char* argv[]) {
       const bool noHidden = engine.autoInput("wasapi") == "-";
       std::printf("amixos --smoke: AUTO INPUT off: inputs %d (%s), sound running %d; on: inputs %d (%s); no hidden computer sound %d\n", offIn, qPrintable(offSrc), int(offRun), onIn, qPrintable(onSrc), int(noHidden));
       engine.setAutoInput(keepAuto);
+      { // LOW LATENCY: the open device's report; the ROUND TRIP runs, gives the input and output back, and on a device with no loop says no click came back
+        engine.stop(); engine.open("null", "", "", 48000, 256, 2, 2);
+        const QVariantMap lr = engine.latencyReport(); const QVariantMap st = engine.startRoundTrip(); const QVariantMap again = engine.startRoundTrip();
+        QElapsedTimer tw; tw.start(); while (engine.roundTripResult().value("state").toString() == "running" && tw.elapsed() < 5000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const QVariantMap rr = engine.roundTripResult(); const bool stillRuns = engine.running();
+        std::printf("amixos --smoke: LOW LATENCY %s (%.1f ms, block %.2f ms, %d advice); round trip started %d, second refused %d, result %s, sound kept %d\n", qPrintable(lr.value("level").toString()), lr.value("totalMs").toDouble(), lr.value("blockMs").toDouble(),
+                    int(lr.value("advice").toStringList().size()), int(st.value("ok").toBool()), int(!again.value("ok").toBool()), qPrintable(rr.value("state").toString()), int(stillRuns));
+        if (!(lr.value("running").toBool() && !lr.value("level").toString().isEmpty() && lr.value("advice").toStringList().size() > 0 && st.value("ok").toBool() && !again.value("ok").toBool() && rr.value("state").toString() == "none" && stillRuns)) {
+          std::fprintf(stderr, "amixos --smoke: LOW LATENCY failed\n"); return 1; } }
       if (!(offIn == 0 && offRun && offSrc == "none" && onIn >= 2 && onSrc == "mic" && noHidden)) { std::fprintf(stderr, "amixos --smoke: AUTO INPUT failed: %s\n", qPrintable(engine.status())); return 1; }
       engine.stop(); engine.open("null", "", "", r0, f0, 2, 2); }
     { // AUTO ZOOM on a 14" laptop, 1920 x 1080 (work area 1920 x 1032 device pixels): 100 % and 125 % fit as they are; 150 % is zoomed
@@ -648,6 +658,16 @@ int main(int argc, char* argv[]) {
     { if (!samples.ready() || samples.list().size() != 100) { std::fprintf(stderr, "amixos --smoke: samples bank\n"); return 120; }
       if (!samples.play(1) || !samples.play(7)) { std::fprintf(stderr, "amixos --smoke: sample trigger\n"); return 121; } waitMs(200);
       if (engine.telemetry()["masterPeakDb"].toDouble() < -40) { std::fprintf(stderr, "amixos --smoke: sample not heard on the master (%.1f dBFS)\n", engine.telemetry()["masterPeakDb"].toDouble()); return 122; } samples.stopAll();
+      // 1000 CUSTOM PADS + 1000 SOUND EFFECTS: listed, a pad and an effect heard, a pad changed and put back (the shared file)
+      { if (samples.padCount() != 1000 || samples.sfxFamilies().size() != 20 || samples.sfx(QString()).size() != 1000 || samples.pads(1, 1000).size() != 1000 || samples.pad(101)["source"].toString() != "sfx:1") { std::fprintf(stderr, "amixos --smoke: 1000 pads / effects listed\n"); return 124; }
+        waitMs(300); if (!samples.playPad(150) || !samples.playSfx(999)) { std::fprintf(stderr, "amixos --smoke: pad / effect play: %s\n", qPrintable(samples.message())); return 125; } waitMs(200);
+        const double pk = engine.telemetry()["masterPeakDb"].toDouble(); samples.stopAll();
+        const int v0 = samples.padsVersion(); const QVariantMap before = samples.pad(777);
+        const bool set = samples.setPad(777, "sfx:5", "Smoke Pad", -3, 2) && samples.pad(777)["name"].toString() == "Smoke Pad" && samples.padsVersion() > v0;
+        const bool refused = !samples.setPad(777, "sfx:5000", "", 0, 0) && !samples.setPadFile(777, QDir::tempPath() + "/no-such-file.wav");
+        const bool back = before["custom"].toBool() ? samples.setPad(777, before["source"].toString(), before["name"].toString(), before["gainDb"].toDouble(), before["color"].toInt()) : samples.resetPad(777);
+        std::fprintf(stderr, "amixos --smoke: 1000 PADS + 1000 EFFECTS: pad and effect heard %.1f dBFS, pad changed %d, bad sources refused %d, put back %d\n", pk, set, refused, back);
+        if (pk < -40 || !set || !refused || !back) return 126; }
       const QString sdir = QDir::tempPath() + "/amixos-smoke-samples"; QDir(sdir).removeRecursively(); std::string serr; if (!am::samples::writeAll(sdir.toStdString(), 48000, serr) || QDir(sdir).entryList({"*.wav"}, QDir::Files).size() != 100) { std::fprintf(stderr, "amixos --smoke: sample export: %s\n", serr.c_str()); return 123; } QDir(sdir).removeRecursively();
       if (engine.fxPresets().size() != 300 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
       if (!engine.applyFxPreset(9, 120) || engine.busFx(9)["kind"].toString() != "delay" || engine.applyFxPreset(9, 999)) { std::fprintf(stderr, "amixos --smoke: fx preset kinds\n"); return 125; } engine.setBusFx(8, ""); engine.setBusFx(9, "");
@@ -986,6 +1006,16 @@ int main(int argc, char* argv[]) {
             samples.stopAll();
             std::printf("amixos --smoke: SAMPLE PADS while phones are linked: sent to the service %d, its master %.3f -> %.3f (in %lld ms)\n", sent, before, during, static_cast<long long>(tp.elapsed()));
             if (!(sent && during > 0.05 && during > before * 4)) { rackOk = false; rackWhy = QStringLiteral("SAMPLE PADS not heard through the service (%1 -> %2)").arg(before).arg(during); } }
+          // 1000 CUSTOM PADS in sync: a custom pad pressed on the console plays through the service; a pad a phone changes shows on the console
+          { wait(400); double during = 0; const bool sent = !engine.running() && samples.playPad(251); QElapsedTimer tp; tp.start();
+            while (tp.elapsed() < 2000) { wait(40); during = std::max(during, get("/api/meters").value("master").toMap().value("l").toDouble()); if (during > 0.05) break; }
+            samples.stopAll(); const QVariantMap keep = samples.pad(888);
+            http("/api/control", "{\"op\":\"padSet\",\"n\":888,\"source\":\"sfx:321\",\"name\":\"From Phone\"}"); QElapsedTimer ts; ts.start(); bool seen = false;
+            while (ts.elapsed() < 3000 && !seen) { wait(50); seen = samples.pad(888)["name"].toString() == "From Phone"; }
+            const qint64 seenMs = ts.elapsed();
+            if (keep["custom"].toBool()) samples.setPad(888, keep["source"].toString(), keep["name"].toString(), keep["gainDb"].toDouble(), keep["color"].toInt()); else samples.resetPad(888);
+            std::printf("amixos --smoke: 1000 PADS while phones are linked: pad 251 (Impact 01) sent %d, heard %.3f; a phone's pad change seen on the console %s in %lld ms\n", sent, during, seen ? "yes" : "NO", static_cast<long long>(seenMs));
+            if (!(sent && during > 0.05 && seen)) { rackOk = false; rackWhy = QStringLiteral("1000 PADS sync (sent %1, heard %2, seen %3)").arg(sent).arg(during).arg(seen); } }
           // INPUT: MIC while phones are linked: the service reopens its sound card with the microphone, and back to outputs only
           { http("/api/control", "{\"op\":\"input\",\"in\":\"-\"}"); wait(200);
             const int inNone = http("/api/status", {}).value("inChannels").toInt(); const QVariantMap r = engine.setInputSource("mic"); QElapsedTimer ti; ti.start(); int inMic = 0;
