@@ -36,6 +36,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
   Q_PROPERTY(bool spatialEnabled READ spatialEnabled WRITE setSpatialEnabled NOTIFY changed)   // 360 AUDIO: an option, off by default; off = its page is out of the menu and no channel is placed in 360
+  Q_PROPERTY(QString mixerLayout READ mixerLayout WRITE setMixerLayout NOTIFY changed)   // EDIT LAYOUT on the mixer: what shows and the strip width, as JSON ("" = the layout it ships with)
   Q_PROPERTY(bool mixerSimple READ mixerSimple WRITE setMixerSimple NOTIFY changed)   // MIXER strips: SIMPLE (name, tone, pan, MUTE / SOLO, fader) or FULL (every key and readout)
   Q_PROPERTY(bool rackCompactDefault READ rackCompactDefault WRITE setRackCompactDefault NOTIFY changed)
   Q_PROPERTY(bool channelPanelDefault READ channelPanelDefault WRITE setChannelPanelDefault NOTIFY changed)
@@ -75,6 +76,7 @@ class Settings : public QObject {
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }
   bool spatialEnabled() const { return s_.value("spatial/enabled", false).toBool(); } void setSpatialEnabled(bool v) { set("spatial/enabled", v); }
+  QString mixerLayout() const { return s_.value("mixer/layout").toString().left(2000); } void setMixerLayout(const QString& v) { set("mixer/layout", v.left(2000)); }
   bool mixerSimple() const { return s_.value("mixer/simple", true).toBool(); } void setMixerSimple(bool v) { set("mixer/simple", v); }
   bool channelPanelDefault() const { return s_.value("mixer/channelPanel", true).toBool(); } void setChannelPanelDefault(bool v) { set("mixer/channelPanel", v); }
   QVariantList dataFiles() const;

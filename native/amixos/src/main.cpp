@@ -1257,6 +1257,8 @@ int main(int argc, char* argv[]) {
             if (QObject* dp = win->findChild<QObject*>("storeDownloadPanel")) dp->setProperty("visible", false); QFile::remove(update.pluginDir + "/AMFB Air Shelf.vst3"); update.setPluginList(QJsonArray()); }
           for (const char* u : {"https://www.tiktok.com/@amfb.audio/live", "https://www.deezer.com/en/album/302127", "https://tidal.com/browse/track/12345678", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "https://youtu.be/dQw4w9WgXcQ"}) links.add(QString::fromLatin1(u), QString());
           win->setProperty("current", "streaming"); settle(800); win->grabWindow().save(shots + "/streaming.png");
+          { win->setProperty("current", "mixer"); settle(500); QObject* mp = nullptr; for (QObject* o : win->findChildren<QObject*>("mixerPage")) if (o->property("visible").toBool()) mp = o;
+            if (mp) { mp->setProperty("editing", true); settle(700); win->grabWindow().save(shots + "/mixer-edit-layout.png"); mp->setProperty("editing", false); settle(200); } }
           engine.setPlugin(0, 0, "fx:preamp"); engine.setPlugin(0, 1, "fx:regulator"); engine.setPlugin(0, 2, "fx:reverb"); engine.setPlugin(0, 3, "fx:protect"); engine.setPluginBypass(0, 2, true);   // THE RACK with effects in
           settle(900); win->grabWindow().save(shots + "/mixer-rack.png"); for (int sl = 0; sl < 4; ++sl) engine.setPlugin(0, sl, "");
           std::printf("amixos --shots: samples-pads, samples-effects, settings-processor, acoustics-room-correction, mixer-automix, mixer-daw\n"); }
@@ -1576,6 +1578,14 @@ int main(int argc, char* argv[]) {
         const bool easy = std::fabs(g1 - (g0 + 1)) < 0.01 && std::fabs(g2 - g0) < 0.01 && find(root, "easy_quieter0") && find(root, "easy_zero0");
         std::printf("amixos --smoke: EASY KEYS louder %.1f -> %.1f dB, BACK -> %.1f dB: %s\n", g0, g1, g2, easy ? "ok" : "FAILED"); if (!easy) std::exit(88);
         const bool keys = find(root, "stripFader") && find(root, "stripMute0") && find(root, "stripSolo0");
+        // EDIT LAYOUT: hide REC and the easy keys and widen the strips; a damaged setting falls back to the shipped layout; RESET brings it back
+        auto vis = [&](const char* n) { QQuickItem* it = find(root, QString::fromLatin1(n)); return it && it->isVisible(); }; auto pump = [&] { QElapsedTimer t; t.start(); while (t.elapsed() < 350) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+        const bool before = vis("side_rec0") && vis("easy_louder0"); const double w0 = find(root, "stripFader") ? find(root, "stripFader")->parentItem()->parentItem()->parentItem()->width() : 0;
+        settings.setMixerLayout("{\"rec\":false,\"easy\":false,\"stripW\":160}"); pump(); const bool hidden = !vis("side_rec0") && !vis("easy_louder0") && vis("side_fx0") && vis("stripMute0");
+        settings.setMixerLayout("{\"stripW\":99999,\"rec\":\"no\",\"fx\":[1]} trailing junk"); pump(); const bool safe = vis("side_rec0") && vis("side_fx0") && vis("easy_louder0") && vis("stripMute0");
+        settings.setMixerLayout(""); pump(); const bool back = vis("side_rec0") && vis("easy_louder0");
+        std::printf("amixos --smoke: EDIT LAYOUT hides REC and the easy keys %d (shown before %d), a damaged setting keeps the shipped layout %d, RESET brings them back %d (strip %.0f px)\n", hidden, before, safe, back, w0);
+        if (!before || !hidden || !safe || !back) std::exit(95);
         engine.setPlugin(0, 9, "fx:reverb"); const bool tenth = engine.plugins(0)[9].toMap().value("kind").toString() == "fx:reverb";
         engine.setPlugin(0, 10, "fx:delay"); const bool eleventhRefused = engine.plugins(0).size() <= 10 || engine.plugins(0)[10].toMap().value("kind").toString().isEmpty();
         engine.setPlugin(0, 9, "");

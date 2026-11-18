@@ -56,6 +56,13 @@ Item {
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
     property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
     // STRIP SECTIONS: what each strip shows (SETTINGS popover); off = a leaner strip. The fader, M/S, name and meters always stay.
+    // EDIT LAYOUT: what the mixer shows and how wide a strip is. One JSON text in the settings; anything missing or odd in it falls back to the
+    // layout the console ships with, so a damaged setting can never hide the faders (they are not in the list at all).
+    property bool editing: false
+    readonly property var layDefault: ({ stripW: 124, rec: true, auto: true, fx: true, eq: true, phase: true, easy: true, masterVu: true })
+    readonly property var lay: { const d = Object.assign({}, layDefault); let o = {}; try { o = JSON.parse(settings.mixerLayout || "{}") || {} } catch (e) { o = {} }
+        for (const k in d) { if (k === "stripW") { const w = Number(o.stripW); if (isFinite(w) && w >= 96 && w <= 180) d.stripW = Math.round(w) } else if (typeof o[k] === "boolean") d[k] = o[k] } return d }
+    function setLay(k, v) { const o = Object.assign({}, lay); o[k] = v; settings.mixerLayout = JSON.stringify(o) }
     property bool simple: settings.mixerSimple   // SIMPLE strips: the name, the tone knobs, pan, MUTE / SOLO and the fader; FULL adds every key and readout
     property bool showInput: true
     property bool showTone: true   // GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers
@@ -110,6 +117,9 @@ Item {
                     }
                 }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
+                Rectangle { objectName: "editLayoutKey"; implicitWidth: elT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: page.editing ? Theme.cyan : Theme.ov(0.06); border.color: page.editing ? Theme.cyan : Theme.lineSoft
+                    Text { id: elT; anchors.centerIn: parent; text: page.editing ? i18n.t("DONE", i18n.lang) : i18n.t("EDIT LAYOUT", i18n.lang); color: page.editing ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.editing = !page.editing } }
                 Repeater {   // SIMPLE: only what a first mix needs on each strip; FULL: every key and readout
                     model: [[true, "SIMPLE"], [false, "FULL"]]
                     delegate: Rectangle { objectName: "mixerView_" + modelData[1]; readonly property bool on: page.simple === modelData[0]
@@ -324,6 +334,29 @@ Item {
             Dialog { id: confirmReset; title: i18n.t("Reset every fader?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.resetFaders(); Text { text: i18n.t("All 32 strips and the master go to 0 dB, pans to centre. Mutes, solos and DSP stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
             Dialog { id: confirmFlatten; title: i18n.t("Flatten the DSP of every channel?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.flattenAllDsp(); Text { text: i18n.t("Gate, EQ, crossover, compressor, limiter, delay and polarity are switched off on all 32 channels. Faders, sends and names stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
         }
+        // EDIT LAYOUT: every part that can be shown or hidden as a key (lit = shown), the strip width, RESET and DONE. The faders, the meters,
+        // MUTE, SOLO and the names are not here: they always stay.
+        Rectangle { objectName: "layoutEditor"; visible: page.editing; Layout.fillWidth: true; implicitHeight: leCol.implicitHeight + 20; radius: 6; color: Theme.card; border.width: 2; border.color: Theme.cyan
+            ColumnLayout { id: leCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10; spacing: 8
+                RowLayout { Layout.fillWidth: true; spacing: 8
+                    Text { text: i18n.t("EDIT LAYOUT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 2 }
+                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t("Press a key to show or hide that part. Faders, meters, MUTE, SOLO and names always stay.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                    MKey { objectName: "layoutReset"; implicitWidth: 120; label: "RESET LAYOUT"; hue: Theme.amber; onHit: { settings.mixerLayout = ""; page.showTone = true; page.showInput = true; page.showPan = true; page.rack = true; page.sidePanel = true; page.monitorPanel = true } }
+                    MKey { objectName: "layoutDone"; implicitWidth: 70; label: "DONE"; hue: Theme.cyan; on: true; onHit: page.editing = false } }
+                Flow { Layout.fillWidth: true; spacing: 6
+                    Repeater { model: [["STRIP", "TONE KNOBS", "p", "showTone"], ["STRIP", "INPUT", "p", "showInput"], ["STRIP", "PAN", "p", "showPan"],
+                                       ["BESIDE THE FADER", "REC", "l", "rec"], ["BESIDE THE FADER", "AUTO", "l", "auto"], ["BESIDE THE FADER", "FX", "l", "fx"], ["BESIDE THE FADER", "EQ", "l", "eq"], ["BESIDE THE FADER", "PHASE", "l", "phase"], ["BESIDE THE FADER", "EASY KEYS", "l", "easy"],
+                                       ["PANELS", "PLUG-IN RACK", "p", "rack"], ["PANELS", "CHANNEL OVERVIEW", "p", "sidePanel"], ["PANELS", "MASTER VU", "l", "masterVu"], ["PANELS", "MONITOR", "p", "monitorPanel"]]
+                        delegate: Row { spacing: 4
+                            Text { visible: index === 0 || modelData[0] !== ["STRIP", "STRIP", "STRIP", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "PANELS", "PANELS", "PANELS", "PANELS"][index - 1]; anchors.verticalCenter: parent.verticalCenter; text: i18n.t(modelData[0], i18n.lang) + ":"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; rightPadding: 2; leftPadding: index ? 10 : 0 }
+                            MKey { objectName: "layout_" + modelData[3]; implicitWidth: Math.max(60, modelData[1].length * 7 + 18); label: modelData[1]; hue: Theme.cyan
+                                on: modelData[2] === "l" ? !!page.lay[modelData[3]] : !!page[modelData[3]]
+                                onHit: { if (modelData[2] === "l") page.setLay(modelData[3], !page.lay[modelData[3]]); else page[modelData[3]] = !page[modelData[3]] } } } } }
+                RowLayout { Layout.fillWidth: true; spacing: 10
+                    Text { text: i18n.t("STRIP WIDTH", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MSlider { objectName: "layoutWidth"; Layout.preferredWidth: 260; from: 96; to: 180; stepSize: 2; value: page.lay.stripW; tint: Theme.cyan; onMoved: page.setLay("stripW", value) }
+                    Text { text: page.lay.stripW + " px"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                    Item { Layout.fillWidth: true } } } }
         // PLUGIN RACK: the insert slots of the selected channel (10 on BASIC, unlimited on PRO / STUDIO / MASTER), one card each. A built-in stage lights up when inserted; right-click or
         // BYP bypasses; ‹ › reorder; OPEN goes to the stage's page; a VST3 reference waits (amber) for the VST3 host.
         Rectangle {
@@ -415,7 +448,7 @@ Item {
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 124 : 124) : 0
+                                width: visible ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
@@ -599,13 +632,13 @@ Item {
                                         ColumnLayout { Layout.fillHeight: true; spacing: 3
                                             Item { Layout.fillHeight: true }
                                             // THE CHANNEL KEYS above the easy keys: what a mix needs most, one press each, lit in its own colour when on
-                                            MKey { objectName: "side_rec" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "REC"; hue: "#ff4d6d"; on: !!(st && st.armed); tip: i18n.t("REC: record this channel when recording starts", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setArmed(stripItem.stripIdx, !(st && st.armed)) } }
-                                            MKey { objectName: "side_auto" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "AUTO"; hue: "#38bdf8"; on: !!(st && st.automix); tip: i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setAutomix(stripItem.stripIdx, !(st && st.automix), st ? st.amWeight : 1) } }
-                                            MKey { objectName: "side_fx" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: st && st.plugins > 0 ? "FX " + st.plugins : "FX"; hue: "#a78bfa"; on: !!(st && st.plugins > 0); tip: i18n.t("FX: the effects of this channel (plug-in rack)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.rack = true } }
-                                            MKey { objectName: "side_eq" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "EQ"; hue: "#4ade80"; on: !!(st && st.eqOn); tip: i18n.t("EQ: open the full equaliser of this channel", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.go("dsp") } }
-                                            MKey { objectName: "side_phase" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: "Ø"; hue: "#facc15"; on: !!(st && st.polarity); tip: i18n.t("PHASE: turn this channel round (when two microphones on one source sound thin together)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setPolarity(stripItem.stripIdx, !(st && st.polarity)) } }
-                                            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; implicitHeight: 1; color: Theme.line }
-                                            Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
+                                            MKey { objectName: "side_rec" + stripItem.stripIdx; visible: page.lay.rec; implicitWidth: 34; implicitHeight: 24; label: "REC"; hue: "#ff4d6d"; on: !!(st && st.armed); tip: i18n.t("REC: record this channel when recording starts", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setArmed(stripItem.stripIdx, !(st && st.armed)) } }
+                                            MKey { objectName: "side_auto" + stripItem.stripIdx; visible: page.lay.auto; implicitWidth: 34; implicitHeight: 24; label: "AUTO"; hue: "#38bdf8"; on: !!(st && st.automix); tip: i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setAutomix(stripItem.stripIdx, !(st && st.automix), st ? st.amWeight : 1) } }
+                                            MKey { objectName: "side_fx" + stripItem.stripIdx; visible: page.lay.fx; implicitWidth: 34; implicitHeight: 24; label: st && st.plugins > 0 ? "FX " + st.plugins : "FX"; hue: "#a78bfa"; on: !!(st && st.plugins > 0); tip: i18n.t("FX: the effects of this channel (plug-in rack)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.rack = true } }
+                                            MKey { objectName: "side_eq" + stripItem.stripIdx; visible: page.lay.eq; implicitWidth: 34; implicitHeight: 24; label: "EQ"; hue: "#4ade80"; on: !!(st && st.eqOn); tip: i18n.t("EQ: open the full equaliser of this channel", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.go("dsp") } }
+                                            MKey { objectName: "side_phase" + stripItem.stripIdx; visible: page.lay.phase; implicitWidth: 34; implicitHeight: 24; glyph: "Ø"; hue: "#facc15"; on: !!(st && st.polarity); tip: i18n.t("PHASE: turn this channel round (when two microphones on one source sound thin together)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setPolarity(stripItem.stripIdx, !(st && st.polarity)) } }
+                                            Rectangle { visible: page.lay.easy && (page.lay.rec || page.lay.auto || page.lay.fx || page.lay.eq || page.lay.phase); Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; implicitHeight: 1; color: Theme.line }
+                                            Repeater { model: !page.lay.easy ? [] : [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
                                                 delegate: MKey { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: modelData[0]; hue: stripItem.sc; tip: i18n.t(modelData[2], i18n.lang)
                                                     can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
                                                     onHit: { engine.selectedStrip = stripItem.stripIdx
@@ -738,7 +771,7 @@ Item {
                 // GAIN MODE on: the Windows volume trims the master; shown here so the level heard is never a surprise
                 Text { objectName: "winTrimLine"; visible: engine.windowsGainMode && engine.windowsVolume >= 0; Layout.alignment: Qt.AlignHCenter
                     text: "WIN " + engine.windowsVolume + "% · " + (engine.windowsTrimDb <= -119 ? "OFF" : engine.windowsTrimDb === 0 ? "0 dB" : engine.windowsTrimDb.toFixed(1) + " dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                VuMeter { objectName: "masterVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 122; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
+                VuMeter { objectName: "masterVu"; visible: page.lay.masterVu; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 122; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 5; rowSpacing: 5
                     ModKey { objectName: "masterEqBtn"; Layout.fillWidth: true; label: "RTA EQ"; tint: Theme.orange; lit: engine.mastering().eqOn; onClicked: page.go("rtaeq") }                       // RTA EQ: the main (master) equaliser
                     ModKey { objectName: "enhancerBtn"; Layout.fillWidth: true; label: "ENHANCE"; tint: Theme.emerald; lit: engine.mastering().on; onClicked: page.Window.window.openEnhancer() }   // AMFB VOLUME ENHANCER
