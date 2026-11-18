@@ -2146,5 +2146,9 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: kênh này chia sẻ mức tăng với các kênh khác (AI MIX)",
 "CORRECTION CURVE": "ĐƯỜNG CONG CHỈNH SỬA",
 "VU meters fed by the Hybrid extension's own meters": "Các đồng hồ VU được cấp tín hiệu từ chính các đồng hồ của tiện ích mở rộng Hybrid",
-"New install: everything starts from the factory state (the licence is kept).": "Cài đặt mới: mọi thứ đều trở về trạng thái ban đầu (giấy phép vẫn được giữ nguyên)."
+"New install: everything starts from the factory state (the licence is kept).": "Cài đặt mới: mọi thứ đều trở về trạng thái ban đầu (giấy phép vẫn được giữ nguyên).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Các kênh đầu vào 1 và 2 nhận tín hiệu từ cùng một micro (một giọng nói được truyền đến cả hai bên): Kênh 1 được đặt ở chế độ không có tín hiệu đầu vào, do đó giọng nói chỉ được nghe thấy một lần, trên kênh 2. Nút UNDO sẽ khôi phục lại trạng thái ban đầu.",
+"UNDO": "HUỶ",
+"One voice": "Một tiếng nói",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Khi đầu vào 1 và 2 cùng kết nối với một micro, kênh 1 sẽ được đặt ở chế độ không có tín hiệu đầu vào để giọng nói chỉ được phát ra một lần (giảm hiện tượng phản hồi)"
 }

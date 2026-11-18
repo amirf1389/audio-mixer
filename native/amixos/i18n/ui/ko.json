@@ -2203,5 +2203,9 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: 이 채널은 다른 채널들과 게인을 공유합니다 (AI MIX).",
 "CORRECTION CURVE": "교정 곡선",
 "VU meters fed by the Hybrid extension's own meters": "하이브리드 확장 기능 자체의 계측기에서 신호를 받는 VU 미터",
-"New install: everything starts from the factory state (the licence is kept).": "새로 설치: 모든 것이 공장 출하 시 상태로 초기화됩니다(라이선스는 유지됩니다)."
+"New install: everything starts from the factory state (the licence is kept).": "새로 설치: 모든 것이 공장 출하 시 상태로 초기화됩니다(라이선스는 유지됩니다).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "입력 1과 2에는 동일한 마이크 신호가 입력됩니다(양쪽 모두에서 하나의 목소리가 나옴). CH 1은 입력 없음으로 설정되어 있으므로, 목소리는 CH 2에서만 한 번 들립니다. UNDO를 누르면 원래대로 돌아갑니다.",
+"UNDO": "되돌리기",
+"One voice": "하나의 목소리",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "입력 1과 2에 동일한 마이크가 연결된 경우, CH 1은 입력 없음으로 설정되어 음성이 한 번만 들리게 됩니다(피드백 감소)."
 }

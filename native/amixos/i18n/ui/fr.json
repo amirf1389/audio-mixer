@@ -2150,5 +2150,9 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX : ce canal partage le gain avec les autres (AI MIX)",
 "CORRECTION CURVE": "COURBE DE CORRECTION",
 "VU meters fed by the Hybrid extension's own meters": "Des vumètres alimentés par les capteurs de l'extension Hybrid",
-"New install: everything starts from the factory state (the licence is kept).": "Nouvelle installation : tout revient aux paramètres d'usine (la licence est conservée)."
+"New install: everything starts from the factory state (the licence is kept).": "Nouvelle installation : tout revient aux paramètres d'usine (la licence est conservée).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Les entrées 1 et 2 sont reliées au même microphone (une seule voix des deux côtés) : le canal 1 est réglé sur « aucune entrée », de sorte que la voix n'est entendue qu'une seule fois, sur le canal 2. La fonction « UNDO » rétablit la situation initiale.",
+"UNDO": "ANNULER",
+"One voice": "Une seule voix",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Lorsque les entrées 1 et 2 sont reliées au même microphone, le canal 1 est réglé sur « aucune entrée » afin que la voix ne soit entendue qu'une seule fois (moins de larsen)"
 }

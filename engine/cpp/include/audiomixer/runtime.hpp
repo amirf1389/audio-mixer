@@ -108,6 +108,9 @@ struct Snapshot {
   std::uint64_t blocks, frames, xruns;
   double ampPk[64], ampGrDb[64];             // the amplifier stage of each output: its peak after processing and the limiter's gain reduction (dB)
   double loadPct, blockUs, maxBlockUs, jitterUs;   // DSP time of the last block as % of its duration, its microseconds, the worst since start, the period jitter
+  // ONE VOICE: how alike the device's inputs 1 and 2 are over the last half second (a mono microphone delivered on both sides reads corr ~1,
+  // diff ~0 dB); levelDb -120 while there is no signal; windows counts the finished measurements
+  double in12Corr, in12DiffDb, in12LevelDb; std::uint64_t in12Windows;
 };
 
 class Runtime {
@@ -246,6 +249,7 @@ class Runtime {
   // published meters (sequence counter)
   mutable std::atomic<unsigned> seq_{0}; Snapshot pub_{}; std::uint64_t blocks_ = 0, frames_ = 0;
   double loadPct_ = 0, blockUs_ = 0, maxBlockUs_ = 0, jitterUs_ = 0; std::int64_t lastStartNs_ = 0;   // profiler (audio thread)
+  double dAB_ = 0, dAA_ = 0, dBB_ = 0; std::size_t dN_ = 0; double in12Corr_ = 0, in12DiffDb_ = 0, in12LevelDb_ = -120; std::uint64_t in12Windows_ = 0;   // ONE VOICE (audio thread)
 };
 
 }  // namespace am

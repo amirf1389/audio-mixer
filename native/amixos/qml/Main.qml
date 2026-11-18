@@ -190,6 +190,14 @@ ApplicationWindow {
                 Rectangle { objectName: "raiseMasterBtn"; implicitWidth: Math.max(110, rmT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.danger
                     Text { id: rmT; anchors.centerIn: parent; text: i18n.t("RAISE TO 0 dB", i18n.lang); color: "#fff"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMaster(0) } } } }
+        // ONE VOICE: the same microphone arrived on inputs 1 and 2, so CH 1 was set to no input (the voice once, 6 dB less towards feedback)
+        Rectangle { objectName: "oneVoiceBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: engine.oneVoiceNote !== ""; color: Qt.rgba(0.133, 0.827, 0.933, 0.12); border.color: Theme.cyan
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "◐"; color: Theme.cyan; font.pixelSize: 12 }
+                Text { Layout.fillWidth: true; text: i18n.t(engine.oneVoiceNote, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                Rectangle { objectName: "oneVoiceUndo"; implicitWidth: Math.max(70, ovT.implicitWidth + 14); implicitHeight: 20; radius: 4; color: Theme.ov(0.12); border.color: Theme.cyan
+                    Text { id: ovT; anchors.centerIn: parent; text: i18n.t("UNDO", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.undoOneVoice() } } } }
         Rectangle { objectName: "inputSilentBanner"; Layout.fillWidth: true; implicitHeight: 30; visible: { engine.meterTick; return engine.inputMutedBySystem() } color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
                 Text { text: "⏚"; font.pixelSize: 12 }

@@ -2241,5 +2241,9 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "آٹو مکس: یہ چینل دوسروں (AI مکس) کے ساتھ گین شیئر کرتا ہے۔",
 "CORRECTION CURVE": "اصلاحی منحنی",
 "VU meters fed by the Hybrid extension's own meters": "ہائبرڈ ایکسٹینشن کے اپنے میٹرز سے منسلک VU میٹرز",
-"New install: everything starts from the factory state (the licence is kept).": "نئی تنصیب: سب کچھ فیکٹری کی حالت سے شروع ہوتا ہے (لائسنس برقرار رہتا ہے)۔"
+"New install: everything starts from the factory state (the licence is kept).": "نئی تنصیب: سب کچھ فیکٹری کی حالت سے شروع ہوتا ہے (لائسنس برقرار رہتا ہے)۔",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "ان پُٹس 1 اور 2 ایک ہی مائیکروفون کی آواز منتقل کرتے ہیں (دونوں اطراف سے ایک ہی آواز): CH1 کو بغیر ان پُٹ کے سیٹ کیا گیا ہے تاکہ آواز صرف ایک بار CH2 پر سنی جائے۔ UNDO اسے واپس کر دیتا ہے۔",
+"UNDO": "واپس کریں",
+"One voice": "ایک آواز",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "جب ان پٹس 1 اور 2 ایک ہی مائیکروفون کو لے کر چلتے ہیں، تو چینل 1 کو بغیر ان پٹ کے سیٹ کیا جاتا ہے تاکہ آواز صرف ایک بار سنائی دے (کم فیڈ بیک)۔"
 }

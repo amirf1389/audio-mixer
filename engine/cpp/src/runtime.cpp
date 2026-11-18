@@ -202,6 +202,17 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   const float* ins[kMaxStrips];
   NetInput* netIn = netIn_.load();
   if (netIn) { float* nb[kNetInputs]; for (int k = 0; k < kNetInputs; ++k) nb[k] = netBuf_[static_cast<std::size_t>(k)].data(); netIn->pull(nb, kNetInputs, frames, mixer_.sampleRate()); }
+  if (nIn_ >= 2 && in && in[0] && in[1]) {   // ONE VOICE: are the device's inputs 1 and 2 the same signal? (half-second windows)
+    for (std::size_t i = 0; i < frames; ++i) { const double a = in[0][i], b = in[1][i]; dAB_ += a * b; dAA_ += a * a; dBB_ += b * b; }
+    dN_ += frames;
+    if (dN_ >= static_cast<std::size_t>(mixer_.sampleRate() * 0.5)) {
+      const double e = (dAA_ + dBB_) / (2.0 * static_cast<double>(dN_));
+      in12LevelDb_ = e > 1e-12 ? 10.0 * std::log10(e) : -120.0;
+      in12Corr_ = dAA_ > 1e-12 && dBB_ > 1e-12 ? dAB_ / std::sqrt(dAA_ * dBB_) : 0.0;
+      in12DiffDb_ = dAA_ > 1e-12 && dBB_ > 1e-12 ? 10.0 * std::log10(dAA_ / dBB_) : 0.0;
+      ++in12Windows_; dAB_ = dAA_ = dBB_ = 0; dN_ = 0;
+    }
+  }
   const int tapRaw = tapRaw_.load(std::memory_order_relaxed); const float* rawIn = nullptr;
   for (int s = 0; s < mixer_.strips(); ++s) {
     const int src = inRoute_[s];
@@ -290,7 +301,7 @@ void Runtime::publish() {
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
   for (int o = 0; o < kMaxOutputs; ++o) { s.ampPk[o] = amp_[o].peak(); s.ampGrDb[o] = amp_[o].gainReductionDb(); }
-  s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;
+  s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.in12Corr = in12Corr_; s.in12DiffDb = in12DiffDb_; s.in12LevelDb = in12LevelDb_; s.in12Windows = in12Windows_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;
   const unsigned q = seq_.load(std::memory_order_relaxed);
   seq_.store(q + 1, std::memory_order_release);                                    // odd: being written
   std::memcpy(&pub_, &s, sizeof s);

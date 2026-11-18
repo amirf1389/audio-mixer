@@ -2154,5 +2154,8 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: saluran ini berkongsi penguatan dengan yang lain (AI MIX)",
 "CORRECTION CURVE": "Lengkung pembetulan",
 "VU meters fed by the Hybrid extension's own meters": "Pengukur VU yang diberi maklumat oleh pengukur tersendiri pada sambungan Hybrid.",
-"New install: everything starts from the factory state (the licence is kept).": "Pemasangan baru: semuanya bermula dari keadaan kilang (lesen dikekalkan)."
+"New install: everything starts from the factory state (the licence is kept).": "Pemasangan baru: semuanya bermula dari keadaan kilang (lesen dikekalkan).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Input 1 dan 2 membawa mikrofon yang sama (satu suara di kedua-dua belah): CH 1 ditetapkan tanpa input supaya suara hanya didengar sekali pada CH 2. UNDO memulihkannya semula.",
+"UNDO": "Batal",
+"One voice": "Satu suara"
 }

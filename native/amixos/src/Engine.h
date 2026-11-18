@@ -21,6 +21,7 @@
 #include <deque>
 #include <mutex>
 #include <thread>
+#include "audiomixer/onevoice.hpp"
 #include "audiomixer/dynamics.hpp"
 #include <vector>
 
@@ -115,6 +116,9 @@ class Engine : public QObject {
   // front (15 with ECO), 4 fps behind another app (Chrome, a game), 1 fps minimised. The sound is never throttled: only the screen.
   Q_INVOKABLE void setUiActivity(int level);   // 2 in front, 1 behind another window, 0 minimised / hidden
   Q_PROPERTY(bool ecoUi READ ecoUi WRITE setEcoUi NOTIFY ecoUiChanged)
+  // ONE VOICE: when inputs 1 and 2 carry the same mono microphone, CH 1 is set to no input so the voice is heard once (on by default)
+  Q_PROPERTY(bool oneVoice READ oneVoice WRITE setOneVoice NOTIFY oneVoiceChanged)
+  Q_PROPERTY(QString oneVoiceNote READ oneVoiceNote NOTIFY oneVoiceChanged)   // what it did on this device ("" = nothing)
   Q_PROPERTY(bool uiAwake READ uiAwake NOTIFY ecoUiChanged)   // the window is in front: animations and fast page polls run only then
   bool uiAwake() const { return uiLevel_ >= 2; }
   bool ecoUi() const { return ecoUi_; }
@@ -327,6 +331,9 @@ class Engine : public QObject {
   void setAutoPrefer(const QString& p);
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
+  bool oneVoice() const { return oneVoice_; } void setOneVoice(bool on); QString oneVoiceNote() const { return oneVoiceNote_; }
+  Q_INVOKABLE void undoOneVoice();   // CH 1 back on input 1, and the rule rests until the next device opens
+  bool oneVoice_ = true, oneVoiceActed_ = false; QString oneVoiceNote_; am::OneVoice ov_;
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
   bool freshInstall_ = false; QString installId_;
   QString startNote_;
@@ -678,6 +685,7 @@ class Engine : public QObject {
  signals:
   void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
   void ecoUiChanged();
+  void oneVoiceChanged();
   void compTargetChanged();
   void stateChanged();
   void ampChanged();

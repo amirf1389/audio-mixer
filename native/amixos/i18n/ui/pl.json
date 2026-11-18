@@ -2146,5 +2146,9 @@
 "battery saver on: the sound may need a larger buffer": "włączona funkcja oszczędzania baterii: dźwięk może wymagać większego bufora",
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: ten kanał dzieli wzmocnienie z pozostałymi (AI MIX)",
 "CORRECTION CURVE": "KRZYWA KOREKCYJNA",
-"New install: everything starts from the factory state (the licence is kept).": "Nowa instalacja: wszystko wraca do stanu fabrycznego (licencja zostaje zachowana)."
+"New install: everything starts from the factory state (the licence is kept).": "Nowa instalacja: wszystko wraca do stanu fabrycznego (licencja zostaje zachowana).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Wejścia 1 i 2 są podłączone do tego samego mikrofonu (jeden głos po obu stronach): kanał 1 jest ustawiony na brak sygnału wejściowego, więc głos słychać tylko raz, na kanale 2. Funkcja UNDO przywraca poprzedni stan.",
+"UNDO": "COFNĄĆ",
+"One voice": "Jeden głos",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Gdy na wejściach 1 i 2 podłączony jest ten sam mikrofon, kanał 1 jest ustawiony na brak sygnału wejściowego, dzięki czemu głos słychać tylko raz (mniej sprzężenia zwrotnego)"
 }

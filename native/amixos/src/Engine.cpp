@@ -71,7 +71,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
-  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate();
+  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate(); oneVoice_ = settings_.value("audio/oneVoice", true).toBool();
   sysFast_ = settings_.value("sys/fastCores", true).toBool(); sysEco_ = settings_.value("sys/ecoBackground", true).toBool(); sysTrim_ = settings_.value("sys/trimMinimised", true).toBool();
   am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -192,6 +192,7 @@ void Engine::setDeviceEnabled(const QString& backend, const QString& id, bool on
   emit devicesChanged();
 }
 bool Engine::open(const QString& backend, const QString& inDevice, const QString& outDevice, double sampleRate, int frames, int inChannels, int outChannels) {
+  if (!opening_) { oneVoiceActed_ = false; ov_.reset(); if (!oneVoiceNote_.isEmpty()) { oneVoiceNote_.clear(); emit oneVoiceChanged(); } }   // ONE VOICE looks again on every device
   if (opening_) return false;   // a start is already under way (asked again from the interface while it waits): nothing is stopped or replaced under it
   for (const QString& dev : {inDevice, outDevice}) if (!dev.isEmpty() && dev != "-" && !deviceEnabled(backend, dev)) { status_ = QStringLiteral("That device is switched OFF on CONNECTIONS: switch it ON to use it."); emit stateChanged(); return false; }
   stop();
@@ -1702,11 +1703,18 @@ QVariantMap Engine::systemInfo() const {
   r["tips"] = tips;
   return r;
 }
+void Engine::setOneVoice(bool on) { if (on == oneVoice_) return; oneVoice_ = on; settings_.setValue("audio/oneVoice", on); ov_.reset(); emit oneVoiceChanged(); }
+void Engine::undoOneVoice() { if (!oneVoiceActed_) return; setInputRoute(0, 0); oneVoiceNote_.clear(); ov_.reset(); emit oneVoiceChanged(); }   // oneVoiceActed_ stays: not again on this device
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
 void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
+    // ONE VOICE: the same mono microphone on inputs 1 and 2 (not on the null test device): CH 1 off, the voice heard once on CH 2
+    if (oneVoice_ && !oneVoiceActed_ && rt_->backendName() != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {
+      oneVoiceActed_ = true; setInputRoute(0, -1);
+      oneVoiceNote_ = QStringLiteral("Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.");
+      emit oneVoiceChanged(); }
     const double vuA = 1.0 - std::exp(-timer_.interval() / 65.0);   // a VU reaches 99 % of a step in 300 ms: a one-pole with tau = 65 ms, run at the timer rate
     if (++dynTick_ >= 3) { dynTick_ = 0; for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].dyn.push(s.strips[i].inPk > 1e-6 ? 20.0 * std::log10(s.strips[i].inPk) : -120.0); }   // ten a second: the input, before EQ and dynamics
     bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard

@@ -32,6 +32,7 @@
 #include "audiomixer/runtime.hpp"
 #include "plugin/plugin.hpp"
 #include "rta.hpp"
+#include "audiomixer/onevoice.hpp"
 #include "samples/pad_player.hpp"
 #include "samples/padbank.hpp"
 #include "audiomixer/master_chain.hpp"
@@ -125,6 +126,7 @@ class Daemon {
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
+  mutable OneVoice ov_; mutable bool ovActed_ = false; mutable std::string ovNote_;   // ONE VOICE (onevoice.hpp): the same microphone on inputs 1 and 2, CH 1 to no input
   pads::Player pads_;   // the SAMPLE PADS, the 1000 SOUND EFFECTS and the 1000 CUSTOM PADS while the service plays (ops sample, pad)
   std::unique_ptr<pads::Bank> bank_;   // what each custom pad plays: the file the console writes too
   json::Value padsJson(const httpd::Request& r);

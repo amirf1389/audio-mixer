@@ -477,7 +477,7 @@ json::Value Daemon::state() const {
   o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
-  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("routing", routingJson());
+  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
     m.set("on", mp_.on); m.set("low", mp_.lowDb); m.set("air", mp_.airDb); m.set("thr", mp_.thrDb); m.set("ratio", mp_.ratio); m.set("attack", mp_.attackMs); m.set("release", mp_.releaseMs);
     m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); o.set("mastering", m); }
@@ -489,6 +489,9 @@ json::Value Daemon::meters() const {
   json::Value o = json::Value::object();
   if (!rt_) { o.set("running", false); return o; }
   const Snapshot s = rt_->snapshot();
+  if (!ovActed_ && backend_ != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {   // ONE VOICE (the phones see the routing change and the note)
+    ovActed_ = true; const_cast<Daemon*>(this)->inRoute_[0] = -1; rt_->setInputRoute(0, -1); ++const_cast<Daemon*>(this)->version_;
+    ovNote_ = "Inputs 1 and 2 carry the same microphone: CH 1 is set to no input so the voice is heard once, on CH 2."; }
   json::Value strips = json::Value::array();
   for (int i = 0; i < opt_.strips; ++i) {
     const auto& m = s.strips[i]; json::Value v = json::Value::object();
@@ -598,6 +601,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
     initRoutes(); for (int i = 0; i < opt_.strips; ++i) rt->setInputRoute(i, inRoute_[i]); for (int o = 0; o < Runtime::kMaxOutputs; ++o) rt->setOutputRoute(o, outRoute_[o]);   // the routing as kept
+    ovActed_ = false; ov_.reset(); ovNote_.clear();   // ONE VOICE looks again on every device
     lastCfg_ = cfg; rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
   }

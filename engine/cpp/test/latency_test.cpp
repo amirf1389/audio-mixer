@@ -1,6 +1,9 @@
 // LOW LATENCY SOUND DETECTION: the verdict and advice for the usual Windows setups, and the ROUND TRIP click found at the exact delay
 // through noise, a quieter return and an inverted cable.
 #include "audiomixer/latency.hpp"
+#include "audiomixer/onevoice.hpp"
+#include "audiomixer/runtime.hpp"
+#include <vector>
 
 #include <cmath>
 #include <cstdio>
@@ -45,6 +48,25 @@ int main() {
   // nothing came back (no loop cable): low confidence, not trusted
   { std::vector<float> rec(24000); for (auto& x : rec) x = noise(g); double conf = 1; findDelay(click.data(), click.size(), rec.data(), rec.size(), &conf); CHECK(conf < 0.3); }
   { double c = 1; CHECK(findDelay(click.data(), click.size(), click.data(), 10, &c) == -1 && c == 0); }
+  // ONE VOICE: the same voice on inputs 1 and 2 is found after 1.5 s; a real stereo pair, silence or a quiet hum on one side never is
+  { using am::Runtime; using am::DeviceConfig; using am::OneVoice;
+    auto run = [&](auto genL, auto genR, double seconds) {
+      Runtime rt(2); DeviceConfig c; c.backend = "null"; c.frames = 256; c.inChannels = 2; std::string err; if (!rt.open(c, err)) return std::pair<am::Snapshot, int>{};
+      const std::size_t n = 256; std::vector<float> a(n), b(n), o0(n), o1(n); const float* ins[2] = {a.data(), b.data()}; float* outs[2] = {o0.data(), o1.data()};
+      OneVoice ov; int firedAt = -1; std::size_t t = 0;
+      for (int k = 0; k < static_cast<int>(seconds * 48000 / n); ++k) { for (std::size_t i = 0; i < n; ++i, ++t) { a[i] = genL(t); b[i] = genR(t); } rt.onBlock(ins, outs, n); if (firedAt < 0 && ov.update(rt.snapshot())) firedAt = k; }
+      return std::pair<am::Snapshot, int>{rt.snapshot(), firedAt}; };
+    std::mt19937 g2(7); std::normal_distribution<float> nz(0.f, 0.1f);
+    std::vector<float> voice(48000 * 3); for (std::size_t i = 0; i < voice.size(); ++i) voice[i] = 0.3f * std::sin(2 * 3.14159 * 180 * i / 48000.0) * (0.6f + 0.4f * std::sin(2 * 3.14159 * 3 * i / 48000.0)) + 0.2f * nz(g2);
+    auto v = [&](std::size_t t) { return voice[t % voice.size()]; };
+    const auto same = run(v, v, 2.5);
+    CHECK(same.first.in12Corr > 0.999 && std::fabs(same.first.in12DiffDb) < 0.01 && same.first.in12LevelDb > -40 && same.second > 0 && same.second * 256 / 48000.0 <= 2.0);
+    std::vector<float> other(48000 * 3); for (auto& x : other) x = 0.3f * nz(g2);
+    const auto stereo = run(v, [&](std::size_t t) { return 0.7f * voice[t % voice.size()] + 0.7f * other[t % other.size()]; }, 3.0);
+    CHECK(stereo.second < 0 && stereo.first.in12Corr < 0.995);
+    const auto quiet = run([](std::size_t) { return 0.f; }, [](std::size_t) { return 0.f; }, 3.0); CHECK(quiet.second < 0);
+    const auto louder = run(v, [&](std::size_t t) { return 0.5f * voice[t % voice.size()]; }, 3.0); CHECK(louder.second < 0 && std::fabs(louder.first.in12DiffDb - 6.02) < 0.1);   // one side 6 dB down: a different gain, not the same capsule twice
+    std::printf("latency_test: ONE VOICE same mic found after %.1f s (corr %.4f); stereo corr %.2f, silence and a 6 dB difference left alone\n", same.second * 256 / 48000.0 + 0.5, same.first.in12Corr, stereo.first.in12Corr); }
   std::printf(fails ? "latency_test: %d FAILED\n" : "latency_test: all passed\n", fails);
   return fails ? 1 : 0;
 }

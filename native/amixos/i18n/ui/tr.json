@@ -2179,5 +2179,9 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: Bu kanal, diğer kanallarla aynı kazanç değerini paylaşır (AI MIX)",
 "CORRECTION CURVE": "DÜZELTME EĞRİSİ",
 "VU meters fed by the Hybrid extension's own meters": "Hybrid eklentisinin kendi ölçüm cihazlarından beslenen VU ölçüm cihazları",
-"New install: everything starts from the factory state (the licence is kept).": "Yeni kurulum: Her şey fabrika ayarlarına sıfırlanır (lisans korunur)."
+"New install: everything starts from the factory state (the licence is kept).": "Yeni kurulum: Her şey fabrika ayarlarına sıfırlanır (lisans korunur).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "1 ve 2 numaralı girişler aynı mikrofonu taşır (her iki tarafta da tek bir ses): CH 1’e giriş yok olarak ayarlandığından ses, CH 2’de tek bir kez duyulur. UNDO tuşu ile eski haline geri döndürülür.",
+"UNDO": "GERİ AL",
+"One voice": "Tek bir ses",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "1 ve 2 numaralı girişler aynı mikrofonu taşıdığında, sesin tek sefer duyulması (geri beslemenin azalması) için CH 1’e “giriş yok” ayarı yapılır"
 }

@@ -2225,5 +2225,9 @@
 "AUTO MIX: this channel shares the gain with the others (AI MIX)": "میکس خودکار: این کانال بهره را با کانال‌های دیگر (AI MIX) به اشتراک می‌گذارد.",
 "CORRECTION CURVE": "منحنی اصلاح",
 "VU meters fed by the Hybrid extension's own meters": "مترهای VU که از مترهای خود افزونهٔ Hybrid تغذیه می‌شوند",
-"New install: everything starts from the factory state (the licence is kept).": "نصب جدید: همه چیز از وضعیت کارخانه‌ای شروع می‌شود (مجوز حفظ می‌شود)."
+"New install: everything starts from the factory state (the licence is kept).": "نصب جدید: همه چیز از وضعیت کارخانه‌ای شروع می‌شود (مجوز حفظ می‌شود).",
+"Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "ورودی‌های ۱ و ۲ یک میکروفون را حمل می‌کنند (یک صدا در هر دو طرف): CH1 روی بدون ورودی تنظیم شده است تا صدا فقط یک‌بار روی CH2 شنیده شود. UNDO آن را بازمی‌گرداند.",
+"UNDO": "ابطال",
+"One voice": "یک صدا",
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "وقتی ورودی‌های ۱ و ۲ یک میکروفون را حمل می‌کنند، کانال ۱ روی بدون ورودی تنظیم می‌شود تا صدا فقط یک‌بار شنیده شود (بازخورد کمتر)."
 }
