@@ -78,6 +78,8 @@ class Engine : public QObject {
   ~Engine() override;
 
   bool running() const { return rt_ && rt_->running(); }
+  bool freshInstall() const { return freshInstall_; }   // the first start after a new install (main runs the full factory reset)
+  void markInstallSeen();   // after that reset: this install counts as seen, so it happens once
   QString status() const { return startNote_.isEmpty() ? status_ : status_ + (status_.isEmpty() ? QString() : QStringLiteral(" · ")) + startNote_; }   // the start note rides along until the master is moved
   QString backend() const { return rt_ ? QString::fromStdString(rt_->backendName()) : QString(); }
   int strips() const { return kStrips; }
@@ -326,6 +328,7 @@ class Engine : public QObject {
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
+  bool freshInstall_ = false; QString installId_;
   QString startNote_;
   int digitalOut_ = -1;        // the first output of the S/PDIF / optical / coaxial pair the driver names (0-based), -1 none
   QVariantList absent_;       // endpoints that exist but are not available now (unplugged / disabled)

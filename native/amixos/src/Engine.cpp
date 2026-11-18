@@ -1689,6 +1689,10 @@ QVariantMap Engine::systemInfo() const {
   r["npuFound"] = n.found; r["npuName"] = q(n.name); r["npuVendor"] = q(n.vendor);
   r["ramTotalMb"] = static_cast<qulonglong>(m.totalMb); r["ramFreeMb"] = static_cast<qulonglong>(m.availMb); r["ramLoadPct"] = m.loadPct;
   r["processMb"] = static_cast<qulonglong>(m.processMb); r["privateMb"] = static_cast<qulonglong>(m.privateMb);
+  { const am::sysopt::Sensors z = am::sysopt::sensors();   // PROCESSOR PANEL: what the computer exposes now (nothing invented where it does not)
+    r["loadOk"] = z.loadOk; r["cpuLoadPct"] = z.loadPct; r["clockOk"] = z.clockOk; r["mhz"] = z.mhz; r["perfPct"] = z.perfPct;
+    QVariantList tl; for (double t : z.tempsC) tl << t; r["temps"] = tl; r["maxTempC"] = z.maxTempC;
+    r["powerOk"] = z.powerOk; r["watts"] = z.watts; r["powerFrom"] = q(z.powerFrom); r["ac"] = z.ac; r["batteryPct"] = z.batteryPct; r["saver"] = z.saver; }
   r["audio"] = q(am::sysopt::audioThreadNote()); { const am::sysopt::AudioTune at = am::sysopt::audioThreadState(); r["audioState"] = at.state; r["audioHighQoS"] = at.highQoS; } r["fastCores"] = sysFast_; r["eco"] = sysEco_; r["trim"] = sysTrim_; r["lastTrim"] = lastTrim_;
   QStringList tips;   // English keys: the page translates them
   if (c.emulated) tips << "This x64 build of the mixing console runs on an ARM64 processor through Windows emulation (Prism). It works; emulation costs some extra CPU. A native ARM64 build would remove that cost.";
@@ -1807,9 +1811,13 @@ void Engine::freshInstallReset() {
   const QString id = QString::fromUtf8(f.read(64)).trimmed(); if (id.isEmpty()) return;
   const QString seen = settings_.value("install/id").toString();
   if (seen == id) return;
-  if (!seen.isEmpty() || settings_.contains("console/state")) { settings_.remove("console/state"); startNote_ = QStringLiteral("New install: the console starts from its factory state."); }
+  // FIRST START AFTER A NEW INSTALL: a full factory reset (main.cpp calls Settings::factoryReset: settings, console, scenes, presets,
+  // arrangement, driver locks and network tokens; the licence and the edition stay), then markInstallSeen() so it happens once
+  installId_ = id; freshInstall_ = !seen.isEmpty() || settings_.contains("console/state") || settings_.contains("general/setupDone");
+  if (freshInstall_) { settings_.remove("console/state"); startNote_ = QStringLiteral("New install: everything starts from the factory state (the licence is kept)."); }
   settings_.setValue("install/id", id); settings_.sync();
 }
+void Engine::markInstallSeen() { if (installId_.isEmpty()) return; settings_.setValue("install/id", installId_); settings_.sync(); freshInstall_ = false; }
 void Engine::load() {
   const QJsonObject root = QJsonDocument::fromJson(settings_.value("console/state").toString().toUtf8()).object();
   if (!root.isEmpty()) {

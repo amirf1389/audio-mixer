@@ -2188,5 +2188,22 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "プログラム内でレンダリングされます（サイン波、FM、ノイズ、フィルター、エンベロープ）：サンプルファイルは同梱されておらず、ダウンロードも不要で、どのコンピュータでも同じ結果が得られます。",
 "SOUND EFFECT ": "効果音 ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "または、パスを入力してください：WAV、FLAC、AIFF、MP3 など...",
-"pad name": "パッド名"
+"pad name": "パッド名",
+"Processor now": "現在のプロセッサ",
+"clock %1 GHz": "クロック %1 GHz",
+"Temperature": "温度",
+"%1 °C (hottest of %2 sensors)": "%1 °C（%2個のセンサーのうち最も高い値）",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "このコンピュータでは Windows によって表示されない（プロセッサ独自のセンサーを検出するには、そのメーカーのツールが必要である）",
+"Power": "電力",
+"power meter": "パワーメーター",
+"processor package": "プロセッサパッケージ",
+"on mains power": "AC電源接続時",
+"on battery": "バッテリー駆動時",
+"power source not reported": "電源については記載なし",
+"battery %1 %": "バッテリー残量 %1 %",
+"battery saver on: the sound may need a larger buffer": "バッテリー節約モードがオン：サウンドにはより大きなバッファが必要になる場合があります",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX：このチャンネルは他のチャンネルとゲインを共有します（AI MIX）",
+"CORRECTION CURVE": "補正曲線",
+"VU meters fed by the Hybrid extension's own meters": "ハイブリッド拡張機能独自のメーターから信号を受け取るVUメーター",
+"New install: everything starts from the factory state (the licence is kept).": "新規インストール：すべてが工場出荷時の状態から開始されます（ライセンスは引き継がれます）。"
 }

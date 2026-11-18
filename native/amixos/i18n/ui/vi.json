@@ -2129,5 +2129,22 @@
 "PAD GAIN  ": "Độ khuếch đại PAD  ",
 "PICK AN EFFECT": "CHỌN MỘT HIỆU ỨNG",
 "SOUND EFFECT ": "HIỆU ỨNG ÂM THANH ",
-"or type a path: WAV, FLAC, AIFF, MP3 ...": "hoặc nhập đường dẫn: WAV, FLAC, AIFF, MP3 ..."
+"or type a path: WAV, FLAC, AIFF, MP3 ...": "hoặc nhập đường dẫn: WAV, FLAC, AIFF, MP3 ...",
+"Processor now": "Bộ xử lý hiện tại",
+"load: measuring…": "Tải: đang đo…",
+"clock %1 GHz": "tần số %1 GHz",
+"Temperature": "Nhiệt độ",
+"%1 °C (hottest of %2 sensors)": "%1 °C (giá trị cao nhất trong số %2 cảm biến)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "không được Windows hiển thị trên máy tính này (cảm biến tích hợp trên bộ xử lý cần công cụ của nhà sản xuất)",
+"Power": "Công suất",
+"power meter": "máy đo công suất",
+"on mains power": "khi sử dụng nguồn điện lưới",
+"on battery": "chạy bằng pin",
+"power source not reported": "nguồn điện không được báo cáo",
+"battery %1 %": "pin %1 %",
+"battery saver on: the sound may need a larger buffer": "Chế độ tiết kiệm pin đang bật: âm thanh có thể cần bộ đệm lớn hơn",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: kênh này chia sẻ mức tăng với các kênh khác (AI MIX)",
+"CORRECTION CURVE": "ĐƯỜNG CONG CHỈNH SỬA",
+"VU meters fed by the Hybrid extension's own meters": "Các đồng hồ VU được cấp tín hiệu từ chính các đồng hồ của tiện ích mở rộng Hybrid",
+"New install: everything starts from the factory state (the licence is kept).": "Cài đặt mới: mọi thứ đều trở về trạng thái ban đầu (giấy phép vẫn được giữ nguyên)."
 }

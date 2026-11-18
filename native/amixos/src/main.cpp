@@ -162,7 +162,8 @@ int main(int argc, char* argv[]) {
 #endif
   if (smoke) std::setvbuf(stdout, nullptr, _IONBF, 0);   // the self-test prints as it goes: after a crash the last line is the step that was running
   if (!smoke) { QFile* lf = new QFile(QString::fromStdString(am::paths::file("console.log"))); if (lf->size() > 256 * 1024) lf->remove(); if (lf->open(QIODevice::Append | QIODevice::Text)) { g_log = lf; qInstallMessageHandler(logToFile); qInfo("AmF X1 %s starting: %s, Qt %s, render %s", AMIX_VERSION, am::paths::osName(), qVersion(), QQuickWindow::graphicsApi() == QSGRendererInterface::Software ? "software" : "auto"); if (!zoomNote.isEmpty()) qInfo("%s", qPrintable(zoomNote)); } }
-  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); settings.setZoomNote(zoomNote); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
+  Engine engine; I18n i18n; Arrange arrange(&engine); Settings settings(&engine); if (engine.freshInstall()) { settings.factoryReset(); engine.markInstallSeen(); }   // NEW INSTALL: a full factory reset once, the licence kept
+  settings.setZoomNote(zoomNote); applyPalette(settings.darkTheme()); QObject::connect(&settings, &Settings::changed, &app, [&] { static bool last = settings.darkTheme(); if (last != settings.darkTheme()) { last = settings.darkTheme(); applyPalette(last); } }); if (smoke) settings.finishSetup(); Access access(&engine); Osc osc(&engine); Media media(&engine); Samples samples(&engine); Update update(QStringLiteral(AMIX_VERSION)); Measure measure(&engine); Remote remote(&engine); Net net(&engine); Frame frame(&engine); osc.setFrame(&frame); net.setFrame(&frame); frame.setOsc(&osc);
   // SAMPLE PADS while phones are linked: the console's engine is stopped and the remote service plays, so the pads are sent there
   samples.remotePlay = [&](int id, double gainDb) { return remote.send(QVariantMap{{"op", "sample"}, {"id", id}, {"gainDb", gainDb}}); };
   samples.remoteStop = [&] { remote.send(QVariantMap{{"op", "sample"}, {"stop", true}}); };
@@ -432,6 +433,16 @@ int main(int argc, char* argv[]) {
       const QVariantList mf = measure.result().value("freq").toList(), mm = measure.result().value("mag").toList(); double at1k = -999; for (int i = 0; i < mf.size(); ++i) if (std::fabs(mf[i].toDouble() - 1000) < 20) at1k = mm[i].toDouble();
       if (std::fabs(at1k + 6.0) > 1.0 || std::fabs(measure.decay().value("delayMs").toDouble() - 5.0) > 0.2) { std::fprintf(stderr, "amixos --smoke: acoustics reads %.2f dB at 1 kHz (want -6), delay %.2f ms (want 5)\n", at1k, measure.decay().value("delayMs").toDouble()); return 61; }
       if (measure.room(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2).value("modes").toList().isEmpty() || !measure.autoEq("house", 0, 4, 20, 400, 8) || measure.waterfall(12).value("rows").toList().isEmpty()) { std::fprintf(stderr, "amixos --smoke: acoustics room / auto EQ / waterfall failed\n"); return 62; }
+      { // ROOM CORRECTION (cuts only, on the predicted modes) and a microphone calibration written back and read again
+        const bool rc = measure.roomCorrection(5.2, 3.9, 2.6, 0.45, 0.6, 0.5, 1.0, 2.6, 3.1, 1.2, 6, 12); bool cutsOnly = rc;
+        for (const QVariant& f : measure.filters()) cutsOnly = cutsOnly && f.toMap().value("gain").toDouble() < 0;
+        const QString calIn = QDir::tempPath() + "/amixos-smoke-cal.txt", calOut = QDir::tempPath() + "/amixos-smoke-cal-out.txt";
+        { QFile f(calIn); f.open(QIODevice::WriteOnly); f.write("* test mic\n20 -2.5\n1000 0\n20000 1.25\n"); }
+        const bool calOk = measure.loadCalibration(calIn) && measure.saveCalibration(calOut) == calOut && measure.loadCalibration(calOut) && measure.calibrated();
+        measure.clearCalibration(); QFile::remove(calIn); QFile::remove(calOut);
+        std::fprintf(stderr, "amixos --smoke: ROOM CORRECTION %d cuts (cuts only %d), %.1f -> %.1f dB RMS; calibration saved and read back %d\n", static_cast<int>(measure.filters().size()), cutsOnly,
+                     measure.eqCurve().value("errorBefore").toDouble(), measure.eqCurve().value("errorAfter").toDouble(), calOk);
+        if (!rc || !cutsOnly || !calOk || measure.eqCurve().value("errorAfter").toDouble() >= measure.eqCurve().value("errorBefore").toDouble()) return 64; }
       QFile::remove(mw);
       engine.setSpatial(5, true, 90, 0, 2, 0); if (!engine.spatial(5).value("on").toBool() || engine.spatial(5).value("az").toDouble() != 90) { std::fprintf(stderr, "amixos --smoke: 360 audio state did not take\n"); return 63; } engine.setSpatial(5, false, 0, 0, 1, 0);
       { // 360 AND IAMF ARE ONE PLACE: an IAMF ELEMENT takes over the strip's position; the 360 controls move its knobs and its knobs move the 360 view
@@ -1456,6 +1467,10 @@ int main(int argc, char* argv[]) {
         std::printf("amixos --smoke: SYSTEM: %s, %d threads in %d core types, RAM %llu MB, console %llu MB, NPU %s; free memory now: %s; sound thread: %s; switch kept %d\n", qPrintable(si.value("cpuName").toString()),
                     si.value("logical").toInt(), si.value("classes").toInt(), si.value("ramTotalMb").toULongLong(), si.value("processMb").toULongLong(), si.value("npuFound").toBool() ? qPrintable(si.value("npuName").toString()) : "none",
                     qPrintable(tr.value("note").toString()), qPrintable(si.value("audio").toString()), int(off));
+        { const QVariantMap z = engine.systemInfo();   // PROCESSOR NOW: the second reading has the load; every value in range or plainly not available
+          std::fprintf(stderr, "amixos --smoke: PROCESSOR NOW load %s %.0f %%, clock %s, temperatures %d, power %s\n", z.value("loadOk").toBool() ? "yes" : "NO", z.value("cpuLoadPct").toDouble(),
+                       z.value("clockOk").toBool() ? "yes" : "not exposed", static_cast<int>(z.value("temps").toList().size()), z.value("powerOk").toBool() ? "yes" : "not exposed");
+          if (!z.value("loadOk").toBool() || z.value("cpuLoadPct").toDouble() < 0 || z.value("cpuLoadPct").toDouble() > 100 || !z.contains("ac")) { std::fprintf(stderr, "amixos --smoke: PROCESSOR NOW failed\n"); QCoreApplication::exit(7); return; } }
         if (si.value("logical").toInt() <= 0 || si.value("ramTotalMb").toULongLong() == 0 || tr.value("note").toString().isEmpty() || !off || !engine.systemInfo().value("fastCores").toBool()) { std::fprintf(stderr, "amixos --smoke: SYSTEM OPTIMIZATION failed\n"); QCoreApplication::exit(7); return; } }
       const QVariantMap m = engine.telemetry();
       const qulonglong blocks = m.value("blocks").toULongLong();

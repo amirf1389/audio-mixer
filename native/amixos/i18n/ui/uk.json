@@ -2141,5 +2141,21 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "Відтворюється безпосередньо в програмі (синусоїда, FM, шум, фільтри, огинаючі): файли зразків не надаються, нічого не потрібно завантажувати, звучання однакове на будь-якому комп’ютері.",
 "SOUND EFFECT ": "ЗВУКОВИЙ ЕФЕКТ ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "або введіть шлях: WAV, FLAC, AIFF, MP3 ...",
-"pad name": "назва панелі"
+"pad name": "назва панелі",
+"Processor now": "Процесор зараз",
+"clock %1 GHz": "тактова частота %1 ГГц",
+"Temperature": "Температура",
+"%1 °C (hottest of %2 sensors)": "%1 °C (найвища температура серед %2 датчиків)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "не відображається системою Windows на цьому комп’ютері (для датчика самого процесора потрібна спеціальна програма від виробника)",
+"Power": "Потужність",
+"power meter": "вимірювач потужності",
+"processor package": "корпус процесора",
+"on mains power": "від мережі електроживлення",
+"on battery": "від акумулятора",
+"power source not reported": "джерело живлення не вказано",
+"battery %1 %": "заряд акумулятора %1 %",
+"battery saver on: the sound may need a larger buffer": "увімкнено режим економії заряду акумулятора: для звуку може знадобитися більший буфер",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: цей канал має спільний коефіцієнт підсилення з іншими (AI MIX)",
+"CORRECTION CURVE": "КРИВА КОРЕКЦІЇ",
+"New install: everything starts from the factory state (the licence is kept).": "Нова інсталяція: все повертається до заводських налаштувань (ліцензія зберігається)."
 }

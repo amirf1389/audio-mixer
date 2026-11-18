@@ -2151,5 +2151,21 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "يتم إنشاؤها داخل البرنامج (موجة جيبية، تعديل التردد (FM)، ضوضاء، مرشحات، مغلفات): لا يتم توفير أي ملفات عينات، ولا يوجد ما يمكن تنزيله، وتظهر بنفس الشكل على كل جهاز كمبيوتر.",
 "SOUND EFFECT ": "تأثير صوتي ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "أو أدخل مسارًا: WAV، FLAC، AIFF، MP3 ...",
-"pad name": "اسم اللوحة"
+"pad name": "اسم اللوحة",
+"Processor now": "المعالج الآن",
+"clock %1 GHz": "السرعة %1 جيجاهرتز",
+"Temperature": "درجة الحرارة",
+"%1 °C (hottest of %2 sensors)": "%1 درجة مئوية (أعلى درجة سجلها %2 من أجهزة الاستشعار)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "لا يعرضها نظام Windows على هذا الكمبيوتر (يحتاج المستشعر المدمج في المعالج إلى أداة خاصة بالشركة المصنعة)",
+"Power": "الطاقة",
+"power meter": "مقياس الطاقة",
+"processor package": "حزمة المعالج",
+"on mains power": "عند التوصيل بالتيار الكهربائي",
+"on battery": "بالبطارية",
+"power source not reported": "لم يتم الإبلاغ عن مصدر الطاقة",
+"battery saver on: the sound may need a larger buffer": "تشغيل وضع توفير البطارية: قد يحتاج الصوت إلى مساحة تخزين مؤقت أكبر",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: تشترك هذه القناة في مستوى الكسب مع القنوات الأخرى (AI MIX)",
+"CORRECTION CURVE": "منحنى التصحيح",
+"VU meters fed by the Hybrid extension's own meters": "أجهزة قياس VU التي تتلقى الإشارات من أجهزة القياس الخاصة بملحق Hybrid",
+"New install: everything starts from the factory state (the licence is kept).": "التثبيت الجديد: يبدأ كل شيء من الحالة المصنعية (مع الاحتفاظ بالترخيص)."
 }

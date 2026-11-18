@@ -2210,5 +2210,20 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "اجرا شده در برنامه (سین، اف‌ام، نویز، فیلترها، انولپ‌ها): هیچ فایل نمونه‌ای همراه نیست، چیزی برای دانلود وجود ندارد، روی هر کامپیوتر یکسان است.",
 "SOUND EFFECT ": "اثر صوتی ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "یا مسیری را تایپ کنید: WAV, FLAC, AIFF, MP3 ...",
-"pad name": "نام پد"
+"pad name": "نام پد",
+"Processor now": "پردازنده اکنون",
+"Temperature": "دما",
+"%1 °C (hottest of %2 sensors)": "%1 درجه سانتی‌گراد (داغ‌ترین از بین %2 حسگر)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "توسط ویندوز در این رایانه در دسترس نیست (سنسور خود پردازنده به ابزار سازنده‌اش نیاز دارد)",
+"Power": "توان",
+"power meter": "شمارنده توان",
+"processor package": "بسته پردازنده",
+"on mains power": "روی برق شهری",
+"on battery": "روی باتری",
+"power source not reported": "منبع تغذیه گزارش نشده است",
+"battery saver on: the sound may need a larger buffer": "صرفه‌جویی باتری روشن: ممکن است صدا به بافر بزرگ‌تری نیاز داشته باشد",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "میکس خودکار: این کانال بهره را با کانال‌های دیگر (AI MIX) به اشتراک می‌گذارد.",
+"CORRECTION CURVE": "منحنی اصلاح",
+"VU meters fed by the Hybrid extension's own meters": "مترهای VU که از مترهای خود افزونهٔ Hybrid تغذیه می‌شوند",
+"New install: everything starts from the factory state (the licence is kept).": "نصب جدید: همه چیز از وضعیت کارخانه‌ای شروع می‌شود (مجوز حفظ می‌شود)."
 }

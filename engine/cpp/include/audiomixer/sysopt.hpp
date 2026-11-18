@@ -56,6 +56,21 @@ struct MemInfo {
 };
 MemInfo memory();
 
+/** PROCESSOR PANEL: what the computer itself exposes, read on demand (call it about once a second; rates are measured between calls).
+ *  Windows: load from GetSystemTimes; clock, performance and temperatures from the system's performance counters (PDH, loaded at run time:
+ *  "Processor Information", "Thermal Zone Information", "Power Meter"); AC / battery from GetSystemPowerStatus. Linux / Android: /proc/stat,
+ *  cpufreq, thermal zones, the RAPL energy counter, power_supply. Nothing is written and no driver is touched; a value the computer does not
+ *  expose stays "not available" (many desktops expose no temperature to programs, most expose no watts). */
+struct Sensors {
+  bool loadOk = false; double loadPct = 0;          // the whole computer, every core
+  bool clockOk = false; double mhz = 0;             // the processor's clock now
+  double perfPct = 0;                               // Windows: % of the base clock (over 100 = turbo); 0 when not known
+  std::vector<double> tempsC; double maxTempC = 0;  // every thermal zone the system exposes (empty: none)
+  bool powerOk = false; double watts = 0; std::string powerFrom;   // measured power and where it comes from ("power meter", "processor package")
+  int ac = -1, batteryPct = -1; bool saver = false; // on mains (1) / battery (0) / unknown (-1); battery charge; battery saver
+};
+Sensors sensors();
+
 /** on/off for the audio-thread preference (default on); read by tuneAudioThread */
 void setFastCoresForAudio(bool on);
 bool fastCoresForAudio();

@@ -2124,5 +2124,22 @@
 "PAD GAIN  ": "PAD-VERSTERKING  ",
 "PICK AN EFFECT": "KIES EEN EFFECT",
 "SOUND EFFECT ": "GELUIDSEFFECT ",
-"or type a path: WAV, FLAC, AIFF, MP3 ...": "of voer een pad in: WAV, FLAC, AIFF, MP3 ..."
+"or type a path: WAV, FLAC, AIFF, MP3 ...": "of voer een pad in: WAV, FLAC, AIFF, MP3 ...",
+"Processor now": "Processor nu",
+"clock %1 GHz": "kloksnelheid %1 GHz",
+"Temperature": "Temperatuur",
+"%1 °C (hottest of %2 sensors)": "%1 °C (hoogste waarde van %2 sensoren)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "wordt op deze computer niet door Windows weergegeven (voor de sensor van de processor is de tool van de fabrikant nodig)",
+"Power": "Vermogen",
+"power meter": "vermogensmeter",
+"processor package": "processorbehuizing",
+"on mains power": "op netstroom",
+"on battery": "op de batterij",
+"power source not reported": "voedingsbron niet vermeld",
+"battery %1 %": "batterij %1 %",
+"battery saver on: the sound may need a larger buffer": "Batterijbesparingsmodus ingeschakeld: voor het geluid is mogelijk een grotere buffer nodig",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: dit kanaal deelt de versterking met de andere kanalen (AI MIX)",
+"CORRECTION CURVE": "CORRECTIECURVE",
+"VU meters fed by the Hybrid extension's own meters": "VU-meters die worden gevoed door de eigen meters van de Hybrid-uitbreiding",
+"New install: everything starts from the factory state (the licence is kept).": "Nieuwe installatie: alles wordt teruggezet naar de fabrieksinstellingen (de licentie blijft behouden)."
 }

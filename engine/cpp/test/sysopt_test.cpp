@@ -2,6 +2,8 @@
 #include "audiomixer/sysopt.hpp"
 
 #include <cstdio>
+#include <string>
+#include <chrono>
 #include <array>
 #include <thread>
 
@@ -53,6 +55,15 @@ int main() {
   std::printf("sysopt: RAM %llu MB, %llu free (%d %% used), this program %llu MB; NPU %s; audio: %s; eco %d\n", (unsigned long long)m.totalMb, (unsigned long long)m.availMb, m.loadPct,
               (unsigned long long)m.processMb, n.found ? n.name.c_str() : "none", audioThreadNote().c_str(), int(setThreadEco(true)));
   setThreadEco(false);
+  // PROCESSOR PANEL: the second reading has a load (rates need two); every value is in range or plainly not available
+  { (void)sensors(); volatile double x = 0; for (int i = 0; i < 3000000; ++i) x = x + i * 0.5; std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const Sensors z = sensors();
+    CHECK(z.loadOk); CHECK(z.loadPct >= 0 && z.loadPct <= 100);
+    CHECK(!z.clockOk || (z.mhz > 50 && z.mhz < 10000));
+    for (double t : z.tempsC) CHECK(t > 1 && t < 130); CHECK(z.tempsC.empty() || z.maxTempC >= z.tempsC.front());
+    CHECK(!z.powerOk || (z.watts > 0 && z.watts < 2000)); CHECK(z.ac >= -1 && z.ac <= 1); CHECK(z.batteryPct >= -1 && z.batteryPct <= 100);
+    std::printf("sysopt: PROCESSOR PANEL load %.1f %%, clock %s, %zu temperature(s)%s, power %s, mains %d, battery %d\n", z.loadPct, z.clockOk ? (std::to_string(static_cast<int>(z.mhz)) + " MHz").c_str() : "not exposed",
+                z.tempsC.size(), z.tempsC.empty() ? " (not exposed here)" : "", z.powerOk ? (std::to_string(z.watts) + " W from the " + z.powerFrom).c_str() : "not exposed", z.ac, z.batteryPct); }
   std::printf(fails ? "sysopt: %d FAILED\n" : "sysopt: all passed\n", fails);
   return fails ? 1 : 0;
 }

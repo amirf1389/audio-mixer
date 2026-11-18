@@ -2127,5 +2127,22 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "Im Programm gerendert (Sinus, FM, Rauschen, Filter, Hüllkurven): Es werden keine Sample-Dateien mitgeliefert, es gibt nichts zum Herunterladen, die Wiedergabe ist auf jedem Computer identisch.",
 "SOUND EFFECT ": "GERÄUSCHEFFEKT ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "oder gib einen Pfad ein: WAV, FLAC, AIFF, MP3 ...",
-"pad name": "Pad-Name"
+"pad name": "Pad-Name",
+"Processor now": "Prozessor jetzt",
+"clock %1 GHz": "Taktfrequenz %1 GHz",
+"Temperature": "Temperatur",
+"%1 °C (hottest of %2 sensors)": "%1 °C (höchster Wert unter den %2 Sensoren)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "wird von Windows auf diesem Computer nicht angezeigt (für den Sensor des Prozessors ist ein Tool des Herstellers erforderlich)",
+"Power": "Leistung",
+"power meter": "Leistungsmesser",
+"processor package": "Prozessorgehäuse",
+"on mains power": "im Netzbetrieb",
+"on battery": "im Akkubetrieb",
+"power source not reported": "Stromquelle nicht angegeben",
+"battery %1 %": "Akku %1 %",
+"battery saver on: the sound may need a larger buffer": "Batteriesparmodus aktiviert: Für den Ton ist möglicherweise ein größerer Puffer erforderlich",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: Dieser Kanal teilt sich die Verstärkung mit den anderen (AI MIX)",
+"CORRECTION CURVE": "KORREKTURKURVE",
+"VU meters fed by the Hybrid extension's own meters": "VU-Meter, die von den eigenen Messgeräten der Hybrid-Erweiterung gespeist werden",
+"New install: everything starts from the factory state (the licence is kept).": "Neuinstallation: Alles wird auf den Werkszustand zurückgesetzt (die Lizenz bleibt erhalten)."
 }

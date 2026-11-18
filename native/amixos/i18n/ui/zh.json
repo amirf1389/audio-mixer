@@ -2117,5 +2117,20 @@
 "PICK AN EFFECT": "选择一个特效",
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "在程序中实时渲染（正弦波、频移调制、噪声、滤波器、包络）：不附带任何采样文件，无需下载，在每台计算机上的效果完全一致。",
 "SOUND EFFECT ": "音效 ",
-"or type a path: WAV, FLAC, AIFF, MP3 ...": "或输入路径：WAV、FLAC、AIFF、MP3 ..."
+"or type a path: WAV, FLAC, AIFF, MP3 ...": "或输入路径：WAV、FLAC、AIFF、MP3 ...",
+"clock %1 GHz": "时钟频率 %1 GHz",
+"Temperature": "温度",
+"%1 °C (hottest of %2 sensors)": "%1 °C（%2个传感器中温度最高的一个）",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "Windows 未在此计算机上显示该信息（处理器的内置传感器需要其制造商提供的专用工具）",
+"Power": "功率",
+"power meter": "功率计",
+"processor package": "处理器封装",
+"on mains power": "连接市电",
+"on battery": "电池供电",
+"power source not reported": "未报告电源",
+"battery %1 %": "电池电量 %1 %",
+"battery saver on: the sound may need a larger buffer": "省电模式已开启：声音可能需要更大的缓冲区",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX：该通道与其他通道共享增益（AI MIX）",
+"CORRECTION CURVE": "校正曲线",
+"New install: everything starts from the factory state (the licence is kept).": "全新安装：一切将恢复为出厂状态（许可证将保留）。"
 }

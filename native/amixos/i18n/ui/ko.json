@@ -2186,5 +2186,22 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "프로그램 내에서 직접 렌더링됩니다(사인파, FM, 노이즈, 필터, 엔벨로프): 샘플 파일은 포함되어 있지 않으며, 다운로드할 것도 없고, 모든 컴퓨터에서 동일한 결과를 보여줍니다.",
 "SOUND EFFECT ": "음향 효과 ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "또는 경로를 입력하세요: WAV, FLAC, AIFF, MP3 ...",
-"pad name": "패드 이름"
+"pad name": "패드 이름",
+"Processor now": "지금 프로세서",
+"clock %1 GHz": "클럭 %1 GHz",
+"Temperature": "온도",
+"%1 °C (hottest of %2 sensors)": "%1 °C (%2개 센서 중 가장 높은 온도)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "이 컴퓨터에서는 Windows를 통해 확인할 수 없음 (프로세서 자체 센서를 확인하려면 제조사의 도구가 필요함)",
+"Power": "전력",
+"power meter": "출력계",
+"processor package": "프로세서 패키지",
+"on mains power": "주전원 연결 시",
+"on battery": "배터리 사용 시",
+"power source not reported": "전원 정보 미기재",
+"battery %1 %": "배터리 %1 %",
+"battery saver on: the sound may need a larger buffer": "배터리 절약 모드 켜짐: 사운드에 더 큰 버퍼가 필요할 수 있습니다",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: 이 채널은 다른 채널들과 게인을 공유합니다 (AI MIX).",
+"CORRECTION CURVE": "교정 곡선",
+"VU meters fed by the Hybrid extension's own meters": "하이브리드 확장 기능 자체의 계측기에서 신호를 받는 VU 미터",
+"New install: everything starts from the factory state (the licence is kept).": "새로 설치: 모든 것이 공장 출하 시 상태로 초기화됩니다(라이선스는 유지됩니다)."
 }

@@ -2133,5 +2133,20 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "Dihasilkan langsung dalam program (gelombang sinus, FM, noise, filter, envelope): tidak disertakan file sampel, tidak perlu mengunduh apa pun, hasilnya sama di setiap komputer.",
 "SOUND EFFECT ": "EFEK SUARA ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "atau ketik jalur file: WAV, FLAC, AIFF, MP3 ...",
-"pad name": "nama pad"
+"pad name": "nama pad",
+"Processor now": "Prosesor saat ini",
+"clock %1 GHz": "kecepatan clock %1 GHz",
+"Temperature": "Suhu",
+"%1 °C (hottest of %2 sensors)": "%1 °C (suhu tertinggi di antara %2 sensor)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "tidak ditampilkan oleh Windows di komputer ini (sensor bawaan prosesor tersebut memerlukan alat dari pabrikannya)",
+"Power": "Tenaga",
+"power meter": "pengukur daya",
+"on mains power": "dengan daya listrik dari jaringan listrik",
+"on battery": "menggunakan baterai",
+"power source not reported": "sumber daya tidak dilaporkan",
+"battery %1 %": "baterai %1 %",
+"battery saver on: the sound may need a larger buffer": "Penghemat baterai aktif: suara mungkin memerlukan buffer yang lebih besar",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: saluran ini berbagi pengaturan gain dengan saluran lainnya (AI MIX)",
+"CORRECTION CURVE": "KURVA KOREKSI",
+"New install: everything starts from the factory state (the licence is kept).": "Instalasi baru: semuanya kembali ke pengaturan pabrik (lisensi tetap dipertahankan)."
 }

@@ -2129,5 +2129,22 @@
 "PICK AN EFFECT": "WYBIERZ EFEKT",
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "Wygenerowane w programie (sinusoida, modulacja częstotliwości, szum, filtry, obwiednie): nie są dostarczane żadne pliki próbek, nie trzeba niczego pobierać, efekt jest identyczny na każdym komputerze.",
 "SOUND EFFECT ": "EFEKT DŹWIĘKOWY ",
-"or type a path: WAV, FLAC, AIFF, MP3 ...": "lub wpisz ścieżkę: WAV, FLAC, AIFF, MP3 ..."
+"or type a path: WAV, FLAC, AIFF, MP3 ...": "lub wpisz ścieżkę: WAV, FLAC, AIFF, MP3 ...",
+"Processor now": "Procesor teraz",
+"load: measuring…": "obciążenie: pomiar w toku…",
+"clock %1 GHz": "zegar %1 GHz",
+"Temperature": "Temperatura",
+"%1 °C (hottest of %2 sensors)": "%1 °C (najwyższa wartość spośród %2 czujników)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "nie jest wykrywane przez system Windows na tym komputerze (czujnik wbudowany w procesor wymaga oprogramowania od producenta)",
+"Power": "Moc",
+"power meter": "miernik mocy",
+"processor package": "obudowa procesora",
+"on mains power": "podłączony do sieci zasilającej",
+"on battery": "na zasilaniu bateryjnym",
+"power source not reported": "źródło zasilania nie zostało podane",
+"battery %1 %": "poziom naładowania baterii %1 %",
+"battery saver on: the sound may need a larger buffer": "włączona funkcja oszczędzania baterii: dźwięk może wymagać większego bufora",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: ten kanał dzieli wzmocnienie z pozostałymi (AI MIX)",
+"CORRECTION CURVE": "KRZYWA KOREKCYJNA",
+"New install: everything starts from the factory state (the licence is kept).": "Nowa instalacja: wszystko wraca do stanu fabrycznego (licencja zostaje zachowana)."
 }

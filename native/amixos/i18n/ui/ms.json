@@ -2137,5 +2137,22 @@
 "Rendered in the program (sine, FM, noise, filters, envelopes): no sample files are shipped, nothing to download, identical on every computer.": "Dihasilkan dalam program (sine, FM, noise, penapis, envelope): tiada fail sampel dihantar, tiada apa-apa untuk dimuat turun, sama pada setiap komputer.",
 "SOUND EFFECT ": "KESAN BUNYI ",
 "or type a path: WAV, FLAC, AIFF, MP3 ...": "atau taip laluan: WAV, FLAC, AIFF, MP3 ...",
-"pad name": "nama pad"
+"pad name": "nama pad",
+"Processor now": "Pemproses kini",
+"load: measuring…": "muatan: sedang diukur…",
+"clock %1 GHz": "jam %1 GHz",
+"Temperature": "Suhu",
+"%1 °C (hottest of %2 sensors)": "%1 °C (paling panas daripada %2 penderia)",
+"not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)": "tidak didedahkan oleh Windows pada komputer ini (penderia terbina dalam pemproses memerlukan alat daripada pembuatnya)",
+"Power": "Kuasa",
+"power meter": "meter kuasa",
+"processor package": "pakej pemproses",
+"on mains power": "pada kuasa utama",
+"on battery": "menggunakan bateri",
+"power source not reported": "Sumber kuasa tidak dilaporkan",
+"battery %1 %": "bateri %1 %",
+"AUTO MIX: this channel shares the gain with the others (AI MIX)": "AUTO MIX: saluran ini berkongsi penguatan dengan yang lain (AI MIX)",
+"CORRECTION CURVE": "Lengkung pembetulan",
+"VU meters fed by the Hybrid extension's own meters": "Pengukur VU yang diberi maklumat oleh pengukur tersendiri pada sambungan Hybrid.",
+"New install: everything starts from the factory state (the licence is kept).": "Pemasangan baru: semuanya bermula dari keadaan kilang (lesen dikekalkan)."
 }

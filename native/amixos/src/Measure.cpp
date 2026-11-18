@@ -152,6 +152,25 @@ QString Measure::exportFilters(const QString& path, bool json) {
   f.write(QByteArray::fromStdString(json ? m::exportFiltersJson(eq_) : m::exportFiltersText(eq_))); set(state_, "filters written: " + p); return p;
 }
 int Measure::applyFilters(int strip) { int n = 0; for (const m::Filter& f : eq_) { if (n >= 10) break; engine_->setEq(strip, n, 1, f.freq, f.q, f.gainDb); ++n; } set(state_, QStringLiteral("%1 filters set on the EQ of CH %2").arg(n).arg(strip + 1)); return n; }
+QString Measure::saveCalibration(const QString& path) {
+  if (cal_.freq.size() < 2) { set(state_, "no microphone calibration loaded to save"); return {}; }
+  const QString p = path.trimmed().isEmpty() ? QString::fromStdString(am::paths::file("mic-calibration.txt")) : path.trimmed(); QFile f(p);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { set(state_, "cannot write " + p); return {}; }
+  f.write(QByteArray::fromStdString(m::formatCalibration(cal_, "saved by AmF X1 ACOUSTICS"))); f.close();
+  set(state_, QStringLiteral("microphone calibration saved: %1 points in %2").arg(cal_.freq.size()).arg(p)); return p;
+}
+bool Measure::roomCorrection(double L, double W, double H, double rt60, double sx, double sy, double sz, double lx, double ly, double lz, int maxFilters, double maxCutDb) {
+  m::Room r; r.L = std::clamp(L, 1.0, 60.0); r.W = std::clamp(W, 1.0, 60.0); r.H = std::clamp(H, 1.5, 20.0); r.rt60 = std::clamp(rt60, 0.1, 5.0);
+  r.sx = std::clamp(sx, 0.0, r.L); r.sy = std::clamp(sy, 0.0, r.W); r.sz = std::clamp(sz, 0.0, r.H); r.lx = std::clamp(lx, 0.0, r.L); r.ly = std::clamp(ly, 0.0, r.W); r.lz = std::clamp(lz, 0.0, r.H);
+  eq_ = m::roomCorrection(r, std::clamp(maxFilters, 1, 10), std::clamp(maxCutDb, 1.0, 24.0), 300); filters_.clear();
+  for (const m::Filter& f : eq_) { QVariantMap e; e["freq"] = f.freq; e["q"] = f.q; e["gain"] = f.gainDb; filters_ << e; }
+  const m::Response pred = m::roomResponse(r, 48, 20, 400), fixed = m::applyFilters(pred, eq_);
+  double mean = 0; int n = 0; for (std::size_t i = 0; i < pred.freq.size(); ++i) if (pred.freq[i] <= 300) { mean += pred.magDb[i]; ++n; } mean = n ? mean / n : 0;
+  const m::Response tgt = m::flatTarget(pred, mean);
+  QVariantMap c; c["room"] = true; c["freq"] = vl(pred.freq); c["target"] = vl(tgt.magDb); c["corrected"] = vl(fixed.magDb); c["errorBefore"] = m::rmsErrorDb(pred, tgt, 20, 300); c["errorAfter"] = m::rmsErrorDb(fixed, tgt, 20, 300); eqCurve_ = c;
+  set(state_, eq_.empty() ? QStringLiteral("room correction: no peak worth cutting in this room") : QStringLiteral("room correction: %1 cuts on the modal peaks, error %2 -> %3 dB RMS (20 - 300 Hz, predicted)").arg(eq_.size()).arg(c["errorBefore"].toDouble(), 0, 'f', 1).arg(c["errorAfter"].toDouble(), 0, 'f', 1));
+  return !eq_.empty();
+}
 bool Measure::loadCalibration(const QString& path) {
   QFile f(path); if (!f.open(QIODevice::ReadOnly) || f.size() > 4 * 1024 * 1024) { set(state_, "cannot read the calibration file"); return false; }
   m::Calibration c; if (!m::parseCalibration(f.readAll().toStdString(), c)) { set(state_, "not a calibration file (lines of: frequency dB)"); return false; }

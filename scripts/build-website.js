@@ -47,7 +47,7 @@ function downloads() {
 const DL = downloads();
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const NAV = [['/', 'Home'], ['/features', 'Features'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'Buy']];
+const NAV = [['/', 'Home'], ['/features', 'Features'], ['/extensions', 'Extensions'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'Buy']];
 
 function page({ slug, title, description, h1, intro, crumbs = true, body, jsonld = [], hero = null, changefreq = 'monthly', priority = '0.7' }) {
   const url = SITE + (slug === '/' ? '/' : slug);
@@ -333,11 +333,50 @@ pages.push(page({
 </div></section>`,
 }));
 
+// EXTENSIONS: the online store list, read from the console's own sources (the built-in rack effects of engine/cpp/app/fx/fx.cpp, grouped as
+// the STORE page groups them, and the extensions it lists), so the website never shows something the console does not have. No payments here:
+// everything listed comes with AmF X1; an extension is installed only from a vendor-signed package (the console's LOCAL UPDATE).
+function storeCatalog() {
+  const fx = fs.readFileSync(path.join(ROOT, 'engine', 'cpp', 'app', 'fx', 'fx.cpp'), 'utf8'), line = (/catalog\(\) \{ return \{(.*)\}; \}/.exec(fx) || [])[1] || '';
+  const effects = [...line.matchAll(/\{"([a-z0-9_]+)", "([^"]+)"\}/g)].map(m => ({ id: m[1], name: m[2] }));
+  const qml = fs.readFileSync(path.join(ROOT, 'native', 'amixos', 'qml', 'StorePage.qml'), 'utf8'), gl = (/property var groups: \((\{[\s\S]*?\})\)/.exec(qml) || [])[1] || '{}';
+  let groups = {}; try { groups = JSON.parse(gl); } catch (_) { groups = {}; }
+  const groupOf = id => Object.keys(groups).find(g => groups[g].includes(id)) || 'OTHER';
+  const eng = fs.readFileSync(path.join(ROOT, 'native', 'amixos', 'src', 'Engine.cpp'), 'utf8');
+  const extensions = [...eng.matchAll(/\{"ext:([^"]+)", "[^"]+", "([^"]+)"\}/g)].map(m => ({ name: m[1], note: m[2] }));
+  return { effects: effects.map(e => ({ ...e, group: groupOf(e.id) })), extensions, groups: [...Object.keys(groups), 'OTHER'] };
+}
+{
+  const cat = storeCatalog(), ACRONYMS = new Set(['EQ', 'MS', 'AEC', 'GPIO', 'ISO', 'IAMF', 'VST', 'VST3']);   // kept in capitals ("MS colour EQ", "Logic / GPIO")
+  const title = s => s.split(/(\s+|\/|\(|\)|-)/).map(w => ACRONYMS.has(w) ? w : w ? w.charAt(0) + w.slice(1).toLowerCase() : w).join('').replace(/^(.)/, c => c.toUpperCase());
+  const byGroup = cat.groups.map(g => [g, cat.effects.filter(e => e.group === g)]).filter(([, l]) => l.length);
+  pages.push(page({
+    slug: '/extensions', title: 'Extensions and effects — AmF X1 store', h1: 'Extensions and effects',
+    description: `Everything that goes into the AmF X1 console: ${cat.effects.length} built-in rack effects and ${cat.extensions.length} extensions, all included. Third-party VST3 plug-ins load too.`,
+    intro: `${cat.effects.length} built-in effects and ${cat.extensions.length} extensions, all included with AmF X1. Nothing to buy here: switch them on in the console's STORE page.`,
+    body: `<section class="block"><div class="wrap">
+<h2>Extensions</h2>
+<p class="sub">Program extensions run inside the console. They are installed with AmF X1; a new one arrives only as a package signed by AMFB Audio, through LOCAL UPDATE.</p>
+<div class="grid">${cat.extensions.map(x => card('Extension', esc(x.name), esc(x.note.charAt(0).toUpperCase() + x.note.slice(1)) + '.')).join('\n')}</div>
+${byGroup.map(([g, l]) => `<h2 class="mt">${esc(title(g))}</h2>\n<div class="grid">${l.map(e => card('Effect', esc(title(e.name)), 'Built-in rack effect: insert it on any channel or bus from the STORE page.')).join('\n')}</div>`).join('\n')}
+<h2 class="mt">VST3 plug-ins</h2><p>Plug-ins you already own load in the console's racks: ADD VST on the STORE page takes their folder. They are scanned on your computer; nothing is downloaded from here.</p>
+</div></section>`,
+  }));
+}
+
 // 404
 const notFound = page({ slug: '/404', title: 'Page not found — AmF X1', h1: 'Page not found', description: 'This page does not exist.', intro: 'The page you asked for does not exist.', crumbs: false,
   body: `<section class="block"><div class="wrap"><p><a href="/">Go to the home page</a> or <a href="/download">download AmF X1</a>.</p></div></section>` });
 notFound.html = notFound.html.replace('<meta name="robots" content="index, follow, max-image-preview:large">', '<meta name="robots" content="noindex">').replace(/<link rel="canonical"[^>]*>\n/, '');
 
+// --only <slug>: write that one page and add it to the sitemap, leaving every other page as it is (a full build is a release step)
+function buildOnly(slug) {
+  const p = pages.find(x => x.slug === '/' + String(slug).replace(/^\//, '')); if (!p) throw new Error('no page ' + slug);
+  fs.mkdirSync(OUT, { recursive: true }); const f = path.join(OUT, p.slug.slice(1) + '.html'); fs.writeFileSync(f, p.html);
+  const sm = path.join(OUT, 'sitemap.xml'); let x = fs.existsSync(sm) ? fs.readFileSync(sm, 'utf8') : '';
+  if (x && !x.includes('<loc>' + p.url + '</loc>')) { x = x.replace('</urlset>', `  <url><loc>${p.url}</loc><lastmod>${new Date().toISOString().slice(0, 10)}</lastmod><changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>\n</urlset>`); fs.writeFileSync(sm, x); }
+  return [f, sm];
+}
 function build() {
   fs.mkdirSync(OUT, { recursive: true });
   const written = [];
@@ -351,5 +390,5 @@ function build() {
   return written;
 }
 
-if (require.main === module) for (const f of build()) console.log(path.relative(ROOT, f));
-module.exports = { build, pages, FAQ, SITE };
+if (require.main === module) for (const f of (arg('--only') ? buildOnly(arg('--only')) : build())) console.log(path.relative(ROOT, f));
+module.exports = { build, buildOnly, storeCatalog, pages, FAQ, SITE };

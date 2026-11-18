@@ -106,6 +106,18 @@ Flickable {
                     : i18n.t("%1 performance cores + %2 efficiency cores", i18n.lang).arg(sysPanel.sys.perfCores).arg(sysPanel.sys.effCores))
                    + "  ·  " + i18n.t("%1 processor threads", i18n.lang).arg(sysPanel.sys.logical) }
             Line { k: i18n.t("Instruction sets", i18n.lang).toUpperCase(); v: [sysPanel.sys.avx2 ? "AVX2" : "", sysPanel.sys.fma ? "FMA" : "", sysPanel.sys.avx512 ? "AVX-512" : "", sysPanel.sys.neon ? "NEON" : ""].filter(function (x) { return x !== "" }).join(" · ") || "—" }
+            // PROCESSOR NOW: load, clock, temperature and power, only what Windows exposes on this computer (never a guess, no driver touched)
+            Line { k: i18n.t("Processor now", i18n.lang).toUpperCase()
+                v: (sysPanel.sys.loadOk ? i18n.t("load %1 %", i18n.lang).arg(sysPanel.sys.cpuLoadPct.toFixed(0)) : i18n.t("load: measuring…", i18n.lang))
+                   + "  ·  " + (sysPanel.sys.clockOk ? i18n.t("clock %1 GHz", i18n.lang).arg((sysPanel.sys.mhz / 1000).toFixed(2)) + (sysPanel.sys.perfPct > 0 ? " (" + sysPanel.sys.perfPct.toFixed(0) + " %)" : "") : i18n.t("clock not exposed", i18n.lang)) }
+            Line { k: i18n.t("Temperature", i18n.lang).toUpperCase()
+                v: sysPanel.sys.temps && sysPanel.sys.temps.length ? i18n.t("%1 °C (hottest of %2 sensors)", i18n.lang).arg(sysPanel.sys.maxTempC.toFixed(0)).arg(sysPanel.sys.temps.length)
+                   : i18n.t("not exposed by Windows on this computer (the processor's own sensor needs its maker's tool)", i18n.lang) }
+            Line { k: i18n.t("Power", i18n.lang).toUpperCase()
+                v: (sysPanel.sys.powerOk ? i18n.t("%1 W (%2)", i18n.lang).arg(sysPanel.sys.watts.toFixed(1)).arg(i18n.t(sysPanel.sys.powerFrom, i18n.lang)) + "  ·  " : "")
+                   + (sysPanel.sys.ac === 1 ? i18n.t("on mains power", i18n.lang) : sysPanel.sys.ac === 0 ? i18n.t("on battery", i18n.lang) : i18n.t("power source not reported", i18n.lang))
+                   + (sysPanel.sys.batteryPct >= 0 ? "  ·  " + i18n.t("battery %1 %", i18n.lang).arg(sysPanel.sys.batteryPct) : "")
+                   + (sysPanel.sys.saver ? "  ·  " + i18n.t("battery saver on: the sound may need a larger buffer", i18n.lang) : "") }
             Line { k: i18n.t("AI accelerator", i18n.lang).toUpperCase(); v: sysPanel.sys.npuFound ? sysPanel.sys.npuName : i18n.t("no AI accelerator found", i18n.lang) }
             Line { k: i18n.t("Memory (RAM)", i18n.lang).toUpperCase(); v: (sysPanel.sys.ramTotalMb - sysPanel.sys.ramFreeMb) + " / " + sysPanel.sys.ramTotalMb + " MB (" + sysPanel.sys.ramLoadPct + " %)  ·  " + i18n.t("used by the mixing console", i18n.lang) + " " + sysPanel.sys.processMb + " MB" + (sysPanel.sys.lastTrim !== "" ? "  ·  " + i18n.t("last memory release", i18n.lang) + " " + sysPanel.sys.lastTrim : "") }
             Line { k: i18n.t("Sound engine", i18n.lang).toUpperCase()
