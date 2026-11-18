@@ -378,7 +378,7 @@ Item {
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 124 : 96) : 0
+                                width: visible ? (page.sendView ? 124 : 108) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
@@ -548,7 +548,7 @@ Item {
                                         Text { Layout.alignment: Qt.AlignHCenter; text: page.sendView === 1 ? i18n.t("AUX SENDS", i18n.lang) : i18n.t("FX SENDS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 5 } } }
                                     // the fader, its meters and the EASY KEYS for everyone (a beginner, anyone who finds dragging hard): LOUDER and QUIETER
                                     // (1 dB a press), 0 (the normal level) and BACK (where the fader was before the last move); each says what it does
-                                    RowLayout { id: fadRow; visible: page.sendView === 0; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 4
+                                    RowLayout { id: fadRow; visible: page.sendView === 0; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 3
                                         readonly property real db: st ? st.db : 0
                                         property real settled: 0; property real before: 0
                                         Component.onCompleted: { settled = db; before = db }   // the level the strip opens with is the first "before"
@@ -557,7 +557,7 @@ Item {
                                         ColumnLayout { Layout.fillHeight: true; spacing: 3
                                             Item { Layout.fillHeight: true }
                                             Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
-                                                delegate: Rectangle { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 24; implicitHeight: 24; radius: 6; border.width: 1
+                                                delegate: Rectangle { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 22; implicitHeight: 24; radius: 6; border.width: 1
                                                     readonly property bool can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
                                                     color: easyMa.pressed ? stripItem.sc : Theme.ov(0.09); border.color: easyMa.containsMouse ? stripItem.sc : Theme.line; opacity: can ? 1 : 0.4
                                                     Text { anchors.centerIn: parent; text: modelData[0]; color: easyMa.pressed ? "#0b0f14" : Theme.ink; font.pixelSize: 12; font.bold: true }
