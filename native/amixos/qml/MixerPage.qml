@@ -9,6 +9,7 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mixerPage"
+    Rectangle { anchors.fill: parent; anchors.margins: -12; z: -1; color: Theme.dark ? "#0d0f12" : "#e8ebf0" }   // the desk: flat graphite behind every panel of this page
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
@@ -42,6 +43,12 @@ Item {
         Text { anchors.centerIn: parent; text: mkey.glyph !== "" ? mkey.glyph : i18n.t(mkey.label, i18n.lang); color: mkey.on ? "#0b0f14" : Theme.ink; font.family: mkey.glyph !== "" ? Theme.sans : Theme.mono; font.pixelSize: mkey.glyph !== "" ? 13 : 9; font.bold: true; font.letterSpacing: mkey.glyph !== "" ? 0 : 0.6 }
         ToolTip.visible: mkey.tip !== "" && mkMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: mkey.tip
         MouseArea { id: mkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: mkey.can; onClicked: mkey.hit() } }
+    // A SECTION of the channel overview: a flat header bar with its title, as on a desk's channel screen
+    component SectHead: Rectangle { property string title; property string link: ""; signal open()
+        Layout.fillWidth: true; implicitHeight: 20; radius: 3; color: Theme.dark ? "#262a31" : "#d5dae2"
+        Text { anchors.centerIn: parent; text: i18n.t(parent.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+        Text { visible: parent.link !== ""; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: Theme.cyan; font.pixelSize: 13; font.bold: true }
+        MouseArea { anchors.fill: parent; enabled: parent.link !== ""; cursorShape: Qt.PointingHandCursor; onClicked: page.go(parent.link) } }
     component Lamp: Rectangle { property color tint: Theme.emerald; property bool lit: true; width: 7; height: 7; radius: 4; color: lit ? tint : Theme.ov(0.15)
         Rectangle { anchors.centerIn: parent; width: 13; height: 13; radius: 7; color: Qt.rgba(parent.tint.r, parent.tint.g, parent.tint.b, 0.25); visible: parent.lit } }
     component ReadPill: Rectangle { property alias text: rpT.text; property color tint: Theme.amber; Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: Qt.rgba(tint.r, tint.g, tint.b, 0.12); border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.45)
@@ -613,15 +620,17 @@ Item {
             // the selected channel's whole chain, editable
             Rectangle {
                 visible: page.sidePanel
-                Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.cardRaised; border.color: Theme.cyan
+                objectName: "channelOverview"; Layout.preferredWidth: 236; Layout.fillHeight: true; radius: 6; color: Theme.dark ? "#16181c" : "#f4f6f9"; border.color: Theme.line
                 Flickable {
                     id: sideFlick; anchors.fill: parent; anchors.margins: 8; contentWidth: width; contentHeight: side.implicitHeight; clip: true
                     flickableDirection: Flickable.VerticalFlick
                     ColumnLayout {
                         id: side; width: sideFlick.width; spacing: 6   // the panel's width, not the content's: long help text wraps instead of widening the column
-                        RowLayout { Layout.fillWidth: true
-                            Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: Theme.stripColors[page.selSt ? page.selSt.color : 0] }
-                            Text { Layout.fillWidth: true; text: (page.selSt ? page.selSt.name : "") + i18n.t("  ·  CH ", i18n.lang) + (page.sel + 1); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideRight } }
+                        // THE CHANNEL: its number, large, and its name on its own colour
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 4; color: Theme.stripColors[page.selSt ? page.selSt.color : 0]
+                            Rectangle { x: 3; y: 3; width: 30; height: 28; radius: 3; color: "#0b0f14"; Text { anchors.centerIn: parent; text: page.sel + 1; color: "#ffffff"; font.family: Theme.mono; font.pixelSize: 15; font.bold: true } }
+                            Text { anchors.left: parent.left; anchors.leftMargin: 40; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: page.selSt ? page.selSt.name : ""; color: "#0b0f14"; font.family: Theme.sans; font.pixelSize: 13; font.bold: true; elide: Text.ElideRight } }
+                        SectHead { title: "INPUT" }
                         Text { text: i18n.t("COLOUR", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
                         RowLayout { Layout.fillWidth: true
@@ -630,7 +639,7 @@ Item {
                             Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
                             Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
                         Text { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: sideFlick.width }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        SectHead { title: "DYNAMICS" }
                         // gate
                         RowLayout { Layout.fillWidth: true
                             Rectangle { id: gb106; implicitWidth: Math.max(44, children[0].implicitWidth + 12); implicitHeight: 18; radius: 7; color: page.selCh.gateOn ? Theme.pink : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb106.color) } GradientStop { position: 1; color: Theme.btnBottom(gb106.color) } } Text { anchors.centerIn: parent; text: i18n.t("GATE", i18n.lang); color: page.selCh.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.sel, !page.selCh.gateOn, page.selCh.gateThresholdDb, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) } }
@@ -643,20 +652,38 @@ Item {
                             Text { text: i18n.t("THR ", i18n.lang) + Theme.dbText(page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb) + "  " + Number(page.selCh.compRatio || 4).toFixed(1) + ":1"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
                             Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dyn") } } }
                         Slider { Layout.fillWidth: true; from: -60; to: 0; value: page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb; onMoved: engine.setCompressor(page.sel, page.selCh.compOn, value, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) }
-                        // tone
-                        RowLayout { Layout.fillWidth: true
-                            Text { text: i18n.t("TONE: ", i18n.lang) + (page.selSt && page.selSt.eqOn ? i18n.t("EQ ", i18n.lang) : "") + (page.selSt && page.selSt.xoverOn ? i18n.t("X-OVER ", i18n.lang) : "") + (page.selSt && page.selSt.limOn ? i18n.t("LIM ", i18n.lang) : "") + (page.selSt && page.selSt.delayOn ? Number(page.selCh.delayMs).toFixed(2) + i18n.t(" ms ", i18n.lang) : "") + (page.selSt && page.selSt.polarity ? "Ø " : "") + (page.selSt && !(page.selSt.eqOn || page.selSt.xoverOn || page.selSt.limOn || page.selSt.delayOn || page.selSt.polarity) ? i18n.t("flat", i18n.lang) : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight }
-                            Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dsp") } } }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        // tone: the curve of the 3-band EQ on a grid (click: the full equaliser)
+                        SectHead { title: "EQ"; link: "dsp" }
+                        Rectangle { objectName: "eqCurve"; Layout.fillWidth: true; implicitHeight: 86; radius: 3; color: Theme.dark ? "#0a0b0d" : "#ffffff"; border.color: Theme.line
+                            readonly property var eq: (page.selSt, engine.channelEq(page.sel))
+                            onEqChanged: curve.requestPaint()
+                            Canvas { id: curve; anchors.fill: parent; anchors.margins: 1
+                                // the three bands as the strip's EQ has them: a low shelf at 100 Hz, a bell at FREQ, a high shelf at 10 kHz (a drawing of the curve, ±15 dB)
+                                onPaint: { const c = getContext("2d"), w = width, h = height, e = parent.eq || {}, on = !!e.on; c.reset()
+                                    const fx = f => Math.log(f / 20) / Math.log(1000) * w, gy = g => h / 2 - g / 18 * (h / 2)
+                                    c.lineWidth = 1; c.strokeStyle = Theme.dark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"
+                                    for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) { c.beginPath(); c.moveTo(fx(f), 0); c.lineTo(fx(f), h); c.stroke() }
+                                    for (const g of [-12, -6, 6, 12]) { c.beginPath(); c.moveTo(0, gy(g)); c.lineTo(w, gy(g)); c.stroke() }
+                                    c.strokeStyle = Theme.dark ? "rgba(255,255,255,0.30)" : "rgba(0,0,0,0.30)"; c.beginPath(); c.moveTo(0, h / 2); c.lineTo(w, h / 2); c.stroke()
+                                    const lo = e.low || 0, mid = e.mid || 0, hi = e.high || 0, f0 = e.midFreq || 1000
+                                    const gain = f => lo / (1 + Math.pow(f / 100, 2)) + hi / (1 + Math.pow(10000 / f, 2)) + mid * Math.exp(-Math.pow(Math.log(f / f0) / Math.log(2), 2) / 1.6)
+                                    c.lineWidth = 2; c.strokeStyle = on ? "#4ade80" : (Theme.dark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)"); c.beginPath()
+                                    for (let x = 0; x <= w; x += 2) { const f = 20 * Math.pow(1000, x / w), y = gy(on ? gain(f) : 0); if (x === 0) c.moveTo(x, y); else c.lineTo(x, y) } c.stroke()
+                                    if (on) for (const [f, col] of [[100, "#fb7185"], [f0, "#4ade80"], [10000, "#38bdf8"]]) { c.fillStyle = col; c.beginPath(); c.arc(fx(f), gy(gain(f)), 3.5, 0, 2 * Math.PI); c.fill() } }
+                                Component.onCompleted: requestPaint(); onWidthChanged: requestPaint() }
+                            Text { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 3; text: "20"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 }
+                            Text { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; text: "20k"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6 }
+                            Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 3; text: parent.eq && parent.eq.on ? i18n.t("EQ ON", i18n.lang) : i18n.t("EQ OFF", i18n.lang); color: parent.eq && parent.eq.on ? "#4ade80" : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.go("dsp") } }
+                        SectHead { title: "SENDS"; link: "bus" }
                         // sends
-                        RowLayout { Layout.fillWidth: true; Text { text: i18n.t("SENDS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true } Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("bus") } } }
                         Repeater { model: engine.busState; delegate: RowLayout { Layout.fillWidth: true; spacing: 4
                             property var sd: engine.send(page.sel, index)
                             Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
                             Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 36; elide: Text.ElideRight }
                             Slider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
                             Rectangle { implicitWidth: 30; Layout.minimumWidth: 30; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
+                        SectHead { title: "GROUPS" }
                         // dca
                         RowLayout { Layout.fillWidth: true; spacing: 2; Text { text: i18n.t("DCA", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.rightMargin: 2 }
                             Repeater { model: 9; delegate: Rectangle { implicitWidth: 18; Layout.fillWidth: true; Layout.maximumWidth: 20; implicitHeight: 14; radius: 2; color: page.selSt && page.selSt.dca === index ? Theme.amber : Theme.ov(0.08); Text { anchors.centerIn: parent; text: index === 0 ? "-" : index; color: page.selSt && page.selSt.dca === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDca(page.sel, index) } } } }
