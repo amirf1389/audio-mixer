@@ -630,6 +630,17 @@ Item {
                         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 4; color: Theme.stripColors[page.selSt ? page.selSt.color : 0]
                             Rectangle { x: 3; y: 3; width: 30; height: 28; radius: 3; color: "#0b0f14"; Text { anchors.centerIn: parent; text: page.sel + 1; color: "#ffffff"; font.family: Theme.mono; font.pixelSize: 15; font.bold: true } }
                             Text { anchors.left: parent.left; anchors.leftMargin: 40; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: page.selSt ? page.selSt.name : ""; color: "#0b0f14"; font.family: Theme.sans; font.pixelSize: 13; font.bold: true; elide: Text.ElideRight } }
+                        // LEVEL: the selected channel on a VU needle (0 VU = the reference chosen on the bar), its peak lamp, and the figures beside it
+                        SectHead { title: "LEVEL" }
+                        RowLayout { Layout.fillWidth: true; spacing: 8
+                            readonly property var m: visible ? (page.tick, engine.meterAt(page.sel)) : undefined
+                            VuMeter { objectName: "channelVu"; Layout.preferredWidth: 128; Layout.preferredHeight: 70; vuDb: parent.m ? parent.m.vuDb : -120; refDb: engine.vuRefDb; peakLamp: parent.m ? !!parent.m.clip : false; label: i18n.t("VU", i18n.lang) }
+                            ColumnLayout { Layout.fillWidth: true; spacing: 3
+                                Repeater { model: [["PEAK", "peakDb", Theme.amber], ["IN", "inDb", Theme.cyan], ["FADER", "", Theme.ink]]
+                                    delegate: RowLayout { Layout.fillWidth: true; spacing: 4
+                                        Text { text: i18n.t(modelData[0], i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; Layout.preferredWidth: 30 }
+                                        Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignRight; color: modelData[2]; font.family: Theme.mono; font.pixelSize: 10; font.bold: true
+                                            text: { const mm = parent.parent.parent.m; const v = modelData[1] === "" ? (page.selSt ? page.selSt.db : 0) : (mm && mm[modelData[1]] !== undefined ? mm[modelData[1]] : -120); return Theme.dbText(v) } } } } } }
                         SectHead { title: "INPUT" }
                         Text { text: i18n.t("COLOUR", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
@@ -710,7 +721,7 @@ Item {
                 // GAIN MODE on: the Windows volume trims the master; shown here so the level heard is never a surprise
                 Text { objectName: "winTrimLine"; visible: engine.windowsGainMode && engine.windowsVolume >= 0; Layout.alignment: Qt.AlignHCenter
                     text: "WIN " + engine.windowsVolume + "% · " + (engine.windowsTrimDb <= -119 ? "OFF" : engine.windowsTrimDb === 0 ? "0 dB" : engine.windowsTrimDb.toFixed(1) + " dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                VuMeter { objectName: "masterVu"; visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 110; Layout.preferredHeight: 58; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
+                VuMeter { objectName: "masterVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 122; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 5; rowSpacing: 5
                     ModKey { objectName: "masterEqBtn"; Layout.fillWidth: true; label: "RTA EQ"; tint: Theme.orange; lit: engine.mastering().eqOn; onClicked: page.go("rtaeq") }                       // RTA EQ: the main (master) equaliser
                     ModKey { objectName: "enhancerBtn"; Layout.fillWidth: true; label: "ENHANCE"; tint: Theme.emerald; lit: engine.mastering().on; onClicked: page.Window.window.openEnhancer() }   // AMFB VOLUME ENHANCER
