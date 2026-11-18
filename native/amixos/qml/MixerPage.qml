@@ -397,7 +397,7 @@ Item {
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 124 : 114) : 0
+                                width: visible ? (page.sendView ? 124 : 124) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
@@ -574,8 +574,15 @@ Item {
                                         Timer { id: settleT; interval: 700; onTriggered: { if (Math.abs(fadRow.db - fadRow.settled) > 0.05) { fadRow.before = fadRow.settled; fadRow.settled = fadRow.db } } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 3
                                             Item { Layout.fillHeight: true }
+                                            // THE CHANNEL KEYS above the easy keys: what a mix needs most, one press each, lit in its own colour when on
+                                            MKey { objectName: "side_rec" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "REC"; hue: "#ff4d6d"; on: !!(st && st.armed); tip: i18n.t("REC: record this channel when recording starts", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setArmed(stripItem.stripIdx, !(st && st.armed)) } }
+                                            MKey { objectName: "side_auto" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "AUTO"; hue: "#38bdf8"; on: !!(st && st.automix); tip: i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setAutomix(stripItem.stripIdx, !(st && st.automix), st ? st.amWeight : 1) } }
+                                            MKey { objectName: "side_fx" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: st && st.plugins > 0 ? "FX " + st.plugins : "FX"; hue: "#a78bfa"; on: !!(st && st.plugins > 0); tip: i18n.t("FX: the effects of this channel (plug-in rack)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.rack = true } }
+                                            MKey { objectName: "side_eq" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "EQ"; hue: "#4ade80"; on: !!(st && st.eqOn); tip: i18n.t("EQ: open the full equaliser of this channel", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.go("dsp") } }
+                                            MKey { objectName: "side_phase" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: "Ø"; hue: "#facc15"; on: !!(st && st.polarity); tip: i18n.t("PHASE: turn this channel round (when two microphones on one source sound thin together)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setPolarity(stripItem.stripIdx, !(st && st.polarity)) } }
+                                            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; implicitHeight: 1; color: Theme.line }
                                             Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
-                                                delegate: MKey { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 24; implicitHeight: 26; glyph: modelData[0]; hue: stripItem.sc; tip: i18n.t(modelData[2], i18n.lang)
+                                                delegate: MKey { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: modelData[0]; hue: stripItem.sc; tip: i18n.t(modelData[2], i18n.lang)
                                                     can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
                                                     onHit: { engine.selectedStrip = stripItem.stripIdx
                                                         // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
