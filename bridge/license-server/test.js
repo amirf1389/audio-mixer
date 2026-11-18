@@ -412,3 +412,67 @@ test('SYSTEM page: health without secrets, validated settings, session ending, s
     assert.strictEqual((await call('/admin/staff/stf_none/end-sessions', { method: 'POST', body: {}, tok: TOKEN })).status, 404);
   } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('CRM and portal extras: a key from a customer record, follow-ups, ending-soon CSV, database backup, sign-in page', async () => {
+  const os = require('node:os'), fsx = require('node:fs'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'extras-'));
+  const srv = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), portalDb: pathx.join(dir, 'portal.db'), portalSecret: 'k'.repeat(48), quiet: true });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const call = async (p, { method, body, tok } = {}) => { const r = await fetch(base + p, { method: method || (body ? 'POST' : 'GET'), headers: { ...(tok ? { authorization: 'Bearer ' + tok } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); const buf = Buffer.from(await r.arrayBuffer()), t = buf.toString('utf8'); let j = null; try { j = JSON.parse(t); } catch (_) {} return { status: r.status, json: j, text: t, buf, headers: r.headers }; };
+  try {
+    await call('/admin/staff', { body: { email: 'kim@amfb.my', name: 'Kim', password: 'kim long password' }, tok: TOKEN });
+    const jwt = (await call('/admin/auth/login', { body: { email: 'kim@amfb.my', password: 'kim long password' } })).json.token;
+    await call('/admin/settings', { method: 'PUT', body: { defaultPlan: 'studio', defaultDays: 20, defaultSeats: 2, orgName: 'AMFB Audio Sdn Bhd' }, tok: TOKEN });
+    // P1: a key straight from the record, with the Settings defaults, listed under the customer with its state
+    const id = (await call('/admin/crm/customers', { body: { name: 'Studio Nord', company: 'Nord AB', email: 'Desk@Nord.example', status: 'customer' }, tok: jwt })).json.id;
+    const noMail = (await call('/admin/crm/customers', { body: { name: 'No Mail' }, tok: jwt })).json.id;
+    assert.strictEqual((await call('/admin/crm/customers/' + noMail + '/licence', { body: {}, tok: jwt })).status, 400);
+    assert.strictEqual((await call('/admin/crm/customers/cus_none/licence', { body: {}, tok: jwt })).status, 404);
+    assert.strictEqual((await call('/admin/crm/customers/' + id + '/licence', { body: {} })).status, 401);
+    const k1 = await call('/admin/crm/customers/' + id + '/licence', { body: {}, tok: jwt });
+    assert.strictEqual(k1.status, 200); assert.strictEqual(k1.json.plan, 'studio'); assert.strictEqual(k1.json.seats, 2); assert.ok(k1.json.expires > Date.now() + 19 * 86400000 && k1.json.expires < Date.now() + 21 * 86400000);
+    assert.strictEqual(verifyKey(k1.json.key, { jwk }).ok, true);
+    const k2 = await call('/admin/crm/customers/' + id + '/licence', { body: { plan: 'basic', days: 0, seats: 1 }, tok: jwt }); assert.strictEqual(k2.json.expires, null);
+    assert.strictEqual((await call('/admin/crm/customers/' + id + '/licence', { body: { plan: 'gold' }, tok: jwt })).status, 400);
+    await call('/admin/licenses/' + k2.json.id + '/revoke', { body: { reason: 'test' }, tok: TOKEN });
+    const cu = (await call('/admin/crm/customers/' + id, { tok: jwt })).json.customer;
+    assert.strictEqual(cu.licences.length, 2); const st = Object.fromEntries(cu.licences.map(l => [l.id, l.state])); assert.strictEqual(st[k1.json.id], 'active'); assert.strictEqual(st[k2.json.id], 'revoked');
+    assert.ok(cu.notes.some(n => n.text.includes(k1.json.id)), 'the issue is noted on the customer');
+    assert.ok((await call('/admin/audit?limit=50', { tok: TOKEN })).json.entries.some(e => e.action === 'license.issue' && String(e.detail || e.note || JSON.stringify(e)).includes('crm=')));
+    // P2: follow-up days, validated; due today and overdue by the browser's day; lost customers left out
+    for (const bad of ['tomorrow', '2026-02-30', '2026-1-5']) assert.strictEqual((await call('/admin/crm/customers/' + id, { method: 'PUT', body: { name: 'Studio Nord', email: 'desk@nord.example', status: 'customer', followUp: bad }, tok: jwt })).status, 400, bad);
+    await call('/admin/crm/customers/' + id, { method: 'PUT', body: { name: 'Studio Nord', company: 'Nord AB', email: 'desk@nord.example', status: 'customer', followUp: '2026-11-18' }, tok: jwt });
+    await call('/admin/crm/customers', { body: { name: 'Late One', followUp: '2026-11-01' }, tok: jwt });
+    await call('/admin/crm/customers', { body: { name: 'Gone', followUp: '2026-10-01', status: 'lost' }, tok: jwt });
+    await call('/admin/crm/customers', { body: { name: 'Later', followUp: '2026-12-24' }, tok: jwt });
+    const due = (await call('/admin/crm/due?today=2026-11-18', { tok: jwt })).json;
+    assert.deepStrictEqual(due.dueToday.map(c => c.name), ['Studio Nord']); assert.deepStrictEqual(due.overdue.map(c => c.name), ['Late One']);
+    assert.strictEqual((await call('/admin/crm/due?today=nonsense', { tok: jwt })).status, 200);
+    assert.strictEqual((await call('/admin/crm/due')).status, 401);
+    assert.ok((await call('/admin/crm/export.csv', { tok: jwt })).text.includes('follow-up'));
+    // P3: the ending-soon list as CSV: only active keys inside the window, formula cells quoted
+    const evil = (await call('/admin/licenses', { body: { name: '=cmd|calc', email: 'x@y.co', plan: 'pro', days: 5 }, tok: TOKEN })).json.id;
+    await call('/admin/licenses', { body: { name: 'Far Away', plan: 'pro', days: 300 }, tok: TOKEN });
+    const csv = await call('/admin/licenses/ending.csv?days=30', { tok: jwt });
+    assert.strictEqual(csv.status, 200); assert.match(csv.headers.get('content-type'), /text\/csv/); assert.match(csv.headers.get('content-disposition'), /ending-soon/);
+    const lines = csv.text.trim().split('\r\n'); assert.strictEqual(lines[0].replace('﻿', ''), 'id,customer,email,plan,trial,ends,days left,computers');
+    assert.ok(lines.some(l => l.includes(evil) && l.includes('"\'=cmd|calc"')), 'formula quoted'); assert.ok(lines.some(l => l.includes(k1.json.id)));
+    assert.ok(!csv.text.includes('Far Away') && !csv.text.includes(k2.json.id), 'only active keys inside the window');
+    assert.strictEqual((await call('/admin/licenses/ending.csv')).status, 401);
+    // P4: a database backup: admin or staff, audited, a real SQLite file, the last backup time shown
+    assert.strictEqual((await call('/admin/system/backup')).status, 401);
+    assert.strictEqual((await call('/admin/system/info', { tok: jwt })).json.data.db.lastBackup, null);
+    const bk = await call('/admin/system/backup', { tok: jwt });
+    assert.strictEqual(bk.status, 200); assert.strictEqual(bk.buf.subarray(0, 16).toString('latin1'), 'SQLite format 3\u0000'); assert.match(bk.headers.get('content-disposition'), /amfx1-portal-\d{4}-\d{2}-\d{2}\.db/);
+    assert.ok(!bk.buf.includes(Buffer.from('desk@nord.example')), 'the CRM stays encrypted inside the backup');
+    const after = (await call('/admin/system/info', { tok: jwt })).json.data.db.lastBackup; assert.ok(after && after.at > 0 && after.by === 'kim@amfb.my');
+    assert.ok((await call('/admin/audit?limit=20', { tok: TOKEN })).json.entries.some(e => e.action === 'system.backup'));
+    assert.ok(!fsx.readdirSync(os.tmpdir()).some(f => f.startsWith('amfx1-portal-backup-')), 'no backup copy left in the temp folder');
+    // P5: the sign-in page: the company name comes from Settings; the e-mail is remembered in the browser only, never the password
+    assert.strictEqual((await call('/portal/notice')).json.orgName, 'AMFB Audio Sdn Bhd');
+    const login = (await call('/admin/login')).text, js = (await call('/admin/login.js')).text;
+    assert.ok(login.includes('id="remember"') && login.includes('id="org"'));
+    assert.ok(js.includes("localStorage.setItem(KEY, $('email').value.trim())") && !/localStorage\.setItem\([^)]*(pw|token)/.test(js));
+  } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

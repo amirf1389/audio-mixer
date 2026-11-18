@@ -28,7 +28,8 @@ inline double log2(double x) noexcept {
 }
 // 2^y: the whole part into the exponent bits, the fraction (in [0, 1)) by e^(f ln 2) to the 9th power term
 inline double exp2(double y) noexcept {
-  if (y < -1000.0) return 0.0; if (y > 1000.0) y = 1000.0;
+  if (y < -1000.0) return 0.0;
+  if (y > 1000.0) y = 1000.0;
   double fl = static_cast<double>(static_cast<std::int64_t>(y)); if (fl > y) fl -= 1.0;   // floor without a library call (SSE2 has no rounding instruction)
   const double f = (y - fl) * 0.6931471805599453;
   const double p = 1.0 + f * (1.0 + f * (0.5 + f * (1.0 / 6 + f * (1.0 / 24 + f * (1.0 / 120 + f * (1.0 / 720 + f * (1.0 / 5040 + f * (1.0 / 40320 + f * (1.0 / 362880)))))))));

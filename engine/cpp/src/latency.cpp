@@ -6,6 +6,8 @@
 
 namespace am::latency {
 
+constexpr double kPi = 3.14159265358979323846;   // M_PI is not standard C++
+
 Level levelOf(double totalMs) { return totalMs < 10.0 ? Level::Low : totalMs <= 20.0 ? Level::Ok : Level::High; }
 const char* levelName(Level l) { return l == Level::Low ? "LOW LATENCY" : l == Level::Ok ? "OK" : "HIGH"; }
 
@@ -42,13 +44,14 @@ std::vector<float> testClick(double rate) {
   // a 40 ms logarithmic sweep 300 Hz -> 6 kHz under a Hann window: a sharp, unambiguous correlation peak, quiet enough to be polite
   const std::size_t n = static_cast<std::size_t>(std::max(256.0, 0.040 * (rate > 0 ? rate : 48000))); std::vector<float> v(n);
   const double f0 = 300, f1 = 6000, T = n / rate, k = std::log(f1 / f0);
-  for (std::size_t i = 0; i < n; ++i) { const double t = i / rate; const double ph = 2 * M_PI * f0 * T / k * (std::exp(t / T * k) - 1);
-    const double w = 0.5 - 0.5 * std::cos(2 * M_PI * i / (n - 1)); v[i] = static_cast<float>(0.5 * w * std::sin(ph)); }
+  for (std::size_t i = 0; i < n; ++i) { const double t = i / rate; const double ph = 2 * kPi * f0 * T / k * (std::exp(t / T * k) - 1);
+    const double w = 0.5 - 0.5 * std::cos(2 * kPi * i / (n - 1)); v[i] = static_cast<float>(0.5 * w * std::sin(ph)); }
   return v;
 }
 
 long findDelay(const float* sent, std::size_t nSent, const float* rec, std::size_t nRec, double* confidence) {
-  if (confidence) *confidence = 0; if (!sent || !rec || nSent < 16 || nRec < nSent) return -1;
+  if (confidence) *confidence = 0;
+  if (!sent || !rec || nSent < 16 || nRec < nSent) return -1;
   double es = 0; for (std::size_t i = 0; i < nSent; ++i) es += static_cast<double>(sent[i]) * sent[i]; if (es <= 0) return -1;
   // the recording's energy over a sliding window, so the score is a true correlation coefficient (a loud noise does not win)
   std::vector<double> cum(nRec + 1, 0.0); for (std::size_t i = 0; i < nRec; ++i) cum[i + 1] = cum[i] + static_cast<double>(rec[i]) * rec[i];

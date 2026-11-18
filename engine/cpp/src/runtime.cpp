@@ -108,7 +108,8 @@ void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); 
 void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, (input >= kNetInBase && input < kNetInBase + kNetInputs) ? input : std::max(-1, std::min(kMaxStrips - 1, input))}); }
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, source == kSrcMasterMono ? source : std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
 void Runtime::setAmp(int out, const AmpParams& p) {
-  if (out < 0 || out >= kMaxOutputs) return; ampUi_[out] = p;
+  if (out < 0 || out >= kMaxOutputs) return;
+  ampUi_[out] = p;
   const int flags = (p.on ? 1 : 0) | (p.mute ? 2 : 0) | (p.invert ? 4 : 0) | (p.limitOn ? 8 : 0) | (std::clamp(p.hpOrder, 0, 8) << 4) | (std::clamp(p.lpOrder, 0, 8) << 8) | (static_cast<int>(p.type) << 12);
   if (!running_) { amp_[out].set(p); return; }   // nothing runs: set it directly
   Cmd c{kAmp, out, p.gainDb, p.delayMs, p.hpHz, flags}; c.w = p.lpHz; c.v = p.limitDb; c.u = p.releaseMs; post(c);
@@ -179,7 +180,8 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kOutRoute: outRoute_[c.a] = c.b; break;
       case kAmp: if (c.a >= 0 && c.a < kMaxOutputs) { AmpParams p; p.on = c.b & 1; p.mute = c.b & 2; p.invert = c.b & 4; p.limitOn = c.b & 8; p.hpOrder = (c.b >> 4) & 15; p.lpOrder = (c.b >> 8) & 15;
         p.type = static_cast<dsp::XoverType>((c.b >> 12) & 3); p.gainDb = c.x; p.delayMs = c.y; p.hpHz = c.z; p.lpHz = c.w; p.limitDb = c.v; p.releaseMs = c.u;
-        for (int b = 0; b < AmpParams::kBands; ++b) p.eq[b] = amp_[c.a].params().eq[b]; amp_[c.a].set(p); } break;   // the bands follow in their own commands
+        for (int b = 0; b < AmpParams::kBands; ++b) { p.eq[b] = amp_[c.a].params().eq[b]; }
+        amp_[c.a].set(p); } break;   // the bands follow in their own commands
       case kAmpEq: if (c.a >= 0 && c.a < kMaxOutputs && c.b >= 0 && c.b < AmpParams::kBands) { AmpParams p = amp_[c.a].params(); p.eq[c.b] = {static_cast<dsp::FilterType>(static_cast<int>(c.w)), c.x, c.y, c.z}; amp_[c.a].set(p); } break;
       case kTrim: trim_[c.a] = c.x; break;
       case kMasterFx: mixer_.setMasterProcessor(static_cast<BusProcessor*>(c.p)); break;

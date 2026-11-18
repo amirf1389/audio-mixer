@@ -59,6 +59,12 @@
       tr.append(who, el('td', '', String(l.plan || '').toUpperCase() + (l.trial ? ' · trial' : '')), el('td', '', day(l.expires)), el('td', left <= 7 ? 'now' : 'soon', left + (left === 1 ? ' day' : ' days'))); body.append(tr); }
     $('expNone').hidden = soon.length > 0; body.parentElement.hidden = soon.length === 0; $('expBadge').hidden = soon.length === 0; $('expBadge').textContent = String(soon.length);
   }
+  // ENDING SOON as a spreadsheet (the server quotes cells a spreadsheet would run as a formula); fetched with the token, handed over as a download
+  $('expCsv').addEventListener('click', async () => {
+    try { const r = await fetch('/admin/licenses/ending.csv?days=' + warnDays, { headers: { authorization: 'Bearer ' + token }, cache: 'no-store' }); if (!r.ok) throw new Error('export refused (' + r.status + ')');
+      const url = URL.createObjectURL(await r.blob()), a = el('a'); a.href = url; a.download = 'amfx1-ending-soon.csv'; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { say($('portalMsg'), e.message, 'err'); }
+  });
   // the side bar: a click moves to its section; the section in view is the one that is lit
   document.querySelectorAll('.navi').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const t = $(a.dataset.nav); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); document.querySelectorAll('.navi').forEach(x => x.classList.toggle('on', x === a)); }));
   if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { for (const e of es) if (e.isIntersecting) document.querySelectorAll('.navi').forEach(x => x.classList.toggle('on', x.dataset.nav === e.target.id)); }, { rootMargin: '-10% 0px -70% 0px' });

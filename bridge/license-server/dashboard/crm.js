@@ -37,20 +37,52 @@
   }
   function fill(c) {
     $('cName').value = c.name || ''; $('cCompany').value = c.company || ''; $('cEmail').value = c.email || ''; $('cPhone').value = c.phone || '';
-    $('cCountry').value = c.country || ''; $('cTags').value = c.tags || ''; $('cStatus').value = c.status || 'lead';
+    $('cCountry').value = c.country || ''; $('cTags').value = c.tags || ''; $('cStatus').value = c.status || 'lead'; $('cFollow').value = c.followUp || '';
+    $('keyBox').classList.toggle('d-none', !c.id); $('kOut').classList.add('d-none'); $('kKey').textContent = ''; paintKeys(c.licences || []);
     $('custTitle').textContent = c.id ? c.name : 'New customer'; $('delBtn').classList.toggle('d-none', !c.id); $('noteBox').classList.toggle('d-none', !c.id);
     const ul = $('notes'); ul.replaceChildren();
     for (const n of c.notes || []) { const li = el('li', 'list-group-item px-0'); li.append(el('div', '', n.text), el('div', 'text-secondary', day(n.at) + ' · ' + n.by)); ul.append(li); }
   }
-  async function openCustomer(id) { const { customer } = await api('crm/customers/' + encodeURIComponent(id)); current = customer; fill(customer); modal.show(); }
+  // the customer's keys (listed under the customer's e-mail) with their state
+  function paintKeys(list) {
+    const tb = $('keyRows'); tb.replaceChildren(); $('keyNone').classList.toggle('d-none', list.length > 0); tb.closest('table').classList.toggle('d-none', !list.length);
+    const tone = { active: 'success', expired: 'secondary', revoked: 'danger' };
+    for (const k of list) { const st = el('td'); st.append(el('span', 'badge text-bg-' + (tone[k.state] || 'secondary'), k.state + (k.trial ? ' · trial' : '')));
+      const tr = el('tr'); tr.append(el('td', 'font-monospace', k.id), el('td', '', String(k.plan || '').toUpperCase()), el('td', '', k.expires ? new Date(k.expires).toLocaleDateString() : 'no end'), el('td', '', (k.devices || 0) + ' / ' + (k.seats || 1)), st); tb.append(tr); }
+  }
+  // the issue form starts from Settings (plan, days, computers)
+  let defaults = null;
+  async function loadDefaults() { if (defaults) return defaults; try { defaults = (await api('settings')).settings || {}; } catch (_) { defaults = {}; } return defaults; }
+  async function prefillKey() { const d = await loadDefaults(); if (d.defaultPlan) $('kPlan').value = d.defaultPlan; $('kDays').value = Number.isInteger(d.defaultDays) ? d.defaultDays : 365; $('kSeats').value = Number.isInteger(d.defaultSeats) ? d.defaultSeats : 1; }
+  $('kIssue').addEventListener('click', async () => {
+    if (!current || !current.id) return;
+    if (!current.email) { say('Save an e-mail for this customer first: the key is listed under it.'); return; }
+    if (!confirm('Issue a ' + $('kPlan').value.toUpperCase() + ' key for ' + current.name + '?')) return;
+    try { const r = await api('crm/customers/' + encodeURIComponent(current.id) + '/licence', 'POST', { plan: $('kPlan').value, days: Number($('kDays').value), seats: Number($('kSeats').value) });
+      const keep = { id: r.id, key: r.key, pk: r.productKey }; await openCustomer(current.id);
+      $('kId').textContent = keep.id; $('kKey').textContent = keep.key; $('kPk').textContent = keep.pk ? 'Product key: ' + keep.pk : ''; $('kOut').classList.remove('d-none'); say('Key ' + keep.id + ' issued.', 'success');
+    } catch (e) { say(e.message); }
+  });
+  // FOLLOW-UPS: due today and overdue, by this browser's own day
+  const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  async function loadDue() {
+    const r = await api('crm/due?today=' + localDay());
+    const fill = (ul, list, late) => { ul.replaceChildren(); if (!list.length) { ul.append(el('li', 'list-group-item px-0 text-secondary', 'None.')); return; }
+      for (const c of list) { const li = el('li', 'list-group-item list-group-item-action px-0'); li.style.cursor = 'pointer'; li.tabIndex = 0;
+        li.append(el('span', 'fw-semibold', c.name), el('span', 'text-secondary', (c.company ? ' · ' + c.company : '') + (late ? ' · since ' + c.followUp : '')));
+        const open = () => openCustomer(c.id); li.addEventListener('click', open); li.addEventListener('keydown', e => { if (e.key === 'Enter') open(); }); ul.append(li); } };
+    fill($('dueToday'), r.dueToday, false); fill($('dueLate'), r.overdue, true);
+    const n = r.dueToday.length + r.overdue.length; $('dueCount').textContent = String(n); $('dueSec').classList.toggle('d-none', n === 0);
+  }
+  async function openCustomer(id) { const { customer } = await api('crm/customers/' + encodeURIComponent(id)); current = customer; fill(customer); await prefillKey(); modal.show(); }
   $('newBtn').addEventListener('click', () => { current = {}; fill({}); modal.show(); });
   $('saveBtn').addEventListener('click', async () => {
-    const body = { name: $('cName').value, company: $('cCompany').value, email: $('cEmail').value, phone: $('cPhone').value, country: $('cCountry').value, tags: $('cTags').value, status: $('cStatus').value };
-    try { if (current && current.id) await api('crm/customers/' + encodeURIComponent(current.id), 'PUT', body); else await api('crm/customers', 'POST', body); modal.hide(); say('Saved.', 'success'); await Promise.all([loadList(), loadStats()]); } catch (e) { say(e.message); }
+    const body = { name: $('cName').value, company: $('cCompany').value, email: $('cEmail').value, phone: $('cPhone').value, country: $('cCountry').value, tags: $('cTags').value, status: $('cStatus').value, followUp: $('cFollow').value };
+    try { if (current && current.id) await api('crm/customers/' + encodeURIComponent(current.id), 'PUT', body); else await api('crm/customers', 'POST', body); modal.hide(); say('Saved.', 'success'); await Promise.all([loadList(), loadStats(), loadDue()]); } catch (e) { say(e.message); }
   });
   $('delBtn').addEventListener('click', async () => {
     if (!current || !current.id || !confirm('Delete ' + current.name + ' and all notes?')) return;
-    try { await api('crm/customers/' + encodeURIComponent(current.id), 'DELETE'); modal.hide(); say('Deleted.', 'success'); await Promise.all([loadList(), loadStats()]); } catch (e) { say(e.message); }
+    try { await api('crm/customers/' + encodeURIComponent(current.id), 'DELETE'); modal.hide(); say('Deleted.', 'success'); await Promise.all([loadList(), loadStats(), loadDue()]); } catch (e) { say(e.message); }
   });
   $('noteAdd').addEventListener('click', async () => {
     const t = $('noteText').value.trim(); if (!t || !current || !current.id) return;
@@ -81,7 +113,7 @@
       const me = await api('auth/me'); $('who').textContent = me.staff ? me.staff.name + ' · ' + me.staff.email : 'admin token';
       statuses = (await api('crm/stats')).statuses || ['lead', 'trial', 'customer', 'reseller', 'lost'];
       for (const s of statuses) { $('fStatus').append(new Option(s, s)); $('cStatus').append(new Option(s, s)); }
-      await Promise.all([loadStats(), loadList()]);
+      await Promise.all([loadStats(), loadList(), loadDue()]);
       if (location.hash === '#staff') show(true);
     } catch (e) { if (e.message !== 'signed out') say(e.message); }
   })();
