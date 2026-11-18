@@ -2150,5 +2150,12 @@
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Wejścia 1 i 2 są podłączone do tego samego mikrofonu (jeden głos po obu stronach): kanał 1 jest ustawiony na brak sygnału wejściowego, więc głos słychać tylko raz, na kanale 2. Funkcja UNDO przywraca poprzedni stan.",
 "UNDO": "COFNĄĆ",
 "One voice": "Jeden głos",
-"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Gdy na wejściach 1 i 2 podłączony jest ten sam mikrofon, kanał 1 jest ustawiony na brak sygnału wejściowego, dzięki czemu głos słychać tylko raz (mniej sprzężenia zwrotnego)"
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Gdy na wejściach 1 i 2 podłączony jest ten sam mikrofon, kanał 1 jest ustawiony na brak sygnału wejściowego, dzięki czemu głos słychać tylko raz (mniej sprzężenia zwrotnego)",
+"CONSOLE": "KONSOLA",
+"INSERTS": "WSTAWY",
+"Louder: +1 dB": "Głośniej: +1 dB",
+"Quieter: -1 dB": "Cichsze: -1 dB",
+"Back to the normal level (0 dB)": "Powrót do normalnego poziomu (0 dB)",
+"BACK: where this fader was before the last move": "POWRÓT: pozycja tego suwaka przed ostatnią zmianą",
+"Mixer look": "Wygląd miksera"
 }

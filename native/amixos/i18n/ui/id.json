@@ -2152,5 +2152,13 @@
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Input 1 dan 2 terhubung ke mikrofon yang sama (satu suara di kedua sisi): Saluran 1 diatur ke tanpa input sehingga suara tersebut hanya terdengar sekali, di Saluran 2. Tombol UNDO mengembalikannya seperti semula.",
 "UNDO": "BATAL",
 "One voice": "Satu suara",
-"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Apabila input 1 dan 2 terhubung ke mikrofon yang sama, CH 1 diatur ke mode tanpa input sehingga suara hanya terdengar sekali (mengurangi umpan balik)"
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Apabila input 1 dan 2 terhubung ke mikrofon yang sama, CH 1 diatur ke mode tanpa input sehingga suara hanya terdengar sekali (mengurangi umpan balik)",
+"CONSOLE": "KONSOL",
+"INSERTS": "SISIPAN",
+"Louder: +1 dB": "Lebih keras: +1 dB",
+"Quieter: -1 dB": "Lebih senyap: -1 dB",
+"Back to the normal level (0 dB)": "Kembali ke tingkat normal (0 dB)",
+"BACK: where this fader was before the last move": "KEMBALI: posisi fader ini sebelum pergerakan terakhir",
+"Mixer look": "Tampilan mixer",
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: panel datar dengan sepuluh slot insert dan tombol-tombol praktis di samping setiap fader. KONSOL: panel perangkat keras di atas meja"
 }

@@ -2180,5 +2180,12 @@
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "As entradas 1 e 2 recebem o sinal do mesmo microfone (uma única voz em ambos os lados): o canal 1 está configurado sem entrada, de modo que a voz é ouvida apenas uma vez, no canal 2. A função UNDO reverte essa configuração.",
 "UNDO": "DESFAZER",
 "One voice": "Uma voz",
-"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Quando as entradas 1 e 2 recebem o sinal do mesmo microfone, o canal 1 é configurado para “sem entrada”, de modo que a voz seja ouvida apenas uma vez (menos realimentação)"
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Quando as entradas 1 e 2 recebem o sinal do mesmo microfone, o canal 1 é configurado para “sem entrada”, de modo que a voz seja ouvida apenas uma vez (menos realimentação)",
+"INSERTS": "INSERÇÕES",
+"Louder: +1 dB": "Mais alto: +1 dB",
+"Quieter: -1 dB": "Mais silencioso: -1 dB",
+"Back to the normal level (0 dB)": "De volta ao nível normal (0 dB)",
+"BACK: where this fader was before the last move": "VOLTAR: onde este fader estava antes do último movimento",
+"Mixer look": "Aparência do mixer",
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: faixas planas com dez slots de inserção e botões de acesso rápido ao lado de cada fader. CONSOLE: as faixas físicas da mesa de som"
 }

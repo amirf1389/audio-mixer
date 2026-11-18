@@ -2183,5 +2183,13 @@
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "1 ve 2 numaralı girişler aynı mikrofonu taşır (her iki tarafta da tek bir ses): CH 1’e giriş yok olarak ayarlandığından ses, CH 2’de tek bir kez duyulur. UNDO tuşu ile eski haline geri döndürülür.",
 "UNDO": "GERİ AL",
 "One voice": "Tek bir ses",
-"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "1 ve 2 numaralı girişler aynı mikrofonu taşıdığında, sesin tek sefer duyulması (geri beslemenin azalması) için CH 1’e “giriş yok” ayarı yapılır"
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "1 ve 2 numaralı girişler aynı mikrofonu taşıdığında, sesin tek sefer duyulması (geri beslemenin azalması) için CH 1’e “giriş yok” ayarı yapılır",
+"CONSOLE": "KONSOL",
+"INSERTS": "EKLER",
+"Louder: +1 dB": "Daha yüksek ses: +1 dB",
+"Quieter: -1 dB": "Daha sessiz: -1 dB",
+"Back to the normal level (0 dB)": "Normal seviyeye (0 dB) geri dön",
+"BACK: where this fader was before the last move": "GERİ: Bu fader’ın son hareketinden önceki konumu",
+"Mixer look": "Mikser görünümü",
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: On adet ekleme yuvası bulunan düz şeritler ve her faderın yanında kolay erişimli düğmeler. KONSOL: Donanım masası şeritleri"
 }

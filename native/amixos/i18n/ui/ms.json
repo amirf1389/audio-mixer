@@ -2157,5 +2157,13 @@
 "New install: everything starts from the factory state (the licence is kept).": "Pemasangan baru: semuanya bermula dari keadaan kilang (lesen dikekalkan).",
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Input 1 dan 2 membawa mikrofon yang sama (satu suara di kedua-dua belah): CH 1 ditetapkan tanpa input supaya suara hanya didengar sekali pada CH 2. UNDO memulihkannya semula.",
 "UNDO": "Batal",
-"One voice": "Satu suara"
+"One voice": "Satu suara",
+"CONSOLE": "KONSOL",
+"INSERTS": "Sisipan",
+"Louder: +1 dB": "Lebih kuat: +1 dB",
+"Quieter: -1 dB": "Lebih senyap: -1 dB",
+"Back to the normal level (0 dB)": "Kembali ke paras biasa (0 dB)",
+"BACK: where this fader was before the last move": "BALIK: di mana fader ini berada sebelum pergerakan terakhir",
+"Mixer look": "Penampilan pengadun",
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: jalur rata dengan sepuluh slot sisipan dan butang mudah di sebelah setiap fader. KONSOL: jalur meja perkakasan"
 }

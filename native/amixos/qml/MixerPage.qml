@@ -36,6 +36,115 @@ Item {
     component ReadPill: Rectangle { property alias text: rpT.text; property color tint: Theme.amber; Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: Qt.rgba(tint.r, tint.g, tint.b, 0.12); border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.45)
         Text { id: rpT; anchors.centerIn: parent; color: parent.tint; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
 
+    component DawChip: Rectangle { property string t; property bool on: false; property color hue: Theme.accent; property int strip: 0; signal hit()
+        implicitWidth: 20; implicitHeight: 16; radius: 2; color: on ? hue : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: on ? hue : (Theme.dark ? "#3a3e47" : "#c9ced8")
+        Text { anchors.centerIn: parent; text: parent.t; color: parent.on ? "#0b0d10" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = parent.strip; parent.hit() } } }
+    // ONE DAW STRIP: the colour tab and name, the input, TEN INSERT SLOTS (click an empty one: add an effect or a VST; click a filled one: its
+    // editor; the dot or a right-click: bypass), pan, MUTE / SOLO / REC / AUTO MIX, the fader with its IN / OUT meter, the level and the name plate
+    component DawStrip: Rectangle {
+        id: ds
+        property int idx: 0
+        readonly property int ver: engine.stripVer(idx, engine.stripTick)
+        readonly property var st: { ver; return engine.stripLite(idx) }
+        readonly property var mt: visible ? (page.tick, engine.meterAt(idx)) : undefined
+        readonly property var pl: { ver; engine.vstCount; return engine.plugins(idx).slice(0, 10) }
+        readonly property color sc: Theme.stripColors[st ? st.color : 0]
+        readonly property bool selected: page.sel === idx
+        readonly property bool locked: idx >= engine.licensedChannels
+        objectName: "dawStrip" + idx
+        radius: 3; clip: true
+        color: Theme.dark ? (selected ? "#2c2f36" : "#23252a") : (selected ? "#e4e7ed" : "#eef0f3")
+        border.color: selected ? Theme.accent : (Theme.dark ? "#30333a" : "#d5d9e0"); border.width: selected ? 1.5 : 1
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton; onPressed: function (m) { engine.selectedStrip = ds.idx; m.accepted = false } }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 4; spacing: 3
+            // NAME + COLOUR TAB
+            Rectangle { Layout.fillWidth: true; implicitHeight: 18; radius: 2; color: Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.22 : 0.30)
+                Rectangle { width: 3; height: parent.height; radius: 1; color: ds.sc }
+                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: chNo.left; anchors.verticalCenter: parent.verticalCenter; text: ds.st ? ds.st.name : ""; elide: Text.ElideRight
+                    color: Theme.ink; font.family: Theme.sans; font.pixelSize: 9; font.bold: true }
+                Text { id: chNo; anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: ds.idx + 1; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } }
+            // INPUT
+            Rectangle { Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
+                readonly property int route: engine.inputRoutes[ds.idx] !== undefined ? engine.inputRoutes[ds.idx] : -1
+                Text { anchors.centerIn: parent; width: parent.width - 6; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideMiddle; font.family: Theme.mono; font.pixelSize: 7
+                    text: parent.route >= 0 ? (engine.running ? engine.inputLabel(parent.route) : i18n.t("IN ", i18n.lang) + (parent.route + 1)) : i18n.t("NO INPUT", i18n.lang); color: parent.route >= 0 ? Theme.emerald : Theme.dim }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.selectedStrip = ds.idx; page.go("routing") } } }
+            // TEN INSERT SLOTS
+            Text { text: i18n.t("INSERTS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true; font.letterSpacing: 1 }
+            Repeater { model: ds.pl
+                delegate: Rectangle { objectName: "dawSlot" + ds.idx + "_" + index
+                    readonly property bool empty: !modelData.kind
+                    Layout.fillWidth: true; implicitHeight: 15; radius: 2
+                    color: empty ? (Theme.dark ? "#1b1d21" : "#e2e5eb") : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : modelData.bypass ? (Theme.dark ? "#272a30" : "#dde1e7") : Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.20 : 0.28)
+                    border.color: slotHover.hovered ? Theme.accent : "transparent"
+                    HoverHandler { id: slotHover }
+                    Rectangle { visible: !parent.empty; width: 2; height: parent.height - 4; x: 1; y: 2; radius: 1; color: modelData.bypass ? Theme.dim : ds.sc }
+                    Text { anchors.left: parent.left; anchors.leftMargin: 6; anchors.right: pwr.left; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
+                        text: parent.empty ? (slotHover.hovered ? "+" : "") : i18n.t(modelData.name ?? "", i18n.lang); color: parent.empty ? Theme.dim : modelData.bypass ? Theme.dim : Theme.ink
+                        font.family: Theme.sans; font.pixelSize: 8; font.strikeout: !parent.empty && modelData.bypass }
+                    Rectangle { id: pwr; visible: !parent.empty; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 4
+                        color: modelData.pending ? Theme.amber : modelData.bypass ? "transparent" : Theme.emerald; border.color: modelData.bypass ? Theme.dim : "transparent"
+                        MouseArea { anchors.fill: parent; anchors.margins: -3; onClicked: { engine.selectedStrip = ds.idx; engine.setPluginBypass(ds.idx, index, !modelData.bypass) } } }
+                    MouseArea { anchors.fill: parent; anchors.rightMargin: parent.empty ? 0 : 12; acceptedButtons: Qt.LeftButton | Qt.RightButton; cursorShape: Qt.PointingHandCursor
+                        onClicked: function (m) { engine.selectedStrip = ds.idx
+                            if (parent.empty || m.button === Qt.RightButton) { if (!parent.empty && m.button === Qt.RightButton) { engine.setPluginBypass(ds.idx, index, !modelData.bypass); return } chooser.slot = index; chooser.popup(); return }
+                            if (modelData.pending) { engine.retryPlugins(); return }
+                            if (modelData.builtIn) page.go(modelData.kind === "miceq" ? "miceq" : modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp")
+                            else plugEd.openFor(ds.idx, index, modelData.kind, modelData.name) } } } }
+            // PAN
+            // PAN: a bar from the centre (drag; double-click: centre)
+            Rectangle { id: panBar; objectName: "dawPan" + ds.idx; Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
+                readonly property real pan: ds.st ? ds.st.pan : 0
+                Rectangle { width: Math.abs(panBar.pan) * (parent.width / 2 - 2); height: parent.height - 6; y: 3; x: panBar.pan < 0 ? parent.width / 2 - width : parent.width / 2; radius: 1; color: ds.sc; opacity: 0.85 }
+                Rectangle { width: 1; height: parent.height; x: parent.width / 2; color: Theme.dim }
+                Text { anchors.centerIn: parent; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; color: Theme.ink
+                    text: Math.abs(panBar.pan) < 0.01 ? "C" : (panBar.pan < 0 ? "L" : "R") + Math.round(Math.abs(panBar.pan) * 100) }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.SizeHorCursor
+                    function setAt(x) { engine.setPan(ds.idx, Math.max(-1, Math.min(1, (x / width) * 2 - 1))) }
+                    onPressed: function (m) { engine.selectedStrip = ds.idx; setAt(m.x) } onPositionChanged: function (m) { if (pressed) setAt(m.x) } onDoubleClicked: engine.setPan(ds.idx, 0) } }
+            // MUTE / SOLO / REC / AUTO MIX
+            RowLayout { Layout.fillWidth: true; spacing: 2
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "M"; on: !!(ds.st && ds.st.mute); hue: Theme.danger; onHit: engine.setMute(ds.idx, !(ds.st && ds.st.mute)) }
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "S"; on: !!(ds.st && ds.st.solo); hue: Theme.amber; onHit: engine.setSolo(ds.idx, !(ds.st && ds.st.solo)) }
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "R"; on: !!(ds.st && ds.st.armed); hue: "#fb7185"; onHit: engine.setArmed(ds.idx, !(ds.st && ds.st.armed)) }
+                DawChip { Layout.fillWidth: true; strip: ds.idx; t: "AM"; on: !!(ds.st && ds.st.automix); hue: Theme.cyan; onHit: engine.setAutomix(ds.idx, !(ds.st && ds.st.automix), ds.st ? ds.st.amWeight : 1) } }
+            // FADER with its IN / OUT meter
+            // FADER with its IN / OUT meter, and beside it the EASY BUTTONS for everyone (a beginner, a first-time user, anyone who finds dragging hard):
+            // LOUDER and QUIETER (1 dB a press), 0 (back to the normal level) and BACK (where the fader was before the last move); each says what it does
+            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
+                readonly property real db: ds.st ? ds.st.db : 0
+                property real settled: 0; property real before: 0
+                Component.onCompleted: { settled = db; before = db }   // the level the strip opens with is the first "before"
+                onDbChanged: settleT.restart()
+                Timer { id: settleT; interval: 700; onTriggered: { const p = parent; if (Math.abs(p.db - p.settled) > 0.05) { p.before = p.settled; p.settled = p.db } } }
+                Fader { objectName: "dawFader"; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: ds.st ? ds.st.db : 0; remoteHot: remote.touched(ds.idx, remote.pulse)
+                    inDb: ds.mt ? ds.mt.inDb : -120; outDb: ds.mt ? ds.mt.peakDb : -120; clip: ds.mt ? ds.mt.clip : false; onMoved: function (db) { engine.setGain(ds.idx, db) } }
+                ColumnLayout { Layout.fillHeight: true; spacing: 3
+                    Item { Layout.fillHeight: true }
+                    Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
+                        delegate: Rectangle { objectName: "dawEasy_" + modelData[1] + ds.idx; implicitWidth: 26; implicitHeight: 24; radius: 4
+                            readonly property bool can: modelData[1] !== "back" || Math.abs(parent.parent.before - parent.parent.settled) > 0.05
+                            color: easyMa.pressed ? Theme.accent : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: easyMa.containsMouse ? Theme.accent : (Theme.dark ? "#3a3e47" : "#c9ced8"); opacity: can ? 1 : 0.4
+                            Text { anchors.centerIn: parent; text: modelData[0]; color: easyMa.pressed ? "#0b0d10" : Theme.ink; font.pixelSize: 12; font.bold: true }
+                            ToolTip.visible: easyMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: i18n.t(modelData[2], i18n.lang)
+                            MouseArea { id: easyMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: parent.can
+                                onClicked: { const f = parent.parent.parent; engine.selectedStrip = ds.idx
+                                    // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
+                                    const now = f.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : f.before
+                                    settleT.stop(); f.before = now; f.settled = to; engine.setGain(ds.idx, to) } } } }
+                    Item { Layout.preferredHeight: 6 } } }
+            Text { Layout.alignment: Qt.AlignHCenter; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: ds.st && ds.st.db > 0 ? Theme.amber : Theme.ink
+                text: !ds.st ? "" : ds.st.db <= -90 ? "-inf" : (ds.st.db > 0 ? "+" : "") + ds.st.db.toFixed(1) }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 4; radius: 2; color: ds.sc; opacity: ds.st && ds.st.effectiveMute ? 0.35 : 1 } }
+        // beyond the licence: locked, a click opens LICENSE
+        Rectangle { anchors.fill: parent; z: 10; radius: 3; color: Qt.rgba(0, 0, 0, 0.72); visible: ds.locked
+            Text { anchors.centerIn: parent; text: "⊘  " + i18n.t("UNLOCK ›", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+            MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
+    }
+    // THE LOOK: DAW (flat strips, ten insert slots on each, the default) or CONSOLE (the hardware-desk strips); the send views keep the console strips
+    readonly property bool daw: settings.mixerStyle === "daw" && sendView === 0
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
     property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
     // STRIP SECTIONS: what each strip shows (SETTINGS popover); off = a leaner strip. The fader, M/S, name and meters always stay.
@@ -91,6 +200,13 @@ Item {
                         MouseArea { anchors.fill: parent; onClicked: page.bank = index }
                     }
                 }
+                Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
+                Repeater {   // THE LOOK of the faders view: DAW or CONSOLE (also on SETTINGS)
+                    model: [["daw", "DAW"], ["console", "CONSOLE"]]
+                    delegate: Rectangle { objectName: "mixerLook_" + modelData[0]; readonly property bool on: settings.mixerStyle === modelData[0]
+                        implicitWidth: lkT.implicitWidth + 14; implicitHeight: 20; radius: 7; color: on ? Theme.accent : Theme.ov(0.06); border.color: on ? Theme.accent : Theme.lineSoft
+                        Text { id: lkT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: settings.mixerStyle = modelData[0] } } }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
                 Repeater {
                     model: ["FADERS", "AUX SENDS", "FX SENDS"]
@@ -331,7 +447,7 @@ Item {
                     Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
                         ToolTip.visible: rackTitleHover.hovered; ToolTip.text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); HoverHandler { id: rackTitleHover } }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
-                    Text { text: engine.pluginCount(page.sel) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + (engine.pluginSlotLimit < 64 ? i18n.t(" · PRO unlocks unlimited", i18n.lang) : ""); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Text { text: (engine.stripTick, engine.pluginCount(page.sel)) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + ""; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                     RowLayout { visible: engine.pluginSlotLimit > 10; spacing: 3
                         Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.max(0, page.rackBank - 1) } }
                         Text { text: (page.rackBank * 10 + 1) + " - " + Math.min(engine.pluginSlotLimit, page.rackBank * 10 + 10); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
@@ -363,7 +479,17 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
+                // DAW LOOK: flat strips, the ten insert slots of each channel on the strip itself
                 Flickable {
+                    objectName: "dawStrips"; visible: page.daw
+                    anchors.fill: parent; anchors.margins: 8
+                    contentWidth: dawRow.implicitWidth; contentHeight: height
+                    flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; clip: true
+                    Row { id: dawRow; spacing: 2; height: parent.height
+                        Repeater { model: page.daw ? engine.strips : 0
+                            delegate: DawStrip { idx: index; height: dawRow.height; visible: page.bank === 2 || Math.floor(index / 16) === page.bank; width: visible ? 100 : 0 } } } }
+                Flickable {
+                    visible: !page.daw
                     anchors.fill: parent; anchors.margins: 8
                     contentWidth: strips.implicitWidth; contentHeight: height
                     flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds
@@ -372,7 +498,7 @@ Item {
                         spacing: 4
                         height: parent.height
                         Repeater {
-                            model: engine.strips
+                            model: page.daw ? 0 : engine.strips
                             delegate: Item {
                                 id: stripItem
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)

@@ -2208,5 +2208,12 @@
 "New install: everything starts from the factory state (the licence is kept).": "新規インストール：すべてが工場出荷時の状態から開始されます（ライセンスは引き継がれます）。",
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "入力1と2には同じマイクが接続されています（両側で同じ声が聞こえます）。CH 1は入力なしに設定されているため、声はCH 2で1回だけ聞こえます。「UNDO」を押すと元の状態に戻ります。",
 "UNDO": "元に戻す",
-"One voice": "一つの声"
+"One voice": "一つの声",
+"CONSOLE": "コンソール",
+"Louder: +1 dB": "音量を上げる：+1 dB",
+"Quieter: -1 dB": "静か：-1 dB",
+"Back to the normal level (0 dB)": "通常のレベル（0 dB）に戻る",
+"BACK: where this fader was before the last move": "BACK：前回の操作前のこのフェーダーの位置",
+"Mixer look": "ミキサーの外観",
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW：10個のインサートスロットを備えたフラットなストリップと、各フェーダーの横にある操作しやすいボタン。コンソール：ハードウェア・デスクのストリップ"
 }

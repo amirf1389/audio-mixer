@@ -566,7 +566,8 @@ class Engine : public QObject {
   // stage on, removing it switches it off) or a VST3 reference ("vst3:<path>"), kept for the VST3 host that is not built yet (shown as pending).
   static constexpr int kPluginSlots = 64;   // the rack's capacity; what an edition may fill: pluginSlotLimit() (all editions 64 = unlimited in practice)
   Q_PROPERTY(int pluginSlotLimit READ pluginSlotLimit NOTIFY licenseChanged)
-  int pluginSlotLimit() const { return kPluginSlots; }   // every edition, BASIC included, may fill the whole rack
+  static constexpr int kPluginsPerChannel = 10;   // TEN PLUG-INS PER CHANNEL: the ten insert slots every strip shows (the storage stays 64 wide)
+  int pluginSlotLimit() const { return kPluginsPerChannel; }   // every edition, BASIC included
   Q_INVOKABLE QVariantList plugins(int strip) const;  // [{slot, kind, name, bypass, builtIn, pending}]
   Q_INVOKABLE void setPlugin(int strip, int slot, const QString& kind);   // "" clears the slot
   Q_INVOKABLE int addToRack(int strip, const QString& kind);
@@ -757,7 +758,7 @@ class Engine : public QObject {
   QJsonObject stripJson(const StripUi& s) const;
   static QJsonObject dspJson(const am::dsp::ChannelParams& p);
   static am::dsp::ChannelParams dspFromJson(const QJsonObject& o);
-  static void stripFromJson(StripUi& s, const QJsonObject& o);
+  static int stripFromJson(StripUi& s, const QJsonObject& o);   // returns how many plug-ins did not fit in the ten slots
   QJsonObject consoleJson() const;
   void applyConsoleJson(const QJsonObject& root, bool respectSafe);
   std::vector<SceneUi> scenes_; int currentScene_ = -1; int selected_ = 0; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;

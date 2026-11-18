@@ -2154,5 +2154,10 @@
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "Les entrées 1 et 2 sont reliées au même microphone (une seule voix des deux côtés) : le canal 1 est réglé sur « aucune entrée », de sorte que la voix n'est entendue qu'une seule fois, sur le canal 2. La fonction « UNDO » rétablit la situation initiale.",
 "UNDO": "ANNULER",
 "One voice": "Une seule voix",
-"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Lorsque les entrées 1 et 2 sont reliées au même microphone, le canal 1 est réglé sur « aucune entrée » afin que la voix ne soit entendue qu'une seule fois (moins de larsen)"
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "Lorsque les entrées 1 et 2 sont reliées au même microphone, le canal 1 est réglé sur « aucune entrée » afin que la voix ne soit entendue qu'une seule fois (moins de larsen)",
+"INSERTS": "INSERTIONS",
+"Louder: +1 dB": "Plus fort : +1 dB",
+"Quieter: -1 dB": "Plus silencieux : -1 dB",
+"Back to the normal level (0 dB)": "Retour au niveau normal (0 dB)",
+"BACK: where this fader was before the last move": "RETOUR : position de ce fader avant le dernier déplacement"
 }

@@ -2207,5 +2207,11 @@
 "Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.": "입력 1과 2에는 동일한 마이크 신호가 입력됩니다(양쪽 모두에서 하나의 목소리가 나옴). CH 1은 입력 없음으로 설정되어 있으므로, 목소리는 CH 2에서만 한 번 들립니다. UNDO를 누르면 원래대로 돌아갑니다.",
 "UNDO": "되돌리기",
 "One voice": "하나의 목소리",
-"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "입력 1과 2에 동일한 마이크가 연결된 경우, CH 1은 입력 없음으로 설정되어 음성이 한 번만 들리게 됩니다(피드백 감소)."
+"When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)": "입력 1과 2에 동일한 마이크가 연결된 경우, CH 1은 입력 없음으로 설정되어 음성이 한 번만 들리게 됩니다(피드백 감소).",
+"CONSOLE": "콘솔",
+"Louder: +1 dB": "더 크게: +1 dB",
+"Quieter: -1 dB": "더 조용함: -1 dB",
+"Back to the normal level (0 dB)": "정상 수준(0 dB)으로 돌아감",
+"BACK: where this fader was before the last move": "BACK: 지난번 이동 전 이 페이더가 있던 위치",
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: 10개의 인서트 슬롯이 있는 평평한 스트립과 각 페이더 옆에 위치한 간편 버튼. 콘솔: 하드웨어 데스크 스트립"
 }

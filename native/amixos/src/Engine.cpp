@@ -1766,13 +1766,20 @@ am::dsp::ChannelParams Engine::dspFromJson(const QJsonObject& o) {
   for (int b = 0; b < am::dsp::kEqBands && b < eq.size(); ++b) { const QJsonObject e = eq[b].toObject(); p.eq[static_cast<std::size_t>(b)] = {static_cast<FilterType>(std::clamp(e.value("t").toInt(0), 0, 8)), std::clamp(e.value("f").toDouble(1000), 10.0, 24000.0), std::clamp(e.value("q").toDouble(1), 0.1, 36.0), std::clamp(e.value("g").toDouble(0), -24.0, 24.0)}; }
   return p;
 }
-void Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
+int Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   if (o.contains("name")) s.name = o.value("name").toString().left(24); s.db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0); s.mute = o.value("mute").toBool(); { const QJsonObject sp = o.value("spatial").toObject(); s.spOn = sp.value("on").toBool(); s.spAz = sp.value("az").toDouble(0); s.spEl = std::clamp(sp.value("el").toDouble(0), -90.0, 90.0); s.spDist = std::clamp(sp.value("dist").toDouble(1), 0.3, 20.0); s.spSpread = std::clamp(sp.value("spread").toDouble(0), 0.0, 1.0); } s.solo = o.value("solo").toBool();
   s.dsp.set(dspFromJson(o.value("dsp").toObject()));
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses; ++k) { if (k < sends.size()) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); } else s.sends[k] = SendUi{}; }
   s.dca = std::clamp(o.value("dca").toInt(0), 0, kGroups); s.muteGroups = static_cast<unsigned>(std::clamp(o.value("muteGroups").toInt(0), 0, 255)); s.color = std::clamp(o.value("color").toInt(0), 0, 7);
   s.link = o.value("link").toBool(); s.trimDb = std::clamp(o.value("trimDb").toDouble(0), -24.0, 24.0); s.toneOn = o.value("toneOn").toBool(true); s.automix = o.value("automix").toBool(); s.autoPol = o.value("autoPol").toBool(); s.amWeight = std::clamp(o.value("amWeight").toDouble(1), 0.25, 4.0);
   const QJsonArray pl = o.value("plugins").toArray(); for (int k = 0; k < kPluginSlots; ++k) { if (k < pl.size()) { const QJsonObject e = pl[k].toObject(); const QString kind = e.value("kind").toString().left(1024); if (s.plugins[k].kind != kind) s.plugins[k].vst.reset(); s.plugins[k].kind = kind; s.plugins[k].bypass = e.value("bypass").toBool(); s.plugins[k].state = e.value("state").toString(); } else s.plugins[k] = PluginUi{}; }
+  // TEN PER CHANNEL: a desk saved with plug-ins past slot 10 has them moved up into free slots, in order; what still does not fit is named in the note
+  QStringList dropped;
+  for (int k = kPluginsPerChannel; k < kPluginSlots; ++k) { if (s.plugins[k].kind.isEmpty()) continue;
+    int free = -1; for (int j = 0; j < kPluginsPerChannel; ++j) if (s.plugins[j].kind.isEmpty()) { free = j; break; }
+    if (free >= 0) { s.plugins[free].kind = s.plugins[k].kind; s.plugins[free].bypass = s.plugins[k].bypass; s.plugins[free].state = s.plugins[k].state; } else dropped << s.plugins[k].kind.section('|', 0, 0);
+    s.plugins[k] = PluginUi{}; }
+  return static_cast<int>(dropped.size());
 }
 QJsonObject Engine::consoleJson() const {
   QJsonArray arr; for (const StripUi& s : strips_) arr << stripJson(s);
@@ -1794,7 +1801,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   if (root.contains("amps")) { for (auto& a : ampUi_) a.clear(); for (const QJsonValue& v : root.value("amps").toArray()) { const QJsonObject a = v.toObject(); const int o = a.value("out").toInt(-1); if (o >= 0 && o < 64) { QVariantMap m = a.toVariantMap(); m.remove("out"); ampUi_[o] = m; if (rt_) rt_->setAmp(o, ampFromMap(m)); } } emit ampChanged(); }
   if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(true); mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
   const QJsonArray arr = root.value("strips").toArray();
-  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && ((recallSafe_ >> i) & 1u)) continue; stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); }
+  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && ((recallSafe_ >> i) & 1u)) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
