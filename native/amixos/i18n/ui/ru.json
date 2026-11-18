@@ -2169,18 +2169,5 @@
 "Back to the normal level (0 dB)": "Вернуться к нормальному уровню (0 дБ)",
 "BACK: where this fader was before the last move": "НАЗАД: положение этого фейдера до последнего перемещения",
 "Mixer look": "Внешний вид миксера",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: плоские панели с десятью слотами для вставок и удобными кнопками рядом с каждым фейдером. КОНСОЛЬ: аппаратные панели",
-"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / ЦИФРОВОЕ АУДИО: ВХОД И ВЫХОД ВМЕСТЕ",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Считывает сигнал со собственного входа устройства и одновременно воспроизводит его на собственном выходе (микрофон или линейный вход, динамики или цифровой выход на одном и том же USB-устройстве). Сигналы с его входов поступают на первые канальные полосы.",
-"WINDOWS SOUND": "ЗВУК В WINDOWS",
-"SOUND SETTINGS": "НАСТРОЙКИ ЗВУКА",
-"VOLUME MIXER": "РЕГУЛЯТОР ГРОМКОСТИ",
-"PLAYBACK DEVICES": "УСТРОЙСТВА ВОСПРОИЗВЕДЕНИЯ",
-"RECORDING DEVICES": "УСТРОЙСТВА ЗАПИСИ",
-"MICROPHONE PRIVACY": "КОНФИДЕНЦИАЛЬНОСТЬ ПРИ ИСПОЛЬЗОВАНИИ МИКРОФОНА",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "ВОСПРОИЗВЕДЕНИЕ (ДИНАМИКИ, НАУШНИКИ, ЦИФРОВОЙ ВЫХОД)",
-"RECORDING (MICROPHONES, LINE IN)": "ЗАПИСЬ (МИКРОФОНЫ, ЛИНИЙНЫЙ ВХОД)",
-"No device of this kind in Windows.": "В Windows нет устройств такого типа.",
-"MAKE DEFAULT": "УСТАНОВИТЬ ПО УМОЛЧАНИЮ",
-"enhancements off": "дополнения отключены"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: плоские панели с десятью слотами для вставок и удобными кнопками рядом с каждым фейдером. КОНСОЛЬ: аппаратные панели"
 }

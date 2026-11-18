@@ -73,21 +73,7 @@ struct DeviceInfo {
   bool defaultIn = false, defaultOut = false;
   std::string kind;                  // what it is: headphones | headset | speakers | microphone | line | digital | interface | bluetooth | app | wrapper | unknown
   std::string probeError;            // ASIO: why the driver could not be read just now (busy in another program, unplugged, other bitness); empty = read
-  std::string group;                 // the piece of hardware this endpoint belongs to (Windows: its device container), so its input and output are found together
-  std::string bus;                   // how it is connected, as the system says: "USB", "HDAUDIO", "BTHENUM" ... ("" = not known)
 };
-// IN + OUT TOGETHER: one piece of hardware (a USB audio interface, a USB / S/PDIF digital device, a sound card) whose input and output are
-// two separate entries of the system's list. Found by the hardware group, else by the device's own name in brackets ("Speakers (USB Audio
-// CODEC)" + "Microphone (USB Audio CODEC)"). App sound / computer sound entries and Bluetooth are left out. USB first.
-struct DuplexPair { std::string backend, name, inId, outId, inName, outName; int inChannels = 0, outChannels = 0; double rate = 48000; bool usb = false; std::string kind; };
-std::vector<DuplexPair> duplexPairs(const std::vector<DeviceInfo>& devices, const std::string& backend = "wasapi");
-// WINDOWS SOUND SETTINGS from the console. setDefaultEndpoint makes an endpoint Windows' default playback / recording device (and, when asked,
-// the default for calls), through the same policy interface Windows' own Sound panel uses: a user setting, no driver and no registry writes.
-// soundSettingsTarget names what a page opens ("sound", "volume-mixer", "playback", "recording", "microphone-privacy", "devices"): pure, "" for
-// an unknown page; openSoundSettings opens it. false with a reason on other systems or on failure.
-bool setDefaultEndpoint(const std::string& id, bool alsoCommunications, std::string& err);
-std::string soundSettingsTarget(const std::string& page);
-bool openSoundSettings(const std::string& page, std::string& err);
 // WINDOWS SOUND (the system's own volume of the default output, through the documented endpoint-volume interface: no driver, no registry):
 // read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.
 bool systemMuteGet(bool& muted);
@@ -105,10 +91,7 @@ int digitalOutputPair(const std::vector<std::string>& outputNames);
 // EVERY AUDIO ENDPOINT of the system, whatever its state: what listDevices leaves out because it cannot be opened now (headphones on an
 // empty jack, a microphone switched off in Windows' Sound settings) is listed here with the reason, for DIAGNOSTICS. Windows: WASAPI
 // active + unplugged + disabled (not-present ghosts are left out); other systems: the active devices of listDevices().
-struct EndpointInfo { std::string id, name, flow /* "out" | "in" */, state /* active | unplugged | disabled */, kind; int channels = 0; double rate = 0; bool isDefault = false; bool isDefaultComm = false;   // Windows' default for calls
-  int bits = 0;                 // Windows' own format for the device (its Advanced tab): bits per sample, 0 = not known
-  int enhancementsOff = -1;     // Windows' audio enhancements: 1 off, 0 on, -1 not known
-  std::string bus, group; };
+struct EndpointInfo { std::string id, name, flow /* "out" | "in" */, state /* active | unplugged | disabled */, kind; int channels = 0; double rate = 0; bool isDefault = false; };
 std::vector<EndpointInfo> listEndpoints();
 std::vector<DeviceInfo> listDevices(bool probeAsio = true);   // probeAsio false: ASIO drivers are listed from the registry without loading them (2 in / 2 out assumed): the list a hung driver cannot block
                        // every device of every backend built in ("null" last)

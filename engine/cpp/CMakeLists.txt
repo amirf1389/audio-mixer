@@ -15,7 +15,7 @@ set(RUNTIME_SRC src/runtime.cpp src/backend_null.cpp src/devices.cpp src/driver_
 set(RUNTIME_LIBS Threads::Threads)
 if(WIN32)
   list(APPEND RUNTIME_SRC src/backend_wasapi.cpp src/backend_asio.cpp src/backend_dsound.cpp)
-  list(APPEND RUNTIME_LIBS ole32 oleaut32 uuid advapi32 avrt dsound winmm bthprops setupapi shell32)
+  list(APPEND RUNTIME_LIBS ole32 oleaut32 uuid advapi32 avrt dsound winmm bthprops setupapi)
   set(ASIO_DRIVER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../drivers/asio)   # asio_sdk.h + the Steinberg ASIO SDK headers (GPLv3)
 elseif(APPLE)
   enable_language(OBJCXX)

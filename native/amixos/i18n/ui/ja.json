@@ -2215,18 +2215,5 @@
 "Back to the normal level (0 dB)": "通常のレベル（0 dB）に戻る",
 "BACK: where this fader was before the last move": "BACK：前回の操作前のこのフェーダーの位置",
 "Mixer look": "ミキサーの外観",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW：10個のインサートスロットを備えたフラットなストリップと、各フェーダーの横にある操作しやすいボタン。コンソール：ハードウェア・デスクのストリップ",
-"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / デジタルオーディオ：入力と出力が一体型",
-"OPEN INPUT + OUTPUT": "入力＋出力を開く",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "デバイス自身の入力を読み取り、同時にその出力（同じUSBデバイス上のマイクまたはライン入力、スピーカーまたはデジタル出力）から再生します。その入力信号は、最初のチャンネルストリップに送られます。",
-"WINDOWS SOUND": "Windowsのサウンド",
-"SOUND SETTINGS": "サウンド設定",
-"VOLUME MIXER": "ボリュームミキサー",
-"PLAYBACK DEVICES": "再生機器",
-"MICROPHONE PRIVACY": "マイクのプライバシー",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "再生（スピーカー、ヘッドフォン、デジタル出力）",
-"RECORDING (MICROPHONES, LINE IN)": "録音（マイク、ライン入力）",
-"No device of this kind in Windows.": "Windowsにはこの種のデバイスは存在しません。",
-"MAKE DEFAULT": "デフォルトに設定",
-"enhancements off": "機能強化を無効にする"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW：10個のインサートスロットを備えたフラットなストリップと、各フェーダーの横にある操作しやすいボタン。コンソール：ハードウェア・デスクのストリップ"
 }

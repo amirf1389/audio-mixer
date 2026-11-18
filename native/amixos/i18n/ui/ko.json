@@ -2213,19 +2213,5 @@
 "Quieter: -1 dB": "더 조용함: -1 dB",
 "Back to the normal level (0 dB)": "정상 수준(0 dB)으로 돌아감",
 "BACK: where this fader was before the last move": "BACK: 지난번 이동 전 이 페이더가 있던 위치",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: 10개의 인서트 슬롯이 있는 평평한 스트립과 각 페이더 옆에 위치한 간편 버튼. 콘솔: 하드웨어 데스크 스트립",
-"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / 디지털 오디오: 입력 및 출력 통합",
-"OPEN INPUT + OUTPUT": "입력 + 출력 열기",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "장치의 자체 입력을 읽으면서 동시에 자체 출력으로 재생합니다(동일한 USB 장치의 마이크 또는 라인 입력, 스피커 또는 디지털 출력). 입력 신호는 첫 번째 채널 스트립으로 전송됩니다.",
-"WINDOWS SOUND": "윈도우 사운드",
-"SOUND SETTINGS": "사운드 설정",
-"VOLUME MIXER": "볼륨 믹서",
-"PLAYBACK DEVICES": "재생 장치",
-"RECORDING DEVICES": "녹음 기기",
-"MICROPHONE PRIVACY": "마이크 개인정보 보호",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "재생 (스피커, 헤드폰, 디지털 출력)",
-"RECORDING (MICROPHONES, LINE IN)": "녹음 (마이크, 라인 입력)",
-"No device of this kind in Windows.": "Windows에는 이런 종류의 장치가 없습니다.",
-"MAKE DEFAULT": "기본값으로 설정",
-"enhancements off": "개선 기능 비활성화"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: 10개의 인서트 슬롯이 있는 평평한 스트립과 각 페이더 옆에 위치한 간편 버튼. 콘솔: 하드웨어 데스크 스트립"
 }

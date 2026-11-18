@@ -2159,17 +2159,5 @@
 "Louder: +1 dB": "Plus fort : +1 dB",
 "Quieter: -1 dB": "Plus silencieux : -1 dB",
 "Back to the normal level (0 dB)": "Retour au niveau normal (0 dB)",
-"BACK: where this fader was before the last move": "RETOUR : position de ce fader avant le dernier déplacement",
-"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / AUDIO NUMÉRIQUE : ENTRÉE ET SORTIE COMBINÉES",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Il lit le signal provenant de ses propres entrées et le diffuse simultanément sur ses propres sorties (micro ou entrée ligne, haut-parleurs ou sortie numérique sur le même périphérique USB). Ses entrées sont acheminées vers les premières tranches de console.",
-"WINDOWS SOUND": "SON DE WINDOWS",
-"SOUND SETTINGS": "PARAMÈTRES AUDIO",
-"PLAYBACK DEVICES": "APPAREILS DE LECTURE",
-"RECORDING DEVICES": "APPAREILS D'ENREGISTREMENT",
-"MICROPHONE PRIVACY": "CONFIDENTIALITÉ RELATIVE AUX MICROPHONES",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "LECTURE (HAUT-PARLEURS, CASQUE, SORTIE NUMÉRIQUE)",
-"RECORDING (MICROPHONES, LINE IN)": "ENREGISTREMENT (MICROPHONES, ENTRÉE LINE)",
-"No device of this kind in Windows.": "Il n'existe aucun périphérique de ce type sous Windows.",
-"MAKE DEFAULT": "DÉFINIR COMME PAR DÉFAUT",
-"enhancements off": "améliorations désactivées"
+"BACK: where this fader was before the last move": "RETOUR : position de ce fader avant le dernier déplacement"
 }

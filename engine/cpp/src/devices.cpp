@@ -19,7 +19,6 @@
 #include <cctype>
 #include <initializer_list>
 #include <windows.h>
-#include <shellapi.h>
 #include <audioclient.h>
 #include <mmreg.h>
 #include <ksmedia.h>
@@ -73,47 +72,6 @@ std::string classifyDevice(const std::string& backend, const std::string& name, 
   return "unknown";
 }
 namespace {
-std::string hardwareName(const std::string& name) {   // "Speakers (USB Audio CODEC)" -> "USB Audio CODEC"; no brackets: the whole name
-  const std::size_t a = name.find('('), b = name.rfind(')');
-  std::string h = a != std::string::npos && b != std::string::npos && b > a + 1 ? name.substr(a + 1, b - a - 1) : name;
-  while (!h.empty() && (h[0] == ' ' || (h[0] >= '0' && h[0] <= '9') || h[0] == '-')) h.erase(h.begin());   // "2- USB Audio CODEC": Windows' numbering of a second copy
-  return h;
-}
-std::string lowerOf(std::string s) { for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }
-}  // namespace
-
-std::vector<DuplexPair> duplexPairs(const std::vector<DeviceInfo>& devices, const std::string& backend) {
-  std::vector<DuplexPair> out;
-  auto usable = [&](const DeviceInfo& d) { return d.backend == backend && d.id.rfind("loopback:", 0) != 0 && d.kind != "app" && d.kind != "bluetooth"; };
-  auto keyOf = [](const DeviceInfo& d) { return d.group.empty() ? "n:" + lowerOf(hardwareName(d.name)) : "g:" + d.group; };
-  for (const DeviceInfo& o : devices) {
-    if (!usable(o) || o.outChannels <= 0) continue;
-    const std::string key = keyOf(o); bool seen = false; for (const DuplexPair& p : out) if (p.outId == o.id) seen = true; if (seen) continue;
-    const DeviceInfo* in = nullptr;
-    for (const DeviceInfo& i : devices) { if (!usable(i) || i.inChannels <= 0 || keyOf(i) != key) continue; if (i.id == o.id) { in = &i; break; } if (!in || (i.defaultIn && !in->defaultIn) || i.inChannels > in->inChannels) in = &i; }
-    if (!in) continue;
-    bool dup = false; for (const DuplexPair& p : out) if (p.inId == in->id && p.name == hardwareName(o.name)) dup = true; if (dup) continue;   // one pair per piece of hardware (its first output)
-    DuplexPair p; p.backend = backend; p.name = hardwareName(o.name); p.inId = in->id; p.outId = o.id; p.inName = in->name; p.outName = o.name; p.inChannels = in->inChannels; p.outChannels = o.outChannels;
-    p.rate = o.defaultRate > 0 ? o.defaultRate : 48000; p.kind = o.kind;
-    const std::string n = lowerOf(o.name + " " + in->name);
-    p.usb = o.bus == "USB" || in->bus == "USB" || n.find("usb") != std::string::npos || o.kind == "interface" || o.kind == "dac";
-    out.push_back(p);
-  }
-  std::stable_sort(out.begin(), out.end(), [](const DuplexPair& a, const DuplexPair& b) { return a.usb > b.usb; });
-  return out;
-}
-
-std::string soundSettingsTarget(const std::string& page) {
-  if (page == "sound") return "ms-settings:sound";
-  if (page == "volume-mixer") return "ms-settings:apps-volume";
-  if (page == "devices") return "ms-settings:sound-devices";
-  if (page == "microphone-privacy") return "ms-settings:privacy-microphone";
-  if (page == "playback") return "control.exe mmsys.cpl,,0";
-  if (page == "recording") return "control.exe mmsys.cpl,,1";
-  return {};
-}
-
-namespace {
 
 #ifdef _WIN32
 const GUID kClsidDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
@@ -121,12 +79,6 @@ const GUID kIidDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE
 const GUID kIidClient = {0x1CB9AD4C, 0xDBFA, 0x4C32, {0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2}};
 const PROPERTYKEY kFormFactor = {{0x1DA5D803, 0xD492, 0x4EDD, {0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E}}, 0};      // PKEY_AudioEndpoint_FormFactor
 const PROPERTYKEY kFriendlyName = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 14};   // PKEY_Device_FriendlyName
-const PROPERTYKEY kEnumerator = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 24};     // PKEY_Device_EnumeratorName: "USB", "HDAUDIO" ...
-const PROPERTYKEY kContainerId = {{0x8C7ED206, 0x3F8A, 0x4827, {0xB3, 0xAB, 0xAE, 0x9E, 0x1F, 0xAE, 0xFC, 0x6C}}, 2};     // PKEY_Device_ContainerId: one per piece of hardware
-const PROPERTYKEY kDeviceFormat = {{0xF19F064D, 0x082C, 0x4E27, {0xBC, 0x73, 0x68, 0x82, 0xA1, 0xBB, 0x8E, 0x4C}}, 0};    // PKEY_AudioEngine_DeviceFormat
-const PROPERTYKEY kDisableSysFx = {{0x1DA5D803, 0xD492, 0x4EDD, {0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E}}, 5};    // PKEY_AudioEndpoint_Disable_SysFx
-// what the property store says about where an endpoint sits: its bus and its hardware (container) id
-void busAndGroup(IPropertyStore* ps, std::string& bus, std::string& group);
 
 std::string utf8(const wchar_t* w) {
   if (!w) return {};
@@ -135,16 +87,6 @@ std::string utf8(const wchar_t* w) {
   std::string s(static_cast<std::size_t>(n - 1), '\0');
   WideCharToMultiByte(CP_UTF8, 0, w, -1, &s[0], n, nullptr, nullptr);
   return s;
-}
-
-void busAndGroup(IPropertyStore* ps, std::string& bus, std::string& group) {
-  PROPVARIANT v; PropVariantInit(&v);
-  if (SUCCEEDED(ps->GetValue(kEnumerator, &v)) && v.vt == VT_LPWSTR) bus = utf8(v.pwszVal);
-  PropVariantClear(&v); PropVariantInit(&v);
-  if (SUCCEEDED(ps->GetValue(kContainerId, &v)) && v.vt == VT_CLSID && v.puuid) { const GUID& g = *v.puuid; char b[40];
-    std::snprintf(b, sizeof b, "%08lx-%04x-%04x-%02x%02x%02x%02x%02x%02x%02x%02x", static_cast<unsigned long>(g.Data1), g.Data2, g.Data3, g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7]);
-    group = b; if (group == "00000000-0000-0000-ffffffffffffffff") group.clear(); }   // the "no container" id: every built-in device shares it
-  PropVariantClear(&v);
 }
 
 std::string endpointId(IMMDevice* d) {
@@ -190,7 +132,7 @@ void addWasapi(std::vector<DeviceInfo>& out) {
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &v)) && v.vt == VT_LPWSTR) info.name = utf8(v.pwszVal);
         PropVariantClear(&v); PropVariantInit(&v);
         if (SUCCEEDED(ps->GetValue(kFormFactor, &v)) && v.vt == VT_UI4) form = static_cast<int>(v.ulVal);
-        PropVariantClear(&v); busAndGroup(ps, info.bus, info.group); ps->Release();
+        PropVariantClear(&v); ps->Release();
       }
       int ch = 2;
       IAudioClient* ac = nullptr;
@@ -239,8 +181,7 @@ std::vector<EndpointInfo> wasapiEndpoints() {
   IMMDeviceEnumerator* en = nullptr;
   if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en)))) return v;
   for (const EDataFlow flow : {eRender, eCapture}) {
-    const std::string def = defaultEndpoint(en, flow); std::string defComm;
-    { IMMDevice* dc = nullptr; if (SUCCEEDED(en->GetDefaultAudioEndpoint(flow, eCommunications, &dc)) && dc) { defComm = endpointId(dc); dc->Release(); } }
+    const std::string def = defaultEndpoint(en, flow);
     IMMDeviceCollection* col = nullptr;
     if (FAILED(en->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE | DEVICE_STATE_UNPLUGGED | DEVICE_STATE_DISABLED, &col)) || !col) continue;
     UINT n = 0; col->GetCount(&n);
@@ -253,17 +194,12 @@ std::vector<EndpointInfo> wasapiEndpoints() {
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &pv)) && pv.vt == VT_LPWSTR) e.name = utf8(pv.pwszVal);
         PropVariantClear(&pv); PropVariantInit(&pv);
         if (SUCCEEDED(ps->GetValue(kFormFactor, &pv)) && pv.vt == VT_UI4) form = static_cast<int>(pv.ulVal);
-        PropVariantClear(&pv); PropVariantInit(&pv);
-        if (SUCCEEDED(ps->GetValue(kDeviceFormat, &pv)) && pv.vt == VT_BLOB && pv.blob.cbSize >= sizeof(WAVEFORMATEX) && pv.blob.pBlobData) { const WAVEFORMATEX* f = reinterpret_cast<const WAVEFORMATEX*>(pv.blob.pBlobData);
-          e.bits = f->wFormatTag == WAVE_FORMAT_EXTENSIBLE && pv.blob.cbSize >= sizeof(WAVEFORMATEXTENSIBLE) ? reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(f)->Samples.wValidBitsPerSample : f->wBitsPerSample; if (e.bits == 0) e.bits = f->wBitsPerSample; }
-        PropVariantClear(&pv); PropVariantInit(&pv);
-        if (SUCCEEDED(ps->GetValue(kDisableSysFx, &pv)) && pv.vt == VT_UI4) e.enhancementsOff = pv.ulVal ? 1 : 0;
-        PropVariantClear(&pv); busAndGroup(ps, e.bus, e.group); ps->Release(); }
+        PropVariantClear(&pv); ps->Release(); }
       if (st == DEVICE_STATE_ACTIVE) { IAudioClient* ac = nullptr;   // only an active endpoint can say its format
         if (SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) { WAVEFORMATEX* f = nullptr;
           if (SUCCEEDED(ac->GetMixFormat(&f)) && f) { e.channels = f->nChannels; e.rate = f->nSamplesPerSec; CoTaskMemFree(f); } ac->Release(); } }
       if (e.name.empty()) e.name = e.id;
-      e.kind = classifyDevice("wasapi", e.name, form, flow == eCapture); e.isDefault = e.id == def; e.isDefaultComm = e.id == defComm;
+      e.kind = classifyDevice("wasapi", e.name, form, flow == eCapture); e.isDefault = e.id == def;
       v.push_back(e); d->Release();
     }
     col->Release();
@@ -429,59 +365,11 @@ IAudioEndpointVolume* makeRenderVolume() {
   en->Release(); return v;
 }
 }  // namespace
-// WINDOWS' DEFAULT DEVICE: the policy interface Windows' own Sound panel uses (not in the SDK headers, the same on Windows 7 to 11). Only
-// SetDefaultEndpoint is called; the methods before it are declared so that it sits at its place in the table.
-namespace {
-struct IPolicyConfigAm : IUnknown {
-  virtual HRESULT STDMETHODCALLTYPE GetMixFormat(PCWSTR, WAVEFORMATEX**) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetDeviceFormat(PCWSTR, INT, WAVEFORMATEX**) = 0;
-  virtual HRESULT STDMETHODCALLTYPE ResetDeviceFormat(PCWSTR) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetDeviceFormat(PCWSTR, WAVEFORMATEX*, WAVEFORMATEX*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetProcessingPeriod(PCWSTR, INT, PINT64, PINT64) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetProcessingPeriod(PCWSTR, PINT64) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetShareMode(PCWSTR, void*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetShareMode(PCWSTR, void*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE GetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(PCWSTR, ERole) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetEndpointVisibility(PCWSTR, INT) = 0;
-};
-const GUID kClsidPolicyConfig = {0x870AF99C, 0x171D, 0x4F9E, {0xAF, 0x0D, 0xE6, 0x3D, 0xF4, 0x0C, 0x2B, 0xC9}};
-const GUID kIidPolicyConfig = {0xF8679F50, 0x850A, 0x41CF, {0x9C, 0x72, 0x43, 0x0F, 0x29, 0x02, 0x90, 0xC8}};
-std::wstring wide(const std::string& s) { const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0); std::wstring w(n > 0 ? static_cast<std::size_t>(n - 1) : 0, L'\0'); if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n); return w; }
-}  // namespace
-bool setDefaultEndpoint(const std::string& id, bool alsoCommunications, std::string& err) {
-  if (id.empty() || id.size() > 512 || id.rfind("loopback:", 0) == 0) { err = "not a Windows sound device"; return false; }
-  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  { IMMDeviceEnumerator* en = nullptr; IMMDevice* d = nullptr; DWORD st = 0;   // it must be a device Windows has, and switched on
-    if (FAILED(CoCreateInstance(kClsidDeviceEnumerator, nullptr, CLSCTX_ALL, kIidDeviceEnumerator, reinterpret_cast<void**>(&en))) || !en) { err = "Windows' device list is not available"; return false; }
-    const bool found = SUCCEEDED(en->GetDevice(wide(id).c_str(), &d)) && d && SUCCEEDED(d->GetState(&st)); if (d) d->Release(); en->Release();
-    if (!found) { err = "Windows does not have that device any more"; return false; }
-    if (st != DEVICE_STATE_ACTIVE) { err = "that device is unplugged or switched off in Windows"; return false; } }
-  IPolicyConfigAm* pc = nullptr;
-  if (FAILED(CoCreateInstance(kClsidPolicyConfig, nullptr, CLSCTX_ALL, kIidPolicyConfig, reinterpret_cast<void**>(&pc))) || !pc) { err = "this Windows does not let a program choose the default device: use Windows' Sound settings"; return false; }
-  const std::wstring w = wide(id); HRESULT r = pc->SetDefaultEndpoint(w.c_str(), eConsole);
-  if (SUCCEEDED(r)) r = pc->SetDefaultEndpoint(w.c_str(), eMultimedia);
-  if (SUCCEEDED(r) && alsoCommunications) r = pc->SetDefaultEndpoint(w.c_str(), eCommunications);
-  pc->Release();
-  if (FAILED(r)) { char b[64]; std::snprintf(b, sizeof b, "Windows refused (0x%08lx)", static_cast<unsigned long>(r)); err = b; return false; }
-  return true;
-}
-bool openSoundSettings(const std::string& page, std::string& err) {
-  const std::string t = soundSettingsTarget(page); if (t.empty()) { err = "no such settings page"; return false; }
-  const bool panel = t.rfind("control.exe ", 0) == 0;   // the classic Sound panel on its tab, or a Settings page by its own address: fixed strings only
-  const std::wstring file = panel ? L"control.exe" : wide(t), args = panel ? wide(t.substr(12)) : std::wstring();
-  const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", file.c_str(), panel ? args.c_str() : nullptr, nullptr, SW_SHOWNORMAL));
-  if (r <= 32) { err = "Windows could not open that page"; return false; }
-  return true;
-}
 bool systemMuteGet(bool& muted) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; BOOL m = FALSE; const bool ok = SUCCEEDED(v->GetMute(&m)); v->Release(); muted = m != FALSE; return ok; }
 bool systemMuteSet(bool muted) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; const HRESULT r = v->SetMute(muted ? TRUE : FALSE, nullptr); v->Release(); return SUCCEEDED(r); }
 bool systemVolumeGet(float& level) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; float f = 0; const bool ok = SUCCEEDED(v->GetMasterVolumeLevelScalar(&f)); v->Release(); level = f; return ok; }
 bool systemVolumeSet(float level) { IAudioEndpointVolume* v = defaultRenderVolume(); if (!v) return false; const HRESULT r = v->SetMasterVolumeLevelScalar(std::clamp(level, 0.0f, 1.0f), nullptr); v->Release(); return SUCCEEDED(r); }
 #else
-bool setDefaultEndpoint(const std::string&, bool, std::string& err) { err = "choosing Windows' default device is a Windows function"; return false; }
-bool openSoundSettings(const std::string& page, std::string& err) { err = soundSettingsTarget(page).empty() ? "no such settings page" : "Windows' sound settings exist on Windows only"; return false; }
 bool systemMuteGet(bool&) { return false; }
 bool systemMuteSet(bool) { return false; }
 bool systemVolumeGet(float&) { return false; }

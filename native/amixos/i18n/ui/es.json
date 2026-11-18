@@ -2192,18 +2192,5 @@
 "Quieter: -1 dB": "Más silencioso: -1 dB",
 "Back to the normal level (0 dB)": "Volver al nivel normal (0 dB)",
 "BACK: where this fader was before the last move": "ATRÁS: la posición en la que se encontraba este fader antes del último movimiento",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: tiras planas con diez ranuras de inserción y botones de acceso rápido junto a cada fader. CONSOLA: las tiras de hardware de la mesa de mezclas",
-"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / AUDIO DIGITAL: ENTRADA + SALIDA JUNTAS",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Lee la señal de entrada del propio dispositivo y la reproduce por su propia salida al mismo tiempo (entrada de micrófono o de línea, altavoces o salida digital en el mismo dispositivo USB). Sus entradas se dirigen a las primeras bandas de canal.",
-"WINDOWS SOUND": "SONIDO DE WINDOWS",
-"SOUND SETTINGS": "AJUSTES DE SONIDO",
-"VOLUME MIXER": "MEZCLADOR DE VOLUMEN",
-"PLAYBACK DEVICES": "DISPOSITIVOS DE REPRODUCCIÓN",
-"RECORDING DEVICES": "DISPOSITIVOS DE GRABACIÓN",
-"MICROPHONE PRIVACY": "PRIVACIDAD DEL MICRÓFONO",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "REPRODUCCIÓN (ALTAVOCES, AURICULARES, SALIDA DIGITAL)",
-"RECORDING (MICROPHONES, LINE IN)": "GRABACIÓN (MICRÓFONOS, ENTRADA DE LÍNEA)",
-"No device of this kind in Windows.": "En Windows no hay ningún dispositivo de este tipo.",
-"MAKE DEFAULT": "ESTABLECER COMO PREDETERMINADO",
-"enhancements off": "mejoras desactivadas"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: tiras planas con diez ranuras de inserción y botones de acceso rápido junto a cada fader. CONSOLA: las tiras de hardware de la mesa de mezclas"
 }

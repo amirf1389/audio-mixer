@@ -76,14 +76,13 @@ Item {
             Repeater { model: ds.pl
                 delegate: Rectangle { objectName: "dawSlot" + ds.idx + "_" + index
                     readonly property bool empty: !modelData.kind
-                    Layout.fillWidth: true; implicitHeight: 16; radius: 3
-                    color: empty ? (Theme.dark ? "#1d1f24" : "#e6e9ee") : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : modelData.bypass ? (Theme.dark ? "#272a30" : "#dde1e7") : Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.20 : 0.28)
+                    Layout.fillWidth: true; implicitHeight: 15; radius: 2
+                    color: empty ? (Theme.dark ? "#1b1d21" : "#e2e5eb") : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.18) : modelData.bypass ? (Theme.dark ? "#272a30" : "#dde1e7") : Qt.rgba(ds.sc.r, ds.sc.g, ds.sc.b, Theme.dark ? 0.20 : 0.28)
                     border.color: slotHover.hovered ? Theme.accent : "transparent"
                     HoverHandler { id: slotHover }
                     Rectangle { visible: !parent.empty; width: 2; height: parent.height - 4; x: 1; y: 2; radius: 1; color: modelData.bypass ? Theme.dim : ds.sc }
-                    Text { anchors.left: parent.left; anchors.leftMargin: 5; anchors.verticalCenter: parent.verticalCenter; text: index + 1; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; visible: parent.empty }
-                    Text { anchors.left: parent.left; anchors.leftMargin: parent.empty ? 18 : 6; anchors.right: pwr.left; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
-                        text: parent.empty ? (slotHover.hovered ? i18n.t("+ add", i18n.lang) : "") : i18n.t(modelData.name ?? "", i18n.lang); color: parent.empty ? Theme.dim : modelData.bypass ? Theme.dim : Theme.ink
+                    Text { anchors.left: parent.left; anchors.leftMargin: 6; anchors.right: pwr.left; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight
+                        text: parent.empty ? (slotHover.hovered ? "+" : "") : i18n.t(modelData.name ?? "", i18n.lang); color: parent.empty ? Theme.dim : modelData.bypass ? Theme.dim : Theme.ink
                         font.family: Theme.sans; font.pixelSize: 8; font.strikeout: !parent.empty && modelData.bypass }
                     Rectangle { id: pwr; visible: !parent.empty; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 4
                         color: modelData.pending ? Theme.amber : modelData.bypass ? "transparent" : Theme.emerald; border.color: modelData.bypass ? Theme.dim : "transparent"
@@ -95,7 +94,6 @@ Item {
                             if (modelData.builtIn) page.go(modelData.kind === "miceq" ? "miceq" : modelData.kind === "gate" ? "gate" : modelData.kind === "comp" ? "dyn" : "dsp")
                             else plugEd.openFor(ds.idx, index, modelData.kind, modelData.name) } } } }
             // PAN
-            Text { text: i18n.t("PAN", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true; font.letterSpacing: 1; topPadding: 2 }
             // PAN: a bar from the centre (drag; double-click: centre)
             Rectangle { id: panBar; objectName: "dawPan" + ds.idx; Layout.fillWidth: true; implicitHeight: 14; radius: 2; color: Theme.dark ? "#1b1d21" : "#e2e5eb"
                 readonly property real pan: ds.st ? ds.st.pan : 0
@@ -113,7 +111,6 @@ Item {
                 DawChip { Layout.fillWidth: true; strip: ds.idx; t: "R"; on: !!(ds.st && ds.st.armed); hue: "#fb7185"; onHit: engine.setArmed(ds.idx, !(ds.st && ds.st.armed)) }
                 DawChip { Layout.fillWidth: true; strip: ds.idx; t: "AM"; on: !!(ds.st && ds.st.automix); hue: Theme.cyan; onHit: engine.setAutomix(ds.idx, !(ds.st && ds.st.automix), ds.st ? ds.st.amWeight : 1) } }
             // FADER with its IN / OUT meter
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.dark ? "#33363d" : "#d5d9e0" }
             // FADER with its IN / OUT meter, and beside it the EASY BUTTONS for everyone (a beginner, a first-time user, anyone who finds dragging hard):
             // LOUDER and QUIETER (1 dB a press), 0 (back to the normal level) and BACK (where the fader was before the last move); each says what it does
             RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
@@ -124,22 +121,20 @@ Item {
                 Timer { id: settleT; interval: 700; onTriggered: { const p = parent; if (Math.abs(p.db - p.settled) > 0.05) { p.before = p.settled; p.settled = p.db } } }
                 Fader { objectName: "dawFader"; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: ds.st ? ds.st.db : 0; remoteHot: remote.touched(ds.idx, remote.pulse)
                     inDb: ds.mt ? ds.mt.inDb : -120; outDb: ds.mt ? ds.mt.peakDb : -120; clip: ds.mt ? ds.mt.clip : false; onMoved: function (db) { engine.setGain(ds.idx, db) } }
-                ColumnLayout { Layout.fillHeight: true; Layout.fillWidth: true; spacing: 4
+                ColumnLayout { Layout.fillHeight: true; spacing: 3
                     Item { Layout.fillHeight: true }
-                    Repeater { model: [["▲", "louder", "Louder: +1 dB", "UP"], ["▼", "quieter", "Quieter: -1 dB", "DOWN"], ["0", "zero", "Back to the normal level (0 dB)", "0 dB"], ["↶", "back", "BACK: where this fader was before the last move", "BACK"]]
-                        delegate: Rectangle { objectName: "dawEasy_" + modelData[1] + ds.idx; Layout.fillWidth: true; implicitHeight: 34; radius: 5
+                    Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
+                        delegate: Rectangle { objectName: "dawEasy_" + modelData[1] + ds.idx; implicitWidth: 26; implicitHeight: 24; radius: 4
                             readonly property bool can: modelData[1] !== "back" || Math.abs(parent.parent.before - parent.parent.settled) > 0.05
                             color: easyMa.pressed ? Theme.accent : (Theme.dark ? "#2f323a" : "#dde1e8"); border.color: easyMa.containsMouse ? Theme.accent : (Theme.dark ? "#3a3e47" : "#c9ced8"); opacity: can ? 1 : 0.4
-                            Column { anchors.centerIn: parent; spacing: 0
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData[0]; color: easyMa.pressed ? "#0b0d10" : Theme.ink; font.pixelSize: 13; font.bold: true }
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(modelData[3], i18n.lang); color: easyMa.pressed ? "#0b0d10" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
+                            Text { anchors.centerIn: parent; text: modelData[0]; color: easyMa.pressed ? "#0b0d10" : Theme.ink; font.pixelSize: 12; font.bold: true }
                             ToolTip.visible: easyMa.containsMouse && settings.tooltips; ToolTip.delay: 300; ToolTip.text: i18n.t(modelData[2], i18n.lang)
                             MouseArea { id: easyMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: parent.can
                                 onClicked: { const f = parent.parent.parent; engine.selectedStrip = ds.idx
                                     // the press itself is the move BACK undoes: the level now becomes "before" at once (the strip's own value arrives a moment later)
                                     const now = f.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : f.before
                                     settleT.stop(); f.before = now; f.settled = to; engine.setGain(ds.idx, to) } } } }
-                    Item { Layout.fillHeight: true } } }
+                    Item { Layout.preferredHeight: 6 } } }
             Text { Layout.alignment: Qt.AlignHCenter; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: ds.st && ds.st.db > 0 ? Theme.amber : Theme.ink
                 text: !ds.st ? "" : ds.st.db <= -90 ? "-inf" : (ds.st.db > 0 ? "+" : "") + ds.st.db.toFixed(1) }
             Rectangle { Layout.fillWidth: true; implicitHeight: 4; radius: 2; color: ds.sc; opacity: ds.st && ds.st.effectiveMute ? 0.35 : 1 } }
@@ -423,7 +418,7 @@ Item {
         // PLUGIN RACK: the insert slots of the selected channel (10 on BASIC, unlimited on PRO / STUDIO / MASTER), one card each. A built-in stage lights up when inserted; right-click or
         // BYP bypasses; ‹ › reorder; OPEN goes to the stage's page; a VST3 reference waits (amber) for the VST3 host.
         Rectangle {
-            visible: page.rack && page.rackCompact && !page.daw   // DAW look: the ten slots are on every strip
+            visible: page.rack && page.rackCompact
             Layout.fillWidth: true; implicitHeight: 30; radius: 8; color: Theme.card; border.color: "#a78bfa"
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 4
@@ -443,7 +438,7 @@ Item {
             }
         }
         Rectangle {
-            visible: page.rack && !page.rackCompact && !page.daw
+            visible: page.rack && !page.rackCompact
             Layout.fillWidth: true; implicitHeight: 74; radius: 8; color: Theme.card; border.color: "#a78bfa"
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
@@ -492,7 +487,7 @@ Item {
                     flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; clip: true
                     Row { id: dawRow; spacing: 2; height: parent.height
                         Repeater { model: page.daw ? engine.strips : 0
-                            delegate: DawStrip { idx: index; height: dawRow.height; visible: page.bank === 2 || Math.floor(index / 16) === page.bank; width: visible ? 116 : 0 } } } }
+                            delegate: DawStrip { idx: index; height: dawRow.height; visible: page.bank === 2 || Math.floor(index / 16) === page.bank; width: visible ? 100 : 0 } } } }
                 Flickable {
                     visible: !page.daw
                     anchors.fill: parent; anchors.margins: 8

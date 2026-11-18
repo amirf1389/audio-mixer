@@ -2160,16 +2160,5 @@
 "Back to the normal level (0 dB)": "Kembali ke tingkat normal (0 dB)",
 "BACK: where this fader was before the last move": "KEMBALI: posisi fader ini sebelum pergerakan terakhir",
 "Mixer look": "Tampilan mixer",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: panel datar dengan sepuluh slot insert dan tombol-tombol praktis di samping setiap fader. KONSOL: panel perangkat keras di atas meja",
-"OPEN INPUT + OUTPUT": "BUKA MASUKAN + KELUARAN",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "Membaca sinyal masukan dari perangkat itu sendiri dan memutarnya melalui saluran keluaran perangkat tersebut secara bersamaan (mikrofon atau saluran masukan, speaker atau saluran keluaran digital pada perangkat USB yang sama). Sinyal masukannya dialirkan ke saluran pertama.",
-"WINDOWS SOUND": "SUARA WINDOWS",
-"SOUND SETTINGS": "PENGATURAN SUARA",
-"VOLUME MIXER": "PENCAMPUR VOLUME",
-"PLAYBACK DEVICES": "PERANGKAT PEMUTAR",
-"MICROPHONE PRIVACY": "PRIVASI MIKROFON",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "PEMUTARAN (SPEAKER, HEADPHONE, KELUARAN DIGITAL)",
-"No device of this kind in Windows.": "Tidak ada perangkat semacam ini di Windows.",
-"MAKE DEFAULT": "JADIKAN SEBAGAI DEFAULT",
-"enhancements off": "penyempurnaan dinonaktifkan"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: panel datar dengan sepuluh slot insert dan tombol-tombol praktis di samping setiap fader. KONSOL: panel perangkat keras di atas meja"
 }

@@ -41,47 +41,10 @@ Item {
                     Item { Layout.fillWidth: true }
                     Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } } }
-            // IN + OUT TOGETHER: a USB / digital audio device whose input and output are two entries in Windows: one button opens both sides
-            Card { Layout.columnSpan: 2; objectName: "duplexCard"; visible: duplexRep.count > 0; border.color: Theme.cyan; border.width: 1.5
-                property var list: { engine.devices; engine.running; return engine.duplexDevices() }
-                RowLayout { Head { text: i18n.t("USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER", i18n.lang); color: Theme.cyan } Item { Layout.fillWidth: true } Btn { label: "RESCAN"; onClicked: engine.refreshDevices() } }
-                Repeater { id: duplexRep; model: parent.parent.list
-                    delegate: Rectangle { objectName: "duplexRow" + index; Layout.fillWidth: true; implicitHeight: 46; radius: 8; color: modelData.running ? Qt.rgba(0.2, 0.83, 0.6, 0.14) : Theme.ov(0.05); border.color: modelData.running ? Theme.emerald : Theme.lineSoft
-                        RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 10; spacing: 12
-                            Rectangle { implicitWidth: 44; implicitHeight: 20; radius: 4; color: modelData.usb ? Theme.cyan : Theme.ov(0.12); Text { anchors.centerIn: parent; text: modelData.usb ? "USB" : i18n.t("CARD", i18n.lang); color: modelData.usb ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
-                            ColumnLayout { Layout.fillWidth: true; spacing: 1
-                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
-                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t("IN: ", i18n.lang) + modelData.inName + " (" + modelData.inChannels + ")   ·   " + i18n.t("OUT: ", i18n.lang) + modelData.outName + " (" + modelData.outChannels + ")   ·   " + (modelData.rate / 1000) + " kHz"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
-                            Btn { objectName: "duplexOpen" + index; implicitHeight: 30; label: modelData.running ? i18n.t("RUNNING: IN + OUT", i18n.lang) : i18n.t("OPEN INPUT + OUTPUT", i18n.lang); on: true; onColor: modelData.running ? Theme.emerald : Theme.cyan
-                                onClicked: { if (engine.openDuplex(modelData.inId, modelData.outId, settings.defaultFrames)) settings.rememberDevice("wasapi", modelData.inId, modelData.outId, engine.sampleRate, engine.blockFrames, engine.deviceInputs, engine.deviceOutputs) } } } } }
-                Note { text: i18n.t("Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.", i18n.lang) } }
-            // WINDOWS SOUND: what Windows itself has set for every device (default, format, enhancements), its default changed from here, and its own pages one click away
-            Card { Layout.columnSpan: 2; objectName: "windowsSoundCard"
-                property var eps: { engine.devices; return engine.windowsEndpoints() }
-                RowLayout { spacing: 6
-                    Head { text: i18n.t("WINDOWS SOUND", i18n.lang) } Item { Layout.fillWidth: true }
-                    Repeater { model: [["sound", "SOUND SETTINGS"], ["volume-mixer", "VOLUME MIXER"], ["playback", "PLAYBACK DEVICES"], ["recording", "RECORDING DEVICES"], ["microphone-privacy", "MICROPHONE PRIVACY"]]
-                        delegate: Btn { objectName: "winOpen_" + modelData[0]; label: modelData[1]; on: true; onColor: Theme.amber; onClicked: { engine.openWindowsSound(modelData[0]); winNote.text = engine.windowsNote() } } } }
-                Text { id: winNote; visible: text !== ""; text: ""; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }
-                Repeater { model: [["out", "PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)"], ["in", "RECORDING (MICROPHONES, LINE IN)"]]
-                    delegate: ColumnLayout { Layout.fillWidth: true; spacing: 3; readonly property string flow: modelData[0]
-                        readonly property var rows: { const o = []; const all = parent.parent.eps; for (let i = 0; i < all.length; ++i) if (all[i].flow === flow) o.push(all[i]); return o }
-                        Text { text: i18n.t(modelData[1], i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 }
-                        Text { visible: parent.rows.length === 0; text: i18n.t("No device of this kind in Windows.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-                        Repeater { model: parent.rows
-                            delegate: RowLayout { Layout.fillWidth: true; spacing: 8; opacity: modelData.state === "active" ? 1 : 0.5
-                                Rectangle { implicitWidth: 62; implicitHeight: 18; radius: 4; color: modelData.isDefault ? Theme.emerald : "transparent"; border.color: modelData.isDefault ? Theme.emerald : Theme.lineSoft
-                                    Text { anchors.centerIn: parent; text: modelData.isDefault ? i18n.t("DEFAULT", i18n.lang) : modelData.state !== "active" ? i18n.t(modelData.state, i18n.lang).toUpperCase() : ""; color: modelData.isDefault ? "#000" : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
-                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name + (modelData.bus === "USB" ? "  ·  USB" : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: modelData.isDefault }
-                                Text { text: modelData.state !== "active" ? "" : modelData.channels + i18n.t(" ch", i18n.lang) + "  ·  " + (modelData.rate / 1000) + " kHz" + (modelData.bits > 0 ? "  ·  " + modelData.bits + i18n.t(" bit", i18n.lang) : ""); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9 }
-                                Text { visible: modelData.enhancementsOff >= 0; text: modelData.enhancementsOff === 1 ? i18n.t("enhancements off", i18n.lang) : i18n.t("ENHANCEMENTS ON", i18n.lang); color: modelData.enhancementsOff === 1 ? Theme.dim : Theme.amber; font.family: Theme.mono; font.pixelSize: 8
-                                    ToolTip.visible: enhH.hovered && settings.tooltips; ToolTip.text: i18n.t("Windows' own sound effects on this device. For mixing they are best off: open the device in PLAYBACK / RECORDING DEVICES, Enhancements or Advanced tab.", i18n.lang); HoverHandler { id: enhH } }
-                                Btn { objectName: "winDefault_" + flow + index; visible: modelData.state === "active" && !modelData.isDefault; label: "MAKE DEFAULT"; onClicked: { engine.setWindowsDefault(modelData.id, false); winNote.text = engine.windowsNote() } } } } } }
-                Note { text: i18n.t("MAKE DEFAULT changes Windows' own default device, as its Sound panel does. The sample rate, bit depth, exclusive use and enhancements of a device are Windows settings: PLAYBACK / RECORDING DEVICES opens them (double-click the device, Advanced tab). The console itself can take a device exclusively with EXCLUSIVE in AUDIO / MIDI SETTINGS.", i18n.lang) } }
             // LOW LATENCY: the open device's latency in plain words (LOW / OK / HIGH), the figures, what would lower it, and a ROUND TRIP test
             Card { Layout.columnSpan: 2; objectName: "latencyCard"
                 property var rep: engine.latencyReport()
-                Timer { interval: 1500; repeat: true; running: page.visible && engine.uiAwake; onTriggered: latencyCard.rep = engine.latencyReport() }
+                Timer { interval: 1500; repeat: true; running: page.visible && engine.uiAwake; onTriggered: parent.rep = engine.latencyReport() }
                 Connections { target: engine; function onStateChanged() { latencyCard.rep = engine.latencyReport() } }
                 id: latencyCard
                 RowLayout { spacing: 10; Head { text: i18n.t("LOW LATENCY", i18n.lang) }

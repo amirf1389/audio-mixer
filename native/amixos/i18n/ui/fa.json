@@ -2235,17 +2235,5 @@
 "Quieter: -1 dB": "ساکت‌تر: -۱ دسی‌بل",
 "Back to the normal level (0 dB)": "بازگشت به سطح عادی (۰ دسی‌بل)",
 "Mixer look": "ظاهر میکسر",
-"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: نوارهای صاف با ده شکاف درج و دکمه‌های آسان در کنار هر فیدر.   CONSOLE: نوارهای میز سخت‌افزاری.",
-"USB / DIGITAL AUDIO: INPUT + OUTPUT TOGETHER": "USB / صدای دیجیتال: ورودی و خروجی همزمان",
-"Reads the device's own input and plays to its own output at the same time (microphone or line in, speakers or digital out on the same USB device). Its inputs go to the first channel strips.": "ورودی‌های خود دستگاه را می‌خواند و هم‌زمان آن‌ها را از خروجی خود پخش می‌کند (میکروفون یا ورودی خط، بلندگوها یا خروجی دیجیتال روی همان دستگاه USB). ورودی‌های آن به اولین نوارهای کانال فرستاده می‌شوند.",
-"WINDOWS SOUND": "صدای ویندوز",
-"SOUND SETTINGS": "تنظیمات صدا",
-"PLAYBACK DEVICES": "دستگاه‌های پخش",
-"RECORDING DEVICES": "دستگاه‌های ضبط",
-"MICROPHONE PRIVACY": "حریم خصوصی میکروفون",
-"PLAYBACK (SPEAKERS, HEADPHONES, DIGITAL OUT)": "پخش (بلندگوها، هدفون، خروجی دیجیتال)",
-"RECORDING (MICROPHONES, LINE IN)": "ضبط (میکروفون‌ها، ورودی خط)",
-"No device of this kind in Windows.": "در ویندوز هیچ دستگاهی از این نوع وجود ندارد.",
-"MAKE DEFAULT": "پیش‌فرض کنید",
-"enhancements off": "بهینه‌سازی‌ها غیرفعال"
+"DAW: flat strips with ten insert slots and easy buttons beside each fader. CONSOLE: the hardware-desk strips": "DAW: نوارهای صاف با ده شکاف درج و دکمه‌های آسان در کنار هر فیدر.   CONSOLE: نوارهای میز سخت‌افزاری."
 }

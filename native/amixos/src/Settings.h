@@ -54,7 +54,7 @@ class Settings : public QObject {
   bool confirmDestructive() const { return s_.value("general/confirm", true).toBool(); } void setConfirmDestructive(bool v) { set("general/confirm", v); }
   bool tooltips() const { return s_.value("general/tooltips", true).toBool(); } void setTooltips(bool v) { set("general/tooltips", v); }
   bool darkTheme() const { return s_.value("ui/dark", true).toBool(); } void setDarkTheme(bool v) { set("ui/dark", v); }
-  QString mixerStyle() const { const QString v = s_.value("ui/mixerStyle", "console").toString(); return v == "daw" ? v : QStringLiteral("console"); } void setMixerStyle(const QString& v) { set("ui/mixerStyle", v == "daw" ? v : QStringLiteral("console")); }
+  QString mixerStyle() const { const QString v = s_.value("ui/mixerStyle", "daw").toString(); return v == "console" ? v : QStringLiteral("daw"); } void setMixerStyle(const QString& v) { set("ui/mixerStyle", v == "console" ? v : QStringLiteral("daw")); }
   bool colorMotion() const { return s_.value("ui/colorMotion", true).toBool(); } void setColorMotion(bool v) { set("ui/colorMotion", v); }
   bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }
