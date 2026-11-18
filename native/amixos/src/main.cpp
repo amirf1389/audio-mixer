@@ -1243,6 +1243,8 @@ int main(int argc, char* argv[]) {
           measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+          engine.setPlugin(0, 0, "fx:preamp"); engine.setPlugin(0, 1, "fx:regulator"); engine.setPlugin(0, 2, "fx:reverb"); engine.setPlugin(0, 3, "fx:protect"); engine.setPluginBypass(0, 2, true);   // THE RACK with effects in
+          settle(900); win->grabWindow().save(shots + "/mixer-rack.png"); for (int sl = 0; sl < 4; ++sl) engine.setPlugin(0, sl, "");
           std::printf("amixos --shots: samples-pads, samples-effects, settings-processor, acoustics-room-correction, mixer-automix, mixer-daw\n"); }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
           win->setProperty("forceSetup", true);

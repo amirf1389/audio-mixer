@@ -347,13 +347,13 @@ Item {
             }
         }
         Rectangle {
-            visible: page.rack && !page.rackCompact
-            Layout.fillWidth: true; implicitHeight: 74; radius: 8; color: Theme.card; border.color: "#a78bfa"
+            objectName: "rackBar"; visible: page.rack && !page.rackCompact
+            Layout.fillWidth: true; implicitHeight: 58; radius: 6; color: Theme.card; border.color: Theme.line
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 ColumnLayout { spacing: 2; Layout.preferredWidth: 96
                     Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 12; radius: 3; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("COMPACT ▴", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.rackCompact = true; settings.rackCompactDefault = true } } }
-                    Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
+                    Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
                         ToolTip.visible: rackTitleHover.hovered; ToolTip.text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); HoverHandler { id: rackTitleHover } }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
                     Text { text: (engine.stripTick, engine.pluginCount(page.sel)) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + ""; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
@@ -363,18 +363,23 @@ Item {
                         Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.min(Math.ceil(engine.pluginSlotLimit / 10) - 1, page.rackBank + 1) } } }
  }   // (the signal chain line moved to the title's tooltip: it ran out of the rack bar)
                 Repeater { model: page.selPlugins.slice(page.rackBank * 10, page.rackBank * 10 + 10)   // ten slots at a time; the bank buttons page through the rest
-                    delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; radius: 6
+                    // one card for each effect that is in (the empty slots are not drawn: ADD EFFECT at the end fills the next one);
+                    // the small keys (move, open, remove) show when the pointer is over the card
+                    delegate: Rectangle { id: rcard; objectName: "rackCard" + modelData.slot; visible: !empty; Layout.preferredWidth: 132; Layout.fillHeight: true; Layout.topMargin: 7; Layout.bottomMargin: 7; radius: 6
                         readonly property bool empty: !modelData.kind
-                        color: empty ? Theme.ov(0.03) : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.12) : modelData.bypass ? Theme.ov(0.06) : Qt.rgba(0.6, 0.4, 1, 0.16)
-                        border.color: empty ? Theme.lineSoft : modelData.pending ? Theme.amber : modelData.bypass ? Theme.lineSoft : "#a78bfa"
-                        ColumnLayout { anchors.fill: parent; anchors.margins: 4; spacing: 2
+                        readonly property bool hot: rcHov.hovered
+                        HoverHandler { id: rcHov }
+                        color: modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.12) : modelData.bypass ? Theme.ov(0.05) : Theme.ov(0.09)
+                        border.color: modelData.pending ? Theme.amber : hot ? "#a78bfa" : Theme.line
+                        Rectangle { x: 1; y: 4; width: 3; height: parent.height - 8; radius: 1.5; color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.dim : "#a78bfa" }
+                        ColumnLayout { anchors.fill: parent; anchors.margins: 4; anchors.leftMargin: 9; spacing: 2
                             RowLayout { Layout.fillWidth: true; spacing: 2
                                 Text { text: (modelData.slot + 1 < 10 ? "0" : "") + (modelData.slot + 1); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                 Item { Layout.fillWidth: true }
                                 Rectangle { visible: !empty; implicitWidth: 24; implicitHeight: 11; radius: 2; color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.ov(0.1) : Theme.emerald; Text { anchors.centerIn: parent; text: modelData.pending ? i18n.t("WAIT", i18n.lang) : modelData.bypass ? i18n.t("BYP", i18n.lang) : i18n.t("ON", i18n.lang); color: modelData.bypass && !modelData.pending ? Theme.muted : "#000"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; enabled: !modelData.pending; onClicked: engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass) } } }
                             Text { Layout.fillWidth: true; text: empty ? i18n.t("+ insert", i18n.lang) : (modelData.name + (modelData.format ? "  ·" + modelData.format : "")); color: empty ? Theme.dim : modelData.pending ? Theme.amber : modelData.bypass ? Theme.muted : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: !empty; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
                                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { engine.selectedStrip = page.sel; if (m.button === Qt.RightButton && !empty) { engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass); return } chooser.slot = modelData.slot; chooser.open() } } }
-                            RowLayout { Layout.fillWidth: true; spacing: 2; visible: !empty
+                            RowLayout { Layout.fillWidth: true; spacing: 2; visible: !empty; opacity: rcard.hot || modelData.pending ? 1 : 0.0
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot > 0; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot - 1) } }
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < engine.pluginSlotLimit - 1; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
                                 Item { Layout.fillWidth: true }
@@ -382,6 +387,13 @@ Item {
                                 Rectangle { visible: modelData.vst && !modelData.pending; implicitWidth: 36; implicitHeight: 12; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.3); Text { anchors.centerIn: parent; text: i18n.t("EDIT", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) engine.openPluginWindow(page.sel, modelData.slot); else plugEd.openFor(page.sel, modelData.slot, modelData.kind, modelData.name) } } }
                                 Rectangle { visible: modelData.pending; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.3); Text { anchors.centerIn: parent; text: i18n.t("WHY?", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } ToolTip.visible: whyHov.hovered; ToolTip.text: (modelData.error || i18n.t("The plug-in could not be loaded.", i18n.lang)) + "  ·  " + i18n.t("Click to try again.", i18n.lang); HoverHandler { id: whyHov } MouseArea { anchors.fill: parent; onClicked: engine.retryPlugins() } }
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 0.165, 0.373, 0.25); Text { anchors.centerIn: parent; text: "×"; color: Theme.danger; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPlugin(page.sel, modelData.slot, "") } } } } } }
+                Rectangle { objectName: "rackAdd"; Layout.preferredWidth: 118; Layout.fillHeight: true; Layout.topMargin: 7; Layout.bottomMargin: 7; radius: 6; color: addHov.hovered ? Theme.ov(0.10) : "transparent"; border.color: addHov.hovered ? "#a78bfa" : Theme.line
+                    readonly property int free: { for (let k = 0; k < page.selPlugins.length; ++k) if (!page.selPlugins[k].kind) return k; return -1 }
+                    visible: free >= 0
+                    HoverHandler { id: addHov; cursorShape: Qt.PointingHandCursor }
+                    Text { anchors.centerIn: parent; text: "+  " + i18n.t("ADD EFFECT", i18n.lang); color: addHov.hovered ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                    MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = page.sel; chooser.slot = parent.free; chooser.open() } } }
+                Item { Layout.fillWidth: true }
             }
         }
         RowLayout {
