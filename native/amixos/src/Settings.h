@@ -19,7 +19,6 @@ class Settings : public QObject {
   Q_PROPERTY(bool confirmDestructive READ confirmDestructive WRITE setConfirmDestructive NOTIFY changed)
   Q_PROPERTY(bool tooltips READ tooltips WRITE setTooltips NOTIFY changed)
   Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY changed)
-  Q_PROPERTY(QString mixerStyle READ mixerStyle WRITE setMixerStyle NOTIFY changed)   // MIXER look: "daw" (default: flat strips, ten insert slots each) or "console"
   Q_PROPERTY(bool colorMotion READ colorMotion WRITE setColorMotion NOTIFY changed)   // the AURORA colour behind the pages moves (off: it stays still, for slow computers)   // the console's look: dark (stage) or light (daylight); Theme.qml and the Qt palette follow
   Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)   // the system is auto on: the remembered device, else AUTO DETECT, at every start (default on)
   Q_PROPERTY(QVariantMap lastDevice READ lastDevice NOTIFY changed)              // backend, in, out, rate, frames, inChannels, outChannels
@@ -54,7 +53,6 @@ class Settings : public QObject {
   bool confirmDestructive() const { return s_.value("general/confirm", true).toBool(); } void setConfirmDestructive(bool v) { set("general/confirm", v); }
   bool tooltips() const { return s_.value("general/tooltips", true).toBool(); } void setTooltips(bool v) { set("general/tooltips", v); }
   bool darkTheme() const { return s_.value("ui/dark", true).toBool(); } void setDarkTheme(bool v) { set("ui/dark", v); }
-  QString mixerStyle() const { const QString v = s_.value("ui/mixerStyle", "daw").toString(); return v == "console" ? v : QStringLiteral("daw"); } void setMixerStyle(const QString& v) { set("ui/mixerStyle", v == "console" ? v : QStringLiteral("daw")); }
   bool colorMotion() const { return s_.value("ui/colorMotion", true).toBool(); } void setColorMotion(bool v) { set("ui/colorMotion", v); }
   bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }

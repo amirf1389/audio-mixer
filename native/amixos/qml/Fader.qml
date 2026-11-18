@@ -17,30 +17,40 @@ Item {
     property bool remoteHot: false    // LIVE SYNC: a phone or browser is moving this fader now: the cap lights cyan and glides to each new value
     signal moved(real db)
     function lvl(db) { return Math.max(0, Math.min(1, (db - from) / (to - from))) }
-    implicitWidth: 34
+    property bool printed: false      // the dB numbers printed beside the slot, the way a desk's panel has them (the analog channel strips)
+    implicitWidth: printed ? 46 : 34
     implicitHeight: 180
+    readonly property real slotX: printed ? width - 15 : width / 2   // the middle of the slot: to the right when the numbers are printed on the left
     function pos(db) { return (1 - (db - from) / (to - from)) * (height - knob.height) }
     function dbAt(y) { var t = 1 - Math.max(0, Math.min(1, (y - knob.height / 2) / (height - knob.height))); return from + t * (to - from) }
-    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; width: 10; height: parent.height; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
+    // THE SLOT: a recess milled into the panel, dark inside, a light lip on its right edge
+    Rectangle { x: fader.slotX - width / 2; y: knob.height / 2 - 4; width: fader.showLevels ? 10 : 6; height: parent.height - knob.height + 8; radius: 3; color: "#050506"; border.color: "#000"
+        Rectangle { anchors.right: parent.right; anchors.rightMargin: -1; width: 1; height: parent.height - 4; y: 2; color: Qt.rgba(1, 1, 1, 0.16) }
         // IN (cyan, left) and OUT (orange, right) level columns, bottom up; the band above 0 dB turns red
         Rectangle { x: 1; width: 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; radius: 2; height: fader.lvl(fader.inDb) * (parent.height - 2); color: fader.inDb > 0 ? Theme.danger : Theme.cyan; opacity: fader.showLevels && fader.inDb > -119 ? 0.9 : 0 }
         Rectangle { x: 5; width: 4; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; radius: 2; height: fader.lvl(fader.outDb) * (parent.height - 2); color: fader.outDb > 0 || fader.clip ? Theme.danger : Theme.orange; opacity: fader.showLevels && fader.outDb > -119 ? 0.9 : 0 }
-        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: fader.pos(0) + knob.height / 2; width: parent.width; height: 1; color: Theme.ov(0.35) }   // the 0 dB line across the track
     }
-    Repeater {   // scale marks: +10, 0, -10, -20, -40, -60
-        model: [10, 0, -10, -20, -40, -60]
-        Rectangle { x: parent.width / 2 + 6; y: fader.pos(modelData) + knob.height / 2; width: modelData === 0 ? 10 : 5; height: 1; color: modelData === 0 ? Theme.orange : Theme.dim }
+    Repeater {   // the printed scale
+        model: fader.printed ? [10, 5, 0, -5, -10, -20, -30, -40, -60] : [10, 0, -10, -20, -40, -60]
+        Item { y: fader.pos(modelData) + knob.height / 2; width: fader.width; height: 1
+            Rectangle { x: fader.printed ? fader.slotX - 16 : fader.slotX + 6; width: modelData === 0 ? 10 : (fader.printed ? 7 : 5); height: modelData === 0 && fader.printed ? 2 : 1; y: modelData === 0 && fader.printed ? -0.5 : 0
+                color: fader.printed ? Theme.engrave : (modelData === 0 ? Theme.orange : Theme.dim); opacity: fader.printed && modelData !== 0 ? 0.75 : 1 }
+            Text { visible: fader.printed; anchors.right: parent.left; anchors.rightMargin: -(fader.slotX - 18); anchors.verticalCenter: parent.verticalCenter
+                text: modelData === -60 ? "∞" : Math.abs(modelData); color: Theme.engrave; opacity: modelData === 0 ? 1 : 0.8; font.family: Theme.sans; font.pixelSize: modelData === -60 ? 9 : 7; font.bold: true } }
     }
+    // THE CAP: black, ridged for the finger, a white line across the middle
     Rectangle {
         id: knob
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: fader.slotX - width / 2
         y: fader.pos(fader.value)
         Behavior on y { enabled: fader.remoteHot && !drag.pressed; NumberAnimation { duration: 70; easing.type: Easing.OutQuad } }   // smooth between remote updates
-        width: 26; height: 40; radius: 4
-        gradient: Gradient { GradientStop { position: 0; color: "#3a4150" } GradientStop { position: 0.5; color: "#1c222d" } GradientStop { position: 1; color: "#2a3140" } }
-        border.color: drag.pressed ? Theme.orange : fader.remoteHot ? Theme.cyan : Theme.line; border.width: fader.remoteHot ? 2 : 1
+        width: 24; height: 42; radius: 3
+        gradient: Gradient { GradientStop { position: 0; color: "#6a6d73" } GradientStop { position: 0.12; color: "#33353a" } GradientStop { position: 0.5; color: "#121315" } GradientStop { position: 0.88; color: "#2b2d31" } GradientStop { position: 1; color: "#0a0a0b" } }
+        border.color: drag.pressed ? Theme.orange : fader.remoteHot ? Theme.cyan : "#000"; border.width: fader.remoteHot ? 2 : 1
         Rectangle { visible: fader.remoteHot; anchors.centerIn: parent; width: parent.width + 10; height: parent.height + 10; radius: 7; color: "transparent"; border.color: Theme.cyan; border.width: 2; opacity: 0.45; z: -1 }   // the glow of a remote hand
-        Rectangle { anchors.centerIn: parent; width: parent.width - 6; height: 2; color: Theme.orange }
+        Rectangle { z: -2; x: 2; y: 4; width: parent.width; height: parent.height; radius: 3; color: Qt.rgba(0, 0, 0, 0.45) }   // its shadow on the panel
+        Repeater { model: [6, 10, 14, 27, 31, 35]; Rectangle { x: 3; y: modelData; width: knob.width - 6; height: 1; color: Qt.rgba(1, 1, 1, 0.13) } }
+        Rectangle { anchors.centerIn: parent; width: parent.width - 4; height: 2; color: "#f4f1e8" }
     }
     MouseArea {
         id: drag
