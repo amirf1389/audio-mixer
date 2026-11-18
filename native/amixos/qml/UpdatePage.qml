@@ -24,8 +24,8 @@ Item {
         color: on ? onColor : (bh.hovered ? Theme.ov(0.16) : Theme.ov(0.09)); border.width: 1; border.color: on || bh.hovered ? onColor : Theme.line
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#0b0f14" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.6 }
         HoverHandler { id: bh; cursorShape: Qt.PointingHandCursor } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
-    component Line: RowLayout { property string k; property string v; Layout.fillWidth: true; spacing: 10
-        Text { text: parent.k; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 150 }
+    component Line: RowLayout { property string k; property string v; Layout.fillWidth: true; Layout.minimumHeight: 20; spacing: 10
+        Text { text: parent.k; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 160; Layout.alignment: Qt.AlignVCenter; verticalAlignment: Text.AlignVCenter; Layout.preferredHeight: 18 }
         Text { text: parent.v.length ? parent.v : i18n.t("not shown by this computer", i18n.lang); color: parent.v.length ? Theme.ink : Theme.dim; font.family: Theme.sans; font.pixelSize: 12; font.bold: parent.v.length > 0; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
     Flickable {
         anchors.fill: parent; anchors.margins: 12; contentWidth: width; contentHeight: col.implicitHeight; clip: true; flickableDirection: Flickable.VerticalFlick
