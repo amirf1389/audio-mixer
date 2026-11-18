@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 44 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 46 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -38,13 +38,30 @@ int main() {
     for (int k = 0; k < 40; ++k) rt.onBlock(quiet, outs, n); CHECK(peak(o0, 0, n) > 0.001f);   // the tail is still sounding 50 ms after the input stopped
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
+  { // POWER REGULATOR and SHORT PROTECT
+    const double fs = 48000; const std::size_t n = 48000; auto tone = [&](double amp, double dc, std::vector<float>& L, std::vector<float>& R) { L.resize(n); R.resize(n); for (std::size_t i = 0; i < n; ++i) L[i] = R[i] = static_cast<float>(dc + amp * std::sin(2 * 3.14159265 * 1000 * static_cast<double>(i) / fs)); };
+    auto rmsDb = [&](const std::vector<float>& v) { double s = 0; for (std::size_t i = n / 2; i < n; ++i) s += static_cast<double>(v[i]) * v[i]; return 10 * std::log10(s / (n / 2.0) + 1e-12); };
+    std::vector<float> L, R;
+    am::fx::PowerRegulator reg(fs); reg.set("target", 0.5); reg.set("range", 1.0); reg.set("speed", 0.0); reg.set("ceiling", 1.0);   // target -18 dBFS, +-12 dB, 0.2 s
+    tone(0.05, 0, L, R); for (int k = 0; k < 3; ++k) { tone(0.05, 0, L, R); reg.process(L.data(), R.data(), n); } const double quietOut = rmsDb(L); CHECK(std::fabs(quietOut - (-18)) < 1.0); CHECK(reg.gainDb() > 6);   // -29 dBFS in: turned up to the target
+    reg.reset(); for (int k = 0; k < 3; ++k) { tone(0.5, 0, L, R); reg.process(L.data(), R.data(), n); } CHECK(std::fabs(rmsDb(L) - (-18)) < 1.0); CHECK(reg.gainDb() < -6);   // -9 dBFS in: turned down
+    reg.reset(); reg.set("range", 0.25); for (int k = 0; k < 3; ++k) { tone(0.5, 0, L, R); reg.process(L.data(), R.data(), n); } CHECK(std::fabs(reg.gainDb() - (-3)) < 0.2);   // RANGE 3 dB: no more than that
+    reg.reset(); reg.set("range", 1.0); { std::vector<float> z(n, 0.f), z2(n, 0.f); reg.process(z.data(), z2.data(), n); CHECK(std::fabs(reg.gainDb()) < 0.01); }   // silence is not turned up
+    reg.reset(); reg.set("target", 1.0); reg.set("ceiling", 0.0); for (int k = 0; k < 3; ++k) { tone(0.9, 0, L, R); reg.process(L.data(), R.data(), n); } { float pk = 0; for (float v : L) pk = std::max(pk, std::fabs(v)); CHECK(pk <= 0.2512f); }   // CEILING -12 dBFS holds
+    am::fx::ShortProtect prot(fs); prot.set("threshold", 0.9167); prot.set("time", 0.0); prot.set("hold", 0.0);   // -1 dBFS, 5 ms, 0.5 s
+    tone(0.5, 0, L, R); const std::vector<float> ref = L; prot.process(L.data(), R.data(), n); CHECK(L == ref && !prot.tripped() && prot.trips() == 0);   // nothing wrong: untouched, bit for bit
+    { std::vector<float> a(n, 1.0f), b(n, 1.0f); prot.process(a.data(), b.data(), n); CHECK(prot.tripped() && prot.trips() == 1); float tail = 0; for (std::size_t i = n / 2; i < n; ++i) tail = std::max(tail, std::fabs(a[i])); CHECK(tail < 1e-4f); }   // stuck at full scale: cut
+    tone(0.5, 0, L, R); prot.process(L.data(), R.data(), n); CHECK(!prot.tripped()); prot.process(L.data(), R.data(), n); { tone(0.5, 0, L, R); const std::vector<float> ref2 = L; prot.process(L.data(), R.data(), n); float d = 0; for (std::size_t i = n / 2; i < n; ++i) d = std::max(d, std::fabs(L[i] - ref2[i])); CHECK(d < 1e-3f); }   // the fault gone for HOLD: back
+    prot.reset(); tone(0.1, 0.4, L, R); prot.process(L.data(), R.data(), n); CHECK(prot.tripped());   // a steady DC offset trips it too
+    prot.reset(); { std::vector<float> a(n, 0.f), b(n, 0.f); for (std::size_t i = 100; i < 140; ++i) a[i] = b[i] = 1.0f; prot.process(a.data(), b.data(), n); CHECK(!prot.tripped() && prot.trips() == 0); }   // a peak shorter than TIME does not
+    std::printf("fx_test: POWER REGULATOR holds -18 dBFS from -29 and -9 in, respects RANGE and CEILING, leaves silence; SHORT PROTECT cuts on a stuck or DC output, not on a short peak, and comes back\n"); }
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 44); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 46); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
       double diff = 0, pk = 0; bool finite = true; for (std::size_t i = 0; i < n; ++i) { finite = finite && std::isfinite(l[i]); diff += std::fabs(l[i] - src[i]); pk = std::max(pk, std::fabs(static_cast<double>(l[i]))); }
-      const bool waits = kind == "antifeedback" || kind == "aec" || kind == "logic" || kind == "sampler" || kind == "imager" || kind == "iamfrender";   // the IAMF renderer is a monitoring stage, neutral until BINAURAL or NORMALIZE is chosen; the imager only shapes what differs between the sides: the same signal on both is left as it is   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
+      const bool waits = kind == "protect" || kind == "antifeedback" || kind == "aec" || kind == "logic" || kind == "sampler" || kind == "imager" || kind == "iamfrender";   // the IAMF renderer is a monitoring stage, neutral until BINAURAL or NORMALIZE is chosen; the imager only shapes what differs between the sides: the same signal on both is left as it is   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
       if (!(finite && pk < 4.0 && (waits ? diff / n < (kind == "aec" ? 1e-3 : 1e-6) : diff / n > 1e-4))) std::fprintf(stderr, "effect %s: finite %d peak %.2f diff %.5f\n", kind.c_str(), finite, pk, diff / n); CHECK(finite && pk < 4.0 && (waits ? diff / n < (kind == "aec" ? 1e-3 : 1e-6) : diff / n > 1e-4));
       p->setParam(0, 0.83); const std::string st = p->state(); auto q = am::fx::FxPlugin::make(kind, 48000); CHECK(q->setState(st) && std::fabs(q->param(0) - 0.83) < 1e-3);
       p->setBypass(true); p->process(in, out, static_cast<int>(n)); double d2 = 0; for (std::size_t i = 0; i < n; ++i) d2 += std::fabs(l[i] - src[i]); CHECK(d2 == 0); }

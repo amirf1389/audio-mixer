@@ -151,6 +151,21 @@ Item {
                 }
             }
             // DIAGNOSTICS
+            // MEMORY CLEAN-UP: the console gives back to Windows the memory it is not using right now (its own memory only: other programs are theirs to manage)
+            Rectangle { objectName: "memoryCard"; Layout.fillWidth: true; Layout.columnSpan: 2; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: memCol.implicitHeight + 24
+                property var res: ({}); property var sys: engine.systemInfo()
+                ColumnLayout { id: memCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
+                    RowLayout { Head { text: i18n.t("MEMORY CLEAN-UP", i18n.lang) } Item { Layout.fillWidth: true }
+                        Btn { objectName: "memoryClean"; label: i18n.t("CLEAN UP NOW", i18n.lang); on: true; onColor: Theme.emerald; onClicked: { const c = parent.parent.parent; const before = engine.systemInfo(); c.res = engine.trimMemoryNow(); c.sys = engine.systemInfo(); c.res.beforeMb = before.processMb } } }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8
+                        text: i18n.t("Gives back to Windows the memory the mixing console is not using right now. The sound keeps playing. It frees the console's own memory only; it does not close or change other programs.", i18n.lang) }
+                    RowLayout { spacing: 18
+                        Repeater { model: [[i18n.t("THIS PROGRAM", i18n.lang), (parent.parent.parent.sys.processMb || 0) + " MB"], [i18n.t("COMPUTER MEMORY IN USE", i18n.lang), ((parent.parent.parent.sys.ramTotalMb || 0) - (parent.parent.parent.sys.ramFreeMb || 0)) + " / " + (parent.parent.parent.sys.ramTotalMb || 0) + " MB"]]
+                            delegate: Column { spacing: 2
+                                Text { text: modelData[0]; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                Text { text: modelData[1]; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 13; font.bold: true } } } }
+                    Text { objectName: "memoryNote"; visible: !!parent.parent.res.note; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                        text: (parent.parent.res.note || "") + (parent.parent.res.beforeMb ? "  (" + parent.parent.res.beforeMb + " → " + (parent.parent.res.processMb || 0) + " MB)" : "") } } }
             Rectangle { Layout.fillWidth: true; Layout.columnSpan: 2; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: dgCol.implicitHeight + 24
                 ColumnLayout { id: dgCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
                     RowLayout { Head { text: i18n.t("SYSTEM DIAGNOSTIC", i18n.lang) } Item { Layout.fillWidth: true } Btn { label: i18n.t("RUN FULL SCAN", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.scan() } Btn { label: i18n.t("CLEAR CLIPS", i18n.lang); onClicked: engine.clearClips() } }

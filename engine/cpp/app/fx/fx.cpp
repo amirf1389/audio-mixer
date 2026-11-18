@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "aec") return std::make_unique<EchoCanceller>(fs);
   if (k == "hybrid") return std::make_unique<PhoneHybrid>(fs);
@@ -39,6 +39,8 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "tubeamp") return std::make_unique<TubeAmp>(fs);
   if (k == "preamp") return std::make_unique<PreAmp>(fs);
   if (k == "postamp") return std::make_unique<PostAmp>(fs);
+  if (k == "regulator") return std::make_unique<PowerRegulator>(fs);
+  if (k == "protect") return std::make_unique<ShortProtect>(fs);
   if (k == "hall") return std::make_unique<Hall>(fs);
   if (k == "room") return std::make_unique<Room>(fs);
   if (k == "drive") return std::make_unique<Drive>(fs);
@@ -491,6 +493,39 @@ void PostAmp::process(float* L, float* R, std::size_t n) {
   const float g = static_cast<float>(std::pow(10.0, (-24 + k_[0].load() * 36) / 20)), tilt = static_cast<float>((k_[1].load() - 0.5) * 12), gLo = static_cast<float>(std::pow(10.0, -tilt / 40)), gHi = static_cast<float>(std::pow(10.0, tilt / 40)), a = static_cast<float>(1 - std::exp(-2 * kPi * 1000 / fs_));
   const double c = k_[2].load(); const float ceil = static_cast<float>(std::pow(10.0, -c * 12 / 20)); float* ch[2] = {L, R};
   for (std::size_t i = 0; i < n; ++i) for (int s = 0; s < 2; ++s) { float v = ch[s][i]; lp_[s] += (v - lp_[s]) * a; v = (lp_[s] * gLo + (v - lp_[s]) * gHi) * g; if (c >= 0.01) v = ceil * std::tanh(v / ceil); ch[s][i] = v; }
+}
+
+PowerRegulator::PowerRegulator(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); }
+void PowerRegulator::reset() { ms_ = 0; g_ = 1; gainDb_ = 0; }
+std::string PowerRegulator::text(const std::string& id, double v) const { v = clamp01(v); if (id == "target") return fmt("%.1f dBFS", -30 + v * 24); if (id == "range") return fmt("%.1f dB", v * 12); if (id == "speed") return fmt("%.1f s", 0.2 + v * 4.8); return fmt("%.1f dBFS", -12 + v * 12); }
+void PowerRegulator::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double target = -30 + k_[0].load() * 24, range = k_[1].load() * 12, secs = 0.2 + k_[2].load() * 4.8; const float ceil = static_cast<float>(std::pow(10.0, (-12 + k_[3].load() * 12) / 20));
+  const double aMs = 1 - std::exp(-1.0 / (0.3 * fs_)), aG = 1 - std::exp(-1.0 / (secs * fs_));   // the level over 300 ms; the gain moves at SPEED
+  for (std::size_t i = 0; i < n; ++i) {
+    const double p = 0.5 * (static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i]); ms_ += (p - ms_) * aMs;
+    const double lvl = 10 * std::log10(ms_ + 1e-12);
+    if (lvl > -60) { const double want = std::pow(10.0, std::clamp(target - lvl, -range, range) / 20); g_ += (want - g_) * aG; }   // silence: hold the gain, do not turn the noise up
+    float l = static_cast<float>(L[i] * g_), r = static_cast<float>(R[i] * g_);
+    L[i] = l > ceil ? ceil : l < -ceil ? -ceil : l; R[i] = r > ceil ? ceil : r < -ceil ? -ceil : r; }
+  gainDb_ = 20 * std::log10(g_ + 1e-12);
+}
+ShortProtect::ShortProtect(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }
+void ShortProtect::reset() { over_ = safe_ = 0; dc_[0] = dc_[1] = 0; g_ = 1; cut_ = false; tripped_ = false; }
+std::string ShortProtect::text(const std::string& id, double v) const { v = clamp01(v); if (id == "threshold") return fmt("%.1f dBFS", -12 + v * 12); if (id == "time") return fmt("%.0f ms", 5 + v * 495); return fmt("%.1f s", 0.5 + v * 9.5); }
+void ShortProtect::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double thr = std::pow(10.0, (-12 + k_[0].load() * 12) / 20), tripAfter = (5 + k_[1].load() * 495) * 1e-3 * fs_, holdFor = (0.5 + k_[2].load() * 9.5) * fs_;
+  const double aDc = 1 - std::exp(-1.0 / (0.5 * fs_)), aCut = 1 - std::exp(-1.0 / (0.003 * fs_)), aBack = 1 - std::exp(-1.0 / (0.25 * fs_));   // DC over half a second; cut in 3 ms, back in 250 ms
+  for (std::size_t i = 0; i < n; ++i) {
+    const double l = L[i], r = R[i]; dc_[0] += (l - dc_[0]) * aDc; dc_[1] += (r - dc_[1]) * aDc;
+    const bool fault = std::fabs(l) >= thr || std::fabs(r) >= thr || std::fabs(dc_[0]) > 0.25 || std::fabs(dc_[1]) > 0.25;   // at or over the threshold, or a quarter of full scale of DC
+    if (fault) { over_ += 1; safe_ = 0; } else { over_ = std::max(0.0, over_ - 0.25); safe_ += 1; }   // a short gap inside a fault does not clear it at once
+    if (!cut_ && over_ >= tripAfter) { cut_ = true; trips_.fetch_add(1); }
+    if (cut_ && safe_ >= holdFor) { cut_ = false; over_ = 0; }
+    g_ += ((cut_ ? 0.0 : 1.0) - g_) * (cut_ ? aCut : aBack);
+    if (g_ < 0.9999) { L[i] = static_cast<float>(l * g_); R[i] = static_cast<float>(r * g_); } }
+  tripped_ = cut_;
 }
 Fdn::Fdn(double fs, int lines, bool hall) : Simple(fs), lines_(lines), hall_(hall) { reset(); }
 void Fdn::reset() {
