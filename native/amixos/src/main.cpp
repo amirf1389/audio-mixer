@@ -920,6 +920,16 @@ int main(int argc, char* argv[]) {
           if (!follow || !back || !free) { std::fprintf(stderr, "amixos --smoke: master / monitor SYNC\n"); return 153; } }
         engine.setMaster(-4.5); engine.setMasterMuted(true); const bool down = engine.masterDb() <= -59.9; engine.setMasterMuted(false);
         if (!down || std::fabs(engine.masterDb() + 4.5) > 1e-6 || engine.masterMuted()) { std::fprintf(stderr, "amixos --smoke: master mute\n"); return 212; } engine.setMaster(0);
+        { // LIVE MODE: START puts the voice chain on the channel, holds the master and switches the watchdog on; STOP takes out exactly what it put in
+          auto kinds = [&](int st) { QStringList l; for (const QVariant& v : engine.plugins(st)) { const QString k = v.toMap()["kind"].toString(); if (!k.isEmpty()) l << k; } return l; };
+          const QStringList before = kinds(5); const int hWas = engine.headroomDb(); const bool wWas = engine.watchdog(); engine.setPlugin(5, 0, "fx:rider");   // the user's own VOICE RIDER is already there
+          const QStringList mine = kinds(5); engine.startLive(5); const QStringList on = kinds(5);
+          const bool chain = on.contains("fx:clean") && on.contains("fx:automiceq") && on.contains("fx:peakremover") && on.count("fx:rider") == 1 && engine.liveMode() && engine.liveStrip() == 5 && engine.headroomDb() >= 3 && engine.watchdog();
+          const bool twice = engine.startLive(2).contains("already") && engine.liveStrip() == 5;
+          engine.stopLive(); const QStringList off = kinds(5); const bool back = off == mine && !engine.liveMode() && engine.headroomDb() == hWas && engine.watchdog() == wWas;
+          engine.setPlugin(5, 0, QString()); const bool clean = kinds(5) == before;
+          std::printf("amixos --smoke: LIVE MODE chain on %d (%d effects on the channel), second start refused %d, STOP leaves the user's own effect and gives the rest back %d %d\n", chain, int(on.size()), twice, back, clean);
+          if (!chain || !twice || !back || !clean) { std::fprintf(stderr, "amixos --smoke: LIVE MODE failed (%s -> %s -> %s)\n", qPrintable(mine.join(",")), qPrintable(on.join(",")), qPrintable(off.join(","))); return 103; } }
         { // HEADROOM MODE: the master stays under the chosen level, whatever the faders say; OFF gives the limiter back as it was
           auto pause2 = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
           const bool nt = engine.nullTestInput(); const double m0 = engine.masterDb(), g0 = engine.stripState()[0].toMap()["db"].toDouble();
@@ -1368,6 +1378,7 @@ int main(int argc, char* argv[]) {
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
           win->setProperty("current", "update"); settle(900); win->grabWindow().save(shots + "/software-update.png");
+          engine.startLive(0); settle(900); win->grabWindow().save(shots + "/live-mode.png"); engine.stopLive(); settle(300);
           { // STORE > DOWNLOADS with two example entries (one already there)
             const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* name, const char* ver, const char* note, const char* file, double size) { QJsonObject f; f["name"] = file; f["url"] = QStringLiteral("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/") + file; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "linux-deb", "linux-tar", "macos-dmg", "macos"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = name; o["version"] = ver; o["note"] = note; o["files"] = files; return o; };
             QJsonArray list; list << entry("amfb-warm", "AMFB Warm Channel", "1.0", "tube warmth and a soft ceiling for a voice", "AMFB Warm Channel.vst3", 4.2e6) << entry("amfb-air", "AMFB Air Shelf", "1.1", "a bright, open top end", "AMFB Air Shelf.vst3", 3.1e6);
