@@ -54,7 +54,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   stop(); backend_.reset();   // the old device is fully gone (no callback can still run) before the buffers below are made again
   // a block size or a rate that makes no sense is refused here: the backends divide by them and loop on them
   if (cfg.frames < 16 || cfg.frames > 16384) { err = "the block size must be 16 .. 16384 frames (asked: " + std::to_string(cfg.frames) + ")"; return false; }
-  if (!(cfg.sampleRate >= 8000.0 && cfg.sampleRate <= 768000.0)) { err = "the sample rate must be 8000 .. 768000 Hz"; return false; }
+  if (!(cfg.sampleRate >= 8000.0 && cfg.sampleRate <= 1100000.0)) { err = "the sample rate must be 8000 .. 1100000 Hz"; return false; }   // the same range the console offers (custom rates up to 1100 kHz)
   std::string name = cfg.backend;
   if (name == "auto") name = availableBackends().front();
   backend_ = createBackend(name);
