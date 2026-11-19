@@ -11,7 +11,7 @@ Item {
     objectName: "mediaPage"
     property var appPanel: null
     function mmss(s) { const m = Math.floor(s / 60), r = Math.floor(s % 60); return m + ":" + (r < 10 ? "0" : "") + r }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 26; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 26; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
@@ -58,11 +58,11 @@ Item {
                     Text { text: (media.current >= 0 && media.playlist[media.current] ? media.playlist[media.current].name : i18n.t("nothing loaded", i18n.lang)); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; elide: Text.ElideMiddle; Layout.maximumWidth: 500 } }
                 RowLayout { spacing: 8; Layout.fillWidth: true
                     Text { text: page.mmss(media.position); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9 }
-                    Slider { Layout.fillWidth: true; from: 0; to: Math.max(0.01, media.duration); value: media.position; onMoved: media.seek(value) }
+                    MSlider { Layout.fillWidth: true; from: 0; to: Math.max(0.01, media.duration); value: media.position; onMoved: media.seek(value) }
                     Text { text: page.mmss(media.duration); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 } }
                 RowLayout { spacing: 8; Layout.fillWidth: true
                     Text { text: i18n.t("PLAYER GAIN", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                    Slider { Layout.fillWidth: true; from: -60; to: 12; stepSize: 0.5; value: media.gainDb; onMoved: media.gainDb = value }
+                    MSlider { Layout.fillWidth: true; from: -60; to: 12; stepSize: 0.5; value: media.gainDb; onMoved: media.gainDb = value }
                     Text { Layout.preferredWidth: 60; text: media.gainDb.toFixed(1) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                     MeterBar { Layout.preferredWidth: 160; implicitHeight: 10; peakDb: media.peakDb }
                     Text { Layout.preferredWidth: 56; text: media.peakDb > -119 ? media.peakDb.toFixed(1) + i18n.t(" dBFS", i18n.lang) : "—"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; horizontalAlignment: Text.AlignRight } } } }

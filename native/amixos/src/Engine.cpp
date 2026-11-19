@@ -71,7 +71,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (masterDb_ <= -60.0) { masterDb_ = 0.0; masterMuted_ = false; startNote_ = QStringLiteral("The master was saved at -inf: it starts at 0 dB."); }
   if (mon_.db <= -60.0) mon_.db = 0.0;
   refreshDevices();
-  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate(); oneVoice_ = settings_.value("audio/oneVoice", true).toBool();
+  ecoUi_ = settings_.value("ui/eco", false).toBool(); applyUiRate(); oneVoice_ = settings_.value("audio/oneVoice", true).toBool(); watchdog_ = settings_.value("audio/watchdog", true).toBool(); wdClock_.start();
   sysFast_ = settings_.value("sys/fastCores", true).toBool(); sysEco_ = settings_.value("sys/ecoBackground", true).toBool(); sysTrim_ = settings_.value("sys/trimMinimised", true).toBool();
   am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
@@ -125,7 +125,10 @@ void Engine::applyFingerprint(const std::string& f) {
   refreshDevices();
   QStringList after; for (const QVariant& v : devices_) after << v.toMap()["name"].toString();
   QStringList added, gone; for (const QString& n : after) if (!before.contains(n)) added << n; for (const QString& n : before) if (!after.contains(n)) gone << n;
-  if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged(); }
+  if (rt_ && !gone.isEmpty() && (gone.contains(inDevName_) || gone.contains(outDevName_))) { const int frames = blockFrames_ > 0 ? blockFrames_ : 256; stop(); status_ = QStringLiteral("The sound card was unplugged: %1").arg(gone.join(", ")); emit stateChanged();
+    if (watchdog_) QTimer::singleShot(700, this, [this, frames, gone] { if (rt_) return;   // FAILOVER: the best device left takes over
+      const bool ok = autoStart(frames); ++failovers_; watchdogNote_ = ok ? QStringLiteral("WATCHDOG: %1 was unplugged; the sound moved to %2.").arg(gone.join(", "), outDevName_.isEmpty() ? QString::fromStdString(curBackend_) : outDevName_) : QStringLiteral("WATCHDOG: %1 was unplugged and no other sound card could be opened.").arg(gone.join(", "));
+      emit watchdogChanged(); }); }
   if (!added.isEmpty()) emit hotplug(true, added.join(", ")); else if (!gone.isEmpty()) emit hotplug(false, gone.join(", "));
 }
 // UNIVERSAL ASIO DETECTION: every ASIO driver, of any brand, gets who made it and what it is (interface, desk, DJ, guitar, onboard,
@@ -466,11 +469,12 @@ void Engine::setMastering(const QVariantMap& m) {
   mp_.deessThrDb = d("deessThr", mp_.deessThrDb, -50, 0); mp_.deessMaxDb = d("deessMax", mp_.deessMaxDb, 0, 18); mp_.exciterAmt = d("exciter", mp_.exciterAmt, 0, 1); mp_.bassMonoHz = d("bassMonoHz", mp_.bassMonoHz, 40, 400);
   masterPreset_ = m.value("preset").toString(); pushMaster(); emit masterChainChanged();
 }
-QStringList Engine::masteringPresets() const { return {"AMFB SIGNATURE", "TRANSPARENT", "STREAMING", "WARM", "PUNCH", "LOUD", "BROADCAST VOICE"}; }
+QStringList Engine::masteringPresets() const { return {"AMFB SIGNATURE", "TRANSPARENT", "STREAMING", "WARM", "PUNCH", "LOUD", "BROADCAST VOICE", "SHORT VIDEO / LIVE"}; }
 void Engine::applyMasteringPreset(const QString& name) {
   struct P { const char* n; double low, air, thr, ratio, att, rel, mk, drive, gain; };
   static const P k[] = {{"TRANSPARENT", 0, 0, -8, 1.5, 30, 250, 0, 0, 0}, {"STREAMING", 1, 1.5, -14, 2, 30, 200, 2, 0.1, 1}, {"WARM", 2.5, -1, -16, 2, 40, 300, 2, 0.35, 0},
-    {"PUNCH", 2, 2, -18, 3, 60, 120, 3, 0.2, 1}, {"LOUD", 1.5, 2, -20, 4, 10, 100, 5, 0.4, 3}, {"BROADCAST VOICE", -2, 2, -22, 3, 5, 150, 5, 0.1, 0}};
+    {"PUNCH", 2, 2, -18, 3, 60, 120, 3, 0.2, 1}, {"LOUD", 1.5, 2, -20, 4, 10, 100, 5, 0.4, 3}, {"BROADCAST VOICE", -2, 2, -22, 3, 5, 150, 5, 0.1, 0},
+    {"SHORT VIDEO / LIVE", 1, 2.5, -20, 3, 12, 140, 5, 0.15, 1}};   // for a phone's small speaker (short videos, live streams): firm, bright, steady, loud without pumping
   if (name == QLatin1String("AMFB SIGNATURE")) {   // the house sound: a firm low end kept mono, open air with a little harmonic sparkle, gentle glue; meant to be heard at once against a plain sound card
     mp_.on = true; mp_.toneOn = mp_.compOn = mp_.satOn = true; mp_.lowDb = 3; mp_.airDb = 2.5; mp_.thrDb = -16; mp_.ratio = 2; mp_.attackMs = 30; mp_.releaseMs = 220; mp_.makeupDb = 2; mp_.drive = 0.15; mp_.gainDb = 1;
     mp_.exciterOn = true; mp_.exciterAmt = 0.25; mp_.bassMonoOn = true; mp_.bassMonoHz = 90; mp_.deessOn = false; masterPreset_ = name; pushMaster(); emit masterChainChanged(); return; }
@@ -1641,9 +1645,9 @@ QVariantList Engine::pages() const {
     {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "delay", "DELAY", "⧗", true}, {"MIX", "surround", "360 AUDIO", "◍", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true}, {"ROUTE", "frame", "I/O FRAME", "▦", true}, {"ROUTE", "amp", "AMP / SYSTEM", "⏚", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "score", "SOUND SCORE", "★", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
-    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "◇", true}, {"SOURCE", "assistant", "AI ASSISTANT", "✦", true}, {"SOURCE", "store", "STORE", "⬡", true}, {"SOURCE", "engctl", "ENGINE CONTROL", "⚡", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
+    {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "streaming", "STREAMING LINKS", "🔗", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "◇", true}, {"SOURCE", "assistant", "AI ASSISTANT", "✦", true}, {"SOURCE", "store", "STORE", "⬡", true}, {"SOURCE", "engctl", "ENGINE CONTROL", "⚡", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
     {"DEVICE", "asio", "SOUND CARD", "◉", true}, {"DEVICE", "bluetooth", "BLUETOOTH", "⮁", true}, {"DEVICE", "network", "NETWORK", "⮞", true}, {"DEVICE", "cloud", "CLOUD", "☁", true}, {"DEVICE", "cascade", "CASCADE", "⚭", true},
-    {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
+    {"SYSTEM", "update", "SOFTWARE UPDATE", "⟳", true}, {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
   QVariantList l; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; l << m; }
@@ -1678,6 +1682,15 @@ void Engine::setSysOpt(const QString& key, bool on) {
 static const am::sysopt::CpuInfo& cpuOnce() { static const am::sysopt::CpuInfo c = am::sysopt::cpu(); return c; }
 static const am::sysopt::NpuInfo& npuOnce() { static const am::sysopt::NpuInfo n = am::sysopt::npu(); return n; }
 static void warmSystemInfo() { std::thread([] { (void)cpuOnce(); (void)npuOnce(); }).detach(); }
+QVariantMap Engine::firmwareInfo() const {
+  static const am::sysopt::Firmware f = am::sysopt::firmware(); auto q = [](const std::string& v) { return QString::fromStdString(v); };
+  return {{"maker", q(f.maker)}, {"model", q(f.model)}, {"board", q(f.board)}, {"biosVendor", q(f.biosVendor)}, {"biosVersion", q(f.biosVersion)}, {"biosDate", q(f.biosDate)}, {"os", q(f.os)}};
+}
+QVariantList Engine::soundDrivers() const {
+  static const std::vector<am::sysopt::DriverInfo> d = am::sysopt::audioDrivers(); QVariantList l;
+  for (const auto& x : d) l << QVariantMap{{"name", QString::fromStdString(x.name)}, {"provider", QString::fromStdString(x.provider)}, {"version", QString::fromStdString(x.version)}, {"date", QString::fromStdString(x.date)}};
+  return l;
+}
 QVariantMap Engine::systemInfo() const {
   const am::sysopt::CpuInfo& c = cpuOnce();
   const am::sysopt::NpuInfo& n = npuOnce();
@@ -1706,10 +1719,27 @@ QVariantMap Engine::systemInfo() const {
 void Engine::setOneVoice(bool on) { if (on == oneVoice_) return; oneVoice_ = on; settings_.setValue("audio/oneVoice", on); ov_.reset(); emit oneVoiceChanged(); }
 void Engine::undoOneVoice() { if (!oneVoiceActed_) return; setInputRoute(0, 0); oneVoiceNote_.clear(); ov_.reset(); emit oneVoiceChanged(); }   // oneVoiceActed_ stays: not again on this device
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
+void Engine::setWatchdog(bool on) { if (on == watchdog_) return; watchdog_ = on; settings_.setValue("audio/watchdog", on); wd_.reset(); emit watchdogChanged(); }
+bool Engine::failover(const QString& why) {
+  if (opening_) return false;
+  const QString backend = QString::fromStdString(curBackend_), in = QString::fromStdString(curIn_), out = QString::fromStdString(curOut_);
+  const double rate = rt_ ? rt_->sampleRate() : 48000; const int frames = blockFrames_ > 0 ? blockFrames_ : 256, inCh = devIn_, outCh = devOut_ > 0 ? devOut_ : 2;
+  stop(); bool ok = !backend.isEmpty() && open(backend, in, out, rate, frames, inCh, outCh); bool moved = false;
+  if (!ok) { ok = autoStart(frames); moved = ok; }
+  ++failovers_; wd_.reset();
+  watchdogNote_ = !ok ? QStringLiteral("WATCHDOG: %1; the sound card could not be started again.").arg(why)
+                : moved ? QStringLiteral("WATCHDOG: %1; the sound moved to %2.").arg(why, outDevName_.isEmpty() ? QString::fromStdString(curBackend_) : outDevName_)
+                        : QStringLiteral("WATCHDOG: %1; the sound card was started again.").arg(why);
+  emit watchdogChanged(); return ok;
+}
 void Engine::tick() {
   QVariantList m; QVariantMap t;
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
+    // WATCHDOG: no new block for three seconds while the engine is running: the device stalled; start again (three times a minute at most)
+    if (watchdog_ && !opening_) { const am::Watchdog::Action act = wd_.feed(true, s.blocks, wdClock_.elapsed());
+      if (act == am::Watchdog::Action::Restart) { QMetaObject::invokeMethod(this, [this] { failover(QStringLiteral("the sound stopped arriving")); }, Qt::QueuedConnection); }
+      else if (act == am::Watchdog::Action::GiveUp) { watchdogNote_ = QStringLiteral("WATCHDOG: three restarts in a minute did not bring the sound back. Check the sound card, then press START."); emit watchdogChanged(); } }
     // ONE VOICE: the same mono microphone on inputs 1 and 2 (not on the null test device): CH 1 off, the voice heard once on CH 2
     if (oneVoice_ && !oneVoiceActed_ && rt_->backendName() != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {
       oneVoiceActed_ = true; setInputRoute(0, -1);

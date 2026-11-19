@@ -35,6 +35,8 @@ class Settings : public QObject {
   Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
   Q_PROPERTY(bool rackDefault READ rackDefault WRITE setRackDefault NOTIFY changed)
+  Q_PROPERTY(bool spatialEnabled READ spatialEnabled WRITE setSpatialEnabled NOTIFY changed)   // 360 AUDIO: an option, off by default; off = its page is out of the menu and no channel is placed in 360
+  Q_PROPERTY(QString mixerLayout READ mixerLayout WRITE setMixerLayout NOTIFY changed)   // EDIT LAYOUT on the mixer: what shows and the strip width, as JSON ("" = the layout it ships with)
   Q_PROPERTY(bool mixerSimple READ mixerSimple WRITE setMixerSimple NOTIFY changed)   // MIXER strips: SIMPLE (name, tone, pan, MUTE / SOLO, fader) or FULL (every key and readout)
   Q_PROPERTY(bool rackCompactDefault READ rackCompactDefault WRITE setRackCompactDefault NOTIFY changed)
   Q_PROPERTY(bool channelPanelDefault READ channelPanelDefault WRITE setChannelPanelDefault NOTIFY changed)
@@ -73,6 +75,8 @@ class Settings : public QObject {
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }
+  bool spatialEnabled() const { return s_.value("spatial/enabled", false).toBool(); } void setSpatialEnabled(bool v) { set("spatial/enabled", v); }
+  QString mixerLayout() const { return s_.value("mixer/layout").toString().left(2000); } void setMixerLayout(const QString& v) { set("mixer/layout", v.left(2000)); }
   bool mixerSimple() const { return s_.value("mixer/simple", true).toBool(); } void setMixerSimple(bool v) { set("mixer/simple", v); }
   bool channelPanelDefault() const { return s_.value("mixer/channelPanel", true).toBool(); } void setChannelPanelDefault(bool v) { set("mixer/channelPanel", v); }
   QVariantList dataFiles() const;
@@ -84,6 +88,12 @@ class Settings : public QObject {
   Q_INVOKABLE bool openPluginBuilder();   // starts "AmF X1 Plugin Builder" next to the console (a separate program); its exports show up here after RESCAN
   Q_INVOKABLE bool openDiagnostics();     // the separate AmF X1 Diagnostics program (speakers, headphones, microphones, drivers)
   Q_INVOKABLE QString vstUserFolder();                // the console's own plug-in folder (<data>/vst): created, and saved among the scanned folders, the first time it is asked for
+  // EXPORT: the console's own things (its saved state with the scenes, the sample pads, the arrangement) in one .zip in the signed-in user's
+  // Downloads folder. Only those files: no licence, no network tokens, no log. toDir = "" means that Downloads folder.
+  // Returns {ok, path, folder, user, files, bytes, error}.
+  Q_INVOKABLE QVariantMap exportZip(const QString& toDir = QString());
+  Q_INVOKABLE QString systemUser() const;             // the name of the user signed in to this computer (shown beside the export)
+  Q_INVOKABLE QString userDownloads() const;          // that user's Downloads folder
   Q_INVOKABLE bool openVstFolder(const QString& dir = QString());   // shows a plug-in folder in the system's file manager; "" = the console's own
   QString dataFolder() const; QVariantMap folders() const;
   QString message() const { return msg_; }

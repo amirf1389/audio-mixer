@@ -2,6 +2,28 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.2",
+      "date": "2026-11-18",
+      "title": "Patch 1.24.0.2: features, fixes, enhancements, security",
+      "items": [
+        "NEW · MIXER: SIMPLE and FULL strips; one modern key design; REC, AUTO, FX, EQ and PHASE keys beside every fader with the easy keys (louder, quieter, 0, BACK)",
+        "NEW · FADER: dB figures on the scale, a level bubble while it moves, SHIFT for 0.1 dB moves, the cap line turns green at exactly 0 dB",
+        "NEW · CHANNEL OVERVIEW: LEVEL with a VU needle, INPUT, DYNAMICS, the EQ curve on a grid, SENDS and GROUPS; a VU needle on the master always",
+        "NEW · EFFECTS: POWER REGULATOR, SHORT PROTECT, VOICE RIDER (automatic level for a voice) and VOICE CLEAN (less noise and room, no delay); PRE AMP and POST AMP in each strip's MORE menu",
+        "NEW · STREAMING LINKS: paste a link to YouTube, Spotify, TIDAL, Deezer or TikTok, keep it in a list, open it in the service's own app or the browser",
+        "NEW · WATCHDOG FAILOVER: the sound starts again by itself when the sound card stalls or is unplugged (the same device first, else the best one left)",
+        "NEW · MASTERING: the SHORT VIDEO / LIVE preset for phone speakers; TOOLS: MEMORY CLEAN-UP",
+        "ENHANCED · LOOK: flat graphite tiles on every page, header bars on panels, a modern slider, a songket band and songket gold as the console's colour",
+        "ENHANCED · PLUG-IN RACK: one card per effect that is in, ADD EFFECT at the end, the small keys only under the pointer",
+        "ENHANCED · CONNECTIONS: input and output devices as cards (what it is, channels, rate, IN USE, ON / OFF); 360 AUDIO is now an option, off by default",
+        "REMOVED · the DAW look of the mixer",
+        "FIXED · SOUND CARD: the latency card's timer wrote to a property that did not exist",
+        "FIXED · SHORT PROTECT returns to exactly the untouched signal after a trip",
+        "SECURITY · STREAMING LINKS accepts https links to the five services only: look-alike hosts, user@host, ports, other schemes and script addresses are refused, and a saved link is checked again before it is opened",
+        "SECURITY · the bridge and the tools have no third-party JavaScript packages (npm audit: 0 known vulnerabilities)"
+      ]
+    },
+    {
       "version": "1.24.0.1",
       "date": "2026-11-16",
       "title": "Release 1.24.0.1",

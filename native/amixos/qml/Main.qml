@@ -44,7 +44,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
     Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
-    Aurora { anchors.fill: parent; z: -1; motion: settings.colorMotion; accent: Theme.accent }
+    Aurora { anchors.fill: parent; z: -1; visible: Theme.glass; motion: Theme.glass && settings.colorMotion; accent: Theme.accent }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
     property bool autoFailed: false
@@ -61,16 +61,11 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         Rectangle {   // header
-            Layout.fillWidth: true; implicitHeight: 48; color: Theme.chrome
-            Rectangle { id: hdrLine; anchors.bottom: parent.bottom; width: parent.width; height: 2   // the colour line: orange, the section colour, violet, cyan, drifting
-                property real sh: 0
-                NumberAnimation on sh { from: 0; to: 1; duration: 9000; loops: Animation.Infinite; running: settings.colorMotion && root.visible && engine.uiAwake }   // still when another app is in front: no full-window repaint 60 times a second
-                gradient: Gradient { orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Theme.orange } GradientStop { position: 0.15 + 0.25 * hdrLine.sh; color: Theme.accent }
-                    GradientStop { position: 0.55 + 0.2 * (1 - hdrLine.sh); color: Theme.violet } GradientStop { position: 1.0; color: Theme.cyan } } }
+            Layout.fillWidth: true; implicitHeight: 52; color: Theme.chrome
+            Songket { anchors.bottom: parent.bottom; width: parent.width; height: 7; unit: 14 }   // the songket band under the header
             RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 12
-                Text { text: Theme.product.toUpperCase(); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
+                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.bottomMargin: 6; spacing: 12
+                Text { text: Theme.product.toUpperCase(); color: Theme.songket; font.family: Theme.mono; font.pixelSize: 15; font.weight: Font.Black; font.letterSpacing: 4 }
                 Text { text: i18n.t("BY AMFB AUDIO", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 2 }
                 Row {   // FILE · VIEW · INFO: the menus of a desktop program, in the console's own look
                     objectName: "menuBar"; spacing: 2
@@ -210,7 +205,7 @@ ApplicationWindow {
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:sound") } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
-            NavRail { Layout.fillHeight: true; pages: engine.pages; current: root.current; onPicked: function (id) { root.current = id } }
+            NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? engine.pages : engine.pages.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Loader {
@@ -224,7 +219,7 @@ ApplicationWindow {
                     sourceComponent: {
                         switch (root.current) {
                         case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
-                        case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
+                        case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "streaming": return streamingC; case "update": return updateC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                         }
                     }
                 }
@@ -281,6 +276,8 @@ ApplicationWindow {
                 Component { id: networkC; NetworkPage {} }
                 Component { id: mediaC; MediaPage {} }
                 Component { id: samplesC; SamplesPage {} }
+                Component { id: streamingC; StreamingPage {} }
+                Component { id: updateC; UpdatePage {} }
                 Component { id: soundC; SoundCardPage {} }
                 Component { id: acousticsC; AcousticsPage {} }
                 Component { id: masteringC; MasteringPage {} }

@@ -36,7 +36,17 @@ function build({ releases, flatUrls = false, version, base, notes = [], features
     files[key] = { name, url: `${base}/${rel}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
   }
   if (!Object.keys(files).length) throw new Error('no release files for version ' + version + ' in ' + (releases || '<os>/releases'));
-  return { product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, features, files };
+  // PLUG-IN DOWNLOADS: releases/plugins.json lists the plug-ins the console may offer; their files live in releases/plugins/. Size and
+  // sha256 are taken from the files here, so the signed list always matches what is published.
+  const plugins = [];
+  const pj = path.join(ROOT, 'releases', 'plugins.json');
+  if (fs.existsSync(pj)) for (const p of (JSON.parse(fs.readFileSync(pj, 'utf8')).plugins || [])) {
+    const pf = {};
+    for (const [key, name] of Object.entries(p.files || {})) { const f = path.join(ROOT, 'releases', 'plugins', name); if (!fs.existsSync(f)) throw new Error('releases/plugins/' + name + ' is listed in plugins.json but is not there');
+      pf[key] = { name, url: `${base}/releases/plugins/${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) }; }
+    if (Object.keys(pf).length) plugins.push({ id: p.id, name: p.name, version: p.version, note: p.note || '', files: pf });
+  }
+  return { product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, features, files, plugins };
 }
 
 if (require.main === module) (async () => {

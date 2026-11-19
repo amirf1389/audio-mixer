@@ -19,8 +19,8 @@ Flickable {
     property string query: ""
     property int rev: 0
     property string note: ""
-    readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "antifeedback"],
-        "SATURATION": ["analog", "drive", "tubeamp", "preamp", "postamp", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
+    readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "rider", "clean", "antifeedback"],
+        "SATURATION": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
         "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay"], "SPATIAL": ["iamfelement", "iamfrender", "imager", "sampler"], "SYSTEM": ["aec", "hybrid", "logic"] })
     readonly property var groupIcon: ({ "EQ / TONE": "tone", "DYNAMICS": "comp", "SATURATION": "drive", "MODULATION": "sine", "SPACE / DELAY": "reverb", "SPATIAL": "orbit", "SYSTEM": "rack", "EXTENSIONS": "extension", "VST PLUG-INS": "vst", "OTHER": "fx" })
     readonly property var groupHue: ({ "EQ / TONE": "#38bdf8", "DYNAMICS": "#f59e0b", "SATURATION": "#f97316", "MODULATION": "#a78bfa", "SPACE / DELAY": "#34d399", "SPATIAL": "#22d3ee", "SYSTEM": "#94a3b8", "EXTENSIONS": "#f472b6", "VST PLUG-INS": "#818cf8", "OTHER": "#94a3b8" })
@@ -79,16 +79,43 @@ Flickable {
             ColumnLayout { anchors.left: parent.left; anchors.leftMargin: 24; anchors.verticalCenter: parent.verticalCenter; spacing: 4
                 Text { text: page.t("STORE"); color: "#f8fafc"; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 4 }
                 Text { text: page.t("Effects, extensions and plug-ins"); color: "#ffffff"; font.family: Theme.sans; font.pixelSize: 24; font.weight: Font.Black }
-                Text { text: page.count("ALL") + page.t(" items on this computer · insert into CH ") + (engine.selectedStrip + 1) + page.t(" · nothing is downloaded or sent"); color: Qt.rgba(1, 1, 1, 0.75); font.family: Theme.sans; font.pixelSize: 11 } } }
+                Text { text: page.count("ALL") + page.t(" items on this computer · insert into CH ") + (engine.selectedStrip + 1) + page.t(" · downloads only from the signed list"); color: Qt.rgba(1, 1, 1, 0.75); font.family: Theme.sans; font.pixelSize: 11 } } }
         // search and the add actions
         RowLayout { Layout.fillWidth: true; spacing: 10
             Rectangle { Layout.fillWidth: true; implicitHeight: 36; radius: 18; color: Theme.ov(0.06); border.color: sF.activeFocus ? Theme.accent : Theme.lineSoft
                 Icon { x: 12; anchors.verticalCenter: parent.verticalCenter; width: 16; height: 16; name: "search"; color: Theme.muted }
                 TextField { id: sF; objectName: "storeSearch"; anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; background: null; color: Theme.ink; font.family: Theme.sans; font.pixelSize: 12
                     placeholderText: page.t("Search effects, extensions, plug-ins…"); placeholderTextColor: Theme.dim; onTextChanged: page.query = text } }
-            Key { objectName: "storeAddVst"; label: "ADD VST"; icon: "plus"; lit: addVst.visible; hue: "#818cf8"; onClicked: { addVst.visible = !addVst.visible; addExt.visible = false } }
+            Key { objectName: "storeDownloads"; label: "DOWNLOADS" + (updater.plugins.length ? " " + updater.plugins.length : ""); icon: "store"; lit: dlPanel.visible; hue: "#34d399"; onClicked: { dlPanel.visible = !dlPanel.visible; addVst.visible = false; addExt.visible = false } }
+            Key { objectName: "storeAddVst"; label: "ADD VST"; icon: "plus"; lit: addVst.visible; hue: "#818cf8"; onClicked: { addVst.visible = !addVst.visible; addExt.visible = false; dlPanel.visible = false } }
             Key { objectName: "storeAddExt"; label: "ADD EXTENSION"; icon: "plus"; lit: addExt.visible; hue: "#f472b6"; onClicked: { addExt.visible = !addExt.visible; addVst.visible = false } }
             Key { label: "RESCAN"; icon: "refresh"; onClicked: { page.note = page.t("Rescan: ") + settings.rescanVst() + page.t(" plug-ins found."); page.rev++ } } }
+        // DOWNLOADS: the plug-ins the vendor-signed list offers. DOWNLOAD fetches one over https, checks its size and sha256 against the signed
+        // list and saves it into the console's own plug-in folder; REMOVE deletes that file. Nothing is run and nothing else is fetched.
+        Rectangle { id: dlPanel; objectName: "storeDownloadPanel"; visible: false; Layout.fillWidth: true; implicitHeight: dlCol.implicitHeight + 24; radius: 8; color: Theme.card; border.color: Qt.rgba(0.204, 0.827, 0.6, 0.5)
+            ColumnLayout { id: dlCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
+                RowLayout { Layout.fillWidth: true; spacing: 8; Icon { width: 18; height: 18; name: "store"; color: Theme.harm("#34d399") }
+                    Text { text: page.t("PLUG-IN DOWNLOADS"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                    Item { Layout.fillWidth: true }
+                    Key { objectName: "storeDlCheck"; label: updater.state === "checking" ? "CHECKING" : "CHECK NOW"; icon: "refresh"; hue: "#34d399"; onClicked: updater.check() } }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 11
+                       text: page.t("Plug-ins offered by AMFB Audio's signed list. A download comes over https, is checked against the signed size and sha256, and is saved into the console's own plug-in folder. Nothing is run by the download.") }
+                Text { objectName: "storeDlMessage"; visible: updater.pluginMessage.length > 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: page.t(updater.pluginMessage); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                Text { visible: updater.plugins.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 10
+                       text: page.t("The signed list offers no plug-ins for this computer yet. CHECK NOW reads the list again.") }
+                Repeater { model: updater.plugins
+                    delegate: Rectangle { objectName: "storeDl_" + modelData.id; Layout.fillWidth: true; implicitHeight: 50; radius: 6; color: Theme.ov(0.06); border.color: modelData.installed ? Qt.rgba(0.204, 0.827, 0.6, 0.6) : Theme.line
+                        Rectangle { x: 1; y: 5; width: 4; height: parent.height - 10; radius: 2; color: modelData.installed ? "#34d399" : Theme.muted }
+                        Rectangle { visible: modelData.busy; anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 1; height: 3; radius: 1; color: "#34d399"; width: (parent.width - 2) * modelData.progress / 100 }
+                        RowLayout { anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 10; spacing: 10
+                            ColumnLayout { Layout.fillWidth: true; spacing: 1
+                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: modelData.name + (modelData.version ? "  " + modelData.version : ""); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 12; font.bold: true }
+                                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: (modelData.note ? modelData.note + "  ·  " : "") + modelData.file + "  ·  " + (modelData.size / 1048576).toFixed(1) + " MB"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
+                            Text { visible: modelData.busy; text: modelData.progress + " %"; color: "#34d399"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                            Text { visible: modelData.installed && !modelData.busy; text: page.t("INSTALLED"); color: "#34d399"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            Key { visible: !modelData.busy; label: modelData.installed ? "DOWNLOAD AGAIN" : "DOWNLOAD"; icon: "plus"; lit: !modelData.installed; hue: "#34d399"; onClicked: updater.downloadPlugin(modelData.id) }
+                            Key { visible: modelData.installed && !modelData.busy; label: "REMOVE"; icon: "folder"; hue: "#f0304f"; onClicked: { updater.removePlugin(modelData.id); page.rev++ } } } } } } }
+        Connections { target: updater; function onPluginInstalled() { page.rev++ } }
         // ADD VST: a folder (or one plug-in file: its folder) joins the scan
         Rectangle { id: addVst; visible: false; Layout.fillWidth: true; implicitHeight: avCol.implicitHeight + 24; radius: 14; color: Theme.card; border.color: Qt.rgba(0.506, 0.549, 0.973, 0.5)
             ColumnLayout { id: avCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8

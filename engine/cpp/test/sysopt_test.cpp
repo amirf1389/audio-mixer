@@ -64,6 +64,14 @@ int main() {
     CHECK(!z.powerOk || (z.watts > 0 && z.watts < 2000)); CHECK(z.ac >= -1 && z.ac <= 1); CHECK(z.batteryPct >= -1 && z.batteryPct <= 100);
     std::printf("sysopt: PROCESSOR PANEL load %.1f %%, clock %s, %zu temperature(s)%s, power %s, mains %d, battery %d\n", z.loadPct, z.clockOk ? (std::to_string(static_cast<int>(z.mhz)) + " MHz").c_str() : "not exposed",
                 z.tempsC.size(), z.tempsC.empty() ? " (not exposed here)" : "", z.powerOk ? (std::to_string(z.watts) + " W from the " + z.powerFrom).c_str() : "not exposed", z.ac, z.batteryPct); }
+  { // SYSTEM INFORMATION: fields are made safe to show; reading them never fails, whatever this computer exposes
+    using am::sysopt::cleanField;
+    CHECK(cleanField("  American Megatrends Inc. \r\n") == "American Megatrends Inc."); CHECK(cleanField("F.25\tRev A") == "F.25 Rev A"); CHECK(cleanField(std::string("a\x01" "b\x7f" "c")) == "abc");
+    CHECK(cleanField(std::string(300, 'x')).size() == 96); CHECK(cleanField("").empty() && cleanField("   ").empty());
+    const am::sysopt::Firmware f = am::sysopt::firmware(); const auto d = am::sysopt::audioDrivers();
+    for (const std::string* v : {&f.biosVendor, &f.biosVersion, &f.biosDate, &f.maker, &f.model, &f.board, &f.os}) CHECK(v->size() <= 96 && *v == cleanField(*v));
+    CHECK(d.size() <= 64); for (const auto& x : d) CHECK(!x.name.empty() && x.name.size() <= 96);
+    std::printf("sysopt: system \"%s\" \"%s\", firmware \"%s\" \"%s\" (%s), OS \"%s\", %zu sound driver(s)\n", f.maker.c_str(), f.model.c_str(), f.biosVendor.c_str(), f.biosVersion.c_str(), f.biosDate.empty() ? "no date" : f.biosDate.c_str(), f.os.c_str(), d.size()); }
   std::printf(fails ? "sysopt: %d FAILED\n" : "sysopt: all passed\n", fails);
   return fails ? 1 : 0;
 }

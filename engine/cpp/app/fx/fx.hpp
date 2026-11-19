@@ -236,6 +236,41 @@ class PostAmp final : public Simple { public: explicit PostAmp(double fs); const
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"level", "tilt", "clip"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"LEVEL", "TILT", "CLIP"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.6667, 0.5, 0.0}; return d[i]; }
  private: float lp_[2] = {}; };
+// POWER REGULATOR: keeps the power of the signal steady, the way a regulated supply keeps its voltage: it measures the level slowly (RMS) and
+// turns the gain up or down toward TARGET (-30 .. -6 dBFS), by RANGE at most (0 .. 12 dB), at SPEED (0.2 .. 5 s); CEILING (-12 .. 0 dBFS)
+// is a hard stop after it. Silence is not turned up (below -60 dBFS the gain holds).
+class PowerRegulator final : public Simple { public: explicit PowerRegulator(double fs); const char* kind() const override { return "regulator"; } const char* name() const override { return "POWER REGULATOR"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double gainDb() const { return gainDb_.load(); }
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"target", "range", "speed", "ceiling"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"TARGET", "RANGE", "SPEED", "CEILING"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.3, 0.9167}; return d[i]; }
+ private: double ms_ = 0, g_ = 1; std::atomic<double> gainDb_{0}; };
+// SHORT PROTECT: what an amplifier's protection does when its output is shorted or driven into a fault, done on the signal: when the level
+// stays above THRESHOLD (-12 .. 0 dBFS) for longer than TIME (5 .. 500 ms), or a steady DC offset appears, the output is cut (a fast fade,
+// no click) and stays cut until the fault has been gone for HOLD (0.5 .. 10 s); then it fades back in. Neutral while nothing is wrong.
+// It works on the signal only: it cannot see a real short circuit on a speaker cable.
+class ShortProtect final : public Simple { public: explicit ShortProtect(double fs); const char* kind() const override { return "protect"; } const char* name() const override { return "SHORT PROTECT"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  bool tripped() const { return tripped_.load(); } int trips() const { return trips_.load(); }
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"threshold", "time", "hold"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"THRESHOLD", "TIME", "HOLD"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.9167, 0.1, 0.2}; return d[i]; }
+ private: double over_ = 0, safe_ = 0, dc_[2] = {}, g_ = 1; bool cut_ = false; std::atomic<bool> tripped_{false}; std::atomic<int> trips_{0}; };
+// VOICE RIDER: an automatic hand on the fader for a voice. It listens in the voice band (150 Hz .. 4 kHz) and rides the gain so the voice
+// sits at TARGET (-30 .. -10 dBFS), by RANGE at most (0 .. 12 dB), at SPEED (50 ms .. 1 s). Below SENSE (-70 .. -30 dBFS) nobody is
+// speaking: the gain holds where it is, so the room noise between sentences is not turned up. No look-ahead: nothing is delayed.
+class VoiceRider final : public Simple { public: explicit VoiceRider(double fs); const char* kind() const override { return "rider"; } const char* name() const override { return "VOICE RIDER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double gainDb() const { return gainDb_.load(); } bool speaking() const { return speaking_.load(); }
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"target", "range", "speed", "sense"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"TARGET", "RANGE", "SPEED", "SENSE"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.6, 0.5, 0.2, 0.5}; return d[i]; }
+ private: double hp_ = 0, lp_ = 0, ms_ = 0, g_ = 1; std::atomic<double> gainDb_{0}; std::atomic<bool> speaking_{false}; };
+// VOICE CLEAN: less noise and less room on a voice, with no delay at all (no look-ahead, no block processing: the first sample in is the
+// first sample out). The signal is split into four bands that add back to exactly the input. DENOISE: each band learns its own noise floor
+// (the level it falls back to between sounds) and is turned down, by up to 24 dB, while it sits at that floor. DEREVERB: each band is
+// turned down, by up to 12 dB, while it is only dying away (the tail a room adds after a sound stops). OUTPUT: -12 .. +12 dB.
+// Signal processing, not machine learning: it cannot separate a voice from loud music or from another voice.
+class VoiceClean final : public Simple { public: explicit VoiceClean(double fs); const char* kind() const override { return "clean"; } const char* name() const override { return "VOICE CLEAN"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  double reductionDb() const { return redDb_.load(); }
+ protected: int count() const override { return 3; } const char* knobId(int i) const override { static const char* k[] = {"denoise", "dereverb", "out"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"DENOISE", "DEREVERB", "OUTPUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.3, 0.5}; return d[i]; }
+ private: static constexpr int kBands = 4; double lp_[2][3] = {}, env_[kBands] = {}, nf_[kBands] = {}, fast_[kBands] = {}, slow_[kBands] = {}, g_[kBands] = {1, 1, 1, 1}; std::atomic<double> redDb_{0}; };
 // HALL REVERB: an eight-line feedback delay network (long, dense, slowly modulated): SIZE, DECAY (0.5 .. 20 s), DAMP, PRE-DELAY, MODULATION
 // ROOM REVERB: the same network with four short lines and early reflections: SIZE, DECAY (0.1 .. 3 s), DAMP, EARLY
 class Fdn : public Simple { public: Fdn(double fs, int lines, bool hall); std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;

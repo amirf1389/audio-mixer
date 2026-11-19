@@ -4,6 +4,7 @@
 // sha256 and are never run by the console: the person opens the installer. Nothing is sent but the GET; no identifiers, no telemetry.
 #pragma once
 #include <QNetworkAccessManager>
+#include <QJsonArray>
 #include <QObject>
 #include <QSettings>
 #include <QVariant>
@@ -30,6 +31,11 @@ class Update : public QObject {
   Q_PROPERTY(bool canInstall READ canInstall NOTIFY changed)        // a verified installer is downloaded and this platform can install it and restart (Windows)
   Q_PROPERTY(QString justUpdated READ justUpdated NOTIFY changed)  // the version an update just brought (shown once at boot), else empty
   Q_PROPERTY(QString failedUpdate READ failedUpdate NOTIFY changed) // an INSTALL AND RESTART that came back on the old version
+  // PLUG-IN DOWNLOADS: the plug-ins the vendor-signed list offers for this platform: [{id, name, version, note, file, size, installed, busy, progress}].
+  // A download is https from one of the project's hosts, checked against the signed sha256 and size, and saved as one file into the console's
+  // own plug-in folder; nothing is run. pluginMessage says what happened; pluginInstalled fires so the plug-in list is scanned again.
+  Q_PROPERTY(QVariantList plugins READ plugins NOTIFY pluginsChanged)
+  Q_PROPERTY(QString pluginMessage READ pluginMessage NOTIFY pluginsChanged)
   Q_PROPERTY(bool autoDownload READ autoDownload WRITE setAutoDownload NOTIFY changed)   // fetch a found update by itself (the install still asks)      // entries newer than the last version the person looked at (the NEW badge)
  public:
   explicit Update(const QString& currentVersion, QObject* parent = nullptr);
@@ -72,7 +78,15 @@ class Update : public QObject {
   Q_INVOKABLE void markFeaturesSeen();                              // the badge goes out until a newer entry arrives
   Q_INVOKABLE static int compareVersions(const QString& a, const QString& b);
   static const char* kDefaultUrl;
+ public:
+  QVariantList plugins() const; QString pluginMessage() const { return pluginMsg_; }
+  Q_INVOKABLE void downloadPlugin(const QString& id);
+  Q_INVOKABLE bool removePlugin(const QString& id);                 // deletes the downloaded file (only one this list put there)
+  int setPluginList(const QJsonArray& list);                        // from the signed manifest (and the self-test): returns how many entries were accepted
+  QString pluginDir;                                                // the console's own plug-in folder (main sets it)
  signals:
+  void pluginsChanged();
+  void pluginInstalled();
   void changed();
   void redeemed(const QString& key);
   void activated(const QString& activation);
@@ -81,5 +95,6 @@ class Update : public QObject {
   void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); }
   static QString platformKey();
   QString redeem_;
+  QVariantList pluginList_; QString pluginMsg_, pluginBusy_; int pluginProgress_ = 0;
   QSettings s_; QNetworkAccessManager net_; QString current_, state_ = "idle", msg_, latest_, channel_, released_, downloaded_; QStringList notes_; QVariantMap file_; QVariantList features_; QString justUpdated_, failed_; int progress_ = 0;
 };

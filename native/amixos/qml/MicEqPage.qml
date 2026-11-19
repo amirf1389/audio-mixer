@@ -79,7 +79,7 @@ Item {
                             delegate: ColumnLayout {
                                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 4
                                 Text { Layout.alignment: Qt.AlignHCenter; text: (page.gains[index] >= 0 ? "+" : "") + Number(page.gains[index]).toFixed(1); color: Math.abs(page.gains[index]) > 0.05 ? Theme.cyan : Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                Slider { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; orientation: Qt.Vertical; from: -24; to: 24; stepSize: 0.5; value: page.gains[index]
+                                MSlider { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; orientation: Qt.Vertical; from: -24; to: 24; stepSize: 0.5; value: page.gains[index]
                                     onMoved: { let g = page.gains.slice(); g[index] = value; page.apply(g, true) } }
                                 Text { Layout.alignment: Qt.AlignHCenter; text: page.centres[index]; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                             }

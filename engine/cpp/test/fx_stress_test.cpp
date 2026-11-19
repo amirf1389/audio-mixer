@@ -49,5 +49,6 @@ int main() {
       std::vector<float> L0 = L; e->process(L.data(), R.data(), 1000); double d = 0; for (int i = 0; i < 1000; ++i) d += std::fabs(L[i] - L0[i]); CHECK(d == 0, "%s: bypass changed the sound", kind.c_str()); }
   }
   std::printf("heaviest at 48 kHz: %s at %.0f us of CPU per second of audio (%.2f %% of one core)\n", worstKind.c_str(), worstUs, worstUs / 1e4);
-  std::printf(fails ? "fx_stress: %d failed\n" : "fx_stress: all %zu effects passed\n", fails ? static_cast<std::size_t>(fails) : catalog().size()); return fails ? 1 : 0;
+  if (fails) std::printf("fx_stress: %d failed\n", fails); else std::printf("fx_stress: all %zu effects passed\n", catalog().size());
+  return fails ? 1 : 0;
 }

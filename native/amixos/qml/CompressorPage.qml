@@ -96,7 +96,7 @@ Flickable {
                         { k: "compAttackMs", t: "ATTACK", u: " ms", from: 0.1, to: 200, step: 0.1 }, { k: "compReleaseMs", t: "RELEASE", u: " ms", from: 5, to: 2000, step: 1 }, { k: "compMakeupDb", t: "MAKE-UP", u: " dB", from: 0, to: 24, step: 0.5 } ]
                     delegate: ColumnLayout { Layout.fillWidth: true; spacing: 0
                         Text { text: i18n.t(modelData.t ?? "", i18n.lang) + "  " + Number(page.ch[modelData.k] === undefined ? modelData.from : page.ch[modelData.k]).toFixed(modelData.step < 1 ? 1 : 0) + modelData.u; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
-                        Slider { Layout.fillWidth: true; from: modelData.from; to: modelData.to; stepSize: modelData.step; value: page.ch[modelData.k] === undefined ? modelData.from : page.ch[modelData.k]; onMoved: page.apply(modelData.k, value) } }
+                        MSlider { Layout.fillWidth: true; from: modelData.from; to: modelData.to; stepSize: modelData.step; value: page.ch[modelData.k] === undefined ? modelData.from : page.ch[modelData.k]; onMoved: page.apply(modelData.k, value) } }
                 }
             }
             Flow { Layout.fillWidth: true; spacing: 4

@@ -1,0 +1,11 @@
+{
+  "product": "AmF X1",
+  "api": "v1",
+  "readOnly": true,
+  "endpoints": {
+    "version": "/api/v1/version.json",
+    "features": "/api/v1/features.json",
+    "plugins": "/api/v1/plugins.json",
+    "update": "/api/v1/update.json"
+  }
+}

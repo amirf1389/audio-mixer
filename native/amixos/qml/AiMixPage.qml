@@ -13,7 +13,7 @@ Item {
     readonly property int members: { let n = 0; for (let i = 0; i < engine.stripState.length; ++i) if (engine.stripAt(i, engine.stripTick).automix) ++n; return n }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
@@ -37,7 +37,7 @@ Item {
                                     Rectangle { width: 36; height: 20; radius: 10; color: st && st.automix ? Theme.cyan : Theme.ov(0.1); Rectangle { width: 14; height: 14; radius: 7; y: 3; x: st && st.automix ? 19 : 3; color: st && st.automix ? "#000" : Theme.dim } MouseArea { anchors.fill: parent; onClicked: engine.setAutomix(s, !(st && st.automix), st ? st.amWeight : 1) } }
                                     Text { Layout.preferredWidth: 80; text: i18n.t("CH ", i18n.lang) + (s + 1 < 10 ? "0" : "") + (s + 1) + " " + (st ? st.name : ""); color: Theme.stripColors[st ? st.color : 0]; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight }
                                     Text { text: "W"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                                    Slider { Layout.fillWidth: true; from: 0.25; to: 4; stepSize: 0.05; value: st ? st.amWeight : 1; enabled: st && st.automix; onMoved: engine.setAutomix(s, true, value) }
+                                    MSlider { Layout.fillWidth: true; from: 0.25; to: 4; stepSize: 0.05; value: st ? st.amWeight : 1; enabled: st && st.automix; onMoved: engine.setAutomix(s, true, value) }
                                     Text { Layout.preferredWidth: 30; text: st ? st.amWeight.toFixed(2) : ""; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 }
                                     Rectangle { Layout.preferredWidth: 90; implicitHeight: 8; radius: 2; color: Theme.ov(0.06)
                                         Rectangle { readonly property real g: mt ? Math.max(-40, Math.min(0, mt.amGainDb)) : 0; width: parent.width * (1 + g / 40); height: parent.height; radius: 2; color: g > -6 ? Theme.emerald : g > -20 ? Theme.amber : Theme.dim } }
@@ -51,11 +51,11 @@ Item {
                     Flow { Layout.fillWidth: true; spacing: 4
                         Repeater { model: [{ t: "-14 STREAMING", v: -14 }, { t: "-16 PODCAST", v: -16 }, { t: "-18 LIVE", v: -18 }, { t: "-23 BROADCAST", v: -23 }]; delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: Math.abs(engine.autoLevelTarget - modelData.v) < 0.01; onColor: Theme.cyan; onClicked: engine.autoLevelTarget = modelData.v } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
-                        Slider { Layout.fillWidth: true; from: -30; to: -6; stepSize: 0.5; value: engine.autoLevelTarget; onMoved: engine.autoLevelTarget = value }
+                        MSlider { Layout.fillWidth: true; from: -30; to: -6; stepSize: 0.5; value: engine.autoLevelTarget; onMoved: engine.autoLevelTarget = value }
                         Text { Layout.preferredWidth: 70; text: engine.autoLevelTarget.toFixed(1) + i18n.t(" LUFS", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     Text { text: i18n.t("MAX LIFT", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 1 }
                     RowLayout { spacing: 8; Layout.fillWidth: true
-                        Slider { Layout.fillWidth: true; from: 0; to: 24; stepSize: 1; value: engine.autoLevelMax; onMoved: engine.autoLevelMax = value }
+                        MSlider { Layout.fillWidth: true; from: 0; to: 24; stepSize: 1; value: engine.autoLevelMax; onMoved: engine.autoLevelMax = value }
                         Text { Layout.preferredWidth: 70; text: "+" + engine.autoLevelMax.toFixed(0) + i18n.t(" dB", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     GridLayout { columns: 2; columnSpacing: 12; rowSpacing: 4

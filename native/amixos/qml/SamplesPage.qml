@@ -30,7 +30,7 @@ Item {
         if (n >= 0) { if (view === "PADS") samples.playPad(bank * 50 + 1 + n); else if (view === "EFFECTS") { if (n < familyFx.length) samples.playSfx(familyFx[n].id) } else { const l = shown(); if (n < l.length) samples.play(l[n].id) } e.accepted = true }
         else if (k === Qt.Key_Escape) { samples.stopAll(); e.accepted = true }
         else if (view === "PADS" && (k === Qt.Key_PageDown || k === Qt.Key_PageUp)) { bank = Math.max(0, Math.min(19, bank + (k === Qt.Key_PageDown ? 1 : -1))); e.accepted = true } }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: page.t(label); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Chip: Rectangle { property string label; property bool on: false; signal clicked(); implicitWidth: cl.implicitWidth + 14; implicitHeight: 20; radius: 4; color: on ? Theme.amber : Theme.ov(0.06)
@@ -111,7 +111,7 @@ Item {
                         onEditingFinished: if (text !== page.selPad.name) samples.setPad(page.sel, page.selPad.source, text, page.selPad.gainDb, page.selPad.color) }
                     Small { Layout.fillWidth: true; text: page.selPad.kind === "file" ? page.t("FILE: ") + page.selPad.file + (page.selPad.missing ? page.t(" (not found: plug the drive in or choose it again)") : "") : page.selPad.kind === "sfx" ? page.t("SOUND EFFECT ") + page.selPad.source.slice(4) : page.selPad.kind === "sample" ? page.t("BUILT-IN SAMPLE ") + page.selPad.source.slice(7) : page.t("Empty: choose an effect or a file."); elide: Text.ElideMiddle; maximumLineCount: 3 }
                     Text { text: page.t("PAD GAIN  ") + ((page.selPad.gainDb ?? 0) > 0 ? "+" : "") + (page.selPad.gainDb ?? 0).toFixed(1) + page.t(" dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
-                    Slider { objectName: "padGain"; Layout.fillWidth: true; from: -40; to: 12; stepSize: 0.5; value: page.selPad.gainDb ?? 0; onPressedChanged: if (!pressed && value !== page.selPad.gainDb) samples.setPad(page.sel, page.selPad.source, page.selPad.name, value, page.selPad.color) }
+                    MSlider { objectName: "padGain"; Layout.fillWidth: true; from: -40; to: 12; stepSize: 0.5; value: page.selPad.gainDb ?? 0; onPressedChanged: if (!pressed && value !== page.selPad.gainDb) samples.setPad(page.sel, page.selPad.source, page.selPad.name, value, page.selPad.color) }
                     Row { spacing: 4
                         Repeater { model: 8; delegate: Rectangle { width: 22; height: 16; radius: 3; color: page.colors[index]; border.width: page.selPad.color === index ? 2 : 0; border.color: Theme.ink
                             MouseArea { anchors.fill: parent; onClicked: samples.setPad(page.sel, page.selPad.source, page.selPad.name, page.selPad.gainDb, index) } } } }
@@ -135,7 +135,7 @@ Item {
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     Text { text: page.t("PLAYER"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                     Text { text: page.t("GAIN  ") + (samples.gainDb > 0 ? "+" : "") + samples.gainDb.toFixed(1) + page.t(" dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
-                    Slider { Layout.fillWidth: true; from: -40; to: 12; stepSize: 0.5; value: samples.gainDb; onMoved: samples.gainDb = value }
+                    MSlider { Layout.fillWidth: true; from: -40; to: 12; stepSize: 0.5; value: samples.gainDb; onMoved: samples.gainDb = value }
                     Btn { label: "STOP ALL  (Esc)"; onColor: Theme.danger; on: samples.voices > 0; onClicked: samples.stopAll() }
                     Small { Layout.fillWidth: true; text: page.t("16 voices; a 17th press steals the oldest. Sounds in memory: ") + samples.keptMb.toFixed(0) + " MB" }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }

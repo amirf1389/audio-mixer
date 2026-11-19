@@ -38,7 +38,7 @@ Item {
         r.push({ ok: !engine.testOn, t: engine.testOn ? "TEST SIGNAL is ON and goes to the master: switch it off before a show." : "TEST SIGNAL: off" })
         report = r
     }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
@@ -62,7 +62,7 @@ Item {
                     }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("TEMPO", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: 40; to: 240; stepSize: 1; value: engine.clickBpm; onMoved: engine.clickBpm = value }
+                        MSlider { Layout.fillWidth: true; from: 40; to: 240; stepSize: 1; value: engine.clickBpm; onMoved: engine.clickBpm = value }
                         Text { Layout.preferredWidth: 60; text: engine.clickBpm.toFixed(0) + i18n.t(" BPM", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 6
                         Text { text: i18n.t("SIGNATURE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
@@ -71,7 +71,7 @@ Item {
                         Repeater { model: engine.clickBeats; delegate: Rectangle { width: 12; height: 12; radius: 6; color: engine.clickBeat === index + 1 ? (index === 0 ? Theme.amber : Theme.cyan) : Theme.ov(0.1) } } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -40; to: 0; stepSize: 1; value: engine.clickDb; onMoved: engine.clickDb = value }
+                        MSlider { Layout.fillWidth: true; from: -40; to: 0; stepSize: 1; value: engine.clickDb; onMoved: engine.clickDb = value }
                         Text { Layout.preferredWidth: 60; text: engine.clickDb.toFixed(0) + i18n.t(" dB", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight }
                         Btn { label: engine.clickOn ? i18n.t("STOP CLICK", i18n.lang) : i18n.t("START CLICK", i18n.lang); on: engine.clickOn; onColor: Theme.emerald; onClicked: engine.clickOn = !engine.clickOn } }
                     Note { text: i18n.t("The click is summed into the master (before the master fader), like the ARRANGE player. Accent on beat 1.", i18n.lang) }
@@ -87,11 +87,11 @@ Item {
                             delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: engine.testType === modelData.ty && (modelData.f === 0 || Math.abs(engine.testFreq - modelData.f) < 0.5); onColor: Theme.cyan; onClicked: { engine.testType = modelData.ty; if (modelData.f > 0) engine.testFreq = modelData.f } } } }
                     RowLayout { visible: engine.testType === 0; spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("FREQ", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, engine.testFreq)); onMoved: engine.testFreq = Math.round(Math.exp(value)) }
+                        MSlider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, engine.testFreq)); onMoved: engine.testFreq = Math.round(Math.exp(value)) }
                         Text { Layout.preferredWidth: 70; text: engine.testFreq >= 1000 ? (engine.testFreq / 1000).toFixed(2) + i18n.t(" kHz", i18n.lang) : engine.testFreq.toFixed(0) + i18n.t(" Hz", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -60; to: 0; stepSize: 1; value: engine.testDb; onMoved: engine.testDb = value }
+                        MSlider { Layout.fillWidth: true; from: -60; to: 0; stepSize: 1; value: engine.testDb; onMoved: engine.testDb = value }
                         Text { Layout.preferredWidth: 70; text: engine.testDb.toFixed(0) + i18n.t(" dBFS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 6
                         Btn { label: engine.testOn ? i18n.t("STOP TEST SIGNAL", i18n.lang) : i18n.t("ENGAGE TEST SIGNAL", i18n.lang); on: engine.testOn; onColor: Theme.danger; onClicked: engine.testOn = !engine.testOn }
@@ -105,11 +105,11 @@ Item {
                     Head { text: i18n.t("DELAY TOWER & TIME ALIGNMENT", i18n.lang) }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { Layout.preferredWidth: 100; text: i18n.t("DISTANCE (M)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: 0; to: 150; stepSize: 0.1; value: page.distanceM; onMoved: page.distanceM = value }
+                        MSlider { Layout.fillWidth: true; from: 0; to: 150; stepSize: 0.1; value: page.distanceM; onMoved: page.distanceM = value }
                         Text { Layout.preferredWidth: 70; text: page.distanceM.toFixed(1) + " m"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 8; Layout.fillWidth: true
                         Text { Layout.preferredWidth: 100; text: i18n.t("TEMPERATURE (°C)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { Layout.fillWidth: true; from: -20; to: 45; stepSize: 0.5; value: page.tempC; onMoved: page.tempC = value }
+                        MSlider { Layout.fillWidth: true; from: -20; to: 45; stepSize: 0.5; value: page.tempC; onMoved: page.tempC = value }
                         Text { Layout.preferredWidth: 70; text: page.tempC.toFixed(1) + " °C"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; horizontalAlignment: Text.AlignRight } }
                     RowLayout { spacing: 16
                         ColumnLayout { spacing: 1; Text { text: i18n.t("SPEED OF SOUND", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } Text { text: page.soundSpeed.toFixed(1) + " m/s"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true } }
@@ -151,6 +151,21 @@ Item {
                 }
             }
             // DIAGNOSTICS
+            // MEMORY CLEAN-UP: the console gives back to Windows the memory it is not using right now (its own memory only: other programs are theirs to manage)
+            Rectangle { objectName: "memoryCard"; Layout.fillWidth: true; Layout.columnSpan: 2; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: memCol.implicitHeight + 24
+                property var res: ({}); property var sys: engine.systemInfo()
+                ColumnLayout { id: memCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
+                    RowLayout { Head { text: i18n.t("MEMORY CLEAN-UP", i18n.lang) } Item { Layout.fillWidth: true }
+                        Btn { objectName: "memoryClean"; label: i18n.t("CLEAN UP NOW", i18n.lang); on: true; onColor: Theme.emerald; onClicked: { const c = parent.parent.parent; const before = engine.systemInfo(); c.res = engine.trimMemoryNow(); c.sys = engine.systemInfo(); c.res.beforeMb = before.processMb } } }
+                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8
+                        text: i18n.t("Gives back to Windows the memory the mixing console is not using right now. The sound keeps playing. It frees the console's own memory only; it does not close or change other programs.", i18n.lang) }
+                    RowLayout { spacing: 18
+                        Repeater { model: [[i18n.t("THIS PROGRAM", i18n.lang), (parent.parent.parent.sys.processMb || 0) + " MB"], [i18n.t("COMPUTER MEMORY IN USE", i18n.lang), ((parent.parent.parent.sys.ramTotalMb || 0) - (parent.parent.parent.sys.ramFreeMb || 0)) + " / " + (parent.parent.parent.sys.ramTotalMb || 0) + " MB"]]
+                            delegate: Column { spacing: 2
+                                Text { text: modelData[0]; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                Text { text: modelData[1]; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 13; font.bold: true } } } }
+                    Text { objectName: "memoryNote"; visible: !!parent.parent.res.note; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                        text: (parent.parent.res.note || "") + (parent.parent.res.beforeMb ? "  (" + parent.parent.res.beforeMb + " → " + (parent.parent.res.processMb || 0) + " MB)" : "") } } }
             Rectangle { Layout.fillWidth: true; Layout.columnSpan: 2; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: dgCol.implicitHeight + 24
                 ColumnLayout { id: dgCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
                     RowLayout { Head { text: i18n.t("SYSTEM DIAGNOSTIC", i18n.lang) } Item { Layout.fillWidth: true } Btn { label: i18n.t("RUN FULL SCAN", i18n.lang); on: true; onColor: Theme.cyan; onClicked: page.scan() } Btn { label: i18n.t("CLEAR CLIPS", i18n.lang); onClicked: engine.clearClips() } }

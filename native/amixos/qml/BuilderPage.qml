@@ -9,7 +9,7 @@ Item {
     id: page
     objectName: "builderPage"
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked()
-        implicitWidth: Math.max(48, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
+        implicitWidth: Math.max(48, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: on ? onColor : Theme.line
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.28 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() } }
@@ -97,7 +97,7 @@ Item {
                         Text { text: i18n.t("or drop a file on the window", i18n.lang); color: Theme.dim; font.pixelSize: 8 } }
                     RowLayout { spacing: 8
                         Text { text: i18n.t("LEVEL", i18n.lang); color: Theme.muted; font.pixelSize: 9; font.family: Theme.mono }
-                        Slider { Layout.fillWidth: true; from: -30; to: 6; value: builder.previewGainDb; onMoved: builder.setPreviewGainDb(value) }
+                        MSlider { Layout.fillWidth: true; from: -30; to: 6; value: builder.previewGainDb; onMoved: builder.setPreviewGainDb(value) }
                         Text { text: (builder.previewGainDb > 0 ? "+" : "") + builder.previewGainDb.toFixed(1) + " dB"; color: Theme.ink; font.pixelSize: 9; font.family: Theme.mono } }
                     Text { visible: builder.previewNote !== ""; text: builder.previewNote; color: builder.previewOn ? Theme.emerald : Theme.amber; font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true } } }
             GridLayout { columns: 2; columnSpacing: 8; rowSpacing: 6; Layout.fillWidth: true

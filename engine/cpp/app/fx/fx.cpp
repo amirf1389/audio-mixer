@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "aec") return std::make_unique<EchoCanceller>(fs);
   if (k == "hybrid") return std::make_unique<PhoneHybrid>(fs);
@@ -39,6 +39,10 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "tubeamp") return std::make_unique<TubeAmp>(fs);
   if (k == "preamp") return std::make_unique<PreAmp>(fs);
   if (k == "postamp") return std::make_unique<PostAmp>(fs);
+  if (k == "regulator") return std::make_unique<PowerRegulator>(fs);
+  if (k == "protect") return std::make_unique<ShortProtect>(fs);
+  if (k == "rider") return std::make_unique<VoiceRider>(fs);
+  if (k == "clean") return std::make_unique<VoiceClean>(fs);
   if (k == "hall") return std::make_unique<Hall>(fs);
   if (k == "room") return std::make_unique<Room>(fs);
   if (k == "drive") return std::make_unique<Drive>(fs);
@@ -491,6 +495,85 @@ void PostAmp::process(float* L, float* R, std::size_t n) {
   const float g = static_cast<float>(std::pow(10.0, (-24 + k_[0].load() * 36) / 20)), tilt = static_cast<float>((k_[1].load() - 0.5) * 12), gLo = static_cast<float>(std::pow(10.0, -tilt / 40)), gHi = static_cast<float>(std::pow(10.0, tilt / 40)), a = static_cast<float>(1 - std::exp(-2 * kPi * 1000 / fs_));
   const double c = k_[2].load(); const float ceil = static_cast<float>(std::pow(10.0, -c * 12 / 20)); float* ch[2] = {L, R};
   for (std::size_t i = 0; i < n; ++i) for (int s = 0; s < 2; ++s) { float v = ch[s][i]; lp_[s] += (v - lp_[s]) * a; v = (lp_[s] * gLo + (v - lp_[s]) * gHi) * g; if (c >= 0.01) v = ceil * std::tanh(v / ceil); ch[s][i] = v; }
+}
+
+PowerRegulator::PowerRegulator(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); }
+void PowerRegulator::reset() { ms_ = 0; g_ = 1; gainDb_ = 0; }
+std::string PowerRegulator::text(const std::string& id, double v) const { v = clamp01(v); if (id == "target") return fmt("%.1f dBFS", -30 + v * 24); if (id == "range") return fmt("%.1f dB", v * 12); if (id == "speed") return fmt("%.1f s", 0.2 + v * 4.8); return fmt("%.1f dBFS", -12 + v * 12); }
+void PowerRegulator::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double target = -30 + k_[0].load() * 24, range = k_[1].load() * 12, secs = 0.2 + k_[2].load() * 4.8; const float ceil = static_cast<float>(std::pow(10.0, (-12 + k_[3].load() * 12) / 20));
+  const double aMs = 1 - std::exp(-1.0 / (0.3 * fs_)), aG = 1 - std::exp(-1.0 / (secs * fs_));   // the level over 300 ms; the gain moves at SPEED
+  for (std::size_t i = 0; i < n; ++i) {
+    const double p = 0.5 * (static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i]); ms_ += (p - ms_) * aMs;
+    const double lvl = 10 * std::log10(ms_ + 1e-12);
+    if (lvl > -60) { const double want = std::pow(10.0, std::clamp(target - lvl, -range, range) / 20); g_ += (want - g_) * aG; }   // silence: hold the gain, do not turn the noise up
+    float l = static_cast<float>(L[i] * g_), r = static_cast<float>(R[i] * g_);
+    L[i] = l > ceil ? ceil : l < -ceil ? -ceil : l; R[i] = r > ceil ? ceil : r < -ceil ? -ceil : r; }
+  gainDb_ = 20 * std::log10(g_ + 1e-12);
+}
+ShortProtect::ShortProtect(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); }
+void ShortProtect::reset() { over_ = safe_ = 0; dc_[0] = dc_[1] = 0; g_ = 1; cut_ = false; tripped_ = false; }
+std::string ShortProtect::text(const std::string& id, double v) const { v = clamp01(v); if (id == "threshold") return fmt("%.1f dBFS", -12 + v * 12); if (id == "time") return fmt("%.0f ms", 5 + v * 495); return fmt("%.1f s", 0.5 + v * 9.5); }
+void ShortProtect::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double thr = std::pow(10.0, (-12 + k_[0].load() * 12) / 20), tripAfter = (5 + k_[1].load() * 495) * 1e-3 * fs_, holdFor = (0.5 + k_[2].load() * 9.5) * fs_;
+  const double aDc = 1 - std::exp(-1.0 / (0.5 * fs_)), aCut = 1 - std::exp(-1.0 / (0.003 * fs_)), aBack = 1 - std::exp(-1.0 / (0.25 * fs_));   // DC over half a second; cut in 3 ms, back in 250 ms
+  for (std::size_t i = 0; i < n; ++i) {
+    const double l = L[i], r = R[i]; dc_[0] += (l - dc_[0]) * aDc; dc_[1] += (r - dc_[1]) * aDc;
+    const bool fault = std::fabs(l) >= thr || std::fabs(r) >= thr || std::fabs(dc_[0]) > 0.25 || std::fabs(dc_[1]) > 0.25;   // at or over the threshold, or a quarter of full scale of DC
+    if (fault) { over_ += 1; safe_ = 0; } else { over_ = std::max(0.0, over_ - 0.25); safe_ += 1; }   // a short gap inside a fault does not clear it at once
+    if (!cut_ && over_ >= tripAfter) { cut_ = true; trips_.fetch_add(1); }
+    if (cut_ && safe_ >= holdFor) { cut_ = false; over_ = 0; }
+    g_ += ((cut_ ? 0.0 : 1.0) - g_) * (cut_ ? aCut : aBack);
+    if (!cut_ && g_ > 0.999) g_ = 1;   // back: exactly unity again, so the sound is untouched bit for bit
+    if (g_ < 0.9999) { L[i] = static_cast<float>(l * g_); R[i] = static_cast<float>(r * g_); } }
+  tripped_ = cut_;
+}
+
+VoiceRider::VoiceRider(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); }
+void VoiceRider::reset() { hp_ = lp_ = ms_ = 0; g_ = 1; gainDb_ = 0; speaking_ = false; }
+std::string VoiceRider::text(const std::string& id, double v) const { v = clamp01(v); if (id == "target") return fmt("%.1f dBFS", -30 + v * 20); if (id == "range") return fmt("%.1f dB", v * 12); if (id == "speed") return fmt("%.0f ms", 50 + v * 950); return fmt("%.0f dBFS", -70 + v * 40); }
+void VoiceRider::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double target = -30 + k_[0].load() * 20, range = k_[1].load() * 12, secs = (50 + k_[2].load() * 950) * 1e-3, sense = -70 + k_[3].load() * 40;
+  const double aHp = 1 - std::exp(-2 * 3.14159265358979 * 150 / fs_), aLp = 1 - std::exp(-2 * 3.14159265358979 * 4000 / fs_), aMs = 1 - std::exp(-1.0 / (0.05 * fs_)), aG = 1 - std::exp(-1.0 / (secs * fs_));
+  bool spoke = false;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double m = 0.5 * (static_cast<double>(L[i]) + R[i]); hp_ += (m - hp_) * aHp; lp_ += ((m - hp_) - lp_) * aLp;   // the voice band: above 150 Hz, below 4 kHz
+    ms_ += (lp_ * lp_ - ms_) * aMs; const double lvl = 10 * std::log10(ms_ + 1e-12);
+    if (lvl > sense) { spoke = true; const double want = std::pow(10.0, std::clamp(target - lvl, -range, range) / 20); g_ += (want - g_) * aG; }   // speaking: ride; silent: hold
+    L[i] = static_cast<float>(L[i] * g_); R[i] = static_cast<float>(R[i] * g_); }
+  gainDb_ = 20 * std::log10(g_ + 1e-12); speaking_ = spoke;
+}
+VoiceClean::VoiceClean(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); reset(); }
+void VoiceClean::reset() { for (auto& c : lp_) for (double& v : c) v = 0; for (int b = 0; b < kBands; ++b) { env_[b] = fast_[b] = slow_[b] = 0; nf_[b] = 1e-5; g_[b] = 1; } redDb_ = 0; }
+std::string VoiceClean::text(const std::string& id, double v) const { v = clamp01(v); if (id == "denoise") return v < 0.01 ? std::string("off") : fmt("-%.0f dB", v * 24); if (id == "dereverb") return v < 0.01 ? std::string("off") : fmt("-%.0f dB", v * 12); return fmt("%+.1f dB", (v - 0.5) * 24); }
+void VoiceClean::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const double dn = k_[0].load(), dr = k_[1].load(), out = std::pow(10.0, (k_[2].load() - 0.5) * 24 / 20);
+  const double floorDn = std::pow(10.0, -dn * 24 / 20), floorDr = std::pow(10.0, -dr * 12 / 20);
+  static const double kXover[3] = {250, 1500, 5000}; double a[3]; for (int k = 0; k < 3; ++k) a[k] = 1 - std::exp(-2 * 3.14159265358979 * kXover[k] / fs_);
+  const double aAtt = 1 - std::exp(-1.0 / (0.005 * fs_)), aRel = 1 - std::exp(-1.0 / (0.08 * fs_)), nfUp = std::pow(10.0, 6.0 / 20 / fs_);   // the floor creeps up 6 dB a second and drops at once
+  const double aFastA = 1 - std::exp(-1.0 / (0.001 * fs_)), aFastR = 1 - std::exp(-1.0 / (0.03 * fs_)), aSlowA = 1 - std::exp(-1.0 / (0.08 * fs_)), aSlowR = 1 - std::exp(-1.0 / (0.4 * fs_)), aG = 1 - std::exp(-1.0 / (0.004 * fs_));
+  double worst = 1; float* ch[2] = {L, R};
+  for (std::size_t i = 0; i < n; ++i) {
+    double band[2][kBands];
+    for (int c = 0; c < 2; ++c) { const double x = ch[c][i]; for (int k = 0; k < 3; ++k) lp_[c][k] += (x - lp_[c][k]) * a[k];
+      band[c][0] = lp_[c][0]; band[c][1] = lp_[c][1] - lp_[c][0]; band[c][2] = lp_[c][2] - lp_[c][1]; band[c][3] = x - lp_[c][2]; }   // the four add back to x exactly
+    double y[2] = {0, 0};
+    for (int b = 0; b < kBands; ++b) {
+      const double mag = std::max(std::fabs(band[0][b]), std::fabs(band[1][b]));
+      env_[b] += (mag - env_[b]) * (mag > env_[b] ? aAtt : aRel);
+      nf_[b] = std::min(std::min(nf_[b] * nfUp, 0.03), std::max(env_[b], 1e-7));   // the level the band falls back to; never above -30 dBFS (that is no longer noise)
+      double g = 1;
+      if (dn >= 0.01) { const double over = env_[b] / (nf_[b] * 2.5); if (over < 1) g = std::max(floorDn, over * over); }   // at the floor: down; 8 dB above it: untouched
+      fast_[b] += (mag - fast_[b]) * (mag > fast_[b] ? aFastA : aFastR); slow_[b] += (mag - slow_[b]) * (mag > slow_[b] ? aSlowA : aSlowR);
+      if (dr >= 0.01 && slow_[b] > 1e-7 && fast_[b] < slow_[b]) g *= std::max(floorDr, std::pow(fast_[b] / slow_[b], dr));   // only dying away: the room's tail
+      g_[b] += (g - g_[b]) * aG; worst = std::min(worst, g_[b]);
+      y[0] += band[0][b] * g_[b]; y[1] += band[1][b] * g_[b]; }
+    L[i] = static_cast<float>(y[0] * out); R[i] = static_cast<float>(y[1] * out); }
+  redDb_ = 20 * std::log10(worst + 1e-12);
 }
 Fdn::Fdn(double fs, int lines, bool hall) : Simple(fs), lines_(lines), hall_(hall) { reset(); }
 void Fdn::reset() {

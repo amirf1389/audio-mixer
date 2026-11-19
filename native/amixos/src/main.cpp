@@ -53,6 +53,8 @@
 #include "Samples.h"
 #include "paths/paths.hpp"
 #include "samples/samples.hpp"
+#include "Links.h"
+#include "zip/zipstore.hpp"
 #include <QHostAddress>
 #include <QSettings>
 #include <QIcon>
@@ -179,7 +181,11 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("access", &access);
   qml.rootContext()->setContextProperty("osc", &osc);
   qml.rootContext()->setContextProperty("media", &media);
+  const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) engine.setWatchdog(false);   // test runs: no automatic restarts under the other checks
+  if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
+  Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("samples", &samples);
+  update.pluginDir = settings.vstUserFolder(); QObject::connect(&update, &Update::pluginInstalled, &settings, [&] { settings.rescanVst(); });   // PLUG-IN DOWNLOADS land in the console's own plug-in folder
   qml.rootContext()->setContextProperty("updater", &update);
   QObject::connect(&update, &Update::revocations, &engine, [&](const QString& l) { engine.storeRevocations(l); });   // the newest revocation list the licence server signs
   QTimer::singleShot(4000, &update, [&] { update.fetchRevocations(); });   // once a start, quietly (nothing when no licence server is set)
@@ -610,7 +616,7 @@ int main(int argc, char* argv[]) {
         const QVariantList sp = engine.pluginParams(20, a); const bool txt = sp.size() >= 4 && sp[0].toMap()["text"].toString().startsWith("1 ");
         if (a < 0 || a != b || n != 1 || d < 0 || dual != d || !txt) { std::fprintf(stderr, "amixos --smoke: rack helpers (sampler %d/%d x%d, dual %d/%d, text %d: %d params, first \"%s\")\n", a, b, n, d, dual, txt, static_cast<int>(sp.size()), sp.isEmpty() ? "" : qPrintable(sp[0].toMap()["text"].toString())); return 154; }
         engine.setPlugin(20, a, ""); engine.setPlugin(20, d, ""); }
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 44) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 44: 41 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 48) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 48: 45 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -1243,6 +1249,19 @@ int main(int argc, char* argv[]) {
           measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+          win->setProperty("current", "update"); settle(900); win->grabWindow().save(shots + "/software-update.png");
+          { // STORE > DOWNLOADS with two example entries (one already there)
+            const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* name, const char* ver, const char* note, const char* file, double size) { QJsonObject f; f["name"] = file; f["url"] = QStringLiteral("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/") + file; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "linux-deb", "linux-tar", "macos-dmg", "macos"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = name; o["version"] = ver; o["note"] = note; o["files"] = files; return o; };
+            QJsonArray list; list << entry("amfb-warm", "AMFB Warm Channel", "1.0", "tube warmth and a soft ceiling for a voice", "AMFB Warm Channel.vst3", 4.2e6) << entry("amfb-air", "AMFB Air Shelf", "1.1", "a bright, open top end", "AMFB Air Shelf.vst3", 3.1e6);
+            update.setPluginList(list); { QDir().mkpath(update.pluginDir); QFile f(update.pluginDir + "/AMFB Air Shelf.vst3"); if (f.open(QIODevice::WriteOnly)) f.write("x"); }
+            win->setProperty("current", "store"); settle(700); if (QObject* dp = win->findChild<QObject*>("storeDownloadPanel")) dp->setProperty("visible", true); settle(500); win->grabWindow().save(shots + "/store-downloads.png");
+            if (QObject* dp = win->findChild<QObject*>("storeDownloadPanel")) dp->setProperty("visible", false); QFile::remove(update.pluginDir + "/AMFB Air Shelf.vst3"); update.setPluginList(QJsonArray()); }
+          for (const char* u : {"https://www.tiktok.com/@amfb.audio/live", "https://www.deezer.com/en/album/302127", "https://tidal.com/browse/track/12345678", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "https://youtu.be/dQw4w9WgXcQ"}) links.add(QString::fromLatin1(u), QString());
+          win->setProperty("current", "streaming"); settle(800); win->grabWindow().save(shots + "/streaming.png");
+          { win->setProperty("current", "mixer"); settle(500); QObject* mp = nullptr; for (QObject* o : win->findChildren<QObject*>("mixerPage")) if (o->property("visible").toBool()) mp = o;
+            if (mp) { mp->setProperty("editing", true); settle(700); win->grabWindow().save(shots + "/mixer-edit-layout.png"); mp->setProperty("editing", false); settle(200); } }
+          engine.setPlugin(0, 0, "fx:preamp"); engine.setPlugin(0, 1, "fx:regulator"); engine.setPlugin(0, 2, "fx:reverb"); engine.setPlugin(0, 3, "fx:protect"); engine.setPluginBypass(0, 2, true);   // THE RACK with effects in
+          settle(900); win->grabWindow().save(shots + "/mixer-rack.png"); for (int sl = 0; sl < 4; ++sl) engine.setPlugin(0, sl, "");
           std::printf("amixos --shots: samples-pads, samples-effects, settings-processor, acoustics-room-correction, mixer-automix, mixer-daw\n"); }
         if (QObject* wiz = win->findChild<QObject*>("setupPage")) {   // the factory setup, every step
           win->setProperty("forceSetup", true);
@@ -1507,6 +1526,48 @@ int main(int argc, char* argv[]) {
         if (!shown || !hidden) { std::fprintf(stderr, "amixos --smoke: the MASTER -inf banner is wrong (shown %d, hidden after %d)\n", shown, hidden); std::exit(85); }
         if (!raised) { std::fprintf(stderr, "amixos --smoke: RAISE TO 0 dB did not raise the master\n"); std::exit(86); }
         std::printf("amixos --smoke: MASTER -inf banner shown, RAISE TO 0 dB works, cleared after\n"); }
+      { // SYSTEM INFORMATION: read only, every field safe to show, never an empty map
+        const QVariantMap fw = engine.firmwareInfo(); const QVariantList dr = engine.soundDrivers(); bool ok = fw.contains("biosVersion") && fw.contains("os") && fw.contains("maker");
+        for (const QString& k : fw.keys()) ok = ok && fw[k].toString().size() <= 96; for (const QVariant& v : dr) ok = ok && !v.toMap()["name"].toString().isEmpty();
+        std::printf("amixos --smoke: SYSTEM INFORMATION computer \"%s %s\", firmware \"%s\" \"%s\", OS \"%s\", %d sound driver(s): %s\n", qPrintable(fw["maker"].toString()), qPrintable(fw["model"].toString()), qPrintable(fw["biosVendor"].toString()), qPrintable(fw["biosVersion"].toString()), qPrintable(fw["os"].toString()), int(dr.size()), ok ? "ok" : "FAILED");
+        if (!ok) std::exit(96); }
+      { // EXPORT: a .zip with only the console's own files, in the folder asked for, never over an earlier one
+        const QString dir = QDir::tempPath() + "/amixos-smoke-export"; QDir(dir).removeRecursively(); engine.saveNow();
+        { QFile f(settings.dataFolder() + "/daemon.tokens.json"); const bool had = f.exists(); if (!had && f.open(QIODevice::WriteOnly)) { f.write("{\"secret\":1}"); f.close(); }
+          const QVariantMap a1 = settings.exportZip(dir), a2 = settings.exportZip(dir); std::vector<am::zip::Listed> got; std::string err; const bool read = am::zip::listZip(a1["path"].toString().toStdString(), got, err);
+          bool crc = !got.empty(), leak = false, state = false; for (const auto& g : got) { crc = crc && g.crcOk; if (g.name.find("token") != std::string::npos || g.name.find("clock") != std::string::npos || g.name.find("audit") != std::string::npos) leak = true; if (g.name == "console/autosave.json") state = true; }
+          if (!had) QFile::remove(settings.dataFolder() + "/daemon.tokens.json");
+          std::printf("amixos --smoke: EXPORT %d files in a .zip that reads back %d with the saved state %d, nothing secret in it %d, a second export beside the first %d, user \"%s\"\n", int(got.size()), read && crc, state, !leak, a2["ok"].toBool() && a2["path"] != a1["path"], qPrintable(settings.systemUser()));
+          if (!a1["ok"].toBool() || !read || !crc || !state || leak || !a2["ok"].toBool() || a2["path"] == a1["path"] || settings.systemUser().isEmpty()) std::exit(94); }
+        QDir(dir).removeRecursively(); }
+      { // PLUG-IN DOWNLOADS: only well-formed entries of the list are offered; a file there counts as installed and REMOVE deletes only that file
+        const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* file, const char* url, double size) { QJsonObject f; f["name"] = file; f["url"] = url; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "win-x64-native", "linux-deb", "linux-tar", "macos", "android-apk", "win-x86-native"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = "Test plug-in"; o["version"] = "1.0"; o["files"] = files; return o; };
+        const char* good = "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/Test.vst3";
+        QJsonArray list; list << entry("warm", "AMFB Warm.vst3", good, 1000) << entry("evil-host", "A.vst3", "https://evil.example/A.vst3", 1000) << entry("http", "B.vst3", "http://raw.githubusercontent.com/x/B.vst3", 1000)
+             << entry("path", "../../C.vst3", good, 1000) << entry("exe", "D.exe", good, 1000) << entry("huge", "E.vst3", good, 3e9) << entry("Bad Id", "F.vst3", good, 1000) << entry("warm", "G.vst3", good, 1000);
+        const int kept = update.setPluginList(list); const QString dir = update.pluginDir, path = dir + "/AMFB Warm.vst3";
+        const bool notYet = !update.plugins()[0].toMap()["installed"].toBool(); { QDir().mkpath(dir); QFile f(path); if (f.open(QIODevice::WriteOnly)) f.write("x"); }
+        const bool there = update.plugins()[0].toMap()["installed"].toBool(), noUrl = !update.plugins()[0].toMap().contains("url"), removed = update.removePlugin("warm") && !QFile::exists(path), unknown = !update.removePlugin("nope");
+        update.setPluginList(QJsonArray());
+        std::printf("amixos --smoke: PLUG-IN DOWNLOADS %d of 8 entries offered (other hosts, http, paths, .exe, over 200 MB, odd ids and repeats left out), installed seen %d, REMOVE %d\n", kept, there && notYet, removed && unknown);
+        if (kept != 1 || !notYet || !there || !noUrl || !removed || !unknown) std::exit(93); }
+      { // WATCHDOG FAILOVER: on by default; a restart by hand brings the same device back and says so
+        const bool wasRunning = engine.running(); const QString dev = engine.backend(); const bool ok = engine.failover("the self-test asked for it");
+        const bool same = engine.running() && engine.backend() == dev, said = engine.watchdogNote().contains("started again") && engine.failovers() >= 1;
+        std::printf("amixos --smoke: WATCHDOG on by default %d, FAILOVER restarted %d on the same device %d and said so %d\n", watchdogWas, ok, same, said);
+        if (!watchdogWas || !wasRunning || !ok || !same || !said) std::exit(92); }
+      { // STREAMING LINKS: a pasted link is recognised, kept once, opened by its app address or its https address; anything else is refused; 360 AUDIO is off by default
+        while (!links.list().isEmpty()) links.remove(0);
+        const bool added = links.add(" https://open.spotify.com/intl-de/track/4uLU6hMCjMI75M1A2tKUQC?si=x ", "Opener"), twice = links.add("spotify:track:4uLU6hMCjMI75M1A2tKUQC", "");
+        const bool bad = links.add("https://open.spotify.com.evil.example/track/4uLU6hMCjMI75M1A2tKUQC", "") || links.add("javascript:alert(1)", "") || links.add("http://youtu.be/dQw4w9WgXcQ", "");
+        const bool tik = links.add("https://www.tiktok.com/@amfb.audio/live", "");
+        const bool inApp = links.open(1, true) && links.lastOpened() == "spotify:track:4uLU6hMCjMI75M1A2tKUQC", inWeb = links.open(0, true) && links.lastOpened() == "https://www.tiktok.com/@amfb.audio/live";   // TikTok has no app address: https
+        const int n = static_cast<int>(links.list().size()); while (!links.list().isEmpty()) links.remove(0);
+        const bool off360 = !QSettings().contains("spatial/enabled") ? !settings.spatialEnabled() : true;
+        std::printf("amixos --smoke: STREAMING LINKS added %d, the same link twice refused %d, look-alike / script / http refused %d, TikTok %d, opens the app address %d, https where there is none %d (%d kept); 360 AUDIO off by default %d\n", added, !twice, !bad, tik, inApp, inWeb, n, off360);
+        if (!added || twice || bad || !tik || !inApp || !inWeb || n != 2 || !off360) std::exit(90);
+        const bool preset = engine.masteringPresets().contains("SHORT VIDEO / LIVE"); engine.applyMasteringPreset("SHORT VIDEO / LIVE"); const bool applied = engine.mastering().value("preset").toString() == "SHORT VIDEO / LIVE"; engine.applyMasteringPreset("TRANSPARENT");
+        if (!preset || !applied) { std::fprintf(stderr, "amixos --smoke: the SHORT VIDEO / LIVE mastering preset (%d, %d)\n", preset, applied); std::exit(91); } }
       if (auto* dw = qobject_cast<QQuickWindow*>(qml.rootObjects().first())) {   // THE MIXER STRIPS: the easy keys beside every fader; ten plug-ins per channel at most
         dw->setProperty("current", "mixer"); { QElapsedTimer t; t.start(); while (t.elapsed() < 800) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); }
         // the strips are made by a Repeater: they are children in the item tree (not QObject children of the window), so the tree is searched
@@ -1523,6 +1584,14 @@ int main(int argc, char* argv[]) {
         const bool easy = std::fabs(g1 - (g0 + 1)) < 0.01 && std::fabs(g2 - g0) < 0.01 && find(root, "easy_quieter0") && find(root, "easy_zero0");
         std::printf("amixos --smoke: EASY KEYS louder %.1f -> %.1f dB, BACK -> %.1f dB: %s\n", g0, g1, g2, easy ? "ok" : "FAILED"); if (!easy) std::exit(88);
         const bool keys = find(root, "stripFader") && find(root, "stripMute0") && find(root, "stripSolo0");
+        // EDIT LAYOUT: hide REC and the easy keys and widen the strips; a damaged setting falls back to the shipped layout; RESET brings it back
+        auto vis = [&](const char* n) { QQuickItem* it = find(root, QString::fromLatin1(n)); return it && it->isVisible(); }; auto pump = [&] { QElapsedTimer t; t.start(); while (t.elapsed() < 350) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+        const bool before = vis("side_rec0") && vis("easy_louder0"); const double w0 = find(root, "stripFader") ? find(root, "stripFader")->parentItem()->parentItem()->parentItem()->width() : 0;
+        settings.setMixerLayout("{\"rec\":false,\"easy\":false,\"stripW\":160}"); pump(); const bool hidden = !vis("side_rec0") && !vis("easy_louder0") && vis("side_fx0") && vis("stripMute0");
+        settings.setMixerLayout("{\"stripW\":99999,\"rec\":\"no\",\"fx\":[1]} trailing junk"); pump(); const bool safe = vis("side_rec0") && vis("side_fx0") && vis("easy_louder0") && vis("stripMute0");
+        settings.setMixerLayout(""); pump(); const bool back = vis("side_rec0") && vis("easy_louder0");
+        std::printf("amixos --smoke: EDIT LAYOUT hides REC and the easy keys %d (shown before %d), a damaged setting keeps the shipped layout %d, RESET brings them back %d (strip %.0f px)\n", hidden, before, safe, back, w0);
+        if (!before || !hidden || !safe || !back) std::exit(95);
         engine.setPlugin(0, 9, "fx:reverb"); const bool tenth = engine.plugins(0)[9].toMap().value("kind").toString() == "fx:reverb";
         engine.setPlugin(0, 10, "fx:delay"); const bool eleventhRefused = engine.plugins(0).size() <= 10 || engine.plugins(0)[10].toMap().value("kind").toString().isEmpty();
         engine.setPlugin(0, 9, "");

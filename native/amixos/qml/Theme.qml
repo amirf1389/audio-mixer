@@ -6,26 +6,31 @@ import QtQuick
 
 QtObject {
     property bool dark: true
-    readonly property color obsidian: dark ? "#040507" : "#f3f5f9"      // the window
-    readonly property color deep: dark ? "#05070a" : "#e6eaf1"          // meters, canvases, fader tracks, text fields
+    readonly property color obsidian: dark ? "#0d0f12" : "#e8ebf0"      // the window
+    readonly property color deep: dark ? "#0a0b0d" : "#dfe3ea"          // meters, canvases, fader tracks, text fields
     // GLASS: the header, the rail and the panels let the AURORA colour behind them through; cardSolid is for menus and popups over a page
-    property bool glass: true
+    property bool glass: false   // FLAT: every page is flat graphite tiles on a flat desk (true brings the translucent panels over the aurora back)
     property color accent: orange                                       // the colour of the section open now (Main.qml sets it)
-    readonly property color chrome: glass ? (dark ? Qt.rgba(0.027, 0.039, 0.063, 0.62) : Qt.rgba(1, 1, 1, 0.70)) : (dark ? "#070a10" : "#ffffff")        // the header bar
-    readonly property color card: glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : (dark ? "#0f141c" : "#ffffff")
-    readonly property color cardSolid: dark ? "#0f141c" : "#ffffff"
-    readonly property color cardRaised: dark ? "#141b26" : "#eef1f6"
+    readonly property color chrome: glass ? (dark ? Qt.rgba(0.027, 0.039, 0.063, 0.62) : Qt.rgba(1, 1, 1, 0.70)) : (dark ? "#121418" : "#ffffff")        // the header bar
+    readonly property color card: glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : (dark ? "#16181c" : "#f4f6f9")
+    readonly property color cardSolid: dark ? "#16181c" : "#ffffff"
+    readonly property color cardRaised: dark ? "#1d2026" : "#eef1f6"
+    readonly property color head: dark ? "#262a31" : "#d5dae2"            // the header bar of a section
     readonly property color line: dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.14)
     readonly property color lineSoft: dark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.07)
     readonly property color ink: dark ? "#f1f5f9" : "#0f172a"
     readonly property color muted: dark ? "#94a3b8" : "#475569"
     readonly property color dim: dark ? "#64748b" : "#64748b"
-    readonly property color orange: "#ea580c"
-    readonly property color orangeGlow: Qt.rgba(1, 0.416, 0, 0.45)
+    // MALAYSIA: the colours of songket cloth and the hibiscus (bunga raya). Gold is the console's own colour; red warns.
+    readonly property color songket: dark ? "#e8b84a" : "#b8860b"        // the woven gold thread
+    readonly property color bunga: dark ? "#f0304f" : "#d11a3c"          // hibiscus red
+    readonly property color nila: dark ? "#3b5bdb" : "#1e3a8a"           // indigo, the ground of the cloth
+    readonly property color orange: dark ? "#e8a93a" : "#b8860b"          // the console's accent: songket gold
+    readonly property color orangeGlow: Qt.rgba(0.91, 0.72, 0.29, 0.45)
     readonly property color amber: dark ? "#fbbf24" : "#d97706"
     readonly property color cyan: dark ? "#3cc8db" : "#0e7490"   // calmer than pure neon: the most used accent
     readonly property color emerald: dark ? "#10b981" : "#047857"
-    readonly property color danger: dark ? "#ef4466" : "#dc2626"
+    readonly property color danger: dark ? "#f0304f" : "#d11a3c"
     readonly property color violet: dark ? "#8b5cf6" : "#6d28d9"
     readonly property color pink: dark ? "#f472b6" : "#db2777"
     readonly property string product: "AmF X1"
@@ -39,8 +44,8 @@ QtObject {
     // (no neon next to pastel) and the gradient only shifts gently. Glass (translucent) colours stay glass.
     function harm(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return c; const h = c.hslHue < 0 ? 0 : c.hslHue, sat = c.hslHue < 0 ? 0 : Math.min(c.hslSaturation, dark ? 0.58 : 0.55);
         return Qt.hsla(h, sat, Math.max(dark ? 0.46 : 0.40, Math.min(dark ? 0.58 : 0.52, c.hslLightness)), c.a) }
-    function btnTop(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.35)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.66, h.hslLightness + 0.05), h.a) }
-    function btnBottom(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.55); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.06), h.a) }
+    function btnTop(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.1)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.64, h.hslLightness + 0.02), h.a) }
+    function btnBottom(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.9); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.02), h.a) }
     function ov(a) { return dark ? Qt.rgba(1, 1, 1, a) : Qt.rgba(0, 0, 0, a); }
     function groupColor(g) {
         switch (g) {

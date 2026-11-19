@@ -91,4 +91,14 @@ bool setThreadEco(bool eco);
 /** give memory back: the heap's free blocks, and the working set too when `workingSet`; returns the MB this program has in RAM afterwards */
 std::uint64_t trimMemory(bool workingSet);
 
+/** SYSTEM INFORMATION: read only. What the computer says about itself: its maker and model, the firmware (BIOS / UEFI) with its version
+ *  and date, the operating system, and the sound drivers installed with their provider, version and date. Nothing here changes a
+ *  driver or the firmware, and nothing is sent anywhere. A field the computer does not expose stays empty. */
+struct Firmware { std::string biosVendor, biosVersion, biosDate, maker, model, board, os; };
+Firmware firmware();
+struct DriverInfo { std::string name, provider, version, date; };
+std::vector<DriverInfo> audioDrivers();
+/** a field as read from the system, made safe to show: printable characters only, spaces trimmed, at most 96 characters */
+std::string cleanField(const std::string& raw);
+
 }  // namespace am::sysopt

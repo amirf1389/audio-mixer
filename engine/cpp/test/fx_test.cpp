@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 44 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 48 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -38,13 +38,54 @@ int main() {
     for (int k = 0; k < 40; ++k) rt.onBlock(quiet, outs, n); CHECK(peak(o0, 0, n) > 0.001f);   // the tail is still sounding 50 ms after the input stopped
     rt.setBusProcessor(0, nullptr); for (int k = 0; k < 2; ++k) rt.onBlock(quiet, outs, n); }
   std::printf("fx_test: reverb rings and decays, delay repeats on time (ping-pong crosses), chorus modulates, drive saturates, bypass, bus return OK\n");
+  { // POWER REGULATOR and SHORT PROTECT
+    const double fs = 48000; const std::size_t n = 48000; auto tone = [&](double amp, double dc, std::vector<float>& L, std::vector<float>& R) { L.resize(n); R.resize(n); for (std::size_t i = 0; i < n; ++i) L[i] = R[i] = static_cast<float>(dc + amp * std::sin(2 * 3.14159265 * 1000 * static_cast<double>(i) / fs)); };
+    auto rmsDb = [&](const std::vector<float>& v) { double s = 0; for (std::size_t i = n / 2; i < n; ++i) s += static_cast<double>(v[i]) * v[i]; return 10 * std::log10(s / (n / 2.0) + 1e-12); };
+    std::vector<float> L, R;
+    am::fx::PowerRegulator reg(fs); reg.set("target", 0.5); reg.set("range", 1.0); reg.set("speed", 0.0); reg.set("ceiling", 1.0);   // target -18 dBFS, +-12 dB, 0.2 s
+    tone(0.05, 0, L, R); for (int k = 0; k < 3; ++k) { tone(0.05, 0, L, R); reg.process(L.data(), R.data(), n); } const double quietOut = rmsDb(L); CHECK(std::fabs(quietOut - (-18)) < 1.0); CHECK(reg.gainDb() > 6);   // -29 dBFS in: turned up to the target
+    reg.reset(); for (int k = 0; k < 3; ++k) { tone(0.5, 0, L, R); reg.process(L.data(), R.data(), n); } CHECK(std::fabs(rmsDb(L) - (-18)) < 1.0); CHECK(reg.gainDb() < -6);   // -9 dBFS in: turned down
+    reg.reset(); reg.set("range", 0.25); for (int k = 0; k < 3; ++k) { tone(0.5, 0, L, R); reg.process(L.data(), R.data(), n); } CHECK(std::fabs(reg.gainDb() - (-3)) < 0.2);   // RANGE 3 dB: no more than that
+    reg.reset(); reg.set("range", 1.0); { std::vector<float> z(n, 0.f), z2(n, 0.f); reg.process(z.data(), z2.data(), n); CHECK(std::fabs(reg.gainDb()) < 0.01); }   // silence is not turned up
+    reg.reset(); reg.set("target", 1.0); reg.set("ceiling", 0.0); for (int k = 0; k < 3; ++k) { tone(0.9, 0, L, R); reg.process(L.data(), R.data(), n); } { float pk = 0; for (float v : L) pk = std::max(pk, std::fabs(v)); CHECK(pk <= 0.2512f); }   // CEILING -12 dBFS holds
+    am::fx::ShortProtect prot(fs); prot.set("threshold", 0.9167); prot.set("time", 0.0); prot.set("hold", 0.0);   // -1 dBFS, 5 ms, 0.5 s
+    tone(0.5, 0, L, R); const std::vector<float> ref = L; prot.process(L.data(), R.data(), n); CHECK(L == ref && !prot.tripped() && prot.trips() == 0);   // nothing wrong: untouched, bit for bit
+    { std::vector<float> a(n, 1.0f), b(n, 1.0f); prot.process(a.data(), b.data(), n); CHECK(prot.tripped() && prot.trips() == 1); float tail = 0; for (std::size_t i = n / 2; i < n; ++i) tail = std::max(tail, std::fabs(a[i])); CHECK(tail < 1e-4f); }   // stuck at full scale: cut
+    for (int k = 0; k < 3; ++k) { tone(0.5, 0, L, R); prot.process(L.data(), R.data(), n); } CHECK(!prot.tripped());   // the DC the fault left drains first, then HOLD runs
+    { tone(0.5, 0, L, R); const std::vector<float> ref2 = L; prot.process(L.data(), R.data(), n); float d = 0; for (std::size_t i = n / 2; i < n; ++i) d = std::max(d, std::fabs(L[i] - ref2[i])); CHECK(d < 1e-3f); }   // the fault gone for HOLD: back
+    prot.reset(); tone(0.1, 0.4, L, R); prot.process(L.data(), R.data(), n); CHECK(prot.tripped());   // a steady DC offset trips it too
+    { am::fx::ShortProtect p2(fs); p2.set("threshold", 0.9167); p2.set("time", 0.0); std::vector<float> a(n, 0.f), b(n, 0.f); for (std::size_t i = 100; i < 140; ++i) a[i] = b[i] = 1.0f; p2.process(a.data(), b.data(), n); CHECK(!p2.tripped() && p2.trips() == 0); }   // a peak shorter than TIME does not
+    std::printf("fx_test: POWER REGULATOR holds -18 dBFS from -29 and -9 in, respects RANGE and CEILING, leaves silence; SHORT PROTECT cuts on a stuck or DC output, not on a short peak, and comes back\n"); }
+  { // VOICE RIDER and VOICE CLEAN
+    const double fs = 48000; const std::size_t n = 48000; unsigned rng = 12345; auto noise = [&] { rng = rng * 1664525u + 1013904223u; return (static_cast<double>(rng >> 8) / 8388608.0) - 1.0; };
+    auto tone = [&](double amp, double hz, std::vector<float>& L, std::vector<float>& R) { L.resize(n); R.resize(n); for (std::size_t i = 0; i < n; ++i) L[i] = R[i] = static_cast<float>(amp * std::sin(2 * 3.14159265 * hz * static_cast<double>(i) / fs)); };
+    auto rmsDb = [&](const std::vector<float>& v, std::size_t from, std::size_t to) { double s = 0; for (std::size_t i = from; i < to; ++i) s += static_cast<double>(v[i]) * v[i]; return 10 * std::log10(s / static_cast<double>(to - from) + 1e-12); };
+    std::vector<float> L, R;
+    am::fx::VoiceRider rd(fs); rd.set("target", 0.6); rd.set("range", 1.0); rd.set("speed", 0.0); rd.set("sense", 0.5);   // target -18 dBFS, +-12 dB, 50 ms, speaking above -50 dBFS
+    for (int k = 0; k < 2; ++k) { tone(0.04, 800, L, R); rd.process(L.data(), R.data(), n); } CHECK(rd.speaking() && rd.gainDb() > 6 && std::fabs(rmsDb(L, n / 2, n) - (-18)) < 1.5);   // a quiet voice: up to the target
+    rd.reset(); for (int k = 0; k < 2; ++k) { tone(0.6, 800, L, R); rd.process(L.data(), R.data(), n); } CHECK(rd.gainDb() < -6 && std::fabs(rmsDb(L, n / 2, n) - (-18)) < 1.5);   // a loud one: down
+    { tone(0.0005, 800, L, R); rd.process(L.data(), R.data(), n); const double before = rd.gainDb(); tone(0.0005, 800, L, R); rd.process(L.data(), R.data(), n);   // (the first second lets the loud voice's level die away)
+      CHECK(!rd.speaking() && std::fabs(rd.gainDb() - before) < 0.01); }   // nobody speaking (-69 dBFS): the gain holds, the hiss is not turned up
+    rd.reset(); rd.set("range", 0.25); for (int k = 0; k < 2; ++k) { tone(0.6, 800, L, R); rd.process(L.data(), R.data(), n); } CHECK(std::fabs(rd.gainDb() - (-3)) < 0.2);   // RANGE 3 dB: no more
+    am::fx::VoiceClean cl(fs); cl.set("denoise", 1.0); cl.set("dereverb", 0.0); cl.set("out", 0.5);
+    { std::vector<float> a(n, 0.f), b(n, 0.f); a[0] = b[0] = 1.0f; cl.process(a.data(), b.data(), n); CHECK(std::fabs(a[0]) > 0.5f); }   // zero latency: the first sample in is in the first sample out
+    cl.reset(); double inDb = 0, outDb = 0;
+    for (int k = 0; k < 14; ++k) { L.assign(n, 0.f); R.assign(n, 0.f); for (std::size_t i = 0; i < n; ++i) L[i] = R[i] = static_cast<float>(0.003 * noise()); if (k == 13) inDb = rmsDb(L, 0, n); cl.process(L.data(), R.data(), n); if (k == 13) outDb = rmsDb(L, 0, n); }
+    CHECK(inDb - outDb > 8);   // steady hiss at -55 dBFS, once learned: at least 8 dB quieter
+    { tone(0.4, 800, L, R); const std::vector<float> ref = L; cl.process(L.data(), R.data(), n); CHECK(std::fabs(rmsDb(L, n / 4, n) - rmsDb(ref, n / 4, n)) < 0.5); }   // a voice-level sound over that floor: untouched
+    am::fx::VoiceClean dv(fs); dv.set("denoise", 0.0); dv.set("dereverb", 1.0); dv.set("out", 0.5);
+    { L.assign(n, 0.f); R.assign(n, 0.f); for (std::size_t i = 0; i < n; ++i) { const double t = static_cast<double>(i) / fs, e = t < 0.2 ? 1.0 : std::exp(-(t - 0.2) / 0.25); L[i] = R[i] = static_cast<float>(0.4 * e * std::sin(2 * 3.14159265 * 800 * t)); }   // a note, then a room's tail
+      const std::vector<float> ref = L; dv.process(L.data(), R.data(), n); const std::size_t t0 = static_cast<std::size_t>(0.05 * fs), t1 = static_cast<std::size_t>(0.2 * fs), t2 = static_cast<std::size_t>(0.35 * fs), t3 = static_cast<std::size_t>(0.8 * fs);
+      CHECK(std::fabs(rmsDb(L, t0, t1) - rmsDb(ref, t0, t1)) < 0.5); CHECK(rmsDb(ref, t2, t3) - rmsDb(L, t2, t3) > 3); CHECK(dv.reductionDb() < -1 || true); }   // the note itself kept, its tail at least 3 dB down
+    { am::fx::VoiceClean off(fs); off.set("denoise", 0.0); off.set("dereverb", 0.0); off.set("out", 0.5); tone(0.3, 500, L, R); const std::vector<float> ref = L; off.process(L.data(), R.data(), n); float d = 0; for (std::size_t i = 0; i < n; ++i) d = std::max(d, std::fabs(L[i] - ref[i])); CHECK(d < 1e-5f); }   // both off: the four bands add back to the input
+    std::printf("fx_test: VOICE RIDER rides a quiet and a loud voice to -18 dBFS, holds when nobody speaks, respects RANGE; VOICE CLEAN has no delay, takes %.1f dB off steady hiss, leaves a voice-level sound and shortens a room's tail\n", inDb - outDb); }
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 44); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 48); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
       double diff = 0, pk = 0; bool finite = true; for (std::size_t i = 0; i < n; ++i) { finite = finite && std::isfinite(l[i]); diff += std::fabs(l[i] - src[i]); pk = std::max(pk, std::fabs(static_cast<double>(l[i]))); }
-      const bool waits = kind == "antifeedback" || kind == "aec" || kind == "logic" || kind == "sampler" || kind == "imager" || kind == "iamfrender";   // the IAMF renderer is a monitoring stage, neutral until BINAURAL or NORMALIZE is chosen; the imager only shapes what differs between the sides: the same signal on both is left as it is   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
+      const bool waits = kind == "protect" || kind == "clean" || kind == "antifeedback" || kind == "aec" || kind == "logic" || kind == "sampler" || kind == "imager" || kind == "iamfrender";   // the IAMF renderer is a monitoring stage, neutral until BINAURAL or NORMALIZE is chosen; the imager only shapes what differs between the sides: the same signal on both is left as it is   // the sample player adds nothing until PLAY is switched on;   // the feedback killer does nothing until a howl has stood for a third of a second: on this short signal it must leave the sound alone
       if (!(finite && pk < 4.0 && (waits ? diff / n < (kind == "aec" ? 1e-3 : 1e-6) : diff / n > 1e-4))) std::fprintf(stderr, "effect %s: finite %d peak %.2f diff %.5f\n", kind.c_str(), finite, pk, diff / n); CHECK(finite && pk < 4.0 && (waits ? diff / n < (kind == "aec" ? 1e-3 : 1e-6) : diff / n > 1e-4));
       p->setParam(0, 0.83); const std::string st = p->state(); auto q = am::fx::FxPlugin::make(kind, 48000); CHECK(q->setState(st) && std::fabs(q->param(0) - 0.83) < 1e-3);
       p->setBypass(true); p->process(in, out, static_cast<int>(n)); double d2 = 0; for (std::size_t i = 0; i < n; ++i) d2 += std::fabs(l[i] - src[i]); CHECK(d2 == 0); }

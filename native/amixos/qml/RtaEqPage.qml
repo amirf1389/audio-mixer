@@ -57,7 +57,7 @@ Flickable {
     onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onMasterChainChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }   // the master's EQ reports through masterChainChanged: without it the sliders and diamonds snapped back after every move
     Timer { interval: engine.uiAwake ? 16 : 500; running: page.visible && page.rtaOn && !page.frozen; repeat: true; onTriggered: { page.spec = engine.spectrum(page.program ? 0 : 2); rta.requestPaint() } }
-    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.12) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.035) } } color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
+    component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; property color offColor: Theme.ov(0.08); signal clicked(); implicitWidth: bl.implicitWidth + 16; implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : offColor; border.color: on ? onColor : Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     ColumnLayout {
@@ -147,7 +147,7 @@ Flickable {
                 Repeater { model: 10
                     delegate: ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
                         Text { Layout.alignment: Qt.AlignHCenter; text: page.bandText[index] + i18n.t("Hz", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                        Slider { id: sl; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; orientation: Qt.Vertical; from: -12; to: 12; stepSize: 0.5; value: page.gains[index]; onMoved: page.setBand(index, value)
+                        MSlider { id: sl; Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; orientation: Qt.Vertical; from: -12; to: 12; stepSize: 0.5; value: page.gains[index]; onMoved: page.setBand(index, value)
                             background: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - 3; y: sl.topPadding; width: 6; height: sl.availableHeight; radius: 3; color: Theme.deep; border.color: Theme.lineSoft
                                 Rectangle { width: parent.width; y: Math.min(parent.height / 2, sl.visualPosition * parent.height); height: Math.abs(parent.height / 2 - sl.visualPosition * parent.height); radius: 3; color: page.gains[index] >= 0 ? Theme.amber : Theme.cyan } }
                             handle: Rectangle { x: sl.leftPadding + sl.availableWidth / 2 - width / 2; y: sl.topPadding + sl.visualPosition * (sl.availableHeight - height); width: 26; height: 14; radius: 3; color: "#1b2230"; border.color: Theme.ink; Rectangle { anchors.centerIn: parent; width: 18; height: 2; color: Theme.amber } } }
@@ -168,9 +168,9 @@ Flickable {
                     Text { text: "Q  " + Number(page.bandNow.q).toFixed(2) + i18n.t("  (bandwidth ", i18n.lang) + (page.bandNow.q > 0 ? (1.44 / page.bandNow.q).toFixed(2) : "-") + i18n.t(" oct)", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Text { text: i18n.t("GAIN  ", i18n.lang) + page.dbText(page.bandNow.gainDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                     Combo { Layout.fillWidth: true; implicitHeight: 24; font.family: Theme.mono; font.pixelSize: 8; model: page.typeNames; currentIndex: page.bandNow.type; onActivated: page.setParam(currentIndex, page.bandNow.freq, page.bandNow.q, page.bandNow.gainDb) }
-                    Slider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: page.setParam(page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
-                    Slider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
-                    Slider { Layout.fillWidth: true; from: -12; to: 12; stepSize: 0.5; value: page.bandNow.gainDb; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) } }
+                    MSlider { Layout.fillWidth: true; from: Math.log(20); to: Math.log(20000); value: Math.log(Math.max(20, page.bandNow.freq)); onMoved: page.setParam(page.bandNow.type || 1, Math.exp(value), page.bandNow.q, page.bandNow.gainDb) }
+                    MSlider { Layout.fillWidth: true; from: 0.1; to: 12; value: page.bandNow.q; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, value, page.bandNow.gainDb) }
+                    MSlider { Layout.fillWidth: true; from: -12; to: 12; stepSize: 0.5; value: page.bandNow.gainDb; onMoved: page.setParam(page.bandNow.type || 1, page.bandNow.freq, page.bandNow.q, value) } }
                 RowLayout { spacing: 6
                     Btn { label: i18n.t("ISO CENTRE", i18n.lang); onClicked: page.setParam(page.bandNow.type || 1, page.bands[page.band], 1.41, page.bandNow.gainDb) }
                     Btn { label: i18n.t("Q 1.41 (2/3 oct)", i18n.lang); onClicked: page.setParam(page.bandNow.type || 1, page.bandNow.freq, 1.41, page.bandNow.gainDb) }

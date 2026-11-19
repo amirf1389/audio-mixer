@@ -1,6 +1,6 @@
 {
   "name": "audio-mixer",
-  "version": "1.24.0.1",
+  "version": "1.24.0.2",
   "releaseChannel": "",
   "description": "A mix OS: native mixing console (Qt Quick on a C++20 engine: ASIO / WASAPI / Core Audio / ALSA) plus the legacy engine service and the vendor licence tools.",
   "private": true,

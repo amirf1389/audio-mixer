@@ -9,7 +9,6 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mixerPage"
-    Rectangle { anchors.fill: parent; anchors.margins: -12; z: -1; color: Theme.dark ? "#0d0f12" : "#e8ebf0" }   // the desk: flat graphite behind every panel of this page
     property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
@@ -57,6 +56,13 @@ Item {
     property int sendView: 0    // 0 faders, 1 the 8 AUX sends of every strip, 2 the 8 FX sends (each a mini fader with PRE/POST), the way a desk flips to "sends on faders"
     property int sendsTick: 0   // bumped when sends change so the send rows re-read engine.send()
     // STRIP SECTIONS: what each strip shows (SETTINGS popover); off = a leaner strip. The fader, M/S, name and meters always stay.
+    // EDIT LAYOUT: what the mixer shows and how wide a strip is. One JSON text in the settings; anything missing or odd in it falls back to the
+    // layout the console ships with, so a damaged setting can never hide the faders (they are not in the list at all).
+    property bool editing: false
+    readonly property var layDefault: ({ stripW: 124, rec: true, auto: true, fx: true, eq: true, phase: true, easy: true, masterVu: true })
+    readonly property var lay: { const d = Object.assign({}, layDefault); let o = {}; try { o = JSON.parse(settings.mixerLayout || "{}") || {} } catch (e) { o = {} }
+        for (const k in d) { if (k === "stripW") { const w = Number(o.stripW); if (isFinite(w) && w >= 96 && w <= 180) d.stripW = Math.round(w) } else if (typeof o[k] === "boolean") d[k] = o[k] } return d }
+    function setLay(k, v) { const o = Object.assign({}, lay); o[k] = v; settings.mixerLayout = JSON.stringify(o) }
     property bool simple: settings.mixerSimple   // SIMPLE strips: the name, the tone knobs, pan, MUTE / SOLO and the fader; FULL adds every key and readout
     property bool showInput: true
     property bool showTone: true   // GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers
@@ -111,6 +117,9 @@ Item {
                     }
                 }
                 Rectangle { implicitWidth: 1; implicitHeight: 16; color: Theme.lineSoft }
+                Rectangle { objectName: "editLayoutKey"; implicitWidth: elT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: page.editing ? Theme.cyan : Theme.ov(0.06); border.color: page.editing ? Theme.cyan : Theme.lineSoft
+                    Text { id: elT; anchors.centerIn: parent; text: page.editing ? i18n.t("DONE", i18n.lang) : i18n.t("EDIT LAYOUT", i18n.lang); color: page.editing ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.editing = !page.editing } }
                 Repeater {   // SIMPLE: only what a first mix needs on each strip; FULL: every key and readout
                     model: [[true, "SIMPLE"], [false, "FULL"]]
                     delegate: Rectangle { objectName: "mixerView_" + modelData[1]; readonly property bool on: page.simple === modelData[0]
@@ -210,7 +219,7 @@ Item {
                                 Text { text: i18n.t("dBFS", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } Item { Layout.fillWidth: true } }
                             RowLayout { Layout.fillWidth: true
                                 Text { text: i18n.t("Clip point", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
-                                Slider { Layout.fillWidth: true; from: -12; to: 0; stepSize: 0.1; value: settings.clipDb; onMoved: settings.clipDb = value }
+                                MSlider { Layout.fillWidth: true; from: -12; to: 0; stepSize: 0.1; value: settings.clipDb; onMoved: settings.clipDb = value }
                                 Text { text: settings.clipDb.toFixed(1) + i18n.t(" dBFS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
                             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                             Rectangle { id: gb87; Layout.fillWidth: true; implicitHeight: 24; radius: 7; color: Qt.rgba(0.235, 0.784, 0.859, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb87.color) } GradientStop { position: 1; color: Theme.btnBottom(gb87.color) } } border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("ALL SETTINGS ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { quick.close(); page.go("sys") } } }
@@ -310,7 +319,7 @@ Item {
                             Repeater { model: paramsPop.model
                                 delegate: RowLayout { Layout.fillWidth: true; spacing: 8
                                     Text { text: i18n.t(modelData.title ?? "", i18n.lang); color: modelData.bypass ? Theme.amber : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 130; elide: Text.ElideRight }
-                                    Slider { Layout.fillWidth: true; from: 0; to: 1; stepSize: modelData.stepCount > 0 ? 1 / modelData.stepCount : 0; value: modelData.value; enabled: !modelData.readOnly; onMoved: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, value) }
+                                    MSlider { Layout.fillWidth: true; from: 0; to: 1; stepSize: modelData.stepCount > 0 ? 1 / modelData.stepCount : 0; value: modelData.value; enabled: !modelData.readOnly; onMoved: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, value) }
                                     Text { text: i18n.t(modelData.text ?? "", i18n.lang) + (modelData.units ? " " + modelData.units : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90; elide: Text.ElideRight }
                                     Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "↺"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPluginParam(page.sel, paramsPop.slot, modelData.id, modelData.default) } } } } } }
                     Text { visible: paramsPop.model.length === 0; text: i18n.t("This plug-in exposes no parameters.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } }
@@ -325,6 +334,29 @@ Item {
             Dialog { id: confirmReset; title: i18n.t("Reset every fader?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.resetFaders(); Text { text: i18n.t("All 32 strips and the master go to 0 dB, pans to centre. Mutes, solos and DSP stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
             Dialog { id: confirmFlatten; title: i18n.t("Flatten the DSP of every channel?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.flattenAllDsp(); Text { text: i18n.t("Gate, EQ, crossover, compressor, limiter, delay and polarity are switched off on all 32 channels. Faders, sends and names stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
         }
+        // EDIT LAYOUT: every part that can be shown or hidden as a key (lit = shown), the strip width, RESET and DONE. The faders, the meters,
+        // MUTE, SOLO and the names are not here: they always stay.
+        Rectangle { objectName: "layoutEditor"; visible: page.editing; Layout.fillWidth: true; implicitHeight: leCol.implicitHeight + 20; radius: 6; color: Theme.card; border.width: 2; border.color: Theme.cyan
+            ColumnLayout { id: leCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10; spacing: 8
+                RowLayout { Layout.fillWidth: true; spacing: 8
+                    Text { text: i18n.t("EDIT LAYOUT", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 2 }
+                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t("Press a key to show or hide that part. Faders, meters, MUTE, SOLO and names always stay.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                    MKey { objectName: "layoutReset"; implicitWidth: 120; label: "RESET LAYOUT"; hue: Theme.amber; onHit: { settings.mixerLayout = ""; page.showTone = true; page.showInput = true; page.showPan = true; page.rack = true; page.sidePanel = true; page.monitorPanel = true } }
+                    MKey { objectName: "layoutDone"; implicitWidth: 70; label: "DONE"; hue: Theme.cyan; on: true; onHit: page.editing = false } }
+                Flow { Layout.fillWidth: true; spacing: 6
+                    Repeater { model: [["STRIP", "TONE KNOBS", "p", "showTone"], ["STRIP", "INPUT", "p", "showInput"], ["STRIP", "PAN", "p", "showPan"],
+                                       ["BESIDE THE FADER", "REC", "l", "rec"], ["BESIDE THE FADER", "AUTO", "l", "auto"], ["BESIDE THE FADER", "FX", "l", "fx"], ["BESIDE THE FADER", "EQ", "l", "eq"], ["BESIDE THE FADER", "PHASE", "l", "phase"], ["BESIDE THE FADER", "EASY KEYS", "l", "easy"],
+                                       ["PANELS", "PLUG-IN RACK", "p", "rack"], ["PANELS", "CHANNEL OVERVIEW", "p", "sidePanel"], ["PANELS", "MASTER VU", "l", "masterVu"], ["PANELS", "MONITOR", "p", "monitorPanel"]]
+                        delegate: Row { spacing: 4
+                            Text { visible: index === 0 || modelData[0] !== ["STRIP", "STRIP", "STRIP", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "BESIDE THE FADER", "PANELS", "PANELS", "PANELS", "PANELS"][index - 1]; anchors.verticalCenter: parent.verticalCenter; text: i18n.t(modelData[0], i18n.lang) + ":"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; rightPadding: 2; leftPadding: index ? 10 : 0 }
+                            MKey { objectName: "layout_" + modelData[3]; implicitWidth: Math.max(60, modelData[1].length * 7 + 18); label: modelData[1]; hue: Theme.cyan
+                                on: modelData[2] === "l" ? !!page.lay[modelData[3]] : !!page[modelData[3]]
+                                onHit: { if (modelData[2] === "l") page.setLay(modelData[3], !page.lay[modelData[3]]); else page[modelData[3]] = !page[modelData[3]] } } } } }
+                RowLayout { Layout.fillWidth: true; spacing: 10
+                    Text { text: i18n.t("STRIP WIDTH", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    MSlider { objectName: "layoutWidth"; Layout.preferredWidth: 260; from: 96; to: 180; stepSize: 2; value: page.lay.stripW; tint: Theme.cyan; onMoved: page.setLay("stripW", value) }
+                    Text { text: page.lay.stripW + " px"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                    Item { Layout.fillWidth: true } } } }
         // PLUGIN RACK: the insert slots of the selected channel (10 on BASIC, unlimited on PRO / STUDIO / MASTER), one card each. A built-in stage lights up when inserted; right-click or
         // BYP bypasses; ‹ › reorder; OPEN goes to the stage's page; a VST3 reference waits (amber) for the VST3 host.
         Rectangle {
@@ -348,13 +380,13 @@ Item {
             }
         }
         Rectangle {
-            visible: page.rack && !page.rackCompact
-            Layout.fillWidth: true; implicitHeight: 74; radius: 8; color: Theme.card; border.color: "#a78bfa"
+            objectName: "rackBar"; visible: page.rack && !page.rackCompact
+            Layout.fillWidth: true; implicitHeight: 58; radius: 6; color: Theme.card; border.color: Theme.line
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 ColumnLayout { spacing: 2; Layout.preferredWidth: 96
                     Rectangle { implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 12; radius: 3; color: Theme.ov(0.06); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("COMPACT ▴", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { page.rackCompact = true; settings.rackCompactDefault = true } } }
-                    Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
+                    Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
                         ToolTip.visible: rackTitleHover.hovered; ToolTip.text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); HoverHandler { id: rackTitleHover } }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
                     Text { text: (engine.stripTick, engine.pluginCount(page.sel)) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + ""; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
@@ -364,18 +396,23 @@ Item {
                         Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.min(Math.ceil(engine.pluginSlotLimit / 10) - 1, page.rackBank + 1) } } }
  }   // (the signal chain line moved to the title's tooltip: it ran out of the rack bar)
                 Repeater { model: page.selPlugins.slice(page.rackBank * 10, page.rackBank * 10 + 10)   // ten slots at a time; the bank buttons page through the rest
-                    delegate: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; Layout.topMargin: 8; Layout.bottomMargin: 8; radius: 6
+                    // one card for each effect that is in (the empty slots are not drawn: ADD EFFECT at the end fills the next one);
+                    // the small keys (move, open, remove) show when the pointer is over the card
+                    delegate: Rectangle { id: rcard; objectName: "rackCard" + modelData.slot; visible: !empty; Layout.preferredWidth: 132; Layout.fillHeight: true; Layout.topMargin: 7; Layout.bottomMargin: 7; radius: 6
                         readonly property bool empty: !modelData.kind
-                        color: empty ? Theme.ov(0.03) : modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.12) : modelData.bypass ? Theme.ov(0.06) : Qt.rgba(0.6, 0.4, 1, 0.16)
-                        border.color: empty ? Theme.lineSoft : modelData.pending ? Theme.amber : modelData.bypass ? Theme.lineSoft : "#a78bfa"
-                        ColumnLayout { anchors.fill: parent; anchors.margins: 4; spacing: 2
+                        readonly property bool hot: rcHov.hovered
+                        HoverHandler { id: rcHov }
+                        color: modelData.pending ? Qt.rgba(0.984, 0.749, 0.141, 0.12) : modelData.bypass ? Theme.ov(0.05) : Theme.ov(0.09)
+                        border.color: modelData.pending ? Theme.amber : hot ? "#a78bfa" : Theme.line
+                        Rectangle { x: 1; y: 4; width: 3; height: parent.height - 8; radius: 1.5; color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.dim : "#a78bfa" }
+                        ColumnLayout { anchors.fill: parent; anchors.margins: 4; anchors.leftMargin: 9; spacing: 2
                             RowLayout { Layout.fillWidth: true; spacing: 2
                                 Text { text: (modelData.slot + 1 < 10 ? "0" : "") + (modelData.slot + 1); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                 Item { Layout.fillWidth: true }
                                 Rectangle { visible: !empty; implicitWidth: 24; implicitHeight: 11; radius: 2; color: modelData.pending ? Theme.amber : modelData.bypass ? Theme.ov(0.1) : Theme.emerald; Text { anchors.centerIn: parent; text: modelData.pending ? i18n.t("WAIT", i18n.lang) : modelData.bypass ? i18n.t("BYP", i18n.lang) : i18n.t("ON", i18n.lang); color: modelData.bypass && !modelData.pending ? Theme.muted : "#000"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; enabled: !modelData.pending; onClicked: engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass) } } }
                             Text { Layout.fillWidth: true; text: empty ? i18n.t("+ insert", i18n.lang) : (modelData.name + (modelData.format ? "  ·" + modelData.format : "")); color: empty ? Theme.dim : modelData.pending ? Theme.amber : modelData.bypass ? Theme.muted : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: !empty; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
                                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { engine.selectedStrip = page.sel; if (m.button === Qt.RightButton && !empty) { engine.setPluginBypass(page.sel, modelData.slot, !modelData.bypass); return } chooser.slot = modelData.slot; chooser.open() } } }
-                            RowLayout { Layout.fillWidth: true; spacing: 2; visible: !empty
+                            RowLayout { Layout.fillWidth: true; spacing: 2; visible: !empty; opacity: rcard.hot || modelData.pending ? 1 : 0.0
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot > 0; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot - 1) } }
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "›"; color: Theme.muted; font.pixelSize: 9 } MouseArea { anchors.fill: parent; enabled: modelData.slot < engine.pluginSlotLimit - 1; onClicked: engine.movePlugin(page.sel, modelData.slot, modelData.slot + 1) } }
                                 Item { Layout.fillWidth: true }
@@ -383,6 +420,13 @@ Item {
                                 Rectangle { visible: modelData.vst && !modelData.pending; implicitWidth: 36; implicitHeight: 12; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.3); Text { anchors.centerIn: parent; text: i18n.t("EDIT", i18n.lang); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) engine.openPluginWindow(page.sel, modelData.slot); else plugEd.openFor(page.sel, modelData.slot, modelData.kind, modelData.name) } } }
                                 Rectangle { visible: modelData.pending; implicitWidth: 30; implicitHeight: 12; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.3); Text { anchors.centerIn: parent; text: i18n.t("WHY?", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } ToolTip.visible: whyHov.hovered; ToolTip.text: (modelData.error || i18n.t("The plug-in could not be loaded.", i18n.lang)) + "  ·  " + i18n.t("Click to try again.", i18n.lang); HoverHandler { id: whyHov } MouseArea { anchors.fill: parent; onClicked: engine.retryPlugins() } }
                                 Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 2; color: Qt.rgba(1, 0.165, 0.373, 0.25); Text { anchors.centerIn: parent; text: "×"; color: Theme.danger; font.pixelSize: 9 } MouseArea { anchors.fill: parent; onClicked: engine.setPlugin(page.sel, modelData.slot, "") } } } } } }
+                Rectangle { objectName: "rackAdd"; Layout.preferredWidth: 118; Layout.fillHeight: true; Layout.topMargin: 7; Layout.bottomMargin: 7; radius: 6; color: addHov.hovered ? Theme.ov(0.10) : "transparent"; border.color: addHov.hovered ? "#a78bfa" : Theme.line
+                    readonly property int free: { for (let k = 0; k < page.selPlugins.length; ++k) if (!page.selPlugins[k].kind) return k; return -1 }
+                    visible: free >= 0
+                    HoverHandler { id: addHov; cursorShape: Qt.PointingHandCursor }
+                    Text { anchors.centerIn: parent; text: "+  " + i18n.t("ADD EFFECT", i18n.lang); color: addHov.hovered ? "#a78bfa" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                    MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = page.sel; chooser.slot = parent.free; chooser.open() } } }
+                Item { Layout.fillWidth: true }
             }
         }
         RowLayout {
@@ -404,7 +448,7 @@ Item {
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
                                 visible: page.bank === 2 || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 124 : 124) : 0
+                                width: visible ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
                                 property var st: { ver; return engine.stripLite(index) }
@@ -521,8 +565,8 @@ Item {
                                             Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
                                                 palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim; id: fxMenu; objectName: "stripFxMenu" + index; property int strip: index; title: i18n.t("Add an effect", i18n.lang)
                                                 // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
-                                                readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "antifeedback"],
-                                                    "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
+                                                readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "rider", "clean", "antifeedback"],
+                                                    "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
                                                     "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
                                                 function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
                                                 Instantiator { model: { const all = engine.pluginCatalog().filter(x => x.fx), names = ["EQ / TONE", "DYNAMICS", "SATURATION / AMPS", "MODULATION", "SPACE / DELAY", "SPATIAL / UTILITY", "OTHER"]; return names.filter(n => all.some(x => fxMenu.groupOf(x.kind) === n)) }
@@ -543,6 +587,12 @@ Item {
                                                     onObjectAdded: function (i, o) { smpMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { smpMenu.removeMenu(o) } } }
                                             MenuItem { text: i18n.t("Sample player (play a sample in this channel)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:sampler"); if (k >= 0) plugEd.openFor(index, k, "fx:sampler", "SAMPLE PLAYER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
                                             MenuItem { text: i18n.t("De-squash (give back what a heavy compressor took)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("Pre amp (the first gain stage)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:preamp"); if (k >= 0) plugEd.openFor(index, k, "fx:preamp", "PRE AMP"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("Post amp (level, tilt and soft clip at the end)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:postamp"); if (k >= 0) plugEd.openFor(index, k, "fx:postamp", "POST AMP"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("Power regulator (holds the level steady)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:regulator"); if (k >= 0) plugEd.openFor(index, k, "fx:regulator", "POWER REGULATOR"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("Short protect (cuts the output on a fault)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:protect"); if (k >= 0) plugEd.openFor(index, k, "fx:protect", "SHORT PROTECT"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("Voice rider (keeps a voice at one level)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:rider"); if (k >= 0) plugEd.openFor(index, k, "fx:rider", "VOICE RIDER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                                            MenuItem { text: i18n.t("Voice clean (less noise and room, no delay)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:clean"); if (k >= 0) plugEd.openFor(index, k, "fx:clean", "VOICE CLEAN"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
                                             MenuItem { text: i18n.t("Flatten DSP (EQ, dyn, delay, Ø)", i18n.lang); onTriggered: engine.resetStripDsp(index) }
                                             MenuItem { text: i18n.t("Reset channel (keep name, colour)", i18n.lang); onTriggered: engine.resetStrip(index) }
                                             MenuSeparator {}
@@ -563,7 +613,7 @@ Item {
                                                 property int bus: (page.sendView - 1) * 8 + index
                                                 property var sd: page.sendsTick >= 0 ? engine.send(stripItem.stripIdx, bus) : null
                                                 Text { text: (page.sendView === 1 ? "A" : "F") + (index + 1); color: sd && sd.db > -60 ? (page.sendView === 1 ? Theme.emerald : "#a78bfa") : Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true; Layout.preferredWidth: 12 }
-                                                Slider { id: sl; Layout.fillWidth: true; implicitHeight: 12; from: -60; to: 10; stepSize: 0.5; value: sd ? sd.db : -60; onMoved: { engine.setSend(stripItem.stripIdx, bus, value, sd ? sd.pre : false); page.sendsTick++ }
+                                                MSlider { id: sl; Layout.fillWidth: true; implicitHeight: 12; from: -60; to: 10; stepSize: 0.5; value: sd ? sd.db : -60; onMoved: { engine.setSend(stripItem.stripIdx, bus, value, sd ? sd.pre : false); page.sendsTick++ }
                                                     background: Rectangle { x: sl.leftPadding; y: sl.topPadding + sl.availableHeight / 2 - 2; width: sl.availableWidth; height: 4; radius: 2; color: Theme.deep; border.color: Theme.lineSoft
                                                         Rectangle { width: sl.visualPosition * parent.width; height: parent.height; radius: 2; color: page.sendView === 1 ? Theme.emerald : "#a78bfa"; opacity: sd && sd.db > -60 ? 1 : 0.25 } }
                                                     handle: Rectangle { x: sl.leftPadding + sl.visualPosition * (sl.availableWidth - width); y: sl.topPadding + sl.availableHeight / 2 - height / 2; width: 6; height: 10; radius: 2; color: Theme.ink } }
@@ -582,13 +632,13 @@ Item {
                                         ColumnLayout { Layout.fillHeight: true; spacing: 3
                                             Item { Layout.fillHeight: true }
                                             // THE CHANNEL KEYS above the easy keys: what a mix needs most, one press each, lit in its own colour when on
-                                            MKey { objectName: "side_rec" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "REC"; hue: "#ff4d6d"; on: !!(st && st.armed); tip: i18n.t("REC: record this channel when recording starts", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setArmed(stripItem.stripIdx, !(st && st.armed)) } }
-                                            MKey { objectName: "side_auto" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "AUTO"; hue: "#38bdf8"; on: !!(st && st.automix); tip: i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setAutomix(stripItem.stripIdx, !(st && st.automix), st ? st.amWeight : 1) } }
-                                            MKey { objectName: "side_fx" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: st && st.plugins > 0 ? "FX " + st.plugins : "FX"; hue: "#a78bfa"; on: !!(st && st.plugins > 0); tip: i18n.t("FX: the effects of this channel (plug-in rack)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.rack = true } }
-                                            MKey { objectName: "side_eq" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; label: "EQ"; hue: "#4ade80"; on: !!(st && st.eqOn); tip: i18n.t("EQ: open the full equaliser of this channel", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.go("dsp") } }
-                                            MKey { objectName: "side_phase" + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: "Ø"; hue: "#facc15"; on: !!(st && st.polarity); tip: i18n.t("PHASE: turn this channel round (when two microphones on one source sound thin together)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setPolarity(stripItem.stripIdx, !(st && st.polarity)) } }
-                                            Rectangle { Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; implicitHeight: 1; color: Theme.line }
-                                            Repeater { model: [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
+                                            MKey { objectName: "side_rec" + stripItem.stripIdx; visible: page.lay.rec; implicitWidth: 34; implicitHeight: 24; label: "REC"; hue: "#ff4d6d"; on: !!(st && st.armed); tip: i18n.t("REC: record this channel when recording starts", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setArmed(stripItem.stripIdx, !(st && st.armed)) } }
+                                            MKey { objectName: "side_auto" + stripItem.stripIdx; visible: page.lay.auto; implicitWidth: 34; implicitHeight: 24; label: "AUTO"; hue: "#38bdf8"; on: !!(st && st.automix); tip: i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setAutomix(stripItem.stripIdx, !(st && st.automix), st ? st.amWeight : 1) } }
+                                            MKey { objectName: "side_fx" + stripItem.stripIdx; visible: page.lay.fx; implicitWidth: 34; implicitHeight: 24; label: st && st.plugins > 0 ? "FX " + st.plugins : "FX"; hue: "#a78bfa"; on: !!(st && st.plugins > 0); tip: i18n.t("FX: the effects of this channel (plug-in rack)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.rack = true } }
+                                            MKey { objectName: "side_eq" + stripItem.stripIdx; visible: page.lay.eq; implicitWidth: 34; implicitHeight: 24; label: "EQ"; hue: "#4ade80"; on: !!(st && st.eqOn); tip: i18n.t("EQ: open the full equaliser of this channel", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; page.go("dsp") } }
+                                            MKey { objectName: "side_phase" + stripItem.stripIdx; visible: page.lay.phase; implicitWidth: 34; implicitHeight: 24; glyph: "Ø"; hue: "#facc15"; on: !!(st && st.polarity); tip: i18n.t("PHASE: turn this channel round (when two microphones on one source sound thin together)", i18n.lang); onHit: { engine.selectedStrip = stripItem.stripIdx; engine.setPolarity(stripItem.stripIdx, !(st && st.polarity)) } }
+                                            Rectangle { visible: page.lay.easy && (page.lay.rec || page.lay.auto || page.lay.fx || page.lay.eq || page.lay.phase); Layout.fillWidth: true; Layout.topMargin: 2; Layout.bottomMargin: 2; implicitHeight: 1; color: Theme.line }
+                                            Repeater { model: !page.lay.easy ? [] : [["▲", "louder", "Louder: +1 dB"], ["▼", "quieter", "Quieter: -1 dB"], ["0", "zero", "Back to the normal level (0 dB)"], ["↶", "back", "BACK: where this fader was before the last move"]]
                                                 delegate: MKey { objectName: "easy_" + modelData[1] + stripItem.stripIdx; implicitWidth: 34; implicitHeight: 24; glyph: modelData[0]; hue: stripItem.sc; tip: i18n.t(modelData[2], i18n.lang)
                                                     can: modelData[1] !== "back" || Math.abs(fadRow.before - fadRow.settled) > 0.05
                                                     onHit: { engine.selectedStrip = stripItem.stripIdx
@@ -646,7 +696,7 @@ Item {
                         RowLayout { spacing: 4; Repeater { model: 8; delegate: Rectangle { implicitWidth: 20; implicitHeight: 14; radius: 3; color: Theme.stripColors[index]; border.color: page.selSt && page.selSt.color === index ? Theme.ink : "transparent"; border.width: 2; MouseArea { anchors.fill: parent; onClicked: engine.setColor(page.sel, index) } } } }
                         RowLayout { Layout.fillWidth: true
                             Text { text: i18n.t("INPUT TRIM", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
-                            Slider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -24; to: 24; stepSize: 0.5; value: page.selSt ? page.selSt.trimDb : 0; onMoved: engine.setTrim(page.sel, value) }
+                            MSlider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -24; to: 24; stepSize: 0.5; value: page.selSt ? page.selSt.trimDb : 0; onMoved: engine.setTrim(page.sel, value) }
                             Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
                             Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
                         Text { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: sideFlick.width }
@@ -656,13 +706,13 @@ Item {
                             Rectangle { id: gb106; implicitWidth: Math.max(44, children[0].implicitWidth + 12); implicitHeight: 18; radius: 7; color: page.selCh.gateOn ? Theme.pink : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb106.color) } GradientStop { position: 1; color: Theme.btnBottom(gb106.color) } } Text { anchors.centerIn: parent; text: i18n.t("GATE", i18n.lang); color: page.selCh.gateOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setGate(page.sel, !page.selCh.gateOn, page.selCh.gateThresholdDb, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) } }
                             Text { text: i18n.t("THR ", i18n.lang) + Theme.dbText(page.selCh.gateThresholdDb === undefined ? -50 : page.selCh.gateThresholdDb); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
                             Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("gate") } } }
-                        Slider { Layout.fillWidth: true; from: -90; to: 0; value: page.selCh.gateThresholdDb === undefined ? -50 : page.selCh.gateThresholdDb; onMoved: engine.setGate(page.sel, page.selCh.gateOn, value, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) }
+                        MSlider { Layout.fillWidth: true; from: -90; to: 0; value: page.selCh.gateThresholdDb === undefined ? -50 : page.selCh.gateThresholdDb; onMoved: engine.setGate(page.sel, page.selCh.gateOn, value, page.selCh.gateRangeDb, page.selCh.gateAttackMs, page.selCh.gateHoldMs, page.selCh.gateReleaseMs) }
                         // compressor
                         RowLayout { Layout.fillWidth: true
                             Rectangle { id: gb107; implicitWidth: Math.max(44, children[0].implicitWidth + 12); implicitHeight: 18; radius: 7; color: page.selCh.compOn ? Theme.emerald : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb107.color) } GradientStop { position: 1; color: Theme.btnBottom(gb107.color) } } Text { anchors.centerIn: parent; text: i18n.t("COMP", i18n.lang); color: page.selCh.compOn ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setCompressor(page.sel, !page.selCh.compOn, page.selCh.compThresholdDb, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) } }
                             Text { text: i18n.t("THR ", i18n.lang) + Theme.dbText(page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb) + "  " + Number(page.selCh.compRatio || 4).toFixed(1) + ":1"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
                             Text { text: i18n.t("OPEN ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 34; MouseArea { anchors.fill: parent; onClicked: page.go("dyn") } } }
-                        Slider { Layout.fillWidth: true; from: -60; to: 0; value: page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb; onMoved: engine.setCompressor(page.sel, page.selCh.compOn, value, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) }
+                        MSlider { Layout.fillWidth: true; from: -60; to: 0; value: page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb; onMoved: engine.setCompressor(page.sel, page.selCh.compOn, value, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) }
                         // tone: the curve of the 3-band EQ on a grid (click: the full equaliser)
                         SectHead { title: "EQ"; link: "dsp" }
                         Rectangle { objectName: "eqCurve"; Layout.fillWidth: true; implicitHeight: 86; radius: 3; color: Theme.dark ? "#0a0b0d" : "#ffffff"; border.color: Theme.line
@@ -692,7 +742,7 @@ Item {
                             property var sd: engine.send(page.sel, index)
                             Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
                             Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 36; elide: Text.ElideRight }
-                            Slider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
+                            MSlider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
                             Rectangle { implicitWidth: 30; Layout.minimumWidth: 30; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
                         SectHead { title: "GROUPS" }
                         // dca
@@ -721,7 +771,7 @@ Item {
                 // GAIN MODE on: the Windows volume trims the master; shown here so the level heard is never a surprise
                 Text { objectName: "winTrimLine"; visible: engine.windowsGainMode && engine.windowsVolume >= 0; Layout.alignment: Qt.AlignHCenter
                     text: "WIN " + engine.windowsVolume + "% · " + (engine.windowsTrimDb <= -119 ? "OFF" : engine.windowsTrimDb === 0 ? "0 dB" : engine.windowsTrimDb.toFixed(1) + " dB"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                VuMeter { objectName: "masterVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 122; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
+                VuMeter { objectName: "masterVu"; visible: page.lay.masterVu; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 122; Layout.preferredHeight: 66; vuDb: engine.telv("masterVuDb", page.tick) === undefined ? -120 : engine.telv("masterVuDb", page.tick); refDb: engine.vuRefDb; peakLamp: engine.telv("masterClip", page.tick) === true; label: i18n.t("VU  MASTER", i18n.lang) }
                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 5; rowSpacing: 5
                     ModKey { objectName: "masterEqBtn"; Layout.fillWidth: true; label: "RTA EQ"; tint: Theme.orange; lit: engine.mastering().eqOn; onClicked: page.go("rtaeq") }                       // RTA EQ: the main (master) equaliser
                     ModKey { objectName: "enhancerBtn"; Layout.fillWidth: true; label: "ENHANCE"; tint: Theme.emerald; lit: engine.mastering().on; onClicked: page.Window.window.openEnhancer() }   // AMFB VOLUME ENHANCER

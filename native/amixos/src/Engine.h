@@ -6,6 +6,7 @@
 #include <QQuickItem>
 #include <QPointer>
 #include <algorithm>
+#include <QElapsedTimer>
 #include <QObject>
 #include <functional>
 #include <QSettings>
@@ -22,6 +23,7 @@
 #include <mutex>
 #include <thread>
 #include "audiomixer/onevoice.hpp"
+#include "audiomixer/watchdog.hpp"
 #include "audiomixer/dynamics.hpp"
 #include <vector>
 
@@ -118,6 +120,11 @@ class Engine : public QObject {
   Q_PROPERTY(bool ecoUi READ ecoUi WRITE setEcoUi NOTIFY ecoUiChanged)
   // ONE VOICE: when inputs 1 and 2 carry the same mono microphone, CH 1 is set to no input so the voice is heard once (on by default)
   Q_PROPERTY(bool oneVoice READ oneVoice WRITE setOneVoice NOTIFY oneVoiceChanged)
+  // WATCHDOG FAILOVER: the sound stops arriving (a stalled driver) or the sound card is unplugged: the engine starts again by itself, on the
+  // same device first, else on the best one left (AUTO DETECT). At most three times a minute. watchdogNote says what it did.
+  Q_PROPERTY(bool watchdog READ watchdog WRITE setWatchdog NOTIFY watchdogChanged)
+  Q_PROPERTY(QString watchdogNote READ watchdogNote NOTIFY watchdogChanged)
+  Q_PROPERTY(int failovers READ failovers NOTIFY watchdogChanged)
   Q_PROPERTY(QString oneVoiceNote READ oneVoiceNote NOTIFY oneVoiceChanged)   // what it did on this device ("" = nothing)
   Q_PROPERTY(bool uiAwake READ uiAwake NOTIFY ecoUiChanged)   // the window is in front: animations and fast page polls run only then
   bool uiAwake() const { return uiLevel_ >= 2; }
@@ -275,6 +282,10 @@ class Engine : public QObject {
   //   fastCores: the audio thread asks for the performance cores of a hybrid processor; eco: the interface thread is EcoQoS while the window is
   //   behind another program; trim: memory goes back to Windows 3 s after the window is minimised
   Q_INVOKABLE QVariantMap systemInfo() const;
+  // SYSTEM INFORMATION (read only): {maker, model, board, biosVendor, biosVersion, biosDate, os} and the installed sound drivers
+  // [{name, provider, version, date}]. Looked up once; the console never changes a driver or the firmware.
+  Q_INVOKABLE QVariantMap firmwareInfo() const;
+  Q_INVOKABLE QVariantList soundDrivers() const;
   Q_INVOKABLE void setSysOpt(const QString& key, bool on);
   Q_INVOKABLE QVariantMap trimMemoryNow();
   // LOW LATENCY SOUND DETECTION (audiomixer/latency.hpp): the open sound card's latency in plain words, with what would lower it;
@@ -332,8 +343,11 @@ class Engine : public QObject {
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
   bool oneVoice() const { return oneVoice_; } void setOneVoice(bool on); QString oneVoiceNote() const { return oneVoiceNote_; }
+  bool watchdog() const { return watchdog_; } void setWatchdog(bool on); QString watchdogNote() const { return watchdogNote_; } int failovers() const { return failovers_; }
+  Q_INVOKABLE bool failover(const QString& why);   // stop and start again: the same device, else AUTO DETECT (also what the watchdog calls)
   Q_INVOKABLE void undoOneVoice();   // CH 1 back on input 1, and the rule rests until the next device opens
   bool oneVoice_ = true, oneVoiceActed_ = false; QString oneVoiceNote_; am::OneVoice ov_;
+  bool watchdog_ = true; QString watchdogNote_; int failovers_ = 0; am::Watchdog wd_; QElapsedTimer wdClock_;
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
   bool freshInstall_ = false; QString installId_;
   QString startNote_;
@@ -686,6 +700,7 @@ class Engine : public QObject {
  signals:
   void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
   void ecoUiChanged();
+  void watchdogChanged();
   void oneVoiceChanged();
   void compTargetChanged();
   void stateChanged();

@@ -1,4 +1,6 @@
 #include "Update.h"
+#include <memory>
+#include <QRegularExpression>
 #include "paths/paths.hpp"
 
 #include <QCryptographicHash>
@@ -134,6 +136,7 @@ bool Update::applyManifest(const QString& text) {
   latest_ = m.value("version").toString(); channel_ = m.value("channel").toString("stable"); released_ = m.value("released").toString(); notes_.clear(); for (const QJsonValue& n : m.value("notes").toArray()) notes_ << n.toString();
   file_.clear(); const QJsonObject files = m.value("files").toObject(); const QJsonObject f = files.value(platformKey()).toObject();
   if (!f.isEmpty() && am::upd::hostAllowed(f.value("url").toString().toStdString()) && am::upd::isHex64(f.value("sha256").toString().toStdString())) { file_["key"] = platformKey(); file_["name"] = f.value("name").toString(); file_["url"] = f.value("url").toString(); file_["size"] = f.value("size").toDouble(); file_["sha256"] = f.value("sha256").toString(); }
+  setPluginList(m.value("plugins").toArray());
   features_.clear();
   for (const QJsonValue& v : m.value("features").toArray()) { const QJsonObject o = v.toObject(); QVariantMap e; e["version"] = o.value("version").toString(); e["date"] = o.value("date").toString(); e["title"] = o.value("title").toString(); QStringList items; for (const QJsonValue& i : o.value("items").toArray()) items << i.toString(); e["items"] = items; features_ << e; }
   s_.setValue("update/lastCheck", QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"));
@@ -165,6 +168,48 @@ void Update::download() {
     if (got != file_["sha256"].toString().toLower()) { QFile::remove(dest); set("error", "the download's sha256 does not match the signed manifest: deleted"); return; }
     downloaded_ = dest; progress_ = 100; set("downloaded", "verified and saved: " + dest + ". Open it to install; the console does not run installers itself.");
   });
+}
+int Update::setPluginList(const QJsonArray& list) {
+  pluginList_.clear();
+  for (const QJsonValue& v : list) { if (pluginList_.size() >= 200) break; const QJsonObject o = v.toObject(), f = o.value("files").toObject().value(platformKey()).toObject();
+    const QString id = o.value("id").toString(), file = f.value("name").toString(), url = f.value("url").toString(), sha = f.value("sha256").toString().toLower(); const double size = f.value("size").toDouble();
+    static const QRegularExpression idRe(QStringLiteral("^[a-z0-9][a-z0-9._-]{0,47}$"));
+    if (!idRe.match(id).hasMatch() || !am::upd::pluginFileOk(file.toStdString()) || !am::upd::hostAllowed(url.toStdString()) || !am::upd::isHex64(sha.toStdString()) || size < 1 || size > static_cast<double>(am::upd::kMaxPluginBytes)) continue;   // anything odd is left out
+    bool dup = false; for (const QVariant& e : pluginList_) if (e.toMap()["id"].toString() == id || e.toMap()["file"].toString().compare(file, Qt::CaseInsensitive) == 0) dup = true;
+    if (dup) continue;
+    QVariantMap e; e["id"] = id; e["name"] = o.value("name").toString().left(60); e["version"] = o.value("version").toString().left(20); e["note"] = o.value("note").toString().left(200); e["file"] = file; e["url"] = url; e["sha256"] = sha; e["size"] = size; pluginList_ << e; }
+  emit pluginsChanged(); return static_cast<int>(pluginList_.size());
+}
+QVariantList Update::plugins() const {
+  QVariantList out; for (const QVariant& v : pluginList_) { QVariantMap e = v.toMap(); e.remove("url"); e["installed"] = !pluginDir.isEmpty() && QFile::exists(pluginDir + "/" + e["file"].toString());
+    e["busy"] = pluginBusy_ == e["id"].toString(); e["progress"] = e["busy"].toBool() ? pluginProgress_ : 0; out << e; }
+  return out;
+}
+bool Update::removePlugin(const QString& id) {
+  for (const QVariant& v : pluginList_) { const QVariantMap e = v.toMap(); if (e["id"].toString() != id) continue;
+    const QString path = pluginDir + "/" + e["file"].toString(); const bool ok = !pluginDir.isEmpty() && QFile::exists(path) && QFile::remove(path);
+    pluginMsg_ = ok ? e["name"].toString() + ": removed." : e["name"].toString() + ": nothing to remove."; emit pluginsChanged(); if (ok) emit pluginInstalled(); return ok; }
+  return false;
+}
+void Update::downloadPlugin(const QString& id) {
+  if (!pluginBusy_.isEmpty()) { pluginMsg_ = "One download at a time: wait for the one that is running."; emit pluginsChanged(); return; }
+  QVariantMap e; for (const QVariant& v : pluginList_) if (v.toMap()["id"].toString() == id) e = v.toMap();
+  if (e.isEmpty() || pluginDir.isEmpty()) { pluginMsg_ = "That plug-in is not in the signed list."; emit pluginsChanged(); return; }
+  const QString u = e["url"].toString(), file = e["file"].toString(), name = e["name"].toString(), sha = e["sha256"].toString(); const qint64 size = static_cast<qint64>(e["size"].toDouble());
+  if (!am::upd::hostAllowed(u.toStdString()) || !am::upd::pluginFileOk(file.toStdString())) { pluginMsg_ = name + ": refused (not one of the project's hosts)."; emit pluginsChanged(); return; }   // checked again right before the request
+  QDir().mkpath(pluginDir); const QString dest = pluginDir + "/" + file, part = dest + ".part";
+  QNetworkRequest req{QUrl(u)}; req.setTransferTimeout(600000); req.setHeader(QNetworkRequest::UserAgentHeader, "AmF-X1-console"); req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
+  QNetworkReply* r = net_.get(req); auto* out = new QFile(part, r); if (!out->open(QIODevice::WriteOnly | QIODevice::Truncate)) { pluginMsg_ = name + ": cannot write into the plug-in folder."; r->abort(); r->deleteLater(); emit pluginsChanged(); return; }
+  pluginBusy_ = id; pluginProgress_ = 0; pluginMsg_ = "Downloading " + name + " ..."; emit pluginsChanged();
+  auto hash = std::make_shared<QCryptographicHash>(QCryptographicHash::Sha256); auto got = std::make_shared<qint64>(0);
+  connect(r, &QNetworkReply::readyRead, this, [this, r, out, hash, got, size] { const QByteArray b = r->readAll(); *got += b.size(); if (*got > size) { r->abort(); return; }   // more than the signed size: stop at once
+    out->write(b); hash->addData(b); pluginProgress_ = size > 0 ? static_cast<int>(100 * *got / size) : 0; emit pluginsChanged(); });
+  connect(r, &QNetworkReply::finished, this, [this, r, out, hash, got, size, sha, dest, part, name] {
+    r->deleteLater(); out->close(); pluginBusy_.clear(); pluginProgress_ = 0; const QString have = QString::fromLatin1(hash->result().toHex());
+    if (r->error() != QNetworkReply::NoError || *got != size || have != sha) { QFile::remove(part);
+      pluginMsg_ = name + (*got > size ? ": larger than the signed list says: deleted." : r->error() != QNetworkReply::NoError ? ": the download failed (" + r->errorString() + ")." : ": the file does not match the signed list (sha256): deleted."); emit pluginsChanged(); return; }
+    QFile::remove(dest); if (!QFile::rename(part, dest)) { QFile::remove(part); pluginMsg_ = name + ": could not be put into the plug-in folder."; emit pluginsChanged(); return; }
+    pluginMsg_ = name + ": downloaded and verified. It is in the plug-in list now."; emit pluginsChanged(); emit pluginInstalled(); });
 }
 void Update::openDownloadFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(QString::fromStdString(am::paths::downloadsDir()))); }
 int Update::newFeatures() const {
