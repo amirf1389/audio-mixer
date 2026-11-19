@@ -4,7 +4,7 @@ One private database and one REST API that all your apps ask about licences: cre
 an app, limit the number of devices, expire keys, and see which devices are activated.
 
 - **Stack:** Python 3.11+, FastAPI, PostgreSQL 14+.
-- **Status:** built and tested here (22 tests against a real PostgreSQL; the admin console was driven in a real browser). Not yet deployed anywhere, and AmF X1
+- **Status:** built and tested here (29 tests against a real PostgreSQL; the admin console was driven in a real browser). The Docker deployment files are written but were not run. Not yet deployed anywhere, and AmF X1
   does not use it yet (see "AmF X1" at the end).
 
 ## Layout
@@ -19,6 +19,10 @@ an app, limit the number of devices, expire keys, and see which devices are acti
 | `lkms/keygen.py` | Makes the secrets on your own machine |
 | `lkms/ui/` | The admin console (one page, no outside files) |
 | `sdk/lkms_client.py` | One-file helper for your apps, with offline grace period |
+| `host/sitehost.py` | Site host: volume activation inside a customer's network |
+| `tools/lkmsctl.py` | Admin tool for the terminal |
+| `tools/lkms_activate.py` | Activate, check or release one computer from the terminal |
+| `deploy/` | Docker files with HTTPS, backup script, systemd unit, step-by-step guide |
 | `tests/` | End-to-end tests; they start their own throw-away PostgreSQL |
 
 ## Run it
@@ -31,7 +35,7 @@ uvicorn --factory lkms.main:app --host 127.0.0.1 --port 8088
 python -m pytest -q                   # the tests
 ```
 
-Or with Docker: write `.env` and `db_password.txt`, then `docker compose up -d`. The compose file is not tested here.
+To deploy on a server with HTTPS, follow `deploy/DEPLOY.md`.
 
 ## API
 
@@ -74,6 +78,19 @@ devices, suspending and revoking, registering apps, and the activity log.
 - Sign in with the admin key. The key stays in that browser tab and is forgotten when the tab closes; no cookie is set.
 - The page loads no outside files and its security policy forbids inline code and framing.
 - **Do not expose it to the public.** Limit `/manage` and `/admin/*` in your reverse proxy to your own addresses or a VPN.
+
+## Volume licences and the site host
+
+For a customer with many computers on one network, issue a **volume licence** (a key with site seats) and have them
+run the **site host** inside their network. It works like a volume activation host:
+
+1. The host proves the volume key to your central server and receives a signed **grant**: how many seats it may hand
+   out and until when, with the host's own public key certified by your server.
+2. The site's computers activate against the host. Each gets a lease signed by the host.
+3. A computer believes a lease only if your central server certified that host. A copied or home-made host is refused.
+4. The host renews its grant every 6 hours. Without internet it serves for 30 days; computers away from the site run 7 days.
+
+`POST /v1/host/grant` is the call the host makes. Details and a table of situations are in `deploy/DEPLOY.md`.
 
 ## How it is protected
 

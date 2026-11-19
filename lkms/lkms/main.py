@@ -35,6 +35,7 @@ class LicensesIn(BaseModel):
     expires_at: datetime | None = None
     customer_email: str | None = Field(default=None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     metadata: dict[str, Any] = Field(default_factory=dict)
+    volume_seats: int | None = Field(default=None, ge=1, le=1000000)   # set: a volume licence for a site host with this many seats
 
     @field_validator("expires_at")
     @classmethod
@@ -75,6 +76,11 @@ class ClientIn(BaseModel):
     device_name: str | None = Field(default=None, max_length=120)
     timestamp: int
     nonce: str = Field(min_length=16, max_length=128)
+
+
+class HostIn(ClientIn):
+    host_public_key: str = Field(min_length=40, max_length=64)
+    seats_in_use: int | None = Field(default=None, ge=0, le=1000000)
 
 
 # ---------------------------------------------------------------- the app
@@ -151,7 +157,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise LicenseError("too_many_at_once", 422, max=settings.max_bulk)
         with pool.connection() as conn:
             made = service.create_licenses(conn, settings, app_id=body.app_id, count=body.count, plan=body.plan, max_activations=body.max_activations,
-                                           expires_at=body.expires_at, customer_email=body.customer_email, metadata=body.metadata)
+                                           expires_at=body.expires_at, customer_email=body.customer_email, metadata=body.metadata, volume_seats=body.volume_seats)
         return {"count": len(made), "licenses": made}
 
     @app.patch("/admin/licenses/{key}/revoke", dependencies=[Depends(admin)])
@@ -256,6 +262,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with pool.connection() as conn:
             service.use_nonce(conn, settings, caller, body.timestamp, body.nonce)
             return service.validate(conn, settings, caller, key=body.license_key, device_id=body.device_id, ip=client_ip(request), nonce=body.nonce)
+
+    @app.post("/v1/host/grant")
+    def v1_host_grant(body: HostIn, request: Request, caller: service.App = Depends(app_auth)):
+        with pool.connection() as conn:
+            service.use_nonce(conn, settings, caller, body.timestamp, body.nonce)
+            return service.host_grant(conn, settings, caller, key=body.license_key, device_id=body.device_id, device_name=body.device_name,
+                                      host_public_key=body.host_public_key, seats_in_use=body.seats_in_use, ip=client_ip(request), nonce=body.nonce)
 
     @app.post("/v1/deactivate")
     def v1_deactivate(body: ClientIn, request: Request, caller: service.App = Depends(app_auth)):

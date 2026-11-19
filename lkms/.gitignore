@@ -1,5 +1,5 @@
 .env
-db_password.txt
 __pycache__/
 .pytest_cache/
 *.pyc
+site-host-data/

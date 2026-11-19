@@ -7,6 +7,9 @@
     result = lic.check()                                       # at every start, and now and then while running
     if result.ok: ...   # result.plan, result.source ("server" or "cache"), result.reason
 
+On a customer site with a SITE HOST (volume licence), give the host's address as base_url and use activate("SITE"):
+the helper then checks that your central server certified that host before it believes it.
+
 How it behaves:
 - Every answer of the server carries a signed lease. The helper checks the signature with the public key built
   into your app, so a fake server or an edited cache file is not believed.
@@ -110,12 +113,12 @@ class LicenseClient:
         body = self._body(key, extra)
         status, answer = self._post(path, body)
         if status == 200 and answer:
-            payload = self._verify(answer.get("lease", ""))
+            payload = self._verify(answer.get("lease", ""), grant=answer.get("grant"))
             # the lease must be for this app, this device and THIS request (its nonce): an old answer cannot be replayed to us
             if not payload or payload.get("app") != self.app_id or payload.get("nonce") != body["nonce"] \
                     or payload.get("dev") != hashlib.sha256(self.device_id.encode()).hexdigest():
                 return LicenseResult(False, "bad_server_signature")
-            self._save({"license_key": key, "lease": answer["lease"], "seen": self._now()})
+            self._save({"license_key": key, "lease": answer["lease"], "grant": answer.get("grant"), "seen": self._now()})
             return LicenseResult(True, plan=payload.get("plan"), lease_expires_at=payload.get("exp"), detail=answer)
         if status in (403, 404, 409) and answer and answer.get("error"):
             # the server said no (revoked, expired, limit reached, unknown key): the saved lease is not used
@@ -135,21 +138,35 @@ class LicenseClient:
         now = self._now()
         if now + 300 < float(c.get("seen", 0)):
             return LicenseResult(False, "clock_moved_back", source="cache")
-        payload = self._verify(lease, now)
+        payload = self._verify(lease, now, c.get("grant"))
         if not payload or payload.get("app") != self.app_id or payload.get("dev") != hashlib.sha256(self.device_id.encode()).hexdigest():
             return LicenseResult(False, "lease_expired", source="cache")
         self._save({**c, "seen": max(now, float(c.get("seen", 0)))})
         return LicenseResult(True, plan=payload.get("plan"), source="cache", lease_expires_at=payload.get("exp"))
 
-    def _verify(self, lease: str, now: float | None = None) -> dict | None:
+    def _signed(self, public_key: str, token: str, now: float | None) -> dict | None:
+        """The payload of <payload>.<signature> when that key signed it and it has not run out; otherwise None."""
         try:
-            body, sig = lease.split(".")
+            body, sig = token.split(".")
             pad = lambda s: s + "=" * (-len(s) % 4)  # noqa: E731
-            Ed25519PublicKey.from_public_bytes(base64.b64decode(self.public_key)).verify(base64.urlsafe_b64decode(pad(sig)), body.encode())
+            Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key)).verify(base64.urlsafe_b64decode(pad(sig)), body.encode())
             payload = json.loads(base64.urlsafe_b64decode(pad(body)))
-        except (ValueError, InvalidSignature, TypeError):
+        except (ValueError, InvalidSignature, TypeError, AttributeError):
             return None
         if not isinstance(payload, dict) or float(payload.get("exp", 0)) < (self._now() if now is None else now):
+            return None
+        return payload
+
+    def _verify(self, lease: str, now: float | None = None, grant: str | None = None) -> dict | None:
+        """A lease is believed when the central server signed it, or when a site host signed it AND the central server
+        signed a grant naming that host's key for this app. Anything else (a home-made host, an edited file) is refused."""
+        if not grant:
+            return self._signed(self.public_key, lease, now)
+        g = self._signed(self.public_key, grant, now)
+        if not g or g.get("typ") != "grant" or g.get("app") != self.app_id or not g.get("hpk"):
+            return None
+        payload = self._signed(g["hpk"], lease, now)
+        if not payload or payload.get("lic") != g.get("lic") or float(payload.get("exp", 0)) > float(g.get("exp", 0)):
             return None
         return payload
 

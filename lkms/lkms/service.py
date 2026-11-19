@@ -86,19 +86,22 @@ def use_nonce(conn: psycopg.Connection, settings: Settings, app: App, timestamp:
 # ---------------------------------------------------------------- licences (admin)
 
 def create_licenses(conn: psycopg.Connection, settings: Settings, *, app_id: str, count: int, plan: str,
-                    max_activations: int, expires_at: datetime | None, customer_email: str | None, metadata: dict) -> list[dict]:
+                    max_activations: int, expires_at: datetime | None, customer_email: str | None, metadata: dict,
+                    volume_seats: int | None = None) -> list[dict]:
     if not conn.execute("SELECT 1 FROM apps WHERE app_id = %s", (app_id,)).fetchone():
         raise LicenseError("app_not_found", 404)
     out = []
     for _ in range(count):
         key = security.new_license_key()
         row = conn.execute(
-            """INSERT INTO licenses (key_hash, key_hint, app_id, customer_email, plan, max_activations, expires_at, metadata)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING license_id, created_at""",
-            (security.key_hash(settings.key_pepper, key), key[:5], app_id, customer_email, plan, max_activations, expires_at, json.dumps(metadata)),
+            """INSERT INTO licenses (key_hash, key_hint, app_id, customer_email, plan, max_activations, expires_at, metadata, kind, volume_seats)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING license_id, created_at""",
+            (security.key_hash(settings.key_pepper, key), key[:5], app_id, customer_email, plan, max_activations, expires_at, json.dumps(metadata),
+             "volume" if volume_seats else "device", volume_seats),
         ).fetchone()
         out.append({"license_id": str(row[0]), "license_key": key, "app_id": app_id, "plan": plan, "max_activations": max_activations,
-                    "expires_at": expires_at.isoformat() if expires_at else None, "customer_email": customer_email, "status": "active"})
+                    "expires_at": expires_at.isoformat() if expires_at else None, "customer_email": customer_email, "status": "active",
+                    "kind": "volume" if volume_seats else "device", "volume_seats": volume_seats})
     audit(conn, "admin", "license.create", app_id=app_id, count=count, plan=plan)
     return out
 
@@ -151,13 +154,14 @@ def _load(conn: psycopg.Connection, settings: Settings, app: App, key: str, lock
     row = None
     if norm:
         row = conn.execute(
-            "SELECT license_id, app_id, plan, max_activations, expires_at, status, metadata FROM licenses WHERE key_hash = %s"
+            "SELECT license_id, app_id, plan, max_activations, expires_at, status, metadata, kind, volume_seats FROM licenses WHERE key_hash = %s"
             + (" FOR UPDATE" if lock else ""),
             (security.key_hash(settings.key_pepper, norm),),
         ).fetchone()
     if not row or str(row[1]) != app.app_id:
         raise LicenseError("invalid_license", 404)
-    lic = {"license_id": row[0], "plan": row[2], "max_activations": row[3], "expires_at": row[4], "status": row[5], "metadata": row[6]}
+    lic = {"license_id": row[0], "plan": row[2], "max_activations": row[3], "expires_at": row[4], "status": row[5], "metadata": row[6],
+           "kind": row[7], "volume_seats": row[8]}
     if lic["status"] == "active" and lic["expires_at"] and lic["expires_at"] <= _now():
         lic["status"] = "expired"
         conn.execute("UPDATE licenses SET status = 'expired', updated_at = now() WHERE license_id = %s AND status = 'active'", (lic["license_id"],))
@@ -181,6 +185,8 @@ def _lease(settings: Settings, app: App, lic: dict, device_hash: str, nonce: str
 
 def activate(conn: psycopg.Connection, settings: Settings, app: App, *, key: str, device_id: str, device_name: str | None, ip: str | None, nonce: str) -> dict:
     lic = _load(conn, settings, app, key, lock=True)          # the row lock makes two devices racing for the last seat take turns
+    if lic["kind"] == "volume":
+        raise LicenseError("use_site_host", 409)              # a volume key lives on the customer's site host, not on a device
     dev = security.sha256_hex(device_id)
     again = conn.execute(
         "UPDATE activations SET last_seen_at = now(), ip_address = %s, device_name = COALESCE(%s, device_name) WHERE license_id = %s AND device_hash = %s RETURNING activation_id",
@@ -198,6 +204,8 @@ def activate(conn: psycopg.Connection, settings: Settings, app: App, *, key: str
 
 def validate(conn: psycopg.Connection, settings: Settings, app: App, *, key: str, device_id: str, ip: str | None, nonce: str) -> dict:
     lic = _load(conn, settings, app, key, lock=False)
+    if lic["kind"] == "volume":
+        raise LicenseError("use_site_host", 409)
     dev = security.sha256_hex(device_id)
     seen = conn.execute(
         "UPDATE activations SET last_seen_at = now(), ip_address = %s WHERE license_id = %s AND device_hash = %s RETURNING 1", (ip, lic["license_id"], dev)
@@ -205,6 +213,39 @@ def validate(conn: psycopg.Connection, settings: Settings, app: App, *, key: str
     if not seen:
         raise LicenseError("device_not_activated", 403)
     return _lease(settings, app, lic, dev, nonce)
+
+
+def host_grant(conn: psycopg.Connection, settings: Settings, app: App, *, key: str, device_id: str, device_name: str | None, host_public_key: str,
+               seats_in_use: int | None, ip: str | None, nonce: str) -> dict:
+    """A site host asks to serve its network. It gets a signed grant: how many seats it may hand out, until when, and
+    its own public key certified by this server, so the devices there can trust the leases the host signs."""
+    import base64
+    try:
+        if len(base64.b64decode(host_public_key, validate=True)) != 32:
+            raise ValueError
+    except Exception as exc:  # noqa: BLE001
+        raise LicenseError("bad_host_key", 400) from exc
+    lic = _load(conn, settings, app, key, lock=True)
+    if lic["kind"] != "volume":
+        raise LicenseError("not_a_volume_license", 409)
+    dev = security.sha256_hex(device_id)
+    again = conn.execute(
+        "UPDATE activations SET last_seen_at = now(), ip_address = %s, device_name = COALESCE(%s, device_name) WHERE license_id = %s AND device_hash = %s RETURNING 1",
+        (ip, device_name, lic["license_id"], dev)).fetchone()
+    if not again:
+        used = conn.execute("SELECT count(*) FROM activations WHERE license_id = %s", (lic["license_id"],)).fetchone()[0]
+        if used >= lic["max_activations"]:
+            raise LicenseError("host_limit_reached", 409, max_hosts=lic["max_activations"])
+        conn.execute("INSERT INTO activations (license_id, device_hash, device_name, ip_address) VALUES (%s, %s, %s, %s)", (lic["license_id"], dev, device_name, ip))
+    audit(conn, "app:" + app.app_id, "host.grant", license_id=lic["license_id"], app_id=app.app_id, ip=ip, seats=lic["volume_seats"], seats_in_use=seats_in_use, renewed=bool(again))
+    now = int(time.time())
+    exp = now + settings.grant_hours * 3600
+    if lic["expires_at"]:
+        exp = min(exp, int(lic["expires_at"].timestamp()))
+    payload = {"typ": "grant", "lic": str(lic["license_id"]), "app": app.app_id, "host": dev, "hpk": host_public_key, "seats": lic["volume_seats"],
+               "plan": lic["plan"], "iat": now, "exp": exp, "nonce": nonce}
+    return {"valid": True, "plan": lic["plan"], "seats": lic["volume_seats"], "grant_expires_at": datetime.fromtimestamp(exp, timezone.utc).isoformat(),
+            "metadata": lic["metadata"], "grant": security.sign_lease(settings.signing_key, payload)}
 
 
 def deactivate(conn: psycopg.Connection, settings: Settings, app: App, *, key: str, device_id: str, ip: str | None) -> dict:
@@ -310,7 +351,7 @@ def search_licenses(conn: psycopg.Connection, settings: Settings, *, app_id: str
     cond = " AND ".join(where)
     total = conn.execute(f"SELECT count(*) FROM licenses l WHERE {cond}", tuple(params)).fetchone()[0]
     rows = _rows(conn, f"""SELECT l.license_id, l.key_hint || '-…' AS key_hint, l.app_id, a.name AS app_name, l.customer_email, l.plan, l.max_activations,
-                                  l.expires_at, {_EFFECTIVE} AS status, l.created_at,
+                                  l.expires_at, {_EFFECTIVE} AS status, l.created_at, l.kind, l.volume_seats,
                                   (SELECT count(*) FROM activations x WHERE x.license_id = l.license_id) AS activations
                            FROM licenses l JOIN apps a ON a.app_id = l.app_id WHERE {cond} ORDER BY l.created_at DESC, l.license_id LIMIT %s OFFSET %s""",
                  tuple(params) + (limit, offset))
@@ -320,7 +361,7 @@ def search_licenses(conn: psycopg.Connection, settings: Settings, *, app_id: str
 def license_detail(conn: psycopg.Connection, license_id: str) -> dict:
     license_id = _uuid(license_id, "license_not_found")
     lic = _rows(conn, f"""SELECT l.license_id, l.key_hint || '-…' AS key_hint, l.app_id, a.name AS app_name, l.customer_email, l.plan, l.max_activations, l.expires_at,
-                                 {_EFFECTIVE} AS status, l.status_reason, l.metadata, l.created_at, l.updated_at
+                                 {_EFFECTIVE} AS status, l.status_reason, l.metadata, l.kind, l.volume_seats, l.created_at, l.updated_at
                           FROM licenses l JOIN apps a ON a.app_id = l.app_id WHERE l.license_id = %s""", (license_id,))
     if not lic:
         raise LicenseError("license_not_found", 404)

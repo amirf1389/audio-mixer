@@ -1,0 +1,29 @@
+# HTTPS front door. Caddy gets and renews the certificate for LKMS_DOMAIN by itself (the domain must point at this server).
+{$LKMS_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 256KB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# The admin API and the admin console answer only to your own addresses (LKMS_ADMIN_ALLOW, e.g. "203.0.113.7 10.8.0.0/24").
+	@admin path /admin /admin/* /manage /manage/*
+	handle @admin {
+		@outside not remote_ip {$LKMS_ADMIN_ALLOW}
+		respond @outside 403
+		reverse_proxy api:8088
+	}
+
+	# What your apps and site hosts call.
+	@public path /v1/* /healthz
+	handle @public {
+		reverse_proxy api:8088
+	}
+
+	handle {
+		respond 404
+	}
+}

@@ -26,9 +26,17 @@ CREATE TABLE IF NOT EXISTS licenses (
     status           text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'revoked', 'expired')),
     status_reason    text,
     metadata         jsonb NOT NULL DEFAULT '{}'::jsonb,
+    -- 'device': each device asks the central server. 'volume': a site host on the customer's network holds the licence
+    -- and hands out volume_seats seats to the devices there; max_activations is then the number of site hosts allowed.
+    kind             text NOT NULL DEFAULT 'device' CHECK (kind IN ('device', 'volume')),
+    volume_seats     integer CHECK (volume_seats IS NULL OR volume_seats BETWEEN 1 AND 1000000),
     created_at       timestamptz NOT NULL DEFAULT now(),
-    updated_at       timestamptz NOT NULL DEFAULT now()
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    CHECK ((kind = 'volume') = (volume_seats IS NOT NULL))
 );
+-- databases made before volume licences existed
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'device' CHECK (kind IN ('device', 'volume'));
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS volume_seats integer CHECK (volume_seats IS NULL OR volume_seats BETWEEN 1 AND 1000000);
 CREATE INDEX IF NOT EXISTS licenses_app_idx      ON licenses (app_id, status);
 CREATE INDEX IF NOT EXISTS licenses_email_idx    ON licenses (lower(customer_email));
 CREATE INDEX IF NOT EXISTS licenses_expires_idx  ON licenses (expires_at) WHERE expires_at IS NOT NULL;

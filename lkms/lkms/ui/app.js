@@ -79,10 +79,12 @@ async function viewLicences(main) {
   const appSel = h("select", {}, apps.filter((a) => a.status === "active").map((a) => h("option", { value: a.app_id }, a.name)));
   const count = h("input", { type: "number", min: 1, max: 1000, value: 1 }), plan = h("input", { value: "standard", maxlength: 60 }), seats = h("input", { type: "number", min: 1, max: 100000, value: 1 });
   const exp = h("input", { type: "date" }), email = h("input", { type: "email", placeholder: "optional" }), err = h("div", { class: "error" }), out = h("div", {});
+  const site = h("input", { type: "number", min: 1, max: 1000000, placeholder: "device licence" });
   const issue = h("button", { class: "btn primary" }, "Create keys");
   issue.onclick = run(issue, err, async () => {
     const body = { app_id: appSel.value, count: Number(count.value), plan: plan.value.trim() || "standard", max_activations: Number(seats.value) };
     if (exp.value) body.expires_at = exp.value + "T23:59:59Z"; if (email.value.trim()) body.customer_email = email.value.trim();
+    if (site.value) body.volume_seats = Number(site.value);
     const made = (await api("POST", "/admin/licenses", body)).licenses, keys = made.map((m) => m.license_key);
     const cp = h("button", { class: "btn" }, "Copy all"), dl = h("button", { class: "btn" }, "Download CSV");
     cp.onclick = () => copy(keys.join("\n"), cp);
@@ -90,7 +92,7 @@ async function viewLicences(main) {
     out.replaceChildren(h("div", { class: "notice" }, h("b", {}, keys.length + (keys.length === 1 ? " key created." : " keys created.") + " Save them now: they are not shown again."), h("pre", { class: "mono" }, keys.join("\n")), h("div", { class: "row" }, cp, dl)));
     list();
   });
-  main.append(h("div", { class: "card" }, h("h2", {}, "Create licence keys"), apps.length ? h("div", { class: "row" }, field("App", appSel), field("How many", count), field("Plan", plan), field("Devices per key", seats), field("Expires", exp), field("Customer e-mail", email), issue)
+  main.append(h("div", { class: "card" }, h("h2", {}, "Create licence keys"), apps.length ? h("div", { class: "row" }, field("App", appSel), field("How many", count), field("Plan", plan), field("Devices per key", seats), field("Expires", exp), field("Customer e-mail", email), field("Site seats (volume licence)", site), issue)
     : h("p", { class: "muted" }, "Register an app first, on the Apps tab."), err, out));
   // ---- find and list
   const fApp = h("select", {}, h("option", { value: "" }, "All apps"), apps.map((a) => h("option", { value: a.app_id, selected: f.app_id === a.app_id }, a.name)));
@@ -101,7 +103,7 @@ async function viewLicences(main) {
     const p = new URLSearchParams({ limit: state.limit, offset: f.offset }); if (f.app_id) p.set("app_id", f.app_id); if (f.status) p.set("status", f.status); if (f.q) p.set("q", f.q);
     const r = await api("GET", "/admin/search/licenses?" + p);
     body.replaceChildren(...r.licenses.map((l) => h("tr", { class: "click", tabindex: 0, onclick: () => openLicence(l.license_id, list), onkeydown: (e) => { if (e.key === "Enter") openLicence(l.license_id, list); } },
-      h("td", { class: "mono" }, l.key_hint), h("td", {}, l.app_name), h("td", {}, l.plan), h("td", {}, pill(l.status)), h("td", { class: "num" }, l.activations + " / " + l.max_activations),
+      h("td", { class: "mono" }, l.key_hint), h("td", {}, l.app_name), h("td", {}, l.plan), h("td", {}, pill(l.status)), h("td", { class: "num" }, l.kind === "volume" ? l.volume_seats + " site seats" : l.activations + " / " + l.max_activations),
       h("td", {}, day(l.expires_at)), h("td", {}, l.customer_email || "–"), h("td", {}, day(l.created_at)))));
     if (!r.licenses.length) body.append(h("tr", {}, h("td", { colspan: 8, class: "muted" }, "No licences match.")));
     info.textContent = r.total ? (f.offset + 1) + "–" + (f.offset + r.licenses.length) + " of " + r.total : "";
@@ -136,7 +138,7 @@ async function openLicence(id, refresh) {
       h("p", { class: "small muted" }, l.status_reason ? "Reason: " + l.status_reason : ""),
       h("h3", {}, "Details"), h("div", { class: "row" }, field("Plan", plan), field("Devices allowed", seats)), h("div", { class: "row gap" }, field("Expires (empty: never)", exp), field("Customer e-mail", email)),
       h("div", { class: "row gap" }, save, ...actions), err,
-      h("h3", {}, "Activated devices (" + l.activations.length + " of " + l.max_activations + ")"),
+      h("h3", {}, l.kind === "volume" ? "Site hosts (" + l.activations.length + " of " + l.max_activations + "), " + l.volume_seats + " seats each" : "Activated devices (" + l.activations.length + " of " + l.max_activations + ")"),
       l.activations.length ? h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Device", "Address", "Last seen", ""].map((t) => h("th", {}, t)))), h("tbody", {}, l.activations.map((a) => {
         const rm = h("button", { class: "btn danger" }, "Remove");
         rm.onclick = run(rm, err, async () => { if (!confirm("Remove this device? Its seat becomes free.")) return; await api("DELETE", "/admin/activations/" + a.activation_id); await draw(); });

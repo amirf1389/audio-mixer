@@ -30,6 +30,7 @@ class Settings:
     lease_hours: int
     trust_proxy: bool
     admin_ui: bool = False           # serve the admin console at /manage
+    grant_hours: int = 720           # how long a site host may serve its network without reaching this server
     timestamp_skew_s: int = 300      # how far a request's clock may be from the server's
     max_bulk: int = 1000             # licences per admin request
 
@@ -52,4 +53,5 @@ class Settings:
             lease_hours=hours,
             trust_proxy=os.environ.get("LKMS_TRUST_PROXY", "0") == "1",
             admin_ui=os.environ.get("LKMS_ADMIN_UI", "0") == "1",
+            grant_hours=max(1, min(int(os.environ.get("LKMS_GRANT_HOURS", "720")), 24 * 366)),
         )
