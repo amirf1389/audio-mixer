@@ -49,6 +49,18 @@ class Apps : public QObject {
   QVariantList testPrograms;
   std::function<std::vector<std::pair<quint32, QString>>()> sessionsNow;   // tests: what "plays now" (pid, name); empty = ask Windows
   void poll();                                                     // what the timer does (tests call it)
+  // AUTO LIVE: the console looks at the NAMES of the programs that are running (nothing of what they do, no window, no sound) every few
+  // seconds; when a streaming program (TikTok LIVE Studio, OBS Studio, Streamlabs, XSplit, vMix, Twitch Studio, PRISM Live Studio) appears,
+  // LIVE MODE starts by itself on the selected channel. Once per run of that program: after UNLOCK AND STOP it does not start again
+  // until the program has been closed and opened again.
+  Q_PROPERTY(bool autoLive READ autoLive WRITE setAutoLive NOTIFY changed)
+  Q_PROPERTY(QString streamApp READ streamApp NOTIFY changed)        // the streaming program seen now ("" = none)
+  bool autoLive() const { return s_.value("live/auto", false).toBool(); } void setAutoLive(bool on);
+  QString streamApp() const { return streamApp_; }
+  /** the streaming program a process name belongs to ("" = not one): "TikTok LIVE Studio.exe" -> "TikTok LIVE Studio" */
+  Q_INVOKABLE static QString streamAppOf(const QString& processName);
+  std::function<QStringList()> processesNow;                       // tests: the running programs' names; empty = ask the system
+  void checkStreamApps(const QStringList& names);                  // what a look at the process list leads to (tests call it)
  signals:
   void propertiesReady(const QString& id, const QVariantMap& props);   // {ok, channels, rate, bits, levelPct, muted, enhancements: "on" | "off" | "unknown", error}
   void changed();
@@ -59,4 +71,5 @@ class Apps : public QObject {
   QString waiting_[am::app::Capture::kSlots];                      // the program a free slot waits for ("" = none)
   QString waitingDev_[am::app::Capture::kSlots]; int devTick_ = 0;   // ... or the recording device (its endpoint id; the name is in waiting_)
   QString note_; bool looking_ = false, placing_ = false; QString lastSig_;
+  QString streamApp_; bool streamHandled_ = false, procLooking_ = false; int procTick_ = 0;
 };

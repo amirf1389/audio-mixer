@@ -928,6 +928,16 @@ int main(int argc, char* argv[]) {
           const bool twice = engine.startLive(2).contains("already") && engine.liveStrip() == 5;
           engine.stopLive(); const QStringList off = kinds(5); const bool back = off == mine && !engine.liveMode() && engine.headroomDb() == hWas && engine.watchdog() == wWas;
           engine.setPlugin(5, 0, QString()); const bool clean = kinds(5) == before;
+          { // AUTO LIVE: a streaming program in the list of running programs starts LIVE MODE, once per run of that program; other programs do not
+            const bool names = Apps::streamAppOf("TikTok LIVE Studio.exe") == "TikTok LIVE Studio" && Apps::streamAppOf("obs64.exe") == "OBS Studio" && Apps::streamAppOf("OBS") == "OBS Studio" && Apps::streamAppOf("Streamlabs Desktop.exe") == "Streamlabs"
+              && Apps::streamAppOf("jobs.exe").isEmpty() && Apps::streamAppOf("chrome.exe").isEmpty() && Apps::streamAppOf("observer.exe").isEmpty() && Apps::streamAppOf("").isEmpty();
+            const bool was = apps.autoLive(); apps.setAutoLive(false); apps.checkStreamApps({"explorer.exe", "TikTok LIVE Studio.exe"}); const bool offNo = !engine.liveMode() && apps.streamApp() == "TikTok LIVE Studio";
+            apps.setAutoLive(true); apps.checkStreamApps({"explorer.exe", "chrome.exe"}); const bool otherNo = !engine.liveMode() && apps.streamApp().isEmpty();
+            apps.checkStreamApps({"explorer.exe", "TikTok LIVE Studio.exe"}); const bool started = engine.liveMode();
+            engine.stopLive(); apps.checkStreamApps({"TikTok LIVE Studio.exe"}); const bool notAgain = !engine.liveMode();          // stopped by hand while it still runs: left alone
+            apps.checkStreamApps({"explorer.exe"}); apps.checkStreamApps({"obs64.exe"}); const bool again = engine.liveMode() && apps.streamApp() == "OBS Studio"; engine.stopLive(); apps.checkStreamApps({}); apps.setAutoLive(was);
+            std::printf("amixos --smoke: AUTO LIVE names %d, off does nothing %d, other programs %d, a streaming program starts it %d, not twice %d, the next one again %d\n", names, offNo, otherNo, started, notAgain, again);
+            if (!names || !offNo || !otherNo || !started || !notAgain || !again) { std::fprintf(stderr, "amixos --smoke: AUTO LIVE failed\n"); return 104; } }
           std::printf("amixos --smoke: LIVE MODE chain on %d (%d effects on the channel), second start refused %d, STOP leaves the user's own effect and gives the rest back %d %d\n", chain, int(on.size()), twice, back, clean);
           if (!chain || !twice || !back || !clean) { std::fprintf(stderr, "amixos --smoke: LIVE MODE failed (%s -> %s -> %s)\n", qPrintable(mine.join(",")), qPrintable(on.join(",")), qPrintable(off.join(","))); return 103; } }
         { // HEADROOM MODE: the master stays under the chosen level, whatever the faders say; OFF gives the limiter back as it was

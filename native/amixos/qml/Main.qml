@@ -96,6 +96,7 @@ ApplicationWindow {
                         MItem { text: i18n.t("Clear clip lamps", i18n.lang); onTriggered: engine.clearClips() } }
                     Menu { id: toolsMenu; objectName: "toolsMenu"; width: 260
                         MItem { objectName: "menuLive"; text: i18n.t("LIVE MODE (stream or guest)…", i18n.lang); onTriggered: root.say(engine.startLive(engine.selectedStrip)) }
+                        MItem { objectName: "menuAutoLive"; text: (apps.autoLive ? "✓ " : "") + i18n.t("AUTO LIVE: start it when a streaming program opens", i18n.lang); onTriggered: apps.autoLive = !apps.autoLive }
                         MenuSeparator {}
                         MItem { text: i18n.t("Plug-ins", i18n.lang); onTriggered: root.current = "plugins" }
                         MItem { text: i18n.t("Plug-in Builder (separate app)…", i18n.lang); onTriggered: settings.openPluginBuilder() }
@@ -417,7 +418,7 @@ ApplicationWindow {
                 Rectangle { width: 18; height: 18; radius: 9; color: "#ef4444"; anchors.verticalCenter: parent.verticalCenter; SequentialAnimation on opacity { loops: Animation.Infinite; running: liveScreen.visible; NumberAnimation { to: 0.25; duration: 700 } NumberAnimation { to: 1; duration: 700 } } }
                 Text { text: i18n.t("LIVE MODE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 30; font.bold: true; font.letterSpacing: 6 } }
             Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10
-                   text: i18n.t("The console runs by itself: the voice chain is on the microphone, the master is limited, the watchdog restarts the sound if the sound card stops. The controls are locked.", i18n.lang) }
+                   text: (apps.streamApp !== "" ? apps.streamApp + i18n.t(" is running. ", i18n.lang) : "") + i18n.t("The console runs by itself: the voice chain is on the microphone, the master is limited, the watchdog restarts the sound if the sound card stops. The controls are locked.", i18n.lang) }
             Repeater { model: [{ t: "MICROPHONE · CH " + (engine.liveStrip + 1), v: liveScreen.m.inDb ?? -120, c: Theme.cyan }, { t: "MASTER", v: engine.telv("masterPeakDb", engine.meterTick), c: Theme.orange }]
                 delegate: Column { width: parent.width; spacing: 4
                     Row { width: parent.width; Text { width: parent.width - 90; text: i18n.t(modelData.t, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
