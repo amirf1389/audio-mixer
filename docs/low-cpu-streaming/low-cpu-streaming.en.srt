@@ -1,0 +1,35 @@
+1
+00:00:00,000 --> 00:00:04,000
+AmF X1: low processor use for live streaming
+
+2
+00:00:04,000 --> 00:00:08,000
+LIVE MODE: one switch for a stream or a guest
+
+3
+00:00:08,000 --> 00:00:12,000
+A voice chain on the microphone: clean, equalise, level, remove peaks
+
+4
+00:00:12,000 --> 00:00:16,000
+The output level is limited, so the stream cannot distort. If the sound card stops, the sound starts again by itself.
+
+5
+00:00:16,000 --> 00:00:20,000
+The interface slows down by itself: 30, 4 or 1 redraws a second
+
+6
+00:00:20,000 --> 00:00:24,000
+Measured on our test machine: the program used about 7 percent of one processor core while its window was open, and about 4 percent while it was minimised.
+
+7
+00:00:24,000 --> 00:00:28,000
+Your computer will give other figures. Not yet measured on Windows.
+
+8
+00:00:28,000 --> 00:00:32,000
+AUTO LIVE starts it when a streaming program opens
+
+9
+00:00:32,000 --> 00:00:36,000
+AmF X1 1.24.0.5 by AMFB Audio
