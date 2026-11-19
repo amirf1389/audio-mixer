@@ -115,6 +115,12 @@ class LocalMixerActivity : AppCompatActivity() {
             inRow.addView(PadButton(this, t, if (v) cyan else ConsoleUi.RED, 11f).apply { on = Prefs.localInputOn(this@LocalMixerActivity) == v; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (v) 8 else 0, 0) }
                 setOnClickListener { if (Prefs.localInputOn(this@LocalMixerActivity) != v) { Prefs.setLocalInputOn(this@LocalMixerActivity, v); restartIfRunning(); render() } } }) }
         body.addView(chRow); body.addView(inRow)
+        // ---- QUICK CHAINS: one tap fills the channel's rack (both channels in STEREO) with a ready chain
+        body.addView(TextView(this).apply { text = getString(R.string.lm_chains); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 0, 0, 6) })
+        val chainRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "chainRow" }; val nowChain = LocalChains.current(prefs(), 0)
+        for (c in LocalChains.chains) chainRow.addView(PadButton(this, c.glyph + " " + c.title, cyan, 11f).apply { on = nowChain == c.id; contentDescription = c.sub; setPadding(22, 0, 22, 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 80).apply { setMargins(0, 0, 8, 0) }; setOnClickListener { applyChain(c) } })
+        body.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; setPadding(0, 0, 0, 10); addView(chainRow) })
         // ---- THE DESK
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         // ---- DECKS: two song players (a card each: the file, time, seek, LOAD / PLAY / STOP / LOOP); their channels are on the desk
@@ -208,6 +214,12 @@ class LocalMixerActivity : AppCompatActivity() {
         m[id] = String.format(java.util.Locale.US, "%.4f", v); prefs().edit().putString(paramKey(s, slot), m.entries.joinToString(";") { it.key + "=" + it.value }).apply()
     }
     /** puts the saved levels, pans, mutes, limiter and racks onto a fresh engine */
+    /** a QUICK CHAIN onto the input channel(s): saved, and put into the running engine slot by slot (an emptied slot is taken out) */
+    internal fun applyChain(c: LocalChains.Chain) {
+        for (s in 0 until inChannels()) { LocalChains.save(prefs(), s, c, Engine.MAX_INSERTS)
+            engine?.let { e -> for (slot in 0 until Engine.MAX_INSERTS) { val f = c.slots.getOrNull(slot); e.insert(s, slot, f?.kind ?: ""); f?.params?.forEach { (id, v) -> e.insertSet(s, slot, id, v) } } } }
+        render()
+    }
     private fun applyAll(e: Engine) {
         val p = prefs(); val two = inChannels() == 2
         for (s in 0 until INPUTS) { e.setGain(s, p.getFloat("db$s", if (s == 1 && !two) -60f else 0f).toDouble()); e.setPan(s, p.getFloat("pan$s", if (two) (if (s == 0) -1f else 1f) else 0f).toDouble()); e.setMute(s, p.getBoolean("mute$s", false)) }

@@ -97,7 +97,7 @@ Flickable {
                         Text { text: ch.dir === "in" ? i18n.t("DEVICE IN", i18n.lang) : i18n.t("DEVICE OUT", i18n.lang); color: Theme.muted; font.pixelSize: 9 }
                         Combo { Layout.preferredWidth: 90; model: Array.from({ length: 32 }, (_, i) => String(i + 1)); currentIndex: Math.max(0, ch.device); onActivated: frame.setChannelDevice(page.sel, ch.n, currentIndex) }
                         Text { visible: ch.dir === "in"; text: i18n.t("→ STRIP", i18n.lang); color: Theme.muted; font.pixelSize: 9 }
-                        Combo { visible: ch.dir === "in"; Layout.preferredWidth: 90; model: Array.from({ length: 32 }, (_, i) => "CH " + (i + 1)); currentIndex: Math.max(0, ch.strip); onActivated: frame.setChannelStrip(page.sel, ch.n, currentIndex) }
+                        Combo { visible: ch.dir === "in"; Layout.preferredWidth: 90; model: Array.from({ length: engine.strips }, (_, i) => "CH " + (i + 1)); currentIndex: Math.max(0, ch.strip); onActivated: frame.setChannelStrip(page.sel, ch.n, currentIndex) }
                         Text { visible: ch.dir === "out"; text: i18n.t("← SOURCE", i18n.lang); color: Theme.muted; font.pixelSize: 9 }
                         Combo { visible: ch.dir === "out"; Layout.preferredWidth: 150; model: engine.outputSources.map(s => s.name); currentIndex: Math.max(0, ch.source); onActivated: frame.setChannelSource(page.sel, ch.n, currentIndex) }
                         Btn { visible: ch.phantom !== undefined && page.card.phantomCard; label: "48 V"; on: ch.phantom; onColor: Theme.amber; onClicked: frame.setPhantom(page.sel, ch.n, !ch.phantom) }

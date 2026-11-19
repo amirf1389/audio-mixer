@@ -6,6 +6,7 @@
 #include <QQuickItem>
 #include <QPointer>
 #include <algorithm>
+#include <bitset>
 #include <QElapsedTimer>
 #include <QObject>
 #include <functional>
@@ -42,7 +43,7 @@ class Engine : public QObject {
   Q_PROPERTY(bool running READ running NOTIFY stateChanged)
   Q_PROPERTY(QString status READ status NOTIFY stateChanged)
   Q_PROPERTY(QString backend READ backend NOTIFY stateChanged)
-  Q_PROPERTY(int strips READ strips CONSTANT)
+  Q_PROPERTY(int strips READ strips NOTIFY licenseChanged)   // the strips this console shows: 32 as ever, more with EXTEND packs, 300 with ULTIMATE
   Q_PROPERTY(QVariantList devices READ devices NOTIFY devicesChanged)
   Q_PROPERTY(QStringList backends READ backends CONSTANT)
   Q_PROPERTY(QVariantList stripState READ stripState NOTIFY stripsChanged)
@@ -56,6 +57,15 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList pages READ pages CONSTANT)
   Q_PROPERTY(QString edition READ edition NOTIFY licenseChanged)
   Q_PROPERTY(QVariantMap license READ license NOTIFY licenseChanged)          // state, plan, planName, channels, source, id, name, serial, expires, machine, message
+  // HEADROOM MODE: the master never goes above -3 / -6 / -9 / -12 dBFS (0 = off). The master limiter is held on with its ceiling at
+  // that level (or lower, if the user's own ceiling is lower): room is left for whatever comes after the console (a stream encoder, a
+  // recorder, an amplifier that clips early). Saved with the console's settings.
+  Q_PROPERTY(int headroomDb READ headroomDb WRITE setHeadroomDb NOTIFY stripsChanged)
+ public:
+  int headroomDb() const { return headroom_; } void setHeadroomDb(int db);
+  bool limiterOnNow() const { return masterLim_ || headroom_ > 0; } double ceilingNow() const { return headroom_ > 0 ? std::min(masterCeil_, -double(headroom_)) : masterCeil_; }
+ private:
+  Q_PROPERTY(int inputCap READ inputCap NOTIFY licenseChanged)
   Q_PROPERTY(int licensedChannels READ licensedChannels NOTIFY licenseChanged)   // strips beyond this are locked (muted in the engine)
   Q_PROPERTY(QVariantList busState READ busState NOTIFY busesChanged)
   Q_PROPERTY(QVariantList dcaState READ dcaState NOTIFY groupsChanged)
@@ -85,26 +95,35 @@ class Engine : public QObject {
   void markInstallSeen();   // after that reset: this install counts as seen, so it happens once
   QString status() const { return startNote_.isEmpty() ? status_ : status_ + (status_.isEmpty() ? QString() : QStringLiteral(" · ")) + startNote_; }   // the start note rides along until the master is moved
   QString backend() const { return rt_ ? QString::fromStdString(rt_->backendName()) : QString(); }
-  int strips() const { return kStrips; }
+  int strips() const { return shownStrips(); }
+  // THE STRIPS SHOWN: the engine holds 300, the console shows 32 (strips above the licence locked, as always) or, with more licensed
+  // channels, exactly those. The lists the interface reads, the meters and the saved console follow this, so a 32-strip console costs
+  // what it always did.
+  int shownStrips() const { return std::max(32, licensedChannels_); }
+  // how many inputs of a device are opened: one per strip shown, 256 at most (the routing table keeps 256 and above for network audio)
+  int inputCap() const { return std::min(256, shownStrips()); }
   QVariantList devices() const { return devices_; }
   QStringList backends() const;
   QVariantList stripState() const;
   QVariantList meters() const { return meters_; }
   // ONE strip's meters: a delegate binding to engine.meters[i] converts all 32 strips to JavaScript on every tick (32 delegates x 32 maps,
   // 30 times a second); bind to "engine.meterTick, engine.meterAt(i)" instead, which converts one map.
-  Q_INVOKABLE QVariantMap meterAt(int i) const { return i >= 0 && i < meters_.size() ? meters_[i].toMap() : QVariantMap{}; }
+  Q_INVOKABLE QVariantMap meterAt(int i) const { return i >= 0 && i < meters_.size() ? meters_[i].toMap() : silentMeter(); }
+  // a strip the lists do not hold (the moment the licence changes the number of strips shown, a page still asks for the old ones): a
+  // silent meter and the strip as it is, never an empty map (a page that reads .peakDb of nothing fills the log with warnings)
+  static QVariantMap silentMeter() { static const QVariantMap m{{"peakDb", -120.0}, {"rmsDb", -120.0}, {"holdDb", -120.0}, {"clip", false}, {"compGrDb", 0.0}, {"gateDb", 0.0}, {"inDb", -120.0}, {"vuDb", -120.0}, {"polCorr", 0.0}, {"polInv", false}, {"amGainDb", 0.0}, {"overComp", false}}; return m; }
   Q_INVOKABLE int clippedStrips() const { int n = 0; for (const QVariant& v : meters_) if (v.toMap().value("clip").toBool()) ++n; return n; }
   int meterTick() const { return meterTick_; }
   // FAST READS for the interface: engine.stripState[i] builds and converts all 32 strips (about 40 values each) on every read, and every
   // engine.telemetry.x converts the whole telemetry map; a mixer with 32 strips did that thousands of times per fader move. These read one item
   // from a cache that is rebuilt only after a change (the tick argument makes the binding follow the change).
-  Q_INVOKABLE QVariantMap stripAt(int i, int tick = 0) const { Q_UNUSED(tick); const QVariantList& l = stripCache(); return i >= 0 && i < l.size() ? l[i].toMap() : QVariantMap{}; }
+  Q_INVOKABLE QVariantMap stripAt(int i, int tick = 0) const { Q_UNUSED(tick); const QVariantList& l = stripCache(); return i >= 0 && i < l.size() ? l[i].toMap() : i >= 0 && i < kStrips ? stripMap(i) : QVariantMap{}; }
   Q_INVOKABLE QVariant telv(const QString& key, int tick = 0) const { Q_UNUSED(tick); return telemetry_.value(key); }
   int stripTick() const { return stripTick_; }
   // ONE STRIP REDRAWS, NOT 32: "property int ver: engine.stripVer(index, engine.stripTick)" changes only when that strip changed, and
   // "property var st: { ver; return engine.stripLite(index) }" then converts one small map. QML does not re-run a binding whose input kept its value.
   Q_INVOKABLE int stripVer(int i, int tick = 0) const { Q_UNUSED(tick); stripCache(); return i >= 0 && i < static_cast<int>(stripVer_.size()) ? stripVer_[static_cast<std::size_t>(i)] : 0; }
-  Q_INVOKABLE QVariantMap stripLite(int i) const { stripCache(); return i >= 0 && i < liteCache_.size() ? liteCache_[i].toMap() : QVariantMap{}; }
+  Q_INVOKABLE QVariantMap stripLite(int i) const { stripCache(); if (i >= 0 && i < liteCache_.size()) return liteCache_[i].toMap(); if (i < 0 || i >= kStrips) return QVariantMap{}; QVariantMap m = stripMap(i); m.remove("dsp"); return m; }
   bool anyMute() const; bool anySolo() const;
   QVariantMap telemetry() const { return telemetry_; }
   double masterDb() const { return masterDb_; }
@@ -142,6 +161,11 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap checkKey(const QString& key) const;   // genuine? which plan? upgrade / same / downgrade; nothing is stored
   Q_INVOKABLE QVariantMap activateKey(const QString& key);      // verifies and stores; {ok, reason, message}
   Q_INVOKABLE bool deactivateKey();
+#ifdef AMIXOS_TEST_LICENSE
+  void setTestChannels(int n) { testChannels_ = n; refreshLicense(); }   // test builds only: the console as it is with n licensed channels
+  int testChannels_ = 0;
+#endif
+  Q_INVOKABLE bool removeExtendPacks();   // forgets the CHANNEL EXTEND packs kept on this computer (the licence itself stays)
   Q_INVOKABLE QVariantMap storeActivation(const QString& activation);   // verifies it for this computer, stores it; {ok, reason, message}
   Q_INVOKABLE bool storeRevocations(const QString& list);               // keeps the vendor's revocation list when genuine and newer
   Q_INVOKABLE QString licenseRequest(const QString& plan, const QString& name, const QString& email) const;   // JSON to send the vendor
@@ -277,6 +301,9 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
   // while phones are linked the console's engine is stopped and the remote service plays: the input choice goes there (main.cpp sets it)
   std::function<bool(const QString& in)> remoteInput;
+  std::string currentInputId() const { return rt_ ? curIn_ : std::string(); }   // the device the sound card stream reads now ("" = the default one or none)
+  std::function<QString(int input)> appInputName;   // APP CAPTURE (Apps): the name of a program input, e.g. "Spotify L"
+  static int cleanRoute(int input) { return (input >= am::Runtime::kNetInBase && input < am::Runtime::kNetInBase + am::Runtime::kNetInputs) || am::Runtime::isAppInput(input) ? input : std::clamp(input, -1, am::Runtime::kNetInBase - 1); }   // a device input 0 .. 255, a network input, a program input, or -1 (none)
   std::function<bool()> remoteInProcess;   // the network service plays the sound inside this program (phones linked): no working-set trim then
   // SYSTEM OPTIMIZATION (engine/cpp/include/audiomixer/sysopt.hpp): the processor, its core types, an NPU, memory; and the three switches
   //   fastCores: the audio thread asks for the performance cores of a hybrid processor; eco: the interface thread is EcoQoS while the window is
@@ -306,8 +333,8 @@ class Engine : public QObject {
   Q_INVOKABLE bool startRecording();
   Q_INVOKABLE void stopRecording();
   Q_INVOKABLE void setArmed(int strip, bool on);
-  Q_INVOKABLE bool armed(int strip) const { return strip >= 0 && strip < kStrips && ((armed_ >> strip) & 1u); }
-  Q_INVOKABLE int armedCount() const { int n = 0; for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) ++n; return n; }
+  Q_INVOKABLE bool armed(int strip) const { return strip >= 0 && strip < kStrips && armed_.test(static_cast<std::size_t>(strip)); }
+  Q_INVOKABLE int armedCount() const { return static_cast<int>(armed_.count()); }
   // EFFECTS: one built-in effect per bus (reverb / delay / chorus / drive), before the bus returns to the master
   Q_INVOKABLE QVariantList fxCatalog() const;                 // [{kind, name}]
   Q_INVOKABLE QVariantMap busFx(int bus) const;               // {kind, name, bypass, mix, params: [{id, title, units, value, text, default}]}
@@ -315,7 +342,7 @@ class Engine : public QObject {
   Q_INVOKABLE void setBusFxParam(int bus, const QString& id, double value);
   Q_INVOKABLE void setBusFxBypass(int bus, bool on);
   Q_INVOKABLE void setBusFxMix(int bus, double wet);
-  Q_INVOKABLE QVariantList fxPresets() const;                 // the 300 presets: [{id, name, kind, category, mix}]
+  Q_INVOKABLE QVariantList fxPresets() const;                 // the 600 presets: [{id, name, kind, category, mix}]
   Q_INVOKABLE bool applyFxPreset(int bus, int presetId);      // loads the kind on the bus (if different) and sets every value
   Q_INVOKABLE int busFxPreset(int bus) const { return bus >= 0 && bus < kBuses ? buses_[bus].fxPreset : 0; }
   // WAVEFORM / PHASE: the scope tap
@@ -724,20 +751,20 @@ class Engine : public QObject {
   void clipboardChanged();
 
  private:
-  static constexpr int kStrips = 32;
-  int meterTick_ = 0; int stripTick_ = 0; mutable QVariantList stripCache_, liteCache_; mutable bool stripDirty_ = true; mutable std::vector<int> stripVer_ = std::vector<int>(32, 0);
+  static constexpr int kStrips = am::kMaxStrips;   // 300: the ULTIMATE console. The licence decides how many run (BASIC 10 ... MASTER 32, +30 per EXTEND pack)
+  int meterTick_ = 0; int stripTick_ = 0; mutable QVariantList stripCache_, liteCache_; mutable bool stripDirty_ = true; mutable std::vector<int> stripVer_ = std::vector<int>(kStrips, 0);
   const QVariantList& stripCache() const {
     if (!stripDirty_) return stripCache_;
     QVariantList fresh = buildStripState(); QVariantList lite;
     for (int i = 0; i < fresh.size(); ++i) { QVariantMap m = fresh[i].toMap(); m.remove("dsp"); lite << m;   // the mixer's view: no EQ / dynamics detail
       if (i >= stripCache_.size() || fresh[i] != stripCache_[i]) ++stripVer_[static_cast<std::size_t>(i)]; }   // only the strips that really changed get a new version
     stripCache_ = fresh; liteCache_ = lite; stripDirty_ = false; return stripCache_; }
-  QVariantList buildStripState() const;
+  QVariantList buildStripState() const; QVariantMap stripMap(int i) const;
   static constexpr int kBuses = 16, kGroups = 8;   // buses 0-7 AUX, 8-15 FX
   struct SendUi { double db = -60; bool pre = false; };
   struct PluginUi { QString kind; bool bypass = false; std::shared_ptr<am::host::Plugin> vst; QString state, error; };   // vst: loaded instance (null = pending with error)
   std::vector<bool> muteKeep_; QString asioOpenId_, dacOpenId_, micOffNote_, asioNote_; bool asioReread_ = false;
-  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; struct PluginWin { QWindow* win; std::shared_ptr<am::host::Plugin> pl; int strip, slot; }; QList<PluginWin> pluginWins_; QTimer pluginIdle_; void closePluginWin(int index); bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[32] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
+  bool vstScanning_ = false; std::vector<QVariantMap> vstCatalog_; std::vector<std::shared_ptr<am::host::Plugin>> graveyard_; QTimer graveTimer_; QTimer saveTimer_; QTimer motionTimer_; struct PluginWin { QWindow* win; std::shared_ptr<am::host::Plugin> pl; int strip, slot; }; QList<PluginWin> pluginWins_; QTimer pluginIdle_; void closePluginWin(int index); bool mirror_ = false; bool headOn_ = false, cinema_ = false; double headYaw_ = 0, headPitch_ = 0; double orbit_[kStrips] = {0}; qint64 motionAt_ = 0; void pushSpatial(int i); void moveObjects(); bool masterMuted_ = false; double masterKeepDb_ = 0;
   bool loadVst(int strip, int slot);                      // from kind + state at the runtime's rate; false -> error set
   void rebuildInserts(int strip);                         // the strip's VST chain into the runtime
   void reloadAllVst();                                    // after open (new rate / block)
@@ -776,7 +803,7 @@ class Engine : public QObject {
   static int stripFromJson(StripUi& s, const QJsonObject& o);   // returns how many plug-ins did not fit in the ten slots
   QJsonObject consoleJson() const;
   void applyConsoleJson(const QJsonObject& root, bool respectSafe);
-  std::vector<SceneUi> scenes_; int currentScene_ = -1; int selected_ = 0; unsigned recallSafe_ = 0; std::vector<PresetUi> userPresets_;
+  std::vector<SceneUi> scenes_; int currentScene_ = -1; int selected_ = 0; std::bitset<kStrips> recallSafe_; std::vector<PresetUi> userPresets_;
   void load();
   void pushAll();   // every setting into a freshly opened runtime
 
@@ -786,17 +813,17 @@ class Engine : public QObject {
   BusUi buses_[kBuses]; DcaUi dcas_[kGroups]; MuteGroupUi muteGroups_[kGroups];
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
-  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
+  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100; int headroom_ = 0;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; std::string curBackend_, curIn_, curOut_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   int openBits_ = 0; bool openExclusive_ = false;
   bool spkOn_ = false; QVariantMap spkSaved_; void feedSpeakers(int strip);
-  QVariantMap license_; int licensedChannels_ = 10;
+  QVariantMap license_; int licensedChannels_ = 10; int keepStrips_ = 32;   // keepStrips_: the most strips a loaded console carried, saved again even if the licence now shows fewer (nothing is lost while a key is away)
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
   bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const; void secureInputFor(am::DeviceConfig& cfg);
   QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
-  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; unsigned armed_ = 0; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
+  QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; std::bitset<kStrips> armed_; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; } mon_;   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

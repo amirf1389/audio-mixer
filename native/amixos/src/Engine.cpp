@@ -76,6 +76,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
+  headroom_ = std::clamp(settings_.value("console/headroomDb", 0).toInt(), 0, 12); if (headroom_ % 3) headroom_ = 0;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   refreshLicense();
   histTimer_.setSingleShot(true); histTimer_.setInterval(400); connect(&histTimer_, &QTimer::timeout, this, &Engine::recordHistory);
@@ -269,7 +270,7 @@ void Engine::pushAll() {
     rt_->setDelayMs(i, p.delayMs); rt_->setPolarity(i, p.polarityInvert); rt_->setCrossover(i, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(i, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs);
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
-  pushMasterLevel(); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
+  pushMasterLevel(); rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_);
   rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
   scope_.setSampleRate(rt_->sampleRate()); rt_->setTap(&taps_);
   for (int k = 0; k < kBuses; ++k) makeBusFx(k);
@@ -289,12 +290,16 @@ void Engine::pushAll() {
 QVariantList Engine::stripState() const { return stripCache(); }
 bool Engine::anyMute() const { for (const StripUi& s : strips_) if (s.mute) return true; return false; }
 bool Engine::anySolo() const { for (const StripUi& s : strips_) if (s.solo) return true; return false; }
-QVariantList Engine::buildStripState() const {
-  QVariantList l;
-  for (int i = 0; i < kStrips; ++i) { const StripUi& s = strips_[static_cast<std::size_t>(i)]; QVariantMap m; m["index"] = i; m["autoPol"] = s.autoPol; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = ((armed_ >> i) & 1u) != 0; m["automix"] = s.automix; m["amWeight"] = s.amWeight;
+// one strip as the interface reads it (any strip the engine holds, also one the console does not show now)
+QVariantMap Engine::stripMap(int i) const {
+  const StripUi& s = strips_[static_cast<std::size_t>(std::clamp(i, 0, kStrips - 1))]; QVariantMap m; m["index"] = i; m["autoPol"] = s.autoPol; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = armed_.test(static_cast<std::size_t>(i)); m["automix"] = s.automix; m["amWeight"] = s.amWeight;
     const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
     m["gateOn"] = p.gateOn; m["compOn"] = p.compOn; m["limOn"] = p.limiterOn; m["eqOn"] = eqOn; m["xoverOn"] = p.hpOrder > 0 || p.lpOrder > 0; m["delayOn"] = p.delayMs > 0; m["polarity"] = p.polarityInvert;
-    QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; l << m; }
+    QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; return m;
+}
+QVariantList Engine::buildStripState() const {
+  QVariantList l;
+  for (int i = 0, nShown = shownStrips(); i < nShown; ++i) l << stripMap(i);
   return l;
 }
 // ── aux sends ──
@@ -542,7 +547,11 @@ void Engine::syncSystemVolume() {
 }
 void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; QSettings().remove("mixer/weMutedWindows"); } }
 bool Engine::inputMutedBySystem() const { return rt_ && running() && rt_->inputSilentSeconds() > 2.0; }
-void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(on, masterCeil_, masterRel_); emit stripsChanged(); emit masterChainChanged(); }
+void Engine::setHeadroomDb(int db) {
+  db = db <= 0 ? 0 : db <= 3 ? 3 : db <= 6 ? 6 : db <= 9 ? 9 : 12; if (db == headroom_) return;
+  headroom_ = db; settings_.setValue("console/headroomDb", db); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); emit stripsChanged();
+}
+void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); emit stripsChanged(); emit masterChainChanged(); }
 QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_; m["ceiling"] = masterCeil_; m["release"] = masterRel_; return m; }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
 // ---- licence (engine/cpp/app/license): the vendor public key is compiled in; keys and tokens are verified offline
@@ -550,6 +559,7 @@ static QVariantMap licenseMap(const am::lic::Status& st) {
   QVariantMap m; m["state"] = QString::fromStdString(st.state); m["plan"] = QString::fromStdString(st.planId); m["planName"] = QString::fromStdString(st.planName); m["channels"] = st.channels; m["source"] = QString::fromStdString(st.source);
   m["id"] = QString::fromStdString(st.id); m["name"] = QString::fromStdString(st.name); m["serial"] = QString::fromStdString(st.serial); m["editionName"] = QString::fromStdString(st.editionName); m["expires"] = static_cast<qlonglong>(st.expires); m["boundToThisPc"] = st.boundToThisPc; m["machine"] = QString::fromStdString(st.machine); m["message"] = QString::fromStdString(st.message);
   m["term"] = QString::fromStdString(st.term); m["needsActivation"] = st.needsActivation; m["graceDaysLeft"] = st.graceDaysLeft;
+  m["baseChannels"] = st.baseChannels; m["extendPacks"] = st.extendPacks; m["extendChannels"] = st.extendChannels;   // CHANNEL EXTEND: +30 per pack on PRO / STUDIO / MASTER
   return m;
 }
 QVariantMap Engine::storeActivation(const QString& activation) {
@@ -559,12 +569,34 @@ bool Engine::storeRevocations(const QString& list) { const bool ok = am::lic::st
 QString Engine::edition() const { return license_.value("planName", "BASIC").toString(); }
 void Engine::refreshLicense() {
   const am::lic::Status st = am::lic::status(QDateTime::currentMSecsSinceEpoch());
-  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = std::clamp(st.channels, 1, kStrips);   // BASIC 1-10, PRO 1-20, STUDIO and MASTER all 32
+  license_ = licenseMap(st); const int before = licensedChannels_; licensedChannels_ = std::clamp(st.channels, 1, kStrips);
+#ifdef AMIXOS_TEST_LICENSE
+  // TEST BUILDS ONLY (cmake -DAMIXOS_TEST_LICENSE=ON; never set for a package): AMIX_TEST_CHANNELS=300 shows the console as it is with
+  // that many licensed channels, so the large console can be tested and photographed without a vendor key. Not in release builds.
+  if (const int n = testChannels_ > 0 ? testChannels_ : qEnvironmentVariableIntValue("AMIX_TEST_CHANNELS"); n > 0) { licensedChannels_ = std::clamp(n, 1, kStrips); const bool u = licensedChannels_ >= 300;
+    license_["state"] = "active"; license_["plan"] = u ? "ultimate" : "master"; license_["planName"] = u ? "ULTIMATE" : "MASTER"; license_["channels"] = licensedChannels_; license_["source"] = "key"; license_["id"] = "TEST-BUILD"; license_["name"] = "test build";
+    license_["baseChannels"] = u ? 300 : 32; license_["extendChannels"] = u ? 0 : std::max(0, licensedChannels_ - 32); license_["extendPacks"] = u ? 0 : (std::max(0, licensedChannels_ - 32) + 29) / 30; }
+#endif   // BASIC 1-10, PRO 1-20, STUDIO and MASTER 1-32, +30 per EXTEND pack, ULTIMATE all 300
   if (before != licensedChannels_ && rt_) for (int i = 0; i < kStrips; ++i) pushStrip(i);
   emit licenseChanged(); if (before != licensedChannels_) emit stripsChanged();
 }
+static bool isExtendKey(const QString& key) { return key.trimmed().startsWith(QLatin1String("AMXX1.")); }
 QVariantMap Engine::checkKey(const QString& key) const {
-  const qint64 now = QDateTime::currentMSecsSinceEpoch(); const am::lic::Verdict v = am::lic::verifyKey(key.toStdString(), now, am::lic::machineId());
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  if (isExtendKey(key)) {   // a CHANNEL EXTEND pack: what it would add to the plan running now
+    const am::lic::Verdict x = am::lic::verifyExtend(key.toStdString(), now, am::lic::machineId());
+    QVariantMap m; m["valid"] = x.ok; m["reason"] = QString::fromStdString(x.reason); m["message"] = QString::fromStdString(x.message); m["genuine"] = x.reason != "bad-signature" && x.reason != "malformed"; m["extend"] = true;
+    if (!x.ok) return m;
+    const QString plan = license_.value("plan", "basic").toString(); const int base = license_.value("baseChannels", 10).toInt(), have = license_.value("channels", 10).toInt();
+    const bool takes = plan == "pro" || plan == "studio" || plan == "master"; const int to = std::min(am::lic::kMaxLicensedChannels, have + am::lic::kExtendChannels);
+    m["plan"] = plan; m["planName"] = license_.value("planName", "BASIC"); m["channels"] = takes ? to : have; m["change"] = takes && to > have ? "upgrade" : "same"; m["canActivate"] = takes && to > have;
+    m["id"] = QString::fromStdString(x.payload["id"].asString()); m["boundToThisPc"] = true; m["expires"] = static_cast<qlonglong>(x.payload["expires"].asNumber(0));
+    m["message"] = plan == "ultimate" ? QStringLiteral("Genuine extend key, but ULTIMATE already runs all 300 channels.")
+                 : !takes ? QStringLiteral("Genuine extend key. It adds 30 channels to PRO, STUDIO or MASTER: activate one of those first (BASIC stays at %1 channels).").arg(base)
+                 : to > have ? QStringLiteral("Genuine extend key: %1 goes from %2 to %3 channels.").arg(license_.value("planName").toString()).arg(have).arg(to)
+                 : QStringLiteral("Genuine extend key, but this console already runs 300 channels.");
+    return m;
+  } const am::lic::Verdict v = am::lic::verifyKey(key.toStdString(), now, am::lic::machineId());
   QVariantMap m; m["valid"] = v.ok; m["reason"] = QString::fromStdString(v.reason); m["message"] = QString::fromStdString(v.message); m["genuine"] = v.reason != "bad-signature" && v.reason != "malformed";
   if (!v.ok) return m;
   const am::lic::Plan* cur = am::lic::plan(license_.value("plan", "basic").toString().toStdString()); const am::lic::Plan* to = am::lic::plan(v.planId); if (!cur) cur = &am::lic::basic();
@@ -574,6 +606,13 @@ QVariantMap Engine::checkKey(const QString& key) const {
   return m;
 }
 QVariantMap Engine::activateKey(const QString& key) {
+  if (isExtendKey(key)) {   // a CHANNEL EXTEND pack is kept beside the licence; it counts while PRO / STUDIO / MASTER runs
+    const am::lic::Verdict x = am::lic::addExtend(key.toStdString(), QDateTime::currentMSecsSinceEpoch());
+    QVariantMap m; m["ok"] = x.ok; m["reason"] = QString::fromStdString(x.reason); m["message"] = QString::fromStdString(x.message); m["extend"] = true;
+    if (x.ok) { refreshLicense(); m["message"] = license_.value("extendPacks").toInt() > 0 ? QStringLiteral("Extend pack added: %1 now runs %2 channels.").arg(edition()).arg(licensedChannels_)
+                                                : QStringLiteral("Extend pack kept on this computer. It adds 30 channels as soon as PRO, STUDIO or MASTER is active."); }
+    return m;
+  }
   const am::lic::Verdict v = am::lic::activate(key.toStdString(), QDateTime::currentMSecsSinceEpoch());
   QVariantMap m; m["ok"] = v.ok; m["reason"] = QString::fromStdString(v.reason); m["message"] = QString::fromStdString(v.message);
   if (v.ok) { refreshLicense(); m["message"] = QStringLiteral("%1 activated on this computer.").arg(edition()); }
@@ -624,6 +663,7 @@ int Engine::scanForKeys() {
   emit licenseChanged(); return tried;
 }
 bool Engine::deactivateKey() { const bool r = am::lic::deactivate(); refreshLicense(); return r; }
+bool Engine::removeExtendPacks() { const bool r = am::lic::removeExtends(); refreshLicense(); return r; }
 QString Engine::licenseRequest(const QString& plan, const QString& name, const QString& email) const { return QString::fromStdString(am::lic::request(plan.toStdString(), name.toStdString(), email.toStdString(), QDateTime::currentMSecsSinceEpoch(), AMIX_VERSION).dump()); }
 QString Engine::vendorKeyFingerprint() const { return QString::fromStdString(am::lic::fingerprint(am::lic::kVendorJwk)); }
 
@@ -657,6 +697,7 @@ QVariantMap Engine::ioInfo() const {
   m["blockMs"] = sampleRate() > 0 ? 1000.0 * blockFrames_ / sampleRate() : 0.0; return m;
 }
 QString Engine::inputLabel(int input) const {
+  if (am::Runtime::isAppInput(input)) return QStringLiteral("APP · ") + (appInputName ? appInputName(input) : QString::number(input - am::Runtime::kAppInBase + 1));
   if (input < 0 || !rt_) return QStringLiteral("—"); QString n = inDevName_; n.remove(QRegularExpression("\\s*\\(.*\\)$")); if (n.size() > 14) n = n.left(14);
   return (n.isEmpty() ? QString() : n + " · ") + "IN " + QString::number(input + 1);
 }
@@ -871,7 +912,7 @@ bool Engine::openSmart(const QString& backend, const QString& inAsked, const QSt
   status_ = QStringLiteral("Could not open the sound card on any path: %1").arg(tried.join(" | ")); lastRoute_ = status_; emit stateChanged(); return false;
 }
 
-QVariantList Engine::inputRoutes() const { QVariantList l; for (int i = 0; i < kStrips; ++i) l << inRoute_[i]; return l; }
+QVariantList Engine::inputRoutes() const { QVariantList l; for (int i = 0, n = shownStrips(); i < n; ++i) l << inRoute_[i]; return l; }
 QVariantList Engine::outputRoutes() const { QVariantList l; for (int o = 0; o < kOutputs; ++o) l << outRoute_[o]; return l; }
 QVariantList Engine::outputSources() const {
   QVariantList l; auto add = [&](int idx, const QString& name, const QString& group) { QVariantMap m; m["index"] = idx; m["name"] = name; m["group"] = group; l << m; };
@@ -879,7 +920,7 @@ QVariantList Engine::outputSources() const {
   for (int k = 0; k < kBuses; ++k) { add(am::Runtime::kSrcBus0L + 2 * k, buses_[k].name + " L", "bus"); add(am::Runtime::kSrcBus0L + 2 * k + 1, buses_[k].name + " R", "bus"); }
   return l;
 }
-void Engine::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kStrips) return; inRoute_[strip] = (input >= am::Runtime::kNetInBase && input < am::Runtime::kNetInBase + am::Runtime::kNetInputs) ? input : std::clamp(input, -1, kStrips - 1); if (rt_) rt_->setInputRoute(strip, inRoute_[strip]); emit routingChanged(); }
+void Engine::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kStrips) return; inRoute_[strip] = cleanRoute(input); if (rt_) rt_->setInputRoute(strip, inRoute_[strip]); emit routingChanged(); }
 void Engine::setOutputRoute(int out, int source) { if (out < 0 || out >= kOutputs) return; outRoute_[out] = source == am::Runtime::kSrcMasterMono ? source : std::clamp(source, 0, am::Runtime::kSrcBus0L + 2 * kBuses - 1); if (rt_) rt_->setOutputRoute(out, outRoute_[out]); emit routingChanged(); }
 void Engine::resetRouting() { for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o); if (rt_) { for (int i = 0; i < kStrips; ++i) rt_->setInputRoute(i, inRoute_[i]); for (int o = 0; o < kOutputs; ++o) rt_->setOutputRoute(o, outRoute_[o]); } emit routingChanged(); }
 // ---- bus effects
@@ -971,13 +1012,14 @@ void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes,
   save(); emit scenesChanged(); emit presetsChanged();
 }
 void Engine::factoryReset() {
+  keepStrips_ = 32;
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.dsp.setSampleRate(48000); }
   factoryLayout();
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
-  for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_ = 0; userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
+  for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
   graveTimer_.start(); if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
   emit stripsChanged(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
 }
@@ -985,12 +1027,12 @@ QString Engine::recordFolder() const { const QString d = settings_.value("record
 bool Engine::startRecording() {
   if (!rt_) { recMsg_ = QStringLiteral("Start the engine on CONNECTIONS first."); emit recordChanged(); return false; }
   if (recorder_.recording()) return true;
-  am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if ((armed_ >> i) & 1u) o.strips.push_back(i);
+  am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if (armed_.test(static_cast<std::size_t>(i))) o.strips.push_back(i);
   std::string err; if (!recorder_.start(o, rt_->sampleRate(), err)) { recMsg_ = QString::fromStdString(err); emit recordChanged(); return false; }
   taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2").arg(recorder_.files().size()).arg(recordFolder()); emit recordChanged(); return true;
 }
 void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store(nullptr); recorder_.stop(); recMsg_ = QStringLiteral("Recorded %1 s, %2 file(s)%3 in %4").arg(recorder_.seconds(), 0, 'f', 1).arg(recorder_.files().size()).arg(recorder_.dropped() ? QStringLiteral(" (%1 blocks DROPPED: disk too slow)").arg(recorder_.dropped()) : QString()).arg(recordFolder()); emit recordChanged(); }
-void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; if (on) armed_ |= 1u << i; else armed_ &= ~(1u << i); emit stripsChanged(); emit recordChanged(); }
+void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; armed_.set(static_cast<std::size_t>(i), on); emit stripsChanged(); emit recordChanged(); }
 // DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
@@ -1036,8 +1078,8 @@ bool Engine::openAsioDriver(const QString& id, int frames) {
       stop(); asioReread_ = true; refreshDevices(); const bool ok = openAsioDriver(id, frames); asioReread_ = false; return ok; }
     const bool unknown = d["inChannels"].toInt() + d["outChannels"].toInt() == 0;   // still unknown: ask for everything, the driver gives what the device has
     const double rate = d["defaultRate"].toDouble() > 0 ? d["defaultRate"].toDouble() : 48000.0;
-    if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), 32, 32); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }
-    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(32, std::max(2, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
+    if (unknown) { const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), inputCap(), 32); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }
+    const bool ok = open(QStringLiteral("asio"), id, id, rate, frames > 0 ? frames : asioFrames(rate), std::min(inputCap(), std::max(2, d["inChannels"].toInt())), std::min(32, std::max(2, d["outChannels"].toInt()))); asioOpenId_ = ok ? id : QString(); if (ok) readAsioChannels(id); else asioNote_.clear(); emit devicesChanged(); return ok; }   // this driver or nothing: no other driver is tried in its place
   status_ = QStringLiteral("That ASIO driver is not in the list any more: press RESCAN."); emit stateChanged(); return false;
 }
 // ASIO runs on a 10 ms buffer: the number of frames that is 10 ms at this rate (480 at 48 kHz). The driver then takes the nearest size it
@@ -1139,7 +1181,7 @@ int Engine::assignMixerChannels(const QString& prefix, bool nameStrips) {
 }
 bool Engine::connectMixer(const QString& id, int frames) {
   for (const QVariant& v : mixersFound()) { const QVariantMap m = v.toMap(); if (m["id"].toString() != id) continue;
-    const int in = std::clamp(m["inChannels"].toInt(), 0, kStrips), out = std::clamp(m["outChannels"].toInt(), 2, 32);
+    const int in = std::clamp(m["inChannels"].toInt(), 0, inputCap()), out = std::clamp(m["outChannels"].toInt(), 2, 32);
     if (!openSmart("asio", in > 0 ? id : QStringLiteral("-"), id, 48000, frames > 0 ? frames : asioFrames(48000), in, out)) return false;
     const int n = assignMixerChannels(m["prefix"].toString(), true);
     lastRoute_ = QStringLiteral("MIXER: %1 %2 · %3 channel(s) on strips 1-%3, master on its returns 1-2  ·  ").arg(m["maker"].toString(), m["model"].toString()).arg(n) + lastRoute_; emit stateChanged(); return true; }
@@ -1155,14 +1197,14 @@ bool Engine::autoStart(int frames) {
   const QVariantMap d = autoDetect(); if (d.isEmpty()) { status_ = QStringLiteral("AUTO DETECT: no real sound card found (only the null test device)."); emit stateChanged(); return false; }
   const bool keepIn = keepInputAtStart(d["backend"].toString(), d["in"].toString());   // MIC AT ENGINE ON off: the speakers start without the microphone
   const QString autoIn = keepIn ? d["in"].toString() : autoInput(d["backend"].toString());   // the microphone blocked: COMPUTER SOUND instead where Windows has it
-  const bool ok = openSmart(d["backend"].toString(), autoIn, d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, keepIn ? std::min(32, std::max(0, d["inChannels"].toInt())) : (autoIn == "-" ? 0 : 2), std::min(32, std::max(2, d["outChannels"].toInt())));
+  const bool ok = openSmart(d["backend"].toString(), autoIn, d["out"].toString(), d["rate"].toDouble(), frames > 0 ? frames : 256, keepIn ? std::min(inputCap(), std::max(0, d["inChannels"].toInt())) : (autoIn == "-" ? 0 : 2), std::min(32, std::max(2, d["outChannels"].toInt())));
   if (ok && !keepIn) noteAutoInput(autoIn);
   if (ok) lastRoute_ = QStringLiteral("AUTO DETECT picked %1 (%2): %3").arg(d["name"].toString(), d["backend"].toString().toUpper(), d["why"].toString()) + "  ·  " + lastRoute_;
   emit stateChanged(); return ok;
 }
 void Engine::recordHistory() {
   const QJsonObject now = consoleJson(); if (histPos_ >= 0 && histPos_ < static_cast<int>(history_.size()) && history_[static_cast<std::size_t>(histPos_)] == now) return;
-  history_.resize(static_cast<std::size_t>(histPos_ + 1)); history_.push_back(now); if (history_.size() > 100) history_.erase(history_.begin()); histPos_ = static_cast<int>(history_.size()) - 1; emit historyChanged();
+  history_.resize(static_cast<std::size_t>(histPos_ + 1)); history_.push_back(now); while (history_.size() > static_cast<std::size_t>(shownStrips() > 64 ? 20 : 100)) history_.erase(history_.begin()); histPos_ = static_cast<int>(history_.size()) - 1; emit historyChanged();   // (a 300-strip snapshot is ten times the size: fewer undo steps)
 }
 void Engine::undo() { histTimer_.stop(); if (histPos_ <= 0) return; restoring_ = true; applyConsoleJson(history_[static_cast<std::size_t>(--histPos_)], false); restoring_ = false; emit historyChanged(); }
 void Engine::redo() { histTimer_.stop(); if (histPos_ + 1 >= static_cast<int>(history_.size())) return; restoring_ = true; applyConsoleJson(history_[static_cast<std::size_t>(++histPos_)], false); restoring_ = false; emit historyChanged(); }
@@ -1426,7 +1468,7 @@ void Engine::limitAllChannels(bool on) { for (int i = 0; i < kStrips; ++i) { con
 bool Engine::allChannelsLimited() const { for (int i = 0; i < kStrips; ++i) if (!strips_[static_cast<std::size_t>(i)].dsp.params().limiterOn) return false; return true; }
 int Engine::infUnused() {
   std::vector<int> pull;   // decided first: a linked partner moves with its strip, and still counts as one pulled down
-  for (int i = 0; i < kStrips; ++i) { const int r = inRoute_[i]; const bool net = r >= am::Runtime::kNetInBase && r < am::Runtime::kNetInBase + am::Runtime::kNetInputs;
+  for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { const int r = inRoute_[i]; const bool net = (r >= am::Runtime::kNetInBase && r < am::Runtime::kNetInBase + am::Runtime::kNetInputs) || am::Runtime::isAppInput(r);   // a network or a program input: not a device channel
     if (!net && (r < 0 || r >= devIn_) && strips_[static_cast<std::size_t>(i)].db > -59.9) pull.push_back(i); }
   for (int i : pull) if (strips_[static_cast<std::size_t>(i)].db > -59.9) setGain(i, -60.0);   // -60 is the bottom of the fader: the engine treats it as silence
   return static_cast<int>(pull.size());
@@ -1750,7 +1792,7 @@ void Engine::tick() {
     bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard
     for (int i = 0; i < kStrips; ++i) { StripUi& su = strips_[static_cast<std::size_t>(i)]; if (su.autoPol && s.strips[i].polInv != su.dsp.params().polarityInvert) { su.dsp.setPolarity(s.strips[i].polInv); polFlipped = true; } }
     if (polFlipped) emit stripsChanged();
-    for (int i = 0; i < kStrips; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; { int& oc = strips_[static_cast<std::size_t>(i)].overComp; oc = s.strips[i].compGrDb < -12.0 ? std::min(oc + 1, 90) : std::max(oc - 1, 0); x["overComp"] = oc > 15; }   /* OVER-COMPRESSED: more than 12 dB of reduction for half a second */ x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; m << x; }
+    for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; { int& oc = strips_[static_cast<std::size_t>(i)].overComp; oc = s.strips[i].compGrDb < -12.0 ? std::min(oc + 1, 90) : std::max(oc - 1, 0); x["overComp"] = oc > 15; }   /* OVER-COMPRESSED: more than 12 dB of reduction for half a second */ x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; m << x; }
     vuMaster_ += (std::max(s.master[0].rms, s.master[1].rms) - vuMaster_) * vuA; t["masterVuDb"] = toDb(vuMaster_);
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
     t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms)); t["masterLRmsDb"] = toDb(s.master[0].rms); t["masterRRmsDb"] = toDb(s.master[1].rms);
@@ -1759,7 +1801,7 @@ void Engine::tick() {
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = toDb(s.buses[k].pk); x["rmsDb"] = toDb(s.buses[k].rms); x["holdDb"] = toDb(s.buses[k].hold); x["clip"] = s.buses[k].clipN > 0; bm << x; } busMeters_ = bm;
   } else {
     QVariantList bm; for (int k = 0; k < kBuses; ++k) { QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; bm << x; } busMeters_ = bm;
-    for (int i = 0; i < kStrips; ++i) { vu_[i] = 0; QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; x["compGrDb"] = 0.0; x["gateDb"] = 0.0; x["inDb"] = -120.0; x["vuDb"] = -120.0; m << x; }
+    for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { vu_[i] = 0; QVariantMap x; x["peakDb"] = -120.0; x["rmsDb"] = -120.0; x["holdDb"] = -120.0; x["clip"] = false; x["compGrDb"] = 0.0; x["gateDb"] = 0.0; x["inDb"] = -120.0; x["vuDb"] = -120.0; m << x; }
     vuMaster_ = 0; t["masterVuDb"] = -120.0; t["monitorLDb"] = -120.0; t["monitorRDb"] = -120.0;
     t["masterPeakDb"] = -120.0; t["masterLDb"] = -120.0; t["masterRDb"] = -120.0; t["masterRmsDb"] = -120.0; t["masterClip"] = false; t["momentary"] = -120.0; t["shortTerm"] = -120.0; t["integrated"] = -120.0; t["lra"] = 0.0; t["truePeak"] = -120.0; t["correlation"] = 0.0; t["autoLevelDb"] = 0.0; t["blocks"] = 0; t["frames"] = 0; t["xruns"] = 0; t["loadPct"] = 0.0; t["blockUs"] = 0.0; t["maxBlockUs"] = 0.0; t["jitterUs"] = 0.0;
   }
@@ -1812,13 +1854,13 @@ int Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
   return static_cast<int>(dropped.size());
 }
 QJsonObject Engine::consoleJson() const {
-  QJsonArray arr; for (const StripUi& s : strips_) arr << stripJson(s);
+  const int nSave = std::min(kStrips, std::max(shownStrips(), keepStrips_)); QJsonArray arr; for (int i = 0; i < nSave; ++i) arr << stripJson(strips_[static_cast<std::size_t>(i)]);
   QJsonArray buses; for (const BusUi& b : buses_) { QJsonObject o; o["name"] = b.name; o["db"] = b.db; o["returnDb"] = b.returnDb; o["mute"] = b.mute; o["fx"] = b.fxKind; o["fxMix"] = b.fxMix; o["fxBypass"] = b.fxBypass; QJsonObject fv; for (const auto& [id, v] : b.fxValues) fv[id] = v; o["fxValues"] = fv; buses << o; }
   QJsonArray dcas; for (const DcaUi& d : dcas_) { QJsonObject o; o["name"] = d.name; o["db"] = d.db; o["mute"] = d.mute; dcas << o; }
   QJsonArray mgs; for (const MuteGroupUi& g : muteGroups_) { QJsonObject o; o["name"] = g.name; o["active"] = g.active; mgs << o; }
   QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterRel"] = masterRel_; { QJsonObject pg; QJsonArray eq; for (const auto& b : mp_.eq) { QJsonObject e; e["type"] = static_cast<int>(b.type); e["freq"] = b.freq; e["q"] = b.q; e["gain"] = b.gainDb; eq.append(e); } pg["eq"] = eq; pg["eqOn"] = mp_.eqOn; pg["mastering"] = QJsonObject::fromVariantMap(mastering()); root["program"] = pg; } root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["autoLevelOn"] = autoOn_; root["autoLevelTarget"] = autoTarget_; root["autoLevelMax"] = autoMax_; root["width"] = width_; root["v"] = 2;
   QJsonObject mon; mon["source"] = mon_.source; mon["db"] = mon_.db; mon["dim"] = mon_.dim; mon["mono"] = mon_.mono; mon["mute"] = mon_.mute; mon["sync"] = mon_.sync; root["monitor"] = mon; { QJsonArray amps; for (int o = 0; o < 64; ++o) if (!ampUi_[o].isEmpty()) { QJsonObject a = QJsonObject::fromVariantMap(ampUi_[o]); a["out"] = o; amps << a; } root["amps"] = amps; }
-  QJsonArray ir; for (int i = 0; i < kStrips; ++i) ir << inRoute_[i]; QJsonArray orr; for (int o = 0; o < kOutputs; ++o) orr << outRoute_[o]; root["inputRoutes"] = ir; root["outputRoutes"] = orr;
+  QJsonArray ir; for (int i = 0; i < nSave; ++i) ir << inRoute_[i]; QJsonArray orr; for (int o = 0; o < kOutputs; ++o) orr << outRoute_[o]; root["inputRoutes"] = ir; root["outputRoutes"] = orr;
   return root;
 }
 // respectSafe: strips flagged RECALL SAFE keep what they have (a scene recall); false = the whole document (start-up)
@@ -1826,12 +1868,12 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   if (root.isEmpty()) return;
   masterDb_ = std::clamp(root.value("masterDb").toDouble(0), -60.0, 10.0); masterRel_ = std::clamp(root.value("masterRel").toDouble(100), 10.0, 2000.0); { const QJsonObject pg = root.value("program").toObject(); const QJsonArray eq = pg.value("eq").toArray(); for (int b = 0; b < am::MasterChain::kBands; ++b) { const QJsonObject e = b < eq.size() ? eq[b].toObject() : QJsonObject(); mp_.eq[b] = am::dsp::EqBand{static_cast<FilterType>(std::clamp(e.value("type").toInt(0), 0, 6)), std::clamp(e.value("freq").toDouble(kIsoCentres[b]), 10.0, 24000.0), std::clamp(e.value("q").toDouble(1.41), 0.1, 36.0), std::clamp(e.value("gain").toDouble(0), -24.0, 24.0)}; } mp_.on = false; if (pg.contains("mastering")) { QVariantMap mm = pg.value("mastering").toObject().toVariantMap(); setMastering(mm); } mp_.eqOn = pg.value("eqOn").toBool(true); pushMaster(); emit masterChainChanged(); } masterLim_ = root.value("masterLim").toBool(true); masterCeil_ = std::clamp(root.value("masterCeil").toDouble(-0.5), -12.0, 0.0);
   width_ = std::clamp(root.value("width").toDouble(1.0), 0.0, 2.0); autoOn_ = root.value("autoLevelOn").toBool(); autoTarget_ = std::clamp(root.value("autoLevelTarget").toDouble(-16), -30.0, -6.0); autoMax_ = std::clamp(root.value("autoLevelMax").toDouble(12), 0.0, 24.0);
-  if (root.contains("inputRoutes")) { const QJsonArray ir = root.value("inputRoutes").toArray(); for (int i = 0; i < kStrips && i < ir.size(); ++i) inRoute_[i] = std::clamp(ir[i].toInt(i), -1, kStrips - 1); emit routingChanged(); }
+  if (root.contains("inputRoutes")) { const QJsonArray ir = root.value("inputRoutes").toArray(); for (int i = 0; i < kStrips && i < ir.size(); ++i) inRoute_[i] = cleanRoute(ir[i].toInt(i)); emit routingChanged(); }
   if (root.contains("outputRoutes")) { const QJsonArray orr = root.value("outputRoutes").toArray(); for (int o = 0; o < kOutputs && o < orr.size(); ++o) outRoute_[o] = orr[o].toInt(0) == am::Runtime::kSrcMasterMono ? am::Runtime::kSrcMasterMono : std::clamp(orr[o].toInt(0), 0, am::Runtime::kSrcBus0L + 2 * kBuses - 1); emit routingChanged(); }
   if (root.contains("amps")) { for (auto& a : ampUi_) a.clear(); for (const QJsonValue& v : root.value("amps").toArray()) { const QJsonObject a = v.toObject(); const int o = a.value("out").toInt(-1); if (o >= 0 && o < 64) { QVariantMap m = a.toVariantMap(); m.remove("out"); ampUi_[o] = m; if (rt_) rt_->setAmp(o, ampFromMap(m)); } } emit ampChanged(); }
   if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(true); mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
-  const QJsonArray arr = root.value("strips").toArray();
-  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && ((recallSafe_ >> i) & 1u)) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
+  const QJsonArray arr = root.value("strips").toArray(); keepStrips_ = std::max(keepStrips_, std::min(kStrips, static_cast<int>(arr.size())));
+  for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && recallSafe_.test(static_cast<std::size_t>(i))) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
@@ -1844,7 +1886,8 @@ void Engine::save() {
   settings_.setValue("console/state", QString::fromUtf8(QJsonDocument(consoleJson()).toJson(QJsonDocument::Compact)));
   QJsonArray sc; for (const SceneUi& x : scenes_) { QJsonObject o; o["name"] = x.name; o["at"] = x.at; o["data"] = x.data; sc << o; }
   settings_.setValue("console/scenes", QString::fromUtf8(QJsonDocument(sc).toJson(QJsonDocument::Compact)));
-  settings_.setValue("console/recallSafe", static_cast<qulonglong>(recallSafe_));
+  { qulonglong low = 0; QStringList high; for (int i = 0; i < kStrips; ++i) if (recallSafe_.test(static_cast<std::size_t>(i))) { if (i < 32) low |= 1ull << i; else high << QString::number(i); }
+    settings_.setValue("console/recallSafe", low); settings_.setValue("console/recallSafeHigh", high.join(QLatin1Char(','))); }   // strips 1-32 as the number older versions read, the rest as a list
   QJsonArray pr; for (const PresetUi& x : userPresets_) { QJsonObject o; o["name"] = x.name; o["category"] = x.category; o["dsp"] = x.dsp; pr << o; }
   settings_.setValue("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
 }
@@ -1875,7 +1918,8 @@ void Engine::load() {
   scenes_.resize(kScenes);
   const QJsonArray sc = QJsonDocument::fromJson(settings_.value("console/scenes").toString().toUtf8()).array();
   for (int i = 0; i < kScenes && i < sc.size(); ++i) { const QJsonObject o = sc[i].toObject(); scenes_[static_cast<std::size_t>(i)].name = o.value("name").toString().left(24); scenes_[static_cast<std::size_t>(i)].at = o.value("at").toString(); scenes_[static_cast<std::size_t>(i)].data = o.value("data").toObject(); }
-  recallSafe_ = static_cast<unsigned>(settings_.value("console/recallSafe", 0).toULongLong() & 0xffffffffu);
+  { recallSafe_.reset(); const qulonglong low = settings_.value("console/recallSafe", 0).toULongLong(); for (int i = 0; i < 32; ++i) if ((low >> i) & 1ull) recallSafe_.set(static_cast<std::size_t>(i));
+    for (const QString& t : settings_.value("console/recallSafeHigh").toString().split(QLatin1Char(','), Qt::SkipEmptyParts)) { bool ok = false; const int i = t.toInt(&ok); if (ok && i >= 32 && i < kStrips) recallSafe_.set(static_cast<std::size_t>(i)); } }
   const QJsonArray pr = QJsonDocument::fromJson(settings_.value("console/presets").toString().toUtf8()).array();
   for (const QJsonValue& v : pr) { const QJsonObject o = v.toObject(); if (o.value("name").toString().isEmpty()) continue; userPresets_.push_back({o.value("name").toString().left(24), o.value("category").toString("USER").left(16), o.value("dsp").toObject()}); }
 }
@@ -1897,8 +1941,8 @@ bool Engine::recallScene(int i) {
 }
 void Engine::clearScene(int i) { if (i < 0 || i >= kScenes) return; scenes_[static_cast<std::size_t>(i)] = SceneUi{}; if (currentScene_ == i) currentScene_ = -1; save(); emit scenesChanged(); }
 void Engine::renameScene(int i, const QString& name) { if (i < 0 || i >= kScenes) return; scenes_[static_cast<std::size_t>(i)].name = name.trimmed().left(24); save(); emit scenesChanged(); }
-void Engine::setRecallSafe(int strip, bool on) { if (strip < 0 || strip >= kStrips) return; if (on) recallSafe_ |= 1u << strip; else recallSafe_ &= ~(1u << strip); save(); emit scenesChanged(); }
-bool Engine::recallSafe(int strip) const { return strip >= 0 && strip < kStrips && ((recallSafe_ >> strip) & 1u); }
+void Engine::setRecallSafe(int strip, bool on) { if (strip < 0 || strip >= kStrips) return; recallSafe_.set(static_cast<std::size_t>(strip), on); save(); emit scenesChanged(); }
+bool Engine::recallSafe(int strip) const { return strip >= 0 && strip < kStrips && recallSafe_.test(static_cast<std::size_t>(strip)); }
 
 // ── PRESETS: a channel's DSP chain by name (factory ones built in, user ones saved) ──
 namespace {

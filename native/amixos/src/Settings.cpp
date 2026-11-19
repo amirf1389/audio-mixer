@@ -88,7 +88,7 @@ bool Settings::startLastDevice() {
     const QVariantMap a = engine_->autoDetect(); const int fr = defaultFrames() > 0 ? defaultFrames() : 256;
     const bool ok = !a.isEmpty() && engine_->autoStart(fr);
     if (ok) rememberDevice(a.value("backend").toString(), a.value("in").toString() == "-" ? QString() : a.value("in").toString(), a.value("out").toString() == "-" ? QString() : a.value("out").toString(),
-                           a.value("rate").toDouble() > 0 ? a.value("rate").toDouble() : a.value("defaultRate").toDouble() > 0 ? a.value("defaultRate").toDouble() : 48000.0, fr, std::min(32, a.value("inChannels").toInt()), std::min(32, a.value("outChannels").toInt()));
+                           a.value("rate").toDouble() > 0 ? a.value("rate").toDouble() : a.value("defaultRate").toDouble() > 0 ? a.value("defaultRate").toDouble() : 48000.0, fr, std::min(engine_->inputCap(), a.value("inChannels").toInt()), std::min(32, a.value("outChannels").toInt()));
     note(ok ? engine_->lastRoute() : (a.isEmpty() ? QStringLiteral("No sound card found: plug one in, or pick one on CONNECTIONS.") : engine_->status()));
     return ok;
   }

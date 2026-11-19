@@ -124,7 +124,7 @@ Item {
             // SCRIBBLE STRIPS
             Rectangle { Layout.fillWidth: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: sCol.implicitHeight + 24
                 ColumnLayout { id: sCol; anchors.fill: parent; anchors.margins: 12; spacing: 8
-                    Head { text: i18n.t("32-CHANNEL SCRIBBLE STRIP & COLOUR", i18n.lang) }
+                    Head { text: engine.strips > 32 ? engine.strips + i18n.t("-CHANNEL SCRIBBLE STRIP & COLOUR", i18n.lang) : i18n.t("32-CHANNEL SCRIBBLE STRIP & COLOUR", i18n.lang) }
                     Grid { columns: 16; spacing: 3
                         Repeater { model: engine.stripState; delegate: Rectangle { width: 30; height: 24; radius: 3; color: page.scribble === index ? Theme.ov(0.18) : Theme.ov(0.05); border.color: page.scribble === index ? Theme.ink : "transparent"
                             Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 3; radius: 1; color: Theme.stripColors[modelData.color] }

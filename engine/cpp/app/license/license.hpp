@@ -1,8 +1,8 @@
 // The licence check of A mix OS, natively: the same keys and tokens the Node tooling (bridge/license.js, bridge/edition.js) makes and checks.
 //   Licence key    "AMIX1."  + base64url(payload JSON) + "." + base64url(ECDSA P-256 / SHA-256 signature, 64 bytes r||s)
-//                  payload { v: 1, plan: basic|pro|studio|master, id?, name?, email?, issued?, expires?, mid? (machine code), seats?, admin? }
-//   Edition token  "AMFXE1." + base64url(payload JSON) + "." + base64url(signature), payload { v: 1, kind: "amfx1-edition", edition: pro|studio-master,
-//                  plan, serial: AMFX-PRO-XXXX-XXXX-XXXX | AMFX-SM-..., issued, order?, expires? }
+//                  payload { v: 1, plan: basic|pro|studio|master|ultimate, id?, name?, email?, issued?, expires?, mid? (machine code), seats?, admin? }
+//   Edition token  "AMFXE1." + base64url(payload JSON) + "." + base64url(signature), payload { v: 1, kind: "amfx1-edition", edition: pro|studio-master|ultimate,
+//                  plan, serial: AMFX-PRO-XXXX-XXXX-XXXX | AMFX-SM-... | AMFX-ULT-..., issued, order?, expires? }
 // The app holds only the vendor PUBLIC key (bridge/license-public.json, embedded below as kVendorJwkX / Y). Without a valid key or token the app
 // runs BASIC (10 channels). As in the Node code: the signature stops forged keys; it does not stop someone who edits a locally running program.
 // TOTP (RFC 6238) is here for the vendor's Key Generator second factor and tests, not for end users.
@@ -63,8 +63,15 @@ struct Status {
   std::string id, name, serial, editionName, message; std::int64_t expires = 0; bool boundToThisPc = false;
   std::string machine;
   std::string term;                                      // perpetual | annual | trial | limited (activation), "" otherwise
+  int baseChannels = 10, extendPacks = 0, extendChannels = 0;   // channels = baseChannels (the plan) + extendChannels (the packs that count)
   bool needsActivation = false; int graceDaysLeft = 0;    // an unbound key / pending edition: activate online within graceDaysLeft days
 };
+// CHANNEL EXTEND packs (see license.cpp): +30 channels each on PRO / STUDIO / MASTER, bound to this computer, up to 300 in all
+constexpr int kExtendChannels = 30, kMaxLicensedChannels = 300;
+Verdict verifyExtend(const std::string& token, std::int64_t nowMs, const std::string& machine, const std::vector<Jwk>& trusted = {kVendorJwk});
+Verdict addExtend(const std::string& token, std::int64_t nowMs, const std::vector<Jwk>& trusted = {kVendorJwk});   // verified for this computer, then kept in extend.json
+bool removeExtends();                                    // forgets every pack on this computer; true when something was removed
+std::string extendFile();                                // ~/.amixos/extend.json
 std::string homeDir();
 std::string licenseFile();                               // ~/.amixos/license.json
 std::string editionFile();                               // ~/.amixos/edition.json

@@ -1,4 +1,4 @@
-// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, INPUT pick, pan, mute, solo, AI automix chip, ⋯ / right-click menu, fader (always, with the 8 AUX / 8 FX sends beside it in a send view), post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
+// MIXER: 32 strips in two pages of 16 (or all; with EXTEND packs or ULTIMATE up to 300 strips in pages of 16), each with colour, name, INPUT pick, pan, mute, solo, AI automix chip, ⋯ / right-click menu, fader (always, with the 8 AUX / 8 FX sends beside it in a send view), post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
 // DSP badges (GATE / EQ / X / COMP / LIM / DLY / Ø: lit when that stage is on, click to open its page for this channel), DCA / mute-group /
 // sends readout; click a strip to select it and edit its whole chain in the side panel; the master and the MONITOR (control room: source, level, dim, mono, mute) on the right.
 import QtQuick
@@ -9,7 +9,9 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mixerPage"
-    property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
+    property int bank: 0      // up to 32 strips: 0 = 1-16, 1 = 17-32, 2 = all. More (EXTEND, ULTIMATE): the page of 16, 0 .. 18
+    readonly property bool big: engine.strips > 32
+    onBigChanged: bank = 0
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
     property int tick: visible ? engine.meterTick : -1
@@ -106,8 +108,9 @@ Item {
             Flow {
                 id: barFlow; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                BankBar { visible: page.big; objectName: "mixerBankBar"; bank: page.bank; prefix: "CH"; accent: true; onPicked: b => page.bank = b }
                 Repeater {
-                    model: ["PAGE 1: CH 01-16", "PAGE 2: CH 17-32", "ALL 32 CH"]
+                    model: page.big ? [] : ["PAGE 1: CH 01-16", "PAGE 2: CH 17-32", "ALL 32 CH"]
                     delegate: Rectangle {
                         implicitWidth: lbl.implicitWidth + 16; implicitHeight: 20; radius: 7
                         color: page.bank === index ? Theme.amber : Theme.ov(0.06)
@@ -331,6 +334,7 @@ Item {
                 MenuItem { text: i18n.t("Bypass / enable", i18n.lang); onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
                 MenuItem { text: i18n.t("Clear slot", i18n.lang); onTriggered: engine.setPlugin(page.sel, chooser.slot, "") }
             }
+            AppPicker { id: stripPicker }
             Dialog { id: confirmReset; title: i18n.t("Reset every fader?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.resetFaders(); Text { text: i18n.t("All 32 strips and the master go to 0 dB, pans to centre. Mutes, solos and DSP stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
             Dialog { id: confirmFlatten; title: i18n.t("Flatten the DSP of every channel?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.flattenAllDsp(); Text { text: i18n.t("Gate, EQ, crossover, compressor, limiter, delay and polarity are switched off on all 32 channels. Faders, sends and names stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
         }
@@ -447,7 +451,7 @@ Item {
                                 id: stripItem
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
-                                visible: page.bank === 2 || Math.floor(index / 16) === page.bank
+                                visible: (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank
                                 width: visible ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
@@ -455,6 +459,12 @@ Item {
                                 property var mt: visible ? (page.tick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
                                 property color sc: Theme.stripColors[st ? st.color : 0]
                                 property bool selected: page.sel === index
+                                // BUILT ON DEMAND: a console of up to 32 strips builds them all at once, as ever; of a larger one (EXTEND, ULTIMATE: up to
+                                // 300) only the strips of a page that has been opened are built, so the page opens as fast with 300 strips as with 32.
+                                property bool built: index < 32
+                                onVisibleChanged: if (visible) built = true
+                                Component.onCompleted: if (visible) built = true
+                                Loader { anchors.fill: parent; active: stripItem.built; sourceComponent: Component { Item {
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Theme.ov(0.06) : (index % 2 ? Theme.ov(0.025) : (Theme.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.05))); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
                                     MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onPressed: function (m) { engine.selectedStrip = index; if (m.button === Qt.RightButton) { moreL.active = true; moreL.item.popup(); m.accepted = true } else m.accepted = false } } }
                                 // THE STRIP'S OWN COLOUR: a soft wash from the top (stronger on the selected strip) and a lit cap
@@ -468,7 +478,7 @@ Item {
                                     ColumnLayout { anchors.centerIn: parent; spacing: 6
                                         Text { Layout.alignment: Qt.AlignHCenter; text: "⊘"; color: Theme.amber; font.pixelSize: 18 }
                                         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("CH ", i18n.lang) + (index + 1); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 20 ? i18n.t("PRO", i18n.lang) : i18n.t("STUDIO", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 20 ? i18n.t("PRO", i18n.lang) : index < 32 ? i18n.t("STUDIO", i18n.lang) : i18n.t("ULTIMATE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("UNLOCK ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7 } }
                                     MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
                                 ColumnLayout {
@@ -481,9 +491,10 @@ Item {
                                     Rectangle { visible: page.showInput; Layout.fillWidth: true; implicitHeight: 14; radius: 3; color: Qt.rgba(0.2, 0.9, 0.5, 0.12); border.color: inPop.visible ? Theme.emerald : "transparent"
                                         property int route: page.sendsTick >= 0 && engine.inputRoutes[index] !== undefined ? engine.inputRoutes[index] : -1
                                         Text { anchors.centerIn: parent; width: parent.width - 4; elide: Text.ElideMiddle; horizontalAlignment: Text.AlignHCenter; text: parent.route >= 0 ? (page.sendsTick >= 0 ? engine.inputLabel(parent.route) : "") : i18n.t("IN —", i18n.lang); color: parent.route >= 0 && engine.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                                        ToolTip.visible: inH.hovered && settings.tooltips; ToolTip.text: parent.route >= 0 ? (engine.running ? i18n.t("Input ", i18n.lang) + (parent.route + 1) + i18n.t(" of ", i18n.lang) + engine.inputDeviceName + " (" + engine.backend.toUpperCase() + ")" : i18n.t("Input ", i18n.lang) + (parent.route + 1) + i18n.t(": the engine is not running", i18n.lang)) : i18n.t("No input: this strip takes no device channel", i18n.lang); HoverHandler { id: inH }
+                                        ToolTip.visible: inH.hovered && settings.tooltips; ToolTip.text: parent.route >= 272 ? engine.inputLabel(parent.route) : parent.route >= 0 ? (engine.running ? i18n.t("Input ", i18n.lang) + (parent.route + 1) + i18n.t(" of ", i18n.lang) + engine.inputDeviceName + " (" + engine.backend.toUpperCase() + ")" : i18n.t("Input ", i18n.lang) + (parent.route + 1) + i18n.t(": the engine is not running", i18n.lang)) : i18n.t("No input: this strip takes no device channel", i18n.lang); HoverHandler { id: inH }
                                         MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; inPop.open() } }
-                                        Popup { id: inPop; y: parent.height + 2; width: 150; padding: 6; modal: false; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                                        Popup { id: inPop; y: parent.height + 2; width: 190; padding: 6; modal: false; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                                            property var progs: []; onAboutToShow: progs = apps.programs()   // APP CAPTURE: the programs that play sound now
                                             background: Rectangle { radius: 6; color: Theme.cardRaised; border.color: Theme.emerald }
                                             contentItem: ColumnLayout { spacing: 2
                                                 Text { text: i18n.t("INPUT → CH ", i18n.lang) + (index + 1); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
@@ -492,7 +503,23 @@ Item {
                                                         delegate: Rectangle { property int inp: index - 1; implicitWidth: 30; implicitHeight: 16; radius: 3; color: engine.inputRoutes[page.sel] === inp ? Theme.emerald : Theme.ov(0.08)
                                                             Text { anchors.centerIn: parent; text: inp < 0 ? "—" : inp + 1; color: engine.inputRoutes[page.sel] === inp ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                                             MouseArea { anchors.fill: parent; onClicked: { engine.setInputRoute(page.sel, inp); inPop.close() } } } }
-                                                    Text { visible: engine.deviceInputs <= 0; text: i18n.t("no device open", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } } }
+                                                    Text { visible: engine.deviceInputs <= 0; text: i18n.t("no device open", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                                                // A PROGRAM on this strip (APP CAPTURE): mono here, or stereo here and on the next strip
+                                                RowLayout { Layout.fillWidth: true; Layout.topMargin: 4; spacing: 4
+                                                    Text { Layout.fillWidth: true; text: i18n.t("PROGRAM → CH ", i18n.lang) + (index + 1); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                                    Rectangle { objectName: "inProgPicker"; implicitWidth: pkT2.implicitWidth + 10; implicitHeight: 16; radius: 3; color: Theme.cyan
+                                                        Text { id: pkT2; anchors.centerIn: parent; text: i18n.t("WITH PICTURES…", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                        MouseArea { anchors.fill: parent; onClicked: { inPop.close(); stripPicker.show(page.sel) } } } }
+                                                Text { visible: inPop.progs.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: apps.available ? i18n.t("no program plays sound now", i18n.lang) : i18n.t("needs Windows 10 (2004) or later", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                                                Repeater { model: inPop.progs
+                                                    delegate: RowLayout { Layout.fillWidth: true; spacing: 3
+                                                        Text { Layout.fillWidth: true; text: modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; elide: Text.ElideRight }
+                                                        Rectangle { objectName: "inProgMono" + index; implicitWidth: 34; implicitHeight: 16; radius: 3; color: Theme.ov(0.08); border.color: Theme.emerald
+                                                            Text { anchors.centerIn: parent; text: i18n.t("MONO", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                            MouseArea { anchors.fill: parent; onClicked: { apps.capture(modelData.id, modelData.name, page.sel, false); inPop.close() } } }
+                                                        Rectangle { objectName: "inProgStereo" + index; implicitWidth: 40; implicitHeight: 16; radius: 3; color: Theme.ov(0.08); border.color: Theme.cyan
+                                                            Text { anchors.centerIn: parent; text: i18n.t("STEREO", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                            MouseArea { anchors.fill: parent; onClicked: { apps.capture(modelData.id, modelData.name, page.sel, true); inPop.close() } } } } } } } }
                                     StripTone { visible: page.showTone; Layout.alignment: Qt.AlignHCenter; strip: index; st: stripItem.st }
                                     RowLayout { visible: !page.simple; Layout.fillWidth: true; spacing: 2
                                         Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 4; color: st && st.armed ? Qt.rgba(1, 0.165, 0.373, 0.85) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#0b0f14" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: i18n.t("Arm CH ", i18n.lang) + (index + 1) + i18n.t(" for recording", i18n.lang); HoverHandler { id: armHov } }
@@ -567,7 +594,7 @@ Item {
                                                 // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
                                                 readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "rider", "clean", "antifeedback"],
                                                     "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
-                                                    "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
+                                                    "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay", "pingpong"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
                                                 function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
                                                 Instantiator { model: { const all = engine.pluginCatalog().filter(x => x.fx), names = ["EQ / TONE", "DYNAMICS", "SATURATION / AMPS", "MODULATION", "SPACE / DELAY", "SPATIAL / UTILITY", "OTHER"]; return names.filter(n => all.some(x => fxMenu.groupOf(x.kind) === n)) }
                                                     delegate: Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: fxGroup; required property string modelData; title: i18n.t(modelData, i18n.lang)
@@ -662,6 +689,7 @@ Item {
                                         Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 }
                                         Rectangle { visible: st && st.plugins > 0; implicitWidth: 24; implicitHeight: 11; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.25); Text { anchors.centerIn: parent; text: i18n.t("FX ", i18n.lang) + (st ? st.plugins : 0); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.rack = true } } } }
                                 }
+                                } } }
                             }
                         }
                     }

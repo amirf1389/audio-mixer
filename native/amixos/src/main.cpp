@@ -54,6 +54,10 @@
 #include "paths/paths.hpp"
 #include "samples/samples.hpp"
 #include "Links.h"
+#include "Apps.h"
+#include "SysNotify.h"
+#include "AppWindows.h"
+#include <QPainter>
 #include "zip/zipstore.hpp"
 #include <QHostAddress>
 #include <QSettings>
@@ -154,9 +158,13 @@ int main(int argc, char* argv[]) {
   app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/AmixOS/icons/amfx1.png")));   // the mixer logo in the title bar and the task bar
   QQuickStyle::setStyle("Fusion");   // the one stock style that draws from the application palette (set dark below); Basic ignores the palette and paints light grey boxes on Windows
 
-  bool smoke = false, bench = false; QString shots, lang, film, filmScript;
+  bool smoke = false, bench = false; QString shots, lang, film, filmScript, bigShots;
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
-  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); else if (a == "--film" && i + 2 < argc) { smoke = true; filmScript = QString::fromLocal8Bit(argv[++i]); film = QString::fromLocal8Bit(argv[++i]); } }
+  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); else if (a == "--film" && i + 2 < argc) { smoke = true; filmScript = QString::fromLocal8Bit(argv[++i]); film = QString::fromLocal8Bit(argv[++i]); }
+#ifdef AMIXOS_TEST_LICENSE
+    else if (a == "--big" && i + 1 < argc) { smoke = true; bigShots = QString::fromLocal8Bit(argv[++i]); }   // test builds: the 300-channel console, checked and photographed
+#endif
+  }
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
 #if defined(_WIN32) && defined(_WIN64)
@@ -173,6 +181,8 @@ int main(int argc, char* argv[]) {
   engine.remoteInput = [&](const QString& in) { return remote.send(QVariantMap{{"op", "input"}, {"in", in}}); };   // INPUT while phones are linked
   engine.remoteInProcess = [&] { return remote.inProcess(); };
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
+  AppWindows appWindows;   // PROGRAM PICTURES for the app picker and the live program view (before the interface: it outlives it)
+  Apps apps(&engine);   // before the interface, so it outlives it: every strip reads it (a page must never see it gone at exit)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
   qml.rootContext()->setContextProperty("frame", &frame);
@@ -184,9 +194,16 @@ int main(int argc, char* argv[]) {
   const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) engine.setWatchdog(false);   // test runs: no automatic restarts under the other checks
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
+  qml.rootContext()->setContextProperty("appWindows", &appWindows); qml.addImageProvider(QStringLiteral("appwin"), new AppWindowImages(&appWindows));   // the engine owns the provider
+  qml.rootContext()->setContextProperty("apps", &apps);   // APP CAPTURE: several programs, each on its own strips
   qml.rootContext()->setContextProperty("samples", &samples);
   update.pluginDir = settings.vstUserFolder(); QObject::connect(&update, &Update::pluginInstalled, &settings, [&] { settings.rescanVst(); });   // PLUG-IN DOWNLOADS land in the console's own plug-in folder
   qml.rootContext()->setContextProperty("updater", &update);
+  // A NEW VERSION, told by Windows too (once per version): a click brings the console to the front on SOFTWARE UPDATE
+  QObject::connect(&update, &Update::notifySystem, &app, [&](const QString& title, const QString& text) {
+    if (smoke) return;
+    sysnotify::show(title, text, [&] { if (qml.rootObjects().isEmpty()) return; if (auto* w = qobject_cast<QWindow*>(qml.rootObjects().first())) { w->setProperty("current", "update"); if (w->windowState() & Qt::WindowMinimized) w->showNormal(); w->raise(); w->requestActivate(); } }); });
+  QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [] { sysnotify::remove(); });
   QObject::connect(&update, &Update::revocations, &engine, [&](const QString& l) { engine.storeRevocations(l); });   // the newest revocation list the licence server signs
   QTimer::singleShot(4000, &update, [&] { update.fetchRevocations(); });   // once a start, quietly (nothing when no licence server is set)
   QObject::connect(&update, &Update::restarting, &app, [&] { settings.sessionClosed(); engine.stop(); QTimer::singleShot(1800, &app, &QCoreApplication::quit); });   // INSTALL AND RESTART: save, release the sound card, show the notice, quit; the setup starts the console again
@@ -387,7 +404,7 @@ int main(int argc, char* argv[]) {
     }
     remote.stop(); waitMs(500); return 0;
   }
-  if (smoke) {
+  if (smoke && bigShots.isEmpty()) {
     std::printf("amixos --smoke: start master %.1f dB, monitor %.1f dB; %s\n", engine.masterDb(), engine.monitor()["db"].toDouble(), qPrintable(engine.status()));
     if (engine.masterDb() <= -60.0) { std::fprintf(stderr, "amixos --smoke: the console started with the master at -inf\n"); return 166; }
     // the null device: a timed "sound card" that needs no hardware; the strips read silence, the meters must publish blocks
@@ -523,12 +540,76 @@ int main(int argc, char* argv[]) {
       // APP SOUND: one program's sound is a Windows audio stream; on another driver the press says so and the sound keeps playing as it was;
       // the list of programs is Windows' own (none here); the toolbar has the picker
       const QVariantMap ra = engine.setInputSource("loopback:app:4321"); const bool keptOn = engine.running(); const QString why = engine.status();
-      const QVariantList apps = engine.appSources(); QObject* appBtn = nullptr;
+      const QVariantList appList = engine.appSources(); QObject* appBtn = nullptr;
       if (!qml.rootObjects().isEmpty()) { QObject* w = qml.rootObjects().first(); const QVariant pg = w->property("current"); w->setProperty("current", "mixer");
         QElapsedTimer tw; tw.start(); while (!appBtn && tw.elapsed() < 3000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 20); appBtn = w->findChild<QObject*>("inputSource_app"); }
         w->setProperty("current", pg); }
-      std::printf("amixos --smoke: APP SOUND on a non-Windows driver: refused %d, sound running %d, says WASAPI %d; programs listed %d; picker %d\n", int(ra.isEmpty()), int(keptOn), int(why.contains("APP SOUND") && why.contains("WASAPI")), int(apps.size()), int(appBtn != nullptr));
+      std::printf("amixos --smoke: APP SOUND on a non-Windows driver: refused %d, sound running %d, says WASAPI %d; programs listed %d; picker %d\n", int(ra.isEmpty()), int(keptOn), int(why.contains("APP SOUND") && why.contains("WASAPI")), int(appList.size()), int(appBtn != nullptr));
       if (!(ra.isEmpty() && keptOn && why.contains("APP SOUND") && why.contains("WASAPI") && engine.inputSource() != "app" && appBtn)) { std::fprintf(stderr, "amixos --smoke: APP SOUND failed: %s\n", qPrintable(why)); return 1; }
+      { // APP CAPTURE: two programs beside the device's inputs, each on its own strips (test tones stand in for the programs here)
+        auto pause = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+        auto inDb = [&](int strip) { return engine.meters()[strip].toMap()["inDb"].toDouble(); };
+        const QVariantList routes0 = engine.inputRoutes(); const double pan5 = engine.stripState()[5].toMap()["pan"].toDouble(), pan6 = engine.stripState()[6].toMap()["pan"].toDouble();
+        apps.testMode = true; apps.testPrograms = QVariantList{QVariantMap{{"id", "loopback:app:1001"}, {"name", "Spotify"}}, QVariantMap{{"id", "loopback:app:1002"}, {"name", "Chrome (YouTube, web players)"}}};
+        const QVariantList pl = apps.programs(); const bool listed = pl.size() == 2 && pl[1].toMap()["pid"].toInt() == 1002 && pl[0].toMap()["slot"].toInt() == -1;
+        const QVariantMap a = apps.captureTest("Spotify", 440, 4, false), b = apps.captureTest("Chrome (YouTube, web players)", 880, 5, true); pause(600);
+        const QVariantList r = engine.inputRoutes(); const QVariantList caps = apps.captures();
+        const bool routed = a["ok"].toBool() && b["ok"].toBool() && r[4].toInt() == 272 + 16 + 0 && r[5].toInt() == 272 + 2 && r[6].toInt() == 272 + 3 && apps.count() == 2 && caps.size() == 2 && caps[0].toMap()["strips"].toList() == QVariantList{4} && caps[1].toMap()["strips"].toList() == (QVariantList{5, 6}) && caps[0].toMap()["state"].toString() == "live";
+        const double l4 = inDb(4), l5 = inDb(5), l6 = inDb(6);
+        const bool heard = std::fabs(caps[0].toMap()["peakDb"].toDouble() + 12.0) < 1.0 && std::fabs(caps[1].toMap()["peakDb"].toDouble() + 12.0) < 1.0 && l4 > -40 && l5 > -40 && l6 > -40 && inDb(7) < -100;   // the slots carry -12 dBFS; the strips receive it (their own trim and DSP, left by an earlier run, may change what their meters read)
+        const bool named = engine.inputLabel(r[4].toInt()) == "APP · Spotify" && engine.inputLabel(r[5].toInt()) == "APP · Chrome L" && engine.inputLabel(r[6].toInt()) == "APP · Chrome R" && apps.slotOfInput(r[6].toInt()) == 1 && apps.slotOfInput(3) == -1;
+        const bool panned = engine.stripState()[5].toMap()["pan"].toDouble() == -1 && engine.stripState()[6].toMap()["pan"].toDouble() == 1;
+        QList<double> dbs; for (const QVariant& v : engine.stripState()) dbs << v.toMap()["db"].toDouble();
+        const int pulled = engine.infUnused(); const bool kept = engine.stripState()[4].toMap()["db"].toDouble() > -59 && engine.stripState()[5].toMap()["db"].toDouble() > -59 && pulled >= 0;   // AUTO -INF leaves a program's strips alone
+        for (int i = 0; i < dbs.size(); ++i) engine.setGain(i, dbs[i]);
+        // a real program where Windows cannot capture one: refused with the reason, the strip keeps its input
+        bool refused = true; if (!am::app::Capture::available()) { const QVariantMap x = apps.capture("loopback:app:1001", "Spotify", 8, false); refused = !x["ok"].toBool() && x["message"].toString().contains("Windows") && engine.inputRoutes()[8].toInt() == routes0[8].toInt() && apps.count() == 2; }
+        const bool bad = !apps.capture("not-a-program", "x", 8, false)["ok"].toBool() && !apps.capture("loopback:app:1001", "Spotify", 999, false)["ok"].toBool();
+        // WINDOWS RECORDING DEVICES: the list is Windows' recording devices only; capture, properties and the panels
+        apps.testDevices = QVariantList{QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{mic}"}, {"name", "Microphone (USB)"}, {"kind", "microphone"}, {"inChannels", 1}, {"outChannels", 0}, {"defaultRate", 48000.0}, {"defaultIn", true}},
+          QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{cam}"}, {"name", "Webcam microphone"}, {"kind", "microphone"}, {"inChannels", 2}, {"outChannels", 0}, {"defaultRate", 44100.0}},
+          QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.0.0}.{spk}"}, {"name", "Speakers"}, {"inChannels", 0}, {"outChannels", 2}}, QVariantMap{{"backend", "wasapi"}, {"id", "loopback:system"}, {"name", "Computer sound"}, {"inChannels", 2}},
+          QVariantMap{{"backend", "asio"}, {"id", "X"}, {"name", "ASIO box"}, {"inChannels", 8}}};
+        const QVariantList rd = apps.recordingDevices(); QVariantMap gotProps; QString gotId;
+        const auto pc = QObject::connect(&apps, &Apps::propertiesReady, &app, [&](const QString& id, const QVariantMap& p) { gotId = id; gotProps = p; }); apps.readProperties("{0.0.1.0}.{cam}"); QObject::disconnect(pc);
+        const bool devList = rd.size() == 2 && rd[0].toMap()["isDefault"].toBool() && rd[1].toMap()["name"].toString() == "Webcam microphone" && rd[1].toMap()["slot"].toInt() == -1 && apps.devicesAvailable();
+        const bool devProps = gotId == "{0.0.1.0}.{cam}" && gotProps["ok"].toBool() && gotProps["bits"].toInt() == 24 && gotProps["enhancements"].toString() == "on" && gotProps["levelPct"].toInt() == 80;
+        bool devRefused = !apps.captureDevice("loopback:system", "Computer sound", 8, false)["ok"].toBool() && !apps.captureDevice("", "nothing", 8, false)["ok"].toBool() && !apps.captureDevice("{0.0.1.0}.{cam}", "Webcam microphone", 999, false)["ok"].toBool();
+        if (!am::app::Capture::deviceAvailable()) { const QVariantMap x = apps.captureDevice("{0.0.1.0}.{cam}", "Webcam microphone", 8, false); devRefused = devRefused && !x["ok"].toBool() && x["message"].toString().contains("Windows") && engine.inputRoutes()[8].toInt() == routes0[8].toInt() && apps.count() == 2; }
+        const bool panels = apps.openWindowsSound("recording") && apps.lastPanel == "recording" && apps.openWindowsSound("mixer") && apps.openWindowsSound("settings") && apps.openWindowsSound("playback") && !apps.openWindowsSound("cmd.exe") && apps.lastPanel == "playback";
+        apps.testDevices.clear();
+        std::printf("amixos --smoke: WINDOWS SOUND recording devices listed %d, properties %d, bad picks refused %d, panels %d\n", devList, devProps, devRefused, panels);
+        if (!(devList && devProps && devRefused && panels)) { std::fprintf(stderr, "amixos --smoke: WINDOWS SOUND failed\n"); return 99; }
+        { // PROGRAM PICTURES: the picker's icons and window pictures, a live picture that follows the program, and nothing left when it is forgotten
+          int made = 0; appWindows.testSource = [&made](quint32 pid, bool icon) { ++made; QImage i(icon ? 32 : 320, icon ? 32 : 180, QImage::Format_RGB32); i.fill(QColor(int(pid % 200), 60, made % 255)); return i; };
+          appWindows.testTitle = [](quint32 pid) { return QStringLiteral("Window of %1").arg(pid); };
+          AppWindowImages prov(&appWindows); QSize sz; const QImage none = prov.requestImage("window/1001?0", &sz, QSize());
+          const bool placeholder = !none.isNull() && sz == QSize(320, 180) && none.pixelColor(5, 5) == QColor(18, 20, 24);            // no picture yet: a dark tile, never an error
+          const int t0 = appWindows.tick(); appWindows.snapshot(1001); pause(300);
+          const QImage one = prov.requestImage("window/1001?1", &sz, QSize()); const bool snap = appWindows.tick() > t0 && one.pixelColor(5, 5).red() == 1001 % 200;
+          const QImage ic = prov.requestImage("icon/1001", &sz, QSize(20, 20)); const bool icon = sz == QSize(20, 20) && !ic.isNull();
+          const int t1 = appWindows.tick(); appWindows.watch(1001, true); pause(700); const int frames = appWindows.tick() - t1; const bool live = appWindows.isWatched(1001) && appWindows.watched().size() == 1 && frames >= 3 && frames <= 12;   // about 8 a second
+          appWindows.watch(1001, false); pause(300); const int t2 = appWindows.tick(); pause(400); const bool stopped = appWindows.tick() == t2 && appWindows.watched().isEmpty();
+          for (quint32 p = 2000; p < 2012; ++p) appWindows.watch(p, true); const bool capped = appWindows.watched().size() == 8; for (quint32 p = 2000; p < 2012; ++p) appWindows.forget(p);
+          appWindows.forget(1001); const bool forgotten = prov.requestImage("window/1001?2", &sz, QSize()).pixelColor(5, 5) == QColor(18, 20, 24) && appWindows.titleOf(1001) == "Window of 1001";
+          const bool junk = !prov.requestImage("window/abc", &sz, QSize()).isNull() && !prov.requestImage("", &sz, QSize()).isNull() && !prov.requestImage("icon/0", &sz, QSize()).isNull();
+          appWindows.testSource = nullptr; appWindows.testTitle = nullptr;
+          std::printf("amixos --smoke: PROGRAM PICTURES placeholder %d, snapshot %d, icon %d, live %d (%d pictures in 0.7 s), stops %d, 8 at most %d, forgotten %d, odd requests %d\n", placeholder, snap, icon, live, frames, stopped, capped, forgotten, junk);
+          if (!(placeholder && snap && icon && live && stopped && capped && forgotten && junk)) { std::fprintf(stderr, "amixos --smoke: PROGRAM PICTURES failed\n"); return 100; } }
+        // a slot stays while a strip listens to it, and is given back with its last strip
+        engine.setInputRoute(5, -1); const bool stays = apps.count() == 2; engine.setInputRoute(6, routes0[6].toInt()); const bool freed = apps.count() == 1;
+        apps.release(0); pause(300); const bool released = apps.count() == 0 && engine.inputRoutes()[4].toInt() == -1 && inDb(4) < -100 && apps.captures().isEmpty();
+        // remembered by name: a console that starts with a strip on a program's slot waits for that program
+        engine.setInputRoute(9, 272 + 16 + 2); QSettings().setValue("apps/captures", "[{\"slot\":2,\"name\":\"Deezer\"},{\"slot\":5,\"name\":\"Nobody listens\"}]");
+        bool waits = false, still = false;
+        { Apps again(&engine); const QVariantList w = again.captures(); waits = w.size() == 1 && w[0].toMap()["state"].toString() == "waiting" && w[0].toMap()["name"].toString() == "Deezer" && w[0].toMap()["strips"].toList() == QVariantList{9} && engine.inputLabel(272 + 16 + 2) == "APP · Deezer";
+          again.sessionsNow = [] { return std::vector<std::pair<quint32, QString>>{{4242, QStringLiteral("Deezer")}}; }; again.poll(); pause(200); again.poll();
+          still = again.count() == 1 && (am::app::Capture::available() || again.captures()[0].toMap()["state"].toString() == "waiting"); }
+        engine.appInputName = [&apps](int input) { return apps.inputName(input); };
+        engine.setInputRoute(9, routes0[9].toInt()); engine.setInputRoute(4, routes0[4].toInt()); engine.setInputRoute(5, routes0[5].toInt()); engine.setPan(5, pan5); engine.setPan(6, pan6); QSettings().remove("apps/captures"); apps.testMode = false; apps.testPrograms.clear();
+        std::printf("amixos --smoke: APP CAPTURE programs listed %d, two on strips %d, heard %d (CH 5 %.1f, CH 6 %.1f, CH 7 %.1f dBFS), named %d, panned %d, AUTO -INF keeps them %d, refused without Windows %d, bad picks %d, slot stays %d / freed %d, released %d, waits for its program %d / %d\n",
+                    listed, routed, heard, l4, l5, l6, named, panned, kept, refused, bad, stays, freed, released, waits, still);
+        if (!(listed && routed && heard && named && panned && kept && refused && bad && stays && freed && released && waits && still)) { std::fprintf(stderr, "amixos --smoke: APP CAPTURE failed\n"); return 97; } }
       // AUTO INPUT: OFF closes the input (nothing captured), ON opens it again; "no input" never means COMPUTER SOUND behind the user's back
       const bool keepAuto = engine.micAtStart();
       engine.setAutoInput(false); const int offIn = engine.deviceInputs(); const bool offRun = engine.running(); const QString offSrc = engine.inputSource();
@@ -616,7 +697,7 @@ int main(int argc, char* argv[]) {
         const QVariantList sp = engine.pluginParams(20, a); const bool txt = sp.size() >= 4 && sp[0].toMap()["text"].toString().startsWith("1 ");
         if (a < 0 || a != b || n != 1 || d < 0 || dual != d || !txt) { std::fprintf(stderr, "amixos --smoke: rack helpers (sampler %d/%d x%d, dual %d/%d, text %d: %d params, first \"%s\")\n", a, b, n, d, dual, txt, static_cast<int>(sp.size()), sp.isEmpty() ? "" : qPrintable(sp[0].toMap()["text"].toString())); return 154; }
         engine.setPlugin(20, a, ""); engine.setPlugin(20, d, ""); }
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 48) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 48: 45 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 49) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 48: 45 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -686,7 +767,7 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "amixos --smoke: 1000 PADS + 1000 EFFECTS: pad and effect heard %.1f dBFS, pad changed %d, bad sources refused %d, put back %d\n", pk, set, refused, back);
         if (pk < -40 || !set || !refused || !back) return 126; }
       const QString sdir = QDir::tempPath() + "/amixos-smoke-samples"; QDir(sdir).removeRecursively(); std::string serr; if (!am::samples::writeAll(sdir.toStdString(), 48000, serr) || QDir(sdir).entryList({"*.wav"}, QDir::Files).size() != 100) { std::fprintf(stderr, "amixos --smoke: sample export: %s\n", serr.c_str()); return 123; } QDir(sdir).removeRecursively();
-      if (engine.fxPresets().size() != 300 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
+      if (engine.fxPresets().size() != 600 || !engine.applyFxPreset(8, 301) || engine.busFx(8)["kind"].toString() != "pingpong" || engine.busFx(8)["params"].toList().size() != 6 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
       if (!engine.applyFxPreset(9, 120) || engine.busFx(9)["kind"].toString() != "delay" || engine.applyFxPreset(9, 999)) { std::fprintf(stderr, "amixos --smoke: fx preset kinds\n"); return 125; } engine.setBusFx(8, ""); engine.setBusFx(9, "");
       if (engine.busState().size() != 16 || engine.busState()[0].toMap()["kind"] != "aux" || engine.busState()[8].toMap()["kind"] != "fx") { std::fprintf(stderr, "amixos --smoke: 16 buses (8 AUX + 8 FX)\n"); return 126; }
       // EQ PRESETS: 20 slots, the factory ten locked and named (AmiX W Shape first), apply changes the response, SAVE / CLEAR on a custom slot, locked slots refuse SAVE
@@ -830,6 +911,16 @@ int main(int argc, char* argv[]) {
           if (!follow || !back || !free) { std::fprintf(stderr, "amixos --smoke: master / monitor SYNC\n"); return 153; } }
         engine.setMaster(-4.5); engine.setMasterMuted(true); const bool down = engine.masterDb() <= -59.9; engine.setMasterMuted(false);
         if (!down || std::fabs(engine.masterDb() + 4.5) > 1e-6 || engine.masterMuted()) { std::fprintf(stderr, "amixos --smoke: master mute\n"); return 212; } engine.setMaster(0);
+        { // HEADROOM MODE: the master stays under the chosen level, whatever the faders say; OFF gives the limiter back as it was
+          auto pause2 = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+          const bool nt = engine.nullTestInput(); const double m0 = engine.masterDb(), g0 = engine.stripState()[0].toMap()["db"].toDouble();
+          engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); engine.setInputRoute(0, 0); engine.setMute(0, false); engine.setMaster(10); engine.setGain(0, 10); engine.setHeadroomDb(6); pause2(900);   // the null device with its -12 dBFS tone, pushed 20 dB up
+          const double pk6 = engine.telemetry().value("masterPeakDb").toDouble(); const bool held = pk6 <= -5.9 && pk6 > -9 && engine.headroomDb() == 6 && engine.ceilingNow() == -6.0 && engine.limiterOnNow();
+          engine.setHeadroomDb(7); const bool stepped = engine.headroomDb() == 9; engine.setHeadroomDb(99); const bool top = engine.headroomDb() == 12 && engine.ceilingNow() == -12.0;
+          engine.setHeadroomDb(0); pause2(700); const double pk0 = engine.telemetry().value("masterPeakDb").toDouble(); const bool off = engine.headroomDb() == 0 && engine.ceilingNow() > -1.0 && pk0 > pk6 + 3;
+          engine.setMaster(m0); engine.setGain(0, g0); engine.setNullTestInput(nt); engine.open("null", "", "", 48000, 256, 2, 2);
+          std::printf("amixos --smoke: HEADROOM MODE -6 dB holds the master at %.1f dBFS %d, steps %d, -12 at most %d, OFF gives it back (%.1f dBFS) %d\n", pk6, held, stepped, top, pk0, off);
+          if (!(held && stepped && top && off)) { std::fprintf(stderr, "amixos --smoke: HEADROOM MODE failed\n"); return 101; } }
         engine.limitAllChannels(true); const bool allOn = engine.allChannelsLimited(); engine.limitAllChannels(false); if (!allOn || engine.allChannelsLimited() || engine.channelParams(7)["limiterOn"].toBool()) { std::fprintf(stderr, "amixos --smoke: limit channels\n"); return 213; }
         engine.resetRouting(); const int pulled = engine.infUnused();   // the null device has 2 inputs: strips 3-32 have none
         if (pulled != 30 || engine.stripState()[0].toMap()["db"].toDouble() < -100 || engine.stripState()[9].toMap()["db"].toDouble() > -59.9 || engine.infUnused() != 0) { std::fprintf(stderr, "amixos --smoke: AUTO -INF pulled %d\n", pulled); return 214; }
@@ -1174,6 +1265,24 @@ int main(int argc, char* argv[]) {
           QTemporaryDir td; const QString nd = td.path() + "/new", od = td.path() + "/old"; QDir().mkpath(nd); QDir().mkpath(od);
           for (const auto& [from, to] : {std::pair<QString, QString>{fx + "/new", nd}, {fx + "/old", od}}) for (const QString& n : QDir(from).entryList(QDir::Files)) QFile::copy(from + "/" + n, to + "/" + n);
           const bool good = update.loadLocalWith(nd, false, test) && update.state() == "downloaded" && update.latest() == "99.0.0.0" && QFileInfo::exists(update.downloaded()) && !update.downloaded().startsWith(nd);   // the copy in its own folder is what runs, never the file on the stick
+          { // THE UPDATE NOTICE: a banner, a badge on the menu and one Windows notification per version; LATER, SKIP THIS VERSION, seen
+            QSettings qs; for (const char* k : {"update/skipped", "update/seen", "update/toasted", "update/laterUntil"}) qs.remove(k);
+            qint64 t = 1800000000000LL; update.clock = [&t] { return t; }; int toasts = 0; QString toastTitle;
+            const auto conn = QObject::connect(&update, &Update::notifySystem, &app, [&](const QString& title, const QString&) { ++toasts; toastTitle = title; });
+            QObject* w = qml.rootObjects().isEmpty() ? nullptr : qml.rootObjects().first();
+            auto shown = [&](const char* name) { QCoreApplication::processEvents(); QObject* o = w ? w->findChild<QObject*>(name) : nullptr; return o && o->property("visible").toBool(); };
+            update.skipThisVersion(); const bool before = !shown("updateBanner"); update.unskip(); qs.remove("update/toasted");   // (the step above already found 99.0.0.0: start from a version nobody is told about)
+            update.loadLocalWith(nd, false, test);   // 99.0.0.0 is found
+            const bool told = update.found() && update.noticeBanner() && update.noticeBadge() && toasts == 1 && toastTitle.contains("99.0.0.0") && shown("updateBanner");
+            update.loadLocalWith(nd, false, test); const bool once = toasts == 1;                                   // the same version again: no second notification
+            update.markUpdateSeen(); const bool seen = !update.noticeBadge() && update.noticeBanner();              // the page was opened: the badge goes, the banner stays
+            update.remindLater(24); const bool later = !update.noticeBanner() && !shown("updateBanner"); t += 23LL * 3600000; const bool stillLater = !update.noticeBanner(); t += 2LL * 3600000; const bool back = update.noticeBanner();
+            update.skipThisVersion(); const bool skipped = !update.noticeBanner() && !update.noticeBadge() && update.skippedVersion() == "99.0.0.0" && !shown("updateBanner");
+            update.unskip(); const bool unskipped = update.noticeBanner() && update.skippedVersion().isEmpty();
+            update.setSystemNotice(false); qs.remove("update/toasted"); update.loadLocalWith(nd, false, test); const bool quiet = toasts == 1 && update.noticeBanner(); update.setSystemNotice(true);   // switched off: the banner still tells
+            QObject::disconnect(conn); update.clock = nullptr; for (const char* k : {"update/skipped", "update/seen", "update/toasted", "update/laterUntil"}) qs.remove(k);
+            std::printf("amixos --smoke: UPDATE NOTICE none before %d, banner + badge + one notification %d, once per version %d, seen %d, LATER %d / %d / back %d, SKIP %d, shown again %d, notification off %d\n", before, told, once, seen, later, stillLater, back, skipped, unskipped, quiet);
+            if (!(before && told && once && seen && later && stillLater && back && skipped && unskipped && quiet)) { std::fprintf(stderr, "amixos --smoke: UPDATE NOTICE failed\n"); return 98; } }
           const bool vendorRefuses = !update.loadLocal(nd) && update.message().contains("signature");   // the vendor key did not sign the test bundle: refused
           const bool olderRefused = !update.loadLocalWith(od, false, test) && update.message().contains("older"), olderAllowed = update.loadLocalWith(od, true, test);
           QString bin; for (const QString& n : QDir(nd).entryList({QStringLiteral("*.bin")}, QDir::Files)) { QFile b(nd + "/" + n); if (b.open(QIODevice::Append)) { b.write("x"); b.close(); } }
@@ -1258,6 +1367,35 @@ int main(int argc, char* argv[]) {
             if (QObject* dp = win->findChild<QObject*>("storeDownloadPanel")) dp->setProperty("visible", false); QFile::remove(update.pluginDir + "/AMFB Air Shelf.vst3"); update.setPluginList(QJsonArray()); }
           for (const char* u : {"https://www.tiktok.com/@amfb.audio/live", "https://www.deezer.com/en/album/302127", "https://tidal.com/browse/track/12345678", "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "https://youtu.be/dQw4w9WgXcQ"}) links.add(QString::fromLatin1(u), QString());
           win->setProperty("current", "streaming"); settle(800); win->grabWindow().save(shots + "/streaming.png");
+          { // APP CAPTURE: two programs on their own strips (test tones stand in for them), on the MIXER and on MEDIA
+            apps.testMode = true; apps.testPrograms = QVariantList{QVariantMap{{"id", "loopback:app:1001"}, {"name", "Spotify"}}, QVariantMap{{"id", "loopback:app:1002"}, {"name", "Chrome (YouTube, web players)"}}, QVariantMap{{"id", "loopback:app:1003"}, {"name", "Zoom"}}};
+            const QVariantList r0 = engine.inputRoutes(); const QVariantList st0 = engine.stripState();
+            apps.captureTest("Spotify", 440, 2, false); apps.captureTest("Chrome (YouTube, web players)", 660, 3, true); engine.setName(2, "SPOTIFY"); engine.setName(3, "WEB L"); engine.setName(4, "WEB R");
+            win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-app-capture.png");
+            apps.testDevices = QVariantList{QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{mic}"}, {"name", "Microphone (USB Audio Device)"}, {"kind", "microphone"}, {"inChannels", 1}, {"defaultRate", 48000.0}, {"defaultIn", true}}, QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{cam}"}, {"name", "Microphone (HD Webcam)"}, {"kind", "microphone"}, {"inChannels", 2}, {"defaultRate", 44100.0}}, QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{mix}"}, {"name", "Stereo Mix (Realtek Audio)"}, {"kind", "line"}, {"inChannels", 2}, {"defaultRate", 48000.0}}};
+            apps.readProperties("{0.0.1.0}.{cam}");
+            win->setProperty("current", "media"); settle(900); apps.readProperties("{0.0.1.0}.{cam}"); settle(300); win->grabWindow().save(shots + "/media-app-capture.png"); apps.testDevices.clear();
+            { // the picker with icons and window pictures, and the live PROGRAM VIEW (drawn pictures stand in for the windows here)
+              appWindows.testTitle = [](quint32 pid) { return pid == 1001 ? QStringLiteral("Spotify Premium") : pid == 1002 ? QStringLiteral("AMFB live set - YouTube - Google Chrome") : QStringLiteral("Zoom Meeting"); };
+              appWindows.testSource = [](quint32 pid, bool icon) { const QColor c = pid == 1001 ? QColor(30, 185, 84) : pid == 1002 ? QColor(219, 68, 55) : QColor(45, 140, 255);
+                if (icon) { QImage i(32, 32, QImage::Format_ARGB32_Premultiplied); i.fill(Qt::transparent); QPainter p(&i); p.setRenderHint(QPainter::Antialiasing); p.setBrush(c); p.setPen(Qt::NoPen); p.drawEllipse(2, 2, 28, 28); return i; }
+                QImage i(640, 360, QImage::Format_RGB32); i.fill(QColor(24, 26, 32)); QPainter p(&i); p.fillRect(0, 0, 640, 34, c.darker(160)); p.fillRect(20, 60, 180, 280, QColor(36, 40, 48)); p.fillRect(220, 60, 400, 200, c.darker(220)); p.fillRect(220, 280, 400, 12, QColor(60, 64, 72)); p.fillRect(220, 280, 150, 12, c); return i; };
+              if (QObject* pk = win->findChild<QObject*>("appPickerOpen")) QMetaObject::invokeMethod(pk, "hit");
+              settle(900); win->grabWindow().save(shots + "/app-picker.png");
+              for (QObject* o : win->findChildren<QObject*>("appPicker")) QMetaObject::invokeMethod(o, "close");
+              appWindows.watch(1002, true); settle(900); win->grabWindow().save(shots + "/media-program-view.png"); appWindows.forget(1002); appWindows.forget(1001); appWindows.forget(1003);
+              appWindows.testSource = nullptr; appWindows.testTitle = nullptr; }
+            for (int k = 0; k < 8; ++k) apps.release(k);
+            for (int i2 : {2, 3, 4}) { engine.setInputRoute(i2, r0[i2].toInt()); engine.setName(i2, st0[i2].toMap()["name"].toString()); engine.setPan(i2, st0[i2].toMap()["pan"].toDouble()); }
+            apps.testMode = false; apps.testPrograms.clear(); }
+          { // A NEW VERSION: the banner, the dot on SOFTWARE UPDATE in the menu, and the page itself (the signed test bundle of the local update check)
+            const QString fx = QStringLiteral(AMIX_SOURCE_DIR) + "/test/local-update"; QFile kf(fx + "/test-key.json");
+            if (kf.open(QIODevice::ReadOnly)) { const QJsonObject k = QJsonDocument::fromJson(kf.readAll()).object(); const std::vector<am::lic::Jwk> test{{k.value("x").toString().toStdString(), k.value("y").toString().toStdString()}};
+              QTemporaryDir td; for (const QString& n : QDir(fx + "/new").entryList(QDir::Files)) QFile::copy(fx + "/new/" + n, td.path() + "/" + n);
+              QSettings qs; for (const char* key : {"update/skipped", "update/seen", "update/toasted", "update/laterUntil"}) qs.remove(key);
+              if (update.loadLocalWith(td.path(), false, test)) { win->setProperty("current", "home"); settle(800); win->grabWindow().save(shots + "/update-banner.png");
+                win->setProperty("current", "update"); settle(900); win->grabWindow().save(shots + "/software-update-found.png"); }
+              update.clearLocal(); for (const char* key : {"update/skipped", "update/seen", "update/toasted", "update/laterUntil"}) qs.remove(key); win->setProperty("current", "home"); settle(300); } }
           { win->setProperty("current", "mixer"); settle(500); QObject* mp = nullptr; for (QObject* o : win->findChildren<QObject*>("mixerPage")) if (o->property("visible").toBool()) mp = o;
             if (mp) { mp->setProperty("editing", true); settle(700); win->grabWindow().save(shots + "/mixer-edit-layout.png"); mp->setProperty("editing", false); settle(200); } }
           engine.setPlugin(0, 0, "fx:preamp"); engine.setPlugin(0, 1, "fx:regulator"); engine.setPlugin(0, 2, "fx:reverb"); engine.setPlugin(0, 3, "fx:protect"); engine.setPluginBypass(0, 2, true);   // THE RACK with effects in
@@ -1269,7 +1407,7 @@ int main(int argc, char* argv[]) {
           for (int step = 0; step < 7; ++step) { wiz->setProperty("step", step); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + QStringLiteral("/setup-%1.png").arg(step + 1)); std::printf("amixos --shots: setup-%d\n", step + 1); }
           win->setProperty("forceSetup", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           { win->setProperty("current", "mixer"); for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);   // the plug-in editor on a tube amp and on the hall reverb
-            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}, {"fx:chorus", "STEREO CHORUS", "plugin-editor-chorus.png"}, {"fx:pitch", "PITCH SHIFTER", "plugin-editor-pitch.png"}, {"fx:barrier", "SOUND BARRIER", "plugin-editor-barrier.png"}, {"fx:sampler", "SAMPLE PLAYER", "plugin-editor-sampler.png"}, {"fx:desquash", "DE-SQUASH", "plugin-editor-desquash.png"}, {"fx:mseq", "MS COLOUR EQ", "plugin-editor-mseq.png"}, {"fx:isoeq", "ISO EQ 10", "plugin-editor-isoeq.png"}, {"fx:mod", "MOD MACHINE", "plugin-editor-mod.png"}, {"fx:opto", "OPTO LEVELER", "plugin-editor-opto.png"}, {"fx:glue", "GLUE COMP", "plugin-editor-glue.png"}, {"fx:tape", "TAPE MACHINE", "plugin-editor-tape.png"}, {"fx:transient", "TRANSIENT SHAPER", "plugin-editor-transient.png"}, {"fx:deesser", "DE-ESSER", "plugin-editor-deesser.png"}, {"fx:maximizer", "MAXIMIZER", "plugin-editor-maximizer.png"}, {"fx:multiband", "MULTIBAND COMP", "plugin-editor-multiband.png"}, {"fx:imager", "STEREO IMAGER", "plugin-editor-imager.png"}, {"fx:autopan", "AUTO PAN", "plugin-editor-autopan.png"}, {"fx:doubler", "VOCAL DOUBLER", "plugin-editor-doubler.png"}, {"fx:iamfelement", "IAMF ELEMENT", "plugin-editor-iamfelement.png"}, {"fx:iamfrender", "IAMF RENDERER", "plugin-editor-iamfrender.png"}, {"fx:wshape", "W-SHAPE TUNER", "plugin-editor-wshape.png"}, {"fx:convclip", "CONVERTER CLIP", "plugin-editor-convclip.png"}, {"fx:delay", "TAPE DELAY", "plugin-editor-tapedelay.png"}, {"fx:antifeedback", "FEEDBACK KILLER", "plugin-editor-antifeedback.png"}, {"fx:subsynth", "SUB SYNTH", "plugin-editor-subsynth.png"}, {"fx:dualeq", "DUAL LISTEN EQ", "plugin-editor-dualeq.png"}, {"fx:drive", "TUBE DRIVE", "plugin-editor-drive.png"}, {"fx:flanger", "FLANGER", "plugin-editor-flanger.png"}, {"fx:phaser", "PHASER", "plugin-editor-phaser.png"}, {"fx:tremolo", "TREMOLO", "plugin-editor-tremolo.png"}, {"fx:wah", "AUTO WAH", "plugin-editor-wah.png"}, {"fx:crusher", "BIT CRUSHER", "plugin-editor-crusher.png"}, {"fx:exciter", "EXCITER", "plugin-editor-exciter.png"}, {"fx:preamp", "PRE AMP", "plugin-editor-preamp.png"}, {"fx:postamp", "POST AMP", "plugin-editor-postamp.png"}, {"fx:room", "ROOM REVERB", "plugin-editor-room.png"}}) {
+            if (QObject* edw = win->findChild<QObject*>("plugEd")) { for (const auto& [kind, name, file] : {std::tuple<const char*, const char*, const char*>{"fx:tubeamp", "TUBE AMP", "plugin-editor-tubeamp.png"}, {"fx:hall", "HALL REVERB", "plugin-editor-hall.png"}, {"fx:pingpong", "PING-PONG DELAY", "plugin-editor-pingpong.png"}, {"fx:regulator", "POWER REGULATOR", "plugin-editor-regulator.png"}, {"fx:protect", "SHORT PROTECT", "plugin-editor-protect.png"}, {"fx:rider", "VOICE RIDER", "plugin-editor-rider.png"}, {"fx:clean", "VOICE CLEAN", "plugin-editor-clean.png"}, {"fx:reverb", "PLATE REVERB", "plugin-editor-plate.png"}, {"fx:syncdelay", "SYNC DELAY", "plugin-editor-delay.png"}, {"fx:analog", "ANALOG CHANNEL", "plugin-editor-analog.png"}, {"fx:chorus", "STEREO CHORUS", "plugin-editor-chorus.png"}, {"fx:pitch", "PITCH SHIFTER", "plugin-editor-pitch.png"}, {"fx:barrier", "SOUND BARRIER", "plugin-editor-barrier.png"}, {"fx:sampler", "SAMPLE PLAYER", "plugin-editor-sampler.png"}, {"fx:desquash", "DE-SQUASH", "plugin-editor-desquash.png"}, {"fx:mseq", "MS COLOUR EQ", "plugin-editor-mseq.png"}, {"fx:isoeq", "ISO EQ 10", "plugin-editor-isoeq.png"}, {"fx:mod", "MOD MACHINE", "plugin-editor-mod.png"}, {"fx:opto", "OPTO LEVELER", "plugin-editor-opto.png"}, {"fx:glue", "GLUE COMP", "plugin-editor-glue.png"}, {"fx:tape", "TAPE MACHINE", "plugin-editor-tape.png"}, {"fx:transient", "TRANSIENT SHAPER", "plugin-editor-transient.png"}, {"fx:deesser", "DE-ESSER", "plugin-editor-deesser.png"}, {"fx:maximizer", "MAXIMIZER", "plugin-editor-maximizer.png"}, {"fx:multiband", "MULTIBAND COMP", "plugin-editor-multiband.png"}, {"fx:imager", "STEREO IMAGER", "plugin-editor-imager.png"}, {"fx:autopan", "AUTO PAN", "plugin-editor-autopan.png"}, {"fx:doubler", "VOCAL DOUBLER", "plugin-editor-doubler.png"}, {"fx:iamfelement", "IAMF ELEMENT", "plugin-editor-iamfelement.png"}, {"fx:iamfrender", "IAMF RENDERER", "plugin-editor-iamfrender.png"}, {"fx:wshape", "W-SHAPE TUNER", "plugin-editor-wshape.png"}, {"fx:convclip", "CONVERTER CLIP", "plugin-editor-convclip.png"}, {"fx:delay", "TAPE DELAY", "plugin-editor-tapedelay.png"}, {"fx:antifeedback", "FEEDBACK KILLER", "plugin-editor-antifeedback.png"}, {"fx:subsynth", "SUB SYNTH", "plugin-editor-subsynth.png"}, {"fx:dualeq", "DUAL LISTEN EQ", "plugin-editor-dualeq.png"}, {"fx:drive", "TUBE DRIVE", "plugin-editor-drive.png"}, {"fx:flanger", "FLANGER", "plugin-editor-flanger.png"}, {"fx:phaser", "PHASER", "plugin-editor-phaser.png"}, {"fx:tremolo", "TREMOLO", "plugin-editor-tremolo.png"}, {"fx:wah", "AUTO WAH", "plugin-editor-wah.png"}, {"fx:crusher", "BIT CRUSHER", "plugin-editor-crusher.png"}, {"fx:exciter", "EXCITER", "plugin-editor-exciter.png"}, {"fx:preamp", "PRE AMP", "plugin-editor-preamp.png"}, {"fx:postamp", "POST AMP", "plugin-editor-postamp.png"}, {"fx:room", "ROOM REVERB", "plugin-editor-room.png"}}) {
                 engine.setPlugin(0, 8, kind); QMetaObject::invokeMethod(edw, "openFor", Q_ARG(QVariant, 0), Q_ARG(QVariant, 8), Q_ARG(QVariant, QString::fromLatin1(kind)), Q_ARG(QVariant, QString::fromLatin1(name)));
                 { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 500) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + "/" + file);
                 { QObject* lv = win->findChild<QObject*>("liveView"); QObject* tint = win->findChild<QObject*>("plateTint"); const QString k = QString::fromLatin1(kind);   // each family: its own plate colour, and its display where it has one
@@ -1604,5 +1742,68 @@ int main(int argc, char* argv[]) {
       QCoreApplication::exit(blocks > 100 && engine.pageCount() >= 30 ? 0 : 4);
     });
   }
+#ifdef AMIXOS_TEST_LICENSE
+  // THE BIG CONSOLE (test builds only: --big DIR). The console is run as PRO + one EXTEND pack (50 channels) and as ULTIMATE (300), on
+  // the null device with its test tone, and every claim is checked: the strips shown, the pages of 16, strips built only when their
+  // page opens, the last strip mixing, the saved console keeping every strip, and the first 32 strips untouched. Pictures go to DIR.
+  if (!bigShots.isEmpty()) QTimer::singleShot(1500, &app, [&] {
+    auto fail = [&](int code, const char* what) { std::fprintf(stderr, "amixos --big: %s\n", what); engine.stop(); std::exit(code); };
+    auto settle = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+    QDir().mkpath(bigShots); auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+    auto shot = [&](const char* name) { win->grabWindow().save(bigShots + "/" + name + ".png"); };
+    std::function<void(QQuickItem*, const QString&, bool, bool, QList<QQuickItem*>&)> walk = [&](QQuickItem* it, const QString& n, bool shownOnly, bool up, QList<QQuickItem*>& out) {
+      if (!it || (shownOnly && !it->isVisible())) return; Q_UNUSED(up); if (it->objectName() == n) out << it; for (QQuickItem* c : it->childItems()) walk(c, n, shownOnly, up, out); };
+    auto items = [&](const char* n, bool shownOnly = false) { QList<QQuickItem*> out; walk(win->contentItem(), QString::fromLatin1(n), shownOnly, false, out); return out; };
+    auto item = [&](const char* n) -> QQuickItem* { const QList<QQuickItem*> l = items(n); return l.isEmpty() ? nullptr : l.first(); };
+    auto mixer = [&]() -> QObject* { QObject* mp = nullptr; for (QQuickItem* o : items("mixerPage", true)) mp = o; return mp; };
+    settings.finishSetup(); engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); settle(400);
+    // 1. as shipped: 32 strips shown, 10 licensed (BASIC), every list 32 long
+    if (engine.strips() != 32 || engine.licensedChannels() != 10 || engine.stripState().size() != 32 || engine.meters().size() != 32 || engine.inputRoutes().size() != 32 || engine.inputCap() != 32) fail(2, "BASIC is not the 32-strip console it was");
+    win->setProperty("current", "mixer"); settle(900); QObject* mp = mixer(); if (!mp) fail(3, "no mixer page");
+    if (mp->property("big").toBool() || items("stripFader").size() != 32) fail(4, "BASIC: the mixer does not build its 32 strips at once");
+    // 2. PRO + one EXTEND pack: 50 strips, four pages, the last page holds two
+    engine.setTestChannels(50); settle(900); mp = mixer();
+    if (engine.strips() != 50 || engine.stripState().size() != 50 || engine.meters().size() != 50 || engine.license().value("extendPacks").toInt() != 1) fail(5, "50 channels: the lists do not follow the licence");
+    if (!mp || !mp->property("big").toBool() || mp->property("bank").toInt() != 0) fail(6, "50 channels: the mixer is not paged");
+    { QObject* bar = item("mixerBankBar"); if (!bar || bar->property("banks").toInt() != 4 || !bar->property("paged").toBool()) fail(7, "50 channels: not four pages"); }
+    mp->setProperty("bank", 3); settle(700); shot("extend-50-last-page");
+    { const int vis = static_cast<int>(items("stripFader", true).size());
+      if (vis != 2) { std::fprintf(stderr, "amixos --big: page 4 of 50 channels shows %d strips\n", vis); fail(8, "the last page of 50 channels does not show its 2 strips"); } }
+    // 3. ULTIMATE: 300 strips, nineteen pages; strips are built when their page opens, not before
+    engine.setTestChannels(300); settle(900); mp = mixer();
+    if (engine.strips() != 300 || engine.licensedChannels() != 300 || engine.stripState().size() != 300 || engine.meters().size() != 300 || engine.inputRoutes().size() != 300 || engine.inputCap() != 256 || engine.edition() != "ULTIMATE") fail(9, "ULTIMATE: not 300 strips");
+    const int builtFirst = static_cast<int>(items("stripFader").size());
+    if (builtFirst > 64) { std::fprintf(stderr, "amixos --big: %d strips built before their pages were opened\n", builtFirst); fail(10, "ULTIMATE: every strip is built at once"); }
+    { QObject* bar = item("mixerBankBar"); if (!bar || bar->property("banks").toInt() != 19) fail(11, "ULTIMATE: not nineteen pages"); }
+    shot("ultimate-mixer-page-1");
+    mp->setProperty("bank", 18); settle(900); if (!item("stripMute299") || item("stripMute200") || items("stripFader", true).size() != 12) fail(12, "ULTIMATE: the last page did not build CH 289-300 (or built others)");
+    // CH 300 mixes: route the test tone to it, hear it on the master; its neighbour stays silent
+    engine.setMaster(0); for (int i = 0; i < 300; ++i) engine.setInputRoute(i, -1); settle(700);
+    const double quiet = engine.telemetry().value("masterPeakDb").toDouble();
+    engine.setInputRoute(299, 0); engine.setGain(299, 0); engine.setMute(299, false); settle(700);
+    const double m299 = engine.meters()[299].toMap()["inDb"].toDouble(), m298 = engine.meters()[298].toMap()["inDb"].toDouble(), heard = engine.telemetry().value("masterPeakDb").toDouble();
+    if (std::fabs(m299 + 12.0) > 1.0 || m298 > -100 || heard < -20 || quiet > -100) { std::fprintf(stderr, "amixos --big: CH 300 in %.1f dBFS, CH 299 in %.1f, master %.1f (silent before: %.1f)\n", m299, m298, heard, quiet); fail(13, "ULTIMATE: CH 300 does not mix"); }
+    engine.setName(299, "LAST"); engine.setSolo(299, true); settle(500); shot("ultimate-mixer-page-19"); engine.setSolo(299, false);
+    // the processor load with 300 strips, one live
+    const double load = engine.telemetry().value("loadPct").toDouble(); if (load > 50) { std::fprintf(stderr, "amixos --big: load %.1f %%\n", load); fail(14, "ULTIMATE: idle strips cost processor time"); }
+    // the whole console is saved and comes back: CH 300's name and route, and a scene keeps it
+    { const QJsonObject c = engine.consoleExport(); if (c.value("strips").toArray().size() != 300 || c.value("inputRoutes").toArray().size() != 300) fail(15, "ULTIMATE: the saved console does not hold 300 strips");
+      engine.storeScene(14, "big"); engine.setName(299, "X"); engine.setGain(299, -30); engine.recallScene(14);
+      if (engine.stripState()[299].toMap()["name"].toString() != "LAST" || std::fabs(engine.stripState()[299].toMap()["db"].toDouble()) > 1e-9) fail(16, "ULTIMATE: a scene does not bring CH 300 back");
+      engine.setGain(299, -6); engine.recordHistory(); engine.setGain(299, -9); engine.recordHistory(); engine.undo(); if (std::fabs(engine.stripState()[299].toMap()["db"].toDouble() + 6) > 1e-9) fail(17, "ULTIMATE: undo does not reach CH 300"); engine.setGain(299, 0);
+      engine.setArmed(299, true); engine.setRecallSafe(250, true); if (!engine.armed(299) || engine.armed(298) || engine.armedCount() != 1 || !engine.recallSafe(250) || engine.recallSafe(249)) fail(18, "ULTIMATE: REC arm / recall safe above strip 32"); engine.setArmed(299, false); engine.setRecallSafe(250, false); }
+    // the pages that work in pages of 16, on their last page, and the lists of every channel
+    for (const char* pg : {"bus", "routing", "ai", "miceq", "surround", "tools", "renew", "engctl", "dca", "scenes", "dsp", "home"}) { win->setProperty("current", pg); settle(900);
+      for (const char* nm : {"sendToPage", "routingPage", "aiMixPage", "micEqPage"}) for (QQuickItem* o : items(nm, true)) o->setProperty("bank", 18);
+      settle(500); shot((QByteArray("ultimate-") + pg).constData()); }
+    // 4. the licence goes away (a key expires): back to 32 strips, and nothing of the 300 is lost when the console is saved
+    engine.setTestChannels(-1); settle(900);
+    if (engine.strips() != 32 || engine.licensedChannels() != 10 || engine.stripState().size() != 32) fail(19, "back to BASIC: not 32 strips again");
+    if (engine.consoleExport().value("strips").toArray().size() != 300 || engine.consoleExport().value("strips").toArray()[299].toObject().value("name").toString() != "LAST") fail(20, "back to BASIC: the strips above 32 are dropped from the saved console");
+    win->setProperty("current", "mixer"); settle(900); mp = mixer(); if (!mp || mp->property("big").toBool() || mp->property("bank").toInt() != 0) fail(21, "back to BASIC: the mixer is still paged"); shot("basic-again");
+    std::printf("amixos --big: BASIC 32 strips; EXTEND 50 in 4 pages; ULTIMATE 300 in 19 pages (%d strips built at first), CH 300 heard at %.1f dBFS, load %.1f %%, console / scene / undo / REC arm reach CH 300; back to BASIC keeps all 300 saved\n", builtFirst, heard, load);
+    engine.stop(); QCoreApplication::exit(0);
+  });
+#endif
   return app.exec();
 }

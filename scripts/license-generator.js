@@ -145,7 +145,7 @@ textarea,#key-out{width:100%;background:var(--panel2);border:1px solid var(--lin
 ${k.canInit ? `<section class="card" id="ed-card">
     <h2>PAID EDITION: BUILD EDITION TOKEN</h2>
     <p class="dim">One token per sale. It carries a random serial and is signed with your key; the edition installer is built with it and activates by itself on the buyer's computer (no key to type).</p>
-    <div class="row2"><div class="field"><label for="ed">Edition</label><select id="ed"><option value="pro">AmF X1 Pro (PRO plan)</option><option value="studio-master">AmF X1 Studio Master (MASTER plan)</option></select></div>
+    <div class="row2"><div class="field"><label for="ed">Edition</label><select id="ed"><option value="pro">AmF X1 Pro (PRO plan)</option><option value="studio-master">AmF X1 Studio Master (MASTER plan)</option><option value="ultimate">AmF X1 Ultimate (ULTIMATE plan, 300 channels)</option></select></div>
     <div class="field"><label for="ed-days">Expires in (days, 0 = never)</label><input id="ed-days" type="number" min="0" step="1" value="0"></div></div>
     <div class="row2"><div class="field"><label for="ed-order">Order number (optional)</label><input id="ed-order" type="text" maxlength="40" autocomplete="off"></div>
     <div class="field"><label for="ed-buyer">Buyer (optional, kept encrypted)</label><input id="ed-buyer" type="text" maxlength="80" autocomplete="off"></div></div>

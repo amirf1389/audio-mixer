@@ -20,6 +20,9 @@ if (!mid) {
   const out = { jwk, now, fingerprint: fp, key,
     keyAny: sign('AMIX1', { v: 1, plan: 'studio', id: 'TEST-0002', name: 'Any PC', issued: now }),
     token: sign('AMFXE1', { v: 1, kind: 'amfx1-edition', edition: 'studio-master', plan: 'master', serial: 'AMFX-SM-ZSNP-X4WZ-3DSX', issued: now, order: 'SHOP-77' }),
+    keyUltimate: sign('AMIX1', { v: 1, plan: 'ultimate', id: 'TEST-0005', name: 'Big Show', issued: now }),
+    tokenUltimate: sign('AMFXE1', { v: 1, kind: 'amfx1-edition', edition: 'ultimate', plan: 'ultimate', serial: 'AMFX-ULT-ZSNP-X4WZ-3DSX', issued: now }),
+    tokenUltimateWrongPlan: sign('AMFXE1', { v: 1, kind: 'amfx1-edition', edition: 'ultimate', plan: 'master', serial: 'AMFX-ULT-ZSNP-X4WZ-3DSX', issued: now }),
     tampered: key.replace(/\.([A-Za-z0-9_-])/, (m, c) => '.' + (c === 'A' ? 'B' : 'A')),
     activationOther: sign('AMXA1', { v: 1, kind: 'amfx1-activation', kid, lid: 'TEST-0003', mid: 'ABCD-EF01-2345-6789-ABCD', plan: 'master', term: 'perpetual', iat: now, exp: 0 }) };
   fs.writeFileSync(path.join(__dirname, '..', 'engine', 'cpp', 'test', 'license_vectors.json'), JSON.stringify(out, null, 2) + '\n');
@@ -28,6 +31,16 @@ if (!mid) {
   const term = arg('--term') || 'perpetual', exp = term === 'perpetual' ? 0 : now + (term === 'trial' ? 30 : 365) * 86400000;
   const out = { jwk, now, activation: sign('AMXA1', { v: 1, kind: 'amfx1-activation', kid, lid: 'TEST-0004', mid, plan: 'studio', term, iat: now, exp }),
     revocations: sign('AMXR1', { v: 1, kind: 'amfx1-revocations', kid, issued: now + 1000, lids: [arg('--revoke') || 'NOTHING'] }),
-    revocationsOld: sign('AMXR1', { v: 1, kind: 'amfx1-revocations', kid, issued: now, lids: [] }) };
+    revocationsOld: sign('AMXR1', { v: 1, kind: 'amfx1-revocations', kid, issued: now, lids: [] }),
+    // CHANNEL EXTEND packs (+30 channels, bound to this computer) and the keys they sit on
+    proBound: sign('AMIX1', { v: 1, plan: 'pro', id: 'TEST-0010', name: 'Pro', issued: now, mid }),
+    masterBound: sign('AMIX1', { v: 1, plan: 'master', id: 'TEST-0011', name: 'Master', issued: now, mid }),
+    ultimateBound: sign('AMIX1', { v: 1, plan: 'ultimate', id: 'TEST-0012', name: 'Ultimate', issued: now, mid }),
+    extends: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => sign('AMXX1', { v: 1, kind: 'amfx1-extend', id: 'EXT-000' + n, channels: 30, mid, issued: now })),
+    extendOther: sign('AMXX1', { v: 1, kind: 'amfx1-extend', id: 'EXT-0100', channels: 30, mid: 'ABCD-EF01-2345-6789-ABCD', issued: now }),
+    extendUnbound: sign('AMXX1', { v: 1, kind: 'amfx1-extend', id: 'EXT-0101', channels: 30, issued: now }),
+    extendBig: sign('AMXX1', { v: 1, kind: 'amfx1-extend', id: 'EXT-0102', channels: 300, mid, issued: now }),
+    extendExpired: sign('AMXX1', { v: 1, kind: 'amfx1-extend', id: 'EXT-0103', channels: 30, mid, issued: now - 86400000 * 40, expires: now - 86400000 }),
+    revocationsExt: sign('AMXR1', { v: 1, kind: 'amfx1-revocations', kid, issued: now + 5000, lids: ['EXT-0002'] }) };
   fs.writeFileSync(arg('--out'), JSON.stringify(out) + '\n'); console.log('activation for ' + mid + ' written');
 }

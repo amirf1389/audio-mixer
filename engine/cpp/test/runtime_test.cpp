@@ -97,6 +97,29 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(80)); const long after = fx.n.load();
     std::this_thread::sleep_for(std::chrono::milliseconds(80)); expect(fx.n.load() == after, "burst: the detach at the end of 40 000 changes was not dropped");
     rt.stop(); }
+  { // THE 300-STRIP CONSOLE (ULTIMATE): every strip exists; one that gets no input is left out (its meter reads nothing and it costs
+    // nothing), and it joins the mix the moment an input is routed to it. The last strip works like the first.
+    am::Runtime rt(am::kMaxStrips); am::DeviceConfig cfg; cfg.backend = "null"; cfg.sampleRate = 48000; cfg.frames = 256; cfg.inChannels = 2; cfg.outChannels = 2;
+    cfg.nullInput = [](float* const* x, std::size_t n, std::uint64_t f0) { for (std::size_t i = 0; i < n; ++i) { const float v = static_cast<float>(0.5 * std::sin(2.0 * 3.14159265358979 * 440.0 * static_cast<double>(f0 + i) / 48000.0)); x[0][i] = v; x[1][i] = v; } };
+    std::string err; expect(am::kMaxStrips == 300, "the engine holds 300 strips");
+    if (rt.open(cfg, err) && rt.start(err)) {
+      for (int s = 0; s < am::kMaxStrips; ++s) { rt.setEqBand(s, 0, am::dsp::FilterType::Peaking, 1000, 1.0, 3.0); rt.setCompressor(s, true, -20, 4, 6, 10, 100, 0); rt.setSend(s, 0, -6, false); }   // a whole console pushed at once
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      const am::Snapshot a = rt.snapshot(); bool quiet = true; for (int s = 2; s < am::kMaxStrips; ++s) quiet = quiet && a.strips[s].pk == 0.0 && a.strips[s].inPk == 0.0;
+      expect(a.strips[0].pk > 0.1 && a.strips[1].pk > 0.1, "300 strips: the two strips with an input carry it");
+      expect(quiet, "300 strips: the 298 strips without an input stay at nothing");
+      expect(a.loadPct < 60.0, "300 strips, 2 live: the idle strips cost no processor time");
+      rt.setInputRoute(299, 0); rt.setPan(299, -1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(400));
+      const am::Snapshot b = rt.snapshot();
+      expect(b.strips[299].pk > 0.1 && b.strips[299].inPk > 0.1, "300 strips: strip 300 mixes as soon as an input is routed to it");
+      expect(b.strips[298].pk == 0.0, "300 strips: its neighbour stays idle");
+      rt.setInputRoute(299, -1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(900));
+      expect(rt.snapshot().strips[299].pk < 1e-3, "300 strips: unrouted again, its meter falls back");
+      std::printf("300 strips: load %.2f %% with 2 live, %.2f %% with 3 live\n", a.loadPct, b.loadPct);
+      rt.stop();
+    } else expect(false, "300 strips: the null device opens"); }
   { // SPEAKERS ON A DIGITAL CABLE: Windows' own word (S/PDIF 8, HDMI 9, passthrough 7) wins over a brand in the name; studio monitors are speakers
     using am::classifyDevice;
     expect(classifyDevice("wasapi", "JBL Bar 5.1 (HDMI)", 9, false) == "digital", "a JBL soundbar on HDMI is a digital output, not Bluetooth");

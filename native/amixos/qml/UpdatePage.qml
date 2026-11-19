@@ -20,6 +20,9 @@ Item {
     function headline() { return st === "checking" ? i18n.t("Checking for updates ...", i18n.lang) : st === "available" ? i18n.t("An update is ready", i18n.lang) : st === "downloading" ? i18n.t("Downloading the update ...", i18n.lang)
         : st === "downloaded" ? i18n.t("The update is downloaded and verified", i18n.lang) : st === "upToDate" ? i18n.t("You are up to date", i18n.lang) : st === "error" ? i18n.t("The update could not be checked", i18n.lang) : i18n.t("Press CHECK FOR UPDATES", i18n.lang) }
     function go(id) { Window.window.current = id }
+    // this page was opened: the dot on SOFTWARE UPDATE in the menu goes (also for a version found while the page is open)
+    Component.onCompleted: updater.markUpdateSeen()
+    Connections { target: updater; function onChanged() { if (page.visible) updater.markUpdateSeen() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(72, bl.implicitWidth + 22); implicitHeight: 30; radius: 10
         color: on ? onColor : (bh.hovered ? Theme.ov(0.16) : Theme.ov(0.09)); border.width: 1; border.color: on || bh.hovered ? onColor : Theme.line
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(parent.label, i18n.lang); color: parent.on ? "#0b0f14" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.6 }
@@ -58,6 +61,8 @@ Item {
                 RowLayout { spacing: 8
                     Btn { objectName: "updateAtStart"; label: updater.checkAtStart ? "CHECK AT START: ON" : "CHECK AT START: OFF"; on: updater.checkAtStart; onColor: Theme.emerald; onClicked: updater.checkAtStart = !updater.checkAtStart }
                     Btn { objectName: "updateAuto"; label: updater.autoDownload ? "DOWNLOAD BY ITSELF: ON" : "DOWNLOAD BY ITSELF: OFF"; on: updater.autoDownload; onColor: Theme.emerald; onClicked: updater.autoDownload = !updater.autoDownload }
+                    Btn { objectName: "updateSysNotice"; label: updater.systemNotice ? "WINDOWS NOTIFICATION: ON" : "WINDOWS NOTIFICATION: OFF"; on: updater.systemNotice; onColor: Theme.emerald; onClicked: updater.systemNotice = !updater.systemNotice }
+                    Btn { objectName: "updateUnskip"; visible: updater.skippedVersion !== ""; label: i18n.t("SKIPPED: ", i18n.lang) + updater.skippedVersion + i18n.t(" · SHOW IT AGAIN", i18n.lang); onClicked: updater.unskip() }
                     Btn { label: "UPDATE FROM A USB STICK"; onColor: Theme.cyan; onClicked: page.go("engctl") }
                     Btn { label: "PLUG-IN DOWNLOADS" + (updater.plugins.length ? " (" + updater.plugins.length + ")" : ""); onColor: Theme.cyan; onClicked: page.go("store") } } }
             // HISTORY

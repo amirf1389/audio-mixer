@@ -25,7 +25,7 @@ namespace am::lic {
 const Jwk kVendorJwk = {"qs3G8HQmgXrE0oAJn9Vj9jNg15YaPWuclESZ01899Fw", "sugiBjJ1wcFHZRerQRq4VMEFSWrGDc6ts9cnD0x-_i0"};   // bridge/license-public.json
 
 namespace {
-const Plan kPlans[] = {{"basic", "BASIC", 10, 0}, {"pro", "PRO", 20, 1}, {"studio", "STUDIO", 32, 2}, {"master", "MASTER", 32, 3}};
+const Plan kPlans[] = {{"basic", "BASIC", 10, 0}, {"pro", "PRO", 20, 1}, {"studio", "STUDIO", 32, 2}, {"master", "MASTER", 32, 3}, {"ultimate", "ULTIMATE", 300, 4}};
 std::string programDir_;
 std::string strip(const std::string& s) { std::string o; for (char c : s) if (c != ' ' && c != '\n' && c != '\r' && c != '\t') o += c; return o; }
 std::string noDash(const std::string& s) { std::string o; for (char c : s) if (c != '-') o += c; return o; }
@@ -89,9 +89,9 @@ Verdict verifyToken(const std::string& token, std::int64_t nowMs, const std::vec
   if (!open(token, "AMFXE1", trusted, v.payload, sigOk)) { v.reason = "malformed"; v.message = "This is not an A mix OS edition token."; return v; }
   if (!sigOk) { v.reason = "bad-signature"; v.message = "The edition token was not signed by the vendor key (changed or forged)."; return v; }
   const json::Value& p = v.payload; const std::string ed = p["edition"].asString(), pl = p["plan"].asString();
-  const bool pair = (ed == "pro" && pl == "pro") || (ed == "studio-master" && pl == "master");
+  const bool pair = (ed == "pro" && pl == "pro") || (ed == "studio-master" && pl == "master") || (ed == "ultimate" && pl == "ultimate");
   if (p["v"].asInt() != 1 || p["kind"].asString() != "amfx1-edition" || !pair) { v.reason = "wrong-edition"; v.message = "The edition token names an unknown edition or the wrong plan for it."; v.payload = json::Value(); return v; }
-  const std::string serial = p["serial"].asString(), want = ed == "pro" ? "AMFX-PRO-" : "AMFX-SM-";
+  const std::string serial = p["serial"].asString(), want = ed == "pro" ? "AMFX-PRO-" : ed == "ultimate" ? "AMFX-ULT-" : "AMFX-SM-";
   bool serialOk = serial.rfind(want, 0) == 0 && serial.size() == want.size() + 14;
   if (serialOk) for (std::size_t i = want.size(); i < serial.size(); ++i) { const char c = serial[i]; const std::size_t k = i - want.size(); if (k == 4 || k == 9) { if (c != '-') serialOk = false; } else if (!((c >= '2' && c <= '9') || (c >= 'A' && c <= 'Z' && c != 'I' && c != 'O'))) serialOk = false; }
   if (!serialOk) { v.reason = "bad-serial"; v.message = "The edition token has no valid serial number."; v.payload = json::Value(); return v; }
@@ -185,7 +185,8 @@ std::string editionFile() { if (const char* f = std::getenv("AMIXOS_EDITION_FILE
 void setProgramDir(const std::string& dir) { programDir_ = dir; }
 std::string shippedTokenFile() { if (const char* f = std::getenv("AMIXOS_EDITION_TOKEN_FILE")) return f; return (programDir_.empty() ? std::string(".") : programDir_) + "/edition-token.json"; }
 
-Status status(std::int64_t clockMs, const std::vector<Jwk>& trusted) {
+namespace {
+Status planStatus(std::int64_t clockMs, const std::vector<Jwk>& trusted) {
   Status st; st.machine = machineId(); const std::int64_t nowMs = trustedNow(clockMs);
   auto apply = [&](const Plan* p, const char* source) { st.state = "active"; st.source = source; st.planId = p->id; st.planName = p->name; st.channels = p->channels; st.message.clear(); };
   auto revoked = [&](const std::string& lid, const std::string& what) { if (!isRevoked(lid, trusted)) return false; st.state = "revoked"; st.message = what + " " + lid + " was revoked by the vendor. Contact AMFB Audio."; return true; };
@@ -223,7 +224,7 @@ Status status(std::int64_t clockMs, const std::vector<Jwk>& trusted) {
       else if (!ed.ok) pending = ed.message; } } }
   // the higher plan wins
   const Plan* kp = keyRuns ? plan(kv.planId) : nullptr; const Plan* ep = edRuns ? plan(ed.planId) : nullptr;
-  if (ep && (!kp || ep->rank > kp->rank)) { apply(ep, "edition"); st.serial = ed.payload["serial"].asString(); st.editionName = ed.payload["edition"].asString() == "pro" ? "A mix OS Pro" : "A mix OS Studio Master"; st.id = st.serial;
+  if (ep && (!kp || ep->rank > kp->rank)) { apply(ep, "edition"); st.serial = ed.payload["serial"].asString(); st.editionName = ed.payload["edition"].asString() == "pro" ? "A mix OS Pro" : ed.payload["edition"].asString() == "ultimate" ? "AmF X1 Ultimate" : "A mix OS Studio Master"; st.id = st.serial;
     st.expires = static_cast<std::int64_t>(ed.payload["expires"].asNumber(0)); st.boundToThisPc = true; st.needsActivation = edPending; st.graceDaysLeft = edLeft;
     if (edPending) st.message = "Activate online within " + std::to_string(edLeft) + " days (ACTIVATE ONLINE on LICENSE)."; return st; }
   if (kp) { const bool need = st.needsActivation; const int left = st.graceDaysLeft; apply(kp, "key"); st.id = kv.payload["id"].asString(); st.name = kv.payload["name"].asString();
@@ -232,6 +233,58 @@ Status status(std::int64_t clockMs, const std::vector<Jwk>& trusted) {
   if (st.state == "revoked") return st;
   if (!pending.empty()) { st.message = pending; st.state = pending.find("activated online") != std::string::npos ? "needs-activation" : pending.find("ended") != std::string::npos || pending.find("expired") != std::string::npos ? "expired" : "invalid"; }
   if (!key.empty() && !kv.payload.isNull()) { st.id = kv.payload["id"].asString(); st.name = kv.payload["name"].asString(); st.expires = static_cast<std::int64_t>(kv.payload["expires"].asNumber(0)); }
+  return st;
+}
+
+}  // namespace
+
+// CHANNEL EXTEND: "AMXX1." + base64url(payload) + "." + signature, payload { v: 1, kind: "amfx1-extend", id, channels: 30, mid, issued?,
+// expires? }. A pack adds 30 channels to PRO, STUDIO or MASTER (never to BASIC, and ULTIMATE already has all 300). It is always bound
+// to one computer (mid): an unbound pack could be handed round. Packs with different ids add up, to 300 channels at most.
+Verdict verifyExtend(const std::string& token, std::int64_t nowMs, const std::string& machine, const std::vector<Jwk>& trusted) {
+  Verdict v; bool sigOk = false;
+  if (!open(token, "AMXX1", trusted, v.payload, sigOk)) { v.reason = "malformed"; v.message = "This is not an AmF X1 channel extend key."; return v; }
+  if (!sigOk) { v.reason = "bad-signature"; v.message = "The extend key was not signed by the vendor key (changed or forged)."; return v; }
+  const json::Value& p = v.payload;
+  if (p["v"].asInt() != 1 || p["kind"].asString() != "amfx1-extend" || p["id"].asString().empty() || p["channels"].asInt() != kExtendChannels || p["mid"].asString().empty()) { v.reason = "malformed"; v.message = "The extend key is not complete."; v.payload = json::Value(); return v; }
+  const double now = static_cast<double>(nowMs);
+  if (noDash(p["mid"].asString()) != noDash(machine)) { v.reason = "wrong-machine"; v.message = "This extend key was issued for a different computer."; return v; }
+  if (p.has("issued") && p["issued"].asNumber() > now + 86400000.0) { v.reason = "not-yet-valid"; v.message = "The extend key is not valid yet (check the date of this computer)."; return v; }
+  if (p.has("expires") && p["expires"].asNumber() > 0 && p["expires"].asNumber() < now) { v.reason = "expired"; v.message = "The extend key expired on " + dateOf(p["expires"].asNumber()) + "."; return v; }
+  v.ok = true; return v;
+}
+std::string extendFile() { if (const char* f = std::getenv("AMIXOS_EXTEND_FILE")) return f; return am::paths::file("extend.json"); }
+namespace {
+std::vector<std::string> extendTokens() { std::vector<std::string> out; std::string t; bool ok = false; const json::Value rec = readFile(extendFile(), t) ? json::Value::parse(t, ok) : json::Value();
+  if (ok && rec.isObject() && rec["tokens"].isArray()) for (std::size_t i = 0; i < rec["tokens"].size() && i < 16; ++i) out.push_back(rec["tokens"].at(i).asString()); return out; }
+// the packs that count now: genuine, for this computer, in date, not revoked, each id once
+int extendPacksNow(std::int64_t nowMs, const std::vector<Jwk>& trusted) { std::vector<std::string> ids; const std::string m = machineId();
+  for (const std::string& t : extendTokens()) { const Verdict v = verifyExtend(t, nowMs, m, trusted); if (!v.ok) continue; const std::string id = v.payload["id"].asString();
+    if (isRevoked(id, trusted) || std::find(ids.begin(), ids.end(), id) != ids.end()) continue; ids.push_back(id); }
+  return static_cast<int>(ids.size()); }
+}  // namespace
+Verdict addExtend(const std::string& token, std::int64_t nowMs, const std::vector<Jwk>& trusted) {
+  Verdict v = verifyExtend(token, trustedNow(nowMs), machineId(), trusted); if (!v.ok) return v;
+  const std::string id = v.payload["id"].asString();
+  if (isRevoked(id, trusted)) { v.ok = false; v.reason = "revoked"; v.message = "The extend key " + id + " was revoked by the vendor. Contact AMFB Audio."; return v; }
+  std::vector<std::string> keep;
+  for (const std::string& t : extendTokens()) { const Verdict o = verifyExtend(t, trustedNow(nowMs), machineId(), trusted); if (!o.ok) continue;   // what no longer counts is dropped
+    if (o.payload["id"].asString() == id) { v.ok = false; v.reason = "duplicate"; v.message = "This extend key is already on this computer."; return v; } keep.push_back(strip(t)); }
+  if (keep.size() >= 9) { v.ok = false; v.reason = "full"; v.message = "This computer already holds every extend pack it can use."; return v; }
+  keep.push_back(strip(token)); json::Value arr = json::Value::array(); for (const std::string& t : keep) arr.push(t);
+  json::Value rec = json::Value::object(); rec.set("tokens", arr);
+  if (!writePrivate(extendFile(), rec.dump() + "\n")) { v.ok = false; v.reason = "store"; v.message = "The extend key is genuine but could not be saved in " + extendFile() + "."; }
+  return v;
+}
+bool removeExtends() { return std::remove(extendFile().c_str()) == 0; }
+
+Status status(std::int64_t clockMs, const std::vector<Jwk>& trusted) {
+  Status st = planStatus(clockMs, trusted);
+  const Plan* p = plan(st.planId); st.baseChannels = st.channels;
+  if (p && st.state == "active" && p->rank >= 1 && p->rank <= 3) {   // PRO, STUDIO, MASTER: each pack adds 30 channels
+    const int packs = extendPacksNow(trustedNow(clockMs), trusted);
+    st.extendPacks = packs; st.channels = std::min(kMaxLicensedChannels, st.baseChannels + packs * kExtendChannels); st.extendChannels = st.channels - st.baseChannels;
+  }
   return st;
 }
 

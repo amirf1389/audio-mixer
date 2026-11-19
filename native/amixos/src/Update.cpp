@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "Update.h"
 #include <memory>
 #include <QRegularExpression>
@@ -30,6 +31,9 @@ Update::Update(const QString& currentVersion, QObject* parent) : QObject(parent)
   // back from INSTALL AND RESTART: the version we were installing is now the running one (or it is not: say so once)
   const QString pending = s_.value("update/installing").toString();
   if (!pending.isEmpty()) { s_.remove("update/installing"); if (compareVersions(current_, pending) >= 0) justUpdated_ = current_; else failed_ = pending; }
+  connect(&laterTimer_, &QTimer::timeout, this, [this] { emit changed(); });
+  // a console that stays open for days still hears about a new version: the manifest is read again every 6 hours (when "check at start" is on)
+  recheck_.setInterval(6 * 3600 * 1000); connect(&recheck_, &QTimer::timeout, this, [this] { if (checkAtStart() && state_ != "checking" && state_ != "downloading") check(); }); recheck_.start();
 }
 bool Update::canInstall() const {
 #if defined(_WIN32)
@@ -112,6 +116,29 @@ void Update::fetchRevocations() {
   QNetworkRequest req{QUrl(server + "/revocations")}; req.setTransferTimeout(15000);
   QNetworkReply* r = net_.get(req);
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); const QString l = QJsonDocument::fromJson(r->readAll().left(1 << 20)).object().value("list").toString(); if (l.startsWith("AMXR1.")) emit revocations(l); });   // checked by the console before it is kept
+}
+// ---- THE UPDATE NOTICE
+static qint64 nowMs(const std::function<qint64()>& clock) { return clock ? clock() : QDateTime::currentMSecsSinceEpoch(); }
+bool Update::found() const { return !latest_.isEmpty() && (state_ == "available" || state_ == "downloading" || state_ == "downloaded") && compareVersions(latest_, current_) > 0; }
+static am::upd::Notice noticeOf(bool found, const QSettings& s, const QString& latest, const std::function<qint64()>& clock) {
+  return am::upd::noticeFor(found, latest.toStdString(), s.value("update/skipped").toString().toStdString(), s.value("update/seen").toString().toStdString(), s.value("update/toasted").toString().toStdString(), s.value("update/laterUntil", 0).toLongLong(), nowMs(clock));
+}
+bool Update::noticeBanner() const { return noticeOf(found(), s_, latest_, clock).banner; }
+bool Update::noticeBadge() const { return noticeOf(found(), s_, latest_, clock).badge; }
+void Update::remindLater(int hours) {
+  hours = std::clamp(hours, 1, 24 * 14); s_.setValue("update/laterUntil", nowMs(clock) + qint64(hours) * 3600000);
+  laterTimer_.setSingleShot(true); laterTimer_.start(static_cast<int>(std::min<qint64>(qint64(hours) * 3600000 + 1000, 0x7fffffff)));   // the banner comes back by itself
+  emit changed();
+}
+void Update::skipThisVersion() { if (!latest_.isEmpty()) s_.setValue("update/skipped", latest_); emit changed(); }
+void Update::unskip() { s_.remove("update/skipped"); s_.remove("update/laterUntil"); emit changed(); }
+void Update::markUpdateSeen() { if (found() && s_.value("update/seen").toString() != latest_) { s_.setValue("update/seen", latest_); emit changed(); } }
+void Update::announce() {
+  if (!noticeOf(found(), s_, latest_, clock).toast) return;
+  s_.setValue("update/toasted", latest_);   // once per version, whether or not the notification is switched on (switching it on later does not replay old news)
+  if (!systemNotice()) return;
+  const QString first = notes_.isEmpty() ? QString() : notes_.first().left(160);
+  emit notifySystem(QStringLiteral("AmF X1 %1 is ready").arg(latest_), first.isEmpty() ? QStringLiteral("Open SOFTWARE UPDATE in the console to see what is new and install it.") : first + QStringLiteral("\nOpen SOFTWARE UPDATE in the console to install it."));
 }
 int Update::compareVersions(const QString& a, const QString& b) { return am::upd::cmpVersion(a.toStdString(), b.toStdString()); }
 QString Update::platformKey() {

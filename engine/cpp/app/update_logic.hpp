@@ -89,6 +89,16 @@ inline int cmpVersion(const std::string& a, const std::string& b) {
   return 0;
 }
 
+// THE UPDATE NOTICE: how the console tells that a newer version was found. Three things, each with its own memory:
+//   banner  across the top of the console, until UPDATE NOW, LATER (it comes back after laterUntilMs) or SKIP THIS VERSION
+//   badge   on SOFTWARE UPDATE in the menu, until that page has been opened for this version
+//   toast   one Windows notification per version, the first time it is found
+// A skipped version is never announced again; the next version is. `found` = the signed manifest names a version newer than this one.
+struct Notice { bool banner = false, badge = false, toast = false; };
+inline Notice noticeFor(bool found, const std::string& latest, const std::string& skipped, const std::string& seen, const std::string& toasted, long long laterUntilMs, long long nowMs) {
+  Notice n; if (!found || latest.empty() || latest == skipped) return n;
+  n.banner = nowMs >= laterUntilMs; n.badge = latest != seen; n.toast = latest != toasted; return n;
+}
 inline std::string hostOf(const std::string& url) {
   if (url.compare(0, 8, "https://") != 0) return std::string();
   std::size_t e = url.find_first_of("/?#:", 8); std::string h = url.substr(8, e == std::string::npos ? std::string::npos : e - 8);

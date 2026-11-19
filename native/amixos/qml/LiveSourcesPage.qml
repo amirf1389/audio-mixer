@@ -18,7 +18,7 @@ Item {
     readonly property var last: settings.lastDevice
     function isOpen(d) { if (!engine.running || engine.backend !== d.backend) return false; if (!page.last || (!page.last.in && !page.last.out)) return true; return page.last.in === d.id || page.last.out === d.id }   // without a remembered device, the open backend's entries count as reading
     function read(d) {
-        const inCh = Math.min(32, Math.max(0, d.inChannels)), outCh = Math.min(2, Math.max(0, d.outChannels))
+        const inCh = Math.min(engine.inputCap, Math.max(0, d.inChannels)), outCh = Math.min(2, Math.max(0, d.outChannels))
         const outId = d.outChannels > 0 ? d.id : (page.last && page.last.out ? page.last.out : "")
         const inId = d.inChannels > 0 ? d.id : "-", useIn = d.inChannels > 0 ? inCh : 0   // a device with no inputs opens no input (never the default microphone)
         const ok = engine.openSmart(d.backend, inId, outId, d.defaultRate > 0 ? d.defaultRate : settings.defaultRate, settings.defaultFrames, useIn, outCh > 0 ? outCh : 2)

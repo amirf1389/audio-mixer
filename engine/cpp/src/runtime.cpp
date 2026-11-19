@@ -59,7 +59,7 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   backendName_ = name; exclusive_ = cfg.exclusive; outDevice_ = cfg.outDevice; nIn_ = std::max(0, cfg.inChannels); nOut_ = std::max(0, cfg.outChannels);
   mixer_ = Mixer(mixer_.strips(), cfg.sampleRate);                                  // the mixer runs at the device rate
   const std::size_t n = std::max<std::size_t>(cfg.frames, 16) * 8;                  // scratch for blocks up to 8 periods (devices may hand out more than the period)
-  silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f); netBuf_.assign(kNetInputs, std::vector<float>(n, 0.0f));
+  silence_.assign(n, 0.0f); left_.assign(n, 0.0f); right_.assign(n, 0.0f); monL_.assign(n, 0.0f); monR_.assign(n, 0.0f); extL_.assign(n, 0.0f); extR_.assign(n, 0.0f); netBuf_.assign(kNetInputs, std::vector<float>(n, 0.0f)); appBuf_.assign(kAppInputs, std::vector<float>(n, 0.0f));
   for (int s = 0; s < kMaxStrips; ++s) { inRoute_[s] = s; trim_[s] = 1.0; }
   for (int o = 0; o < kMaxOutputs; ++o) outRoute_[o] = defaultOutputSource(o);
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f)); sumBuf_.assign(n, 0.0f);
@@ -105,7 +105,7 @@ void Runtime::setSend(int s, int b, double db, bool pre) { Cmd c{kSend, s, db, p
 void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
 void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setBusReturn(int b, double db) { post({kBusReturn, b, db, 0, 0}); }
-void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, (input >= kNetInBase && input < kNetInBase + kNetInputs) ? input : std::max(-1, std::min(kMaxStrips - 1, input))}); }
+void Runtime::setInputRoute(int strip, int input) { if (strip < 0 || strip >= kMaxStrips) return; post({kInRoute, strip, 0, 0, 0, ((input >= kNetInBase && input < kNetInBase + kNetInputs) || isAppInput(input)) ? input : std::max(-1, std::min(kNetInBase - 1, input))}); }
 void Runtime::setOutputRoute(int out, int source) { if (out < 0 || out >= kMaxOutputs) return; post({kOutRoute, out, 0, 0, 0, source == kSrcMasterMono ? source : std::max(0, std::min(kSrcBus0L + 2 * kMaxBuses - 1, source))}); }
 void Runtime::setAmp(int out, const AmpParams& p) {
   if (out < 0 || out >= kMaxOutputs) return;
@@ -199,9 +199,11 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     tail_.store(t + 1, std::memory_order_release);
   }
   frames = std::min(frames, left_.size());
-  const float* ins[kMaxStrips];
+  const float* ins[kMaxStrips]; unsigned char idle[kMaxStrips];
   NetInput* netIn = netIn_.load();
   if (netIn) { float* nb[kNetInputs]; for (int k = 0; k < kNetInputs; ++k) nb[k] = netBuf_[static_cast<std::size_t>(k)].data(); netIn->pull(nb, kNetInputs, frames, mixer_.sampleRate()); }
+  NetInput* appIn = appIn_.load();
+  if (appIn) { float* ab[kAppInputs]; for (int k = 0; k < kAppInputs; ++k) ab[k] = appBuf_[static_cast<std::size_t>(k)].data(); appIn->pull(ab, kAppInputs, frames, mixer_.sampleRate()); }
   if (nIn_ >= 2 && in && in[0] && in[1]) {   // ONE VOICE: are the device's inputs 1 and 2 the same signal? (half-second windows)
     for (std::size_t i = 0; i < frames; ++i) { const double a = in[0][i], b = in[1][i]; dAB_ += a * b; dAA_ += a * a; dBB_ += b * b; }
     dN_ += frames;
@@ -216,13 +218,19 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   const int tapRaw = tapRaw_.load(std::memory_order_relaxed); const float* rawIn = nullptr;
   for (int s = 0; s < mixer_.strips(); ++s) {
     const int src = inRoute_[s];
-    ins[s] = (src >= kNetInBase && src < kNetInBase + kNetInputs) ? (netIn ? netBuf_[static_cast<std::size_t>(src - kNetInBase)].data() : silence_.data())
+    ins[s] = isAppInput(src) ? (appIn ? appBuf_[static_cast<std::size_t>(src - kAppInBase)].data() : silence_.data())
+           : (src >= kNetInBase && src < kNetInBase + kNetInputs) ? (netIn ? netBuf_[static_cast<std::size_t>(src - kNetInBase)].data() : silence_.data())
            : (src >= 0 && src < nIn_ && in && in[src]) ? in[src] : silence_.data();
     if (s == tapRaw) rawIn = ins[s];
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     const double tr = trim_[s];
     const std::shared_ptr<const InsertChain> chain = std::atomic_load(&inserts_[s]);
     const bool anyInsert = chain && !chain->empty();
+    // NO INPUT, NO INSERT: the strip carries digital silence. Its EQ and dynamics are not run and the mixer leaves it out (idle), so
+    // the strips of a large console that nothing is plugged into take no processor time. A strip with an insert always runs: a
+    // plug-in may make sound of its own.
+    idle[s] = ins[s] == silence_.data() && !anyInsert;
+    if (idle[s]) continue;
     if (ch.active() || tr != 1.0 || anyInsert) {   // the strip's input trim, channel DSP and inserts, in a scratch block
       float* b = chBuf_[static_cast<std::size_t>(s)].data();
       if (tr != 1.0) { const float g = static_cast<float>(tr); for (std::size_t i = 0; i < frames; ++i) b[i] = ins[s][i] * g; } else std::memcpy(b, ins[s], frames * sizeof(float));
@@ -257,7 +265,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   float* busOut[2 * kMaxBuses]; for (int k = 0; k < 2 * kMaxBuses; ++k) busOut[k] = busBuf_[static_cast<std::size_t>(k)].data();
   ExtraSource* ext = extra_.load();
   if (ext) { ext->render(extL_.data(), extR_.data(), frames, mixer_.sampleRate()); }
-  mixer_.process(ins, frames, left_.data(), right_.data(), busOut, ext ? extL_.data() : nullptr, ext ? extR_.data() : nullptr);
+  mixer_.process(ins, frames, left_.data(), right_.data(), busOut, ext ? extL_.data() : nullptr, ext ? extR_.data() : nullptr, idle);
   if (rawIn) ins[tapRaw] = rawIn;   // from here on only the taps read ins: the measured strip as the device delivered it
   if (Tap* tap = tap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());
   if (Tap* tap = netTap_.load()) tap->onBlock(ins, mixer_.strips(), left_.data(), right_.data(), frames, mixer_.sampleRate());

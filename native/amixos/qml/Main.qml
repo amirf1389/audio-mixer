@@ -171,6 +171,19 @@ ApplicationWindow {
                 }
             }
         }
+        // A NEW VERSION: a banner until UPDATE NOW, LATER (back tomorrow) or SKIP THIS VERSION. Not on SOFTWARE UPDATE itself, which says it all.
+        Rectangle { id: upBanner; objectName: "updateBanner"; Layout.fillWidth: true; implicitHeight: 34; visible: updater.noticeBanner && root.current !== "update"; color: Qt.rgba(Theme.orange.r, Theme.orange.g, Theme.orange.b, 0.16); border.color: Theme.orange
+            component Key: Rectangle { id: bk; property string label; property bool solid: false; signal hit(); implicitWidth: bkT.implicitWidth + 18; implicitHeight: 22; radius: 7; color: solid ? Theme.orange : Theme.ov(0.08); border.color: Theme.orange
+                gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(bk.color) } GradientStop { position: 1; color: Theme.btnBottom(bk.color) } }
+                Text { id: bkT; anchors.centerIn: parent; text: i18n.t(bk.label, i18n.lang); color: bk.solid ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bk.hit() } }
+            RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10
+                Text { text: "⟳"; color: Theme.orange; font.pixelSize: 14; font.bold: true }
+                Text { objectName: "updateBannerText"; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                    text: "AmF X1 " + updater.latest + i18n.t(" is ready", i18n.lang) + (updater.state === "downloaded" ? i18n.t(" (downloaded and verified)", i18n.lang) : "") + (updater.notes.length ? "  ·  " + updater.notes[0] : "") }
+                Key { objectName: "updateNow"; label: "UPDATE NOW"; solid: true; onHit: root.current = "update" }
+                Key { objectName: "updateLater"; label: "LATER"; onHit: updater.remindLater(24) }
+                Key { objectName: "updateSkip"; label: "SKIP THIS VERSION"; onHit: updater.skipThisVersion() } } }
         // ALERT: only when the automatic start found / opened no sound card (entering the MIXER or HOME tries it first): lead to CONNECTIONS
         Rectangle { Layout.fillWidth: true; implicitHeight: 30; visible: root.autoFailed && !engine.running && !engine.busy; color: Qt.rgba(0.984, 0.749, 0.141, 0.14); border.color: Theme.amber
             RowLayout { anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 10

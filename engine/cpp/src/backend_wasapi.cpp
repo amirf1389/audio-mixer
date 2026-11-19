@@ -7,6 +7,8 @@
 #include <vector>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
+#include <endpointvolume.h>
+#include <propsys.h>
 #include <windows.h>
 
 #include <atomic>
@@ -265,5 +267,58 @@ class WasapiBackend : public Backend {
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }
+namespace {
+IMMDevice* captureEndpoint(const std::string& id, std::string& err) {   // the recording device with that id ("" = Windows' default one)
+  IMMDeviceEnumerator* en = nullptr; IMMDevice* dev = nullptr;
+  HRESULT r = CoCreateInstance(kClsidEnumerator, nullptr, CLSCTX_ALL, kIidEnumerator, reinterpret_cast<void**>(&en)); if (FAILED(r)) { err = hr("device enumerator", r); return nullptr; }
+  if (id.empty()) r = en->GetDefaultAudioEndpoint(eCapture, eConsole, &dev);
+  else { const int n = MultiByteToWideChar(CP_UTF8, 0, id.c_str(), -1, nullptr, 0); std::vector<wchar_t> w(static_cast<std::size_t>(n > 0 ? n : 1), L'\0'); if (n > 0) MultiByteToWideChar(CP_UTF8, 0, id.c_str(), -1, w.data(), n); r = en->GetDevice(w.data(), &dev); }
+  en->Release(); if (FAILED(r)) { err = hr("recording device", r) + ": it is unplugged or switched off in Windows"; return nullptr; }
+  return dev;
+}
+const GUID kIidEndpointVolumeW = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+const PROPERTYKEY kDisableSysFx = {{0x1da5d803, 0xd492, 0x4edd, {0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e}}, 5};   // PKEY_AudioEndpoint_Disable_SysFx
+}  // namespace
+// for WINDOWS RECORDING DEVICES (src/app_capture.cpp): one recording device of Windows as a float stereo capture stream at `rate`
+// (shared mode: Windows converts), not started yet. Any device of the Recording tab, beside the sound card the console runs on.
+long wasapiDeviceCaptureClient(const std::string& endpointId, double rate, void** audioClient, void** captureClient, std::string& err) {
+  *audioClient = nullptr; *captureClient = nullptr; IMMDevice* dev = captureEndpoint(endpointId, err); if (!dev) return E_FAIL;
+  IAudioClient* ac = nullptr; IAudioCaptureClient* cc = nullptr;
+  HRESULT r = dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)); dev->Release(); if (FAILED(r)) { err = hr("audio client (recording device)", r); return r; }
+  WAVEFORMATEXTENSIBLE f; std::memset(&f, 0, sizeof f);
+  f.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE; f.Format.nChannels = 2; f.Format.nSamplesPerSec = static_cast<DWORD>(rate); f.Format.wBitsPerSample = 32; f.Format.nBlockAlign = 8;
+  f.Format.nAvgBytesPerSec = f.Format.nSamplesPerSec * 8; f.Format.cbSize = 22; f.Samples.wValidBitsPerSample = 32; f.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT; f.SubFormat = kFloatSubFormat;
+  r = ac->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 2000000 /* 200 ms */, 0, &f.Format, nullptr);
+  if (FAILED(r)) { err = hr("Initialize (recording device)", r) + (r == AUDCLNT_E_DEVICE_IN_USE ? ": another program holds it exclusively" : r == E_ACCESSDENIED ? ": Windows microphone privacy blocks desktop apps" : ""); ac->Release(); return r; }
+  r = ac->GetService(kIidCaptureClient, reinterpret_cast<void**>(&cc)); if (FAILED(r)) { err = hr("GetService (recording device)", r); ac->Release(); return r; }
+  *audioClient = ac; *captureClient = cc; return 0;
+}
+// what Windows' own Sound properties say about a recording device: its shared format, level, mute and whether enhancements are on
+bool wasapiCaptureProperties(const std::string& endpointId, int& channels, double& rate, int& bits, float& level, bool& muted, int& enhancements, std::string& err) {
+  channels = 0; rate = 0; bits = 0; level = -1; muted = false; enhancements = -1;
+  const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED); IMMDevice* dev = captureEndpoint(endpointId, err);
+  if (!dev) { if (SUCCEEDED(co)) CoUninitialize(); return false; }
+  IAudioClient* ac = nullptr;
+  if (SUCCEEDED(dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) { WAVEFORMATEX* f = nullptr;
+    if (SUCCEEDED(ac->GetMixFormat(&f)) && f) { channels = f->nChannels; rate = f->nSamplesPerSec; bits = f->wFormatTag == WAVE_FORMAT_EXTENSIBLE && f->cbSize >= 22 ? reinterpret_cast<WAVEFORMATEXTENSIBLE*>(f)->Samples.wValidBitsPerSample : f->wBitsPerSample; CoTaskMemFree(f); }
+    ac->Release(); }
+  IAudioEndpointVolume* vol = nullptr;
+  if (SUCCEEDED(dev->Activate(kIidEndpointVolumeW, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&vol)))) { float l = 0; BOOL m = FALSE; if (SUCCEEDED(vol->GetMasterVolumeLevelScalar(&l))) level = l; if (SUCCEEDED(vol->GetMute(&m))) muted = m != FALSE; vol->Release(); }
+  IPropertyStore* ps = nullptr;
+  if (SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &ps))) { PROPVARIANT v; PropVariantInit(&v); if (SUCCEEDED(ps->GetValue(kDisableSysFx, &v))) enhancements = v.vt == VT_UI4 ? (v.ulVal ? 0 : 1) : 1; PropVariantClear(&v); ps->Release(); }   // the key is absent on a device that never had them switched off: enhancements as the driver ships them
+  dev->Release(); if (SUCCEEDED(co)) CoUninitialize(); return true;
+}
+// for APP CAPTURE (src/app_capture.cpp): one program's sound as a float stereo capture stream at `rate`, not started yet
+long wasapiAppCaptureClient(unsigned long pid, double rate, void** audioClient, void** captureClient, std::string& err) {
+  IAudioClient* ac = nullptr; IAudioCaptureClient* cc = nullptr; *audioClient = nullptr; *captureClient = nullptr;
+  HRESULT r = activateProcessLoopback(&ac, err, static_cast<DWORD>(pid)); if (FAILED(r)) return r;
+  WAVEFORMATEXTENSIBLE f; std::memset(&f, 0, sizeof f);
+  f.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE; f.Format.nChannels = 2; f.Format.nSamplesPerSec = static_cast<DWORD>(rate); f.Format.wBitsPerSample = 32; f.Format.nBlockAlign = 8;
+  f.Format.nAvgBytesPerSec = f.Format.nSamplesPerSec * 8; f.Format.cbSize = 22; f.Samples.wValidBitsPerSample = 32; f.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT; f.SubFormat = kFloatSubFormat;
+  r = ac->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 2000000 /* 200 ms */, 0, &f.Format, nullptr);
+  if (FAILED(r)) { err = hr("Initialize (app capture)", r); ac->Release(); return r; }
+  r = ac->GetService(kIidCaptureClient, reinterpret_cast<void**>(&cc)); if (FAILED(r)) { err = hr("GetService (app capture)", r); ac->Release(); return r; }
+  *audioClient = ac; *captureClient = cc; return 0;
+}
 }  // namespace am
 #endif

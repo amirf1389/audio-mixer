@@ -47,6 +47,10 @@ Item {
                 Rectangle { width: 1; height: 20; color: Theme.lineSoft }
                 DspModeSwitch { objectName: "masteringDspMode" }
                 Rectangle { width: 1; height: 20; color: Theme.lineSoft }
+                // HEADROOM MODE: the master is held below this level (the limiter's ceiling moves there and stays on)
+                Text { text: page.t("HEADROOM"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.5 }
+                Repeater { model: [0, 3, 6, 9, 12]; delegate: Btn { objectName: "headroom" + modelData; label: modelData === 0 ? "OFF" : "-" + modelData + " dB"; on: engine.headroomDb === modelData; onColor: Theme.emerald; onClicked: engine.headroomDb = modelData } }
+                Rectangle { width: 1; height: 20; color: Theme.lineSoft }
                 Text { text: page.t("PRESETS"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                 Repeater { model: engine.masteringPresets(); delegate: Btn { label: page.t(modelData); on: page.m.preset === modelData; onClicked: engine.applyMasteringPreset(modelData) } }
                 Item { Layout.fillWidth: true } } }

@@ -1267,6 +1267,23 @@ function vendorKeys() {
   return { privateKey, jwk: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } };
 }
 
+test('license: ULTIMATE is its own 300 channel plan; a CHANNEL EXTEND pack is +30 for one computer', () => {
+  const lic = require('./license'), ed = require('./edition'), { privateKey, jwk } = vendorKeys(), now = Date.now();
+  assert.strictEqual(lic.PLANS.ultimate.channels, 300); assert.strictEqual(lic.PLANS.master.channels, 32);
+  const u = lic.verifyKey(lic.signKey({ v: 1, id: 'U1', plan: 'ultimate', name: 'Big Show', issued: now, expires: null }, privateKey), { jwk, now });
+  assert.strictEqual(u.ok, true); assert.strictEqual(u.plan.name, 'ULTIMATE'); assert.ok(u.plan.features.includes('ultimate'));
+  assert.strictEqual(lic.compare('master', 'ultimate').change, 'upgrade'); assert.deepStrictEqual(lic.compare('master', 'ultimate').channels, [32, 300]);
+  assert.strictEqual(ed.EDITIONS.ultimate.plan, 'ultimate'); assert.ok(ed.SERIAL_RE.test(ed.newSerial('ultimate'))); assert.ok(ed.newSerial('ultimate').startsWith('AMFX-ULT-'));
+  const mid = 'ABCD-EF01-2345-6789-ABCD', x = lic.signExtend({ machine: mid, now }, privateKey);
+  assert.ok(x.key.startsWith('AMXX1.')); assert.strictEqual(x.payload.channels, 30); assert.ok(/^EXT-[0-9A-F]{12}$/.test(x.payload.id));
+  assert.strictEqual(lic.verifyExtend(x.key, { jwk, now, machine: mid }).ok, true);
+  assert.strictEqual(lic.verifyExtend(x.key, { jwk, now, machine: '0000-0000-0000-0000-0000' }).reason, 'wrong-machine');
+  assert.strictEqual(lic.verifyExtend(x.key, { jwk: vendorKeys().jwk, now }).reason, 'bad-signature');
+  assert.strictEqual(lic.verifyExtend(lic.signExtend({ machine: mid, days: 1, now: now - 3 * 86400000 }, privateKey).key, { jwk, now }).reason, 'expired');
+  assert.throws(() => lic.signExtend({ machine: '' }, privateKey), /one computer/);   // never an unbound pack
+  assert.strictEqual(lic.verifyKey(x.key, { jwk, now }).ok, false);                    // a pack is not a licence key
+});
+
 test('license: signed keys verify, tampering / expiry / wrong computer are refused', () => {
   const lic = require('./license'), { privateKey, jwk } = vendorKeys();
   const now = Date.now();

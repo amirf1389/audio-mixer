@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 48 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 49 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -80,7 +80,7 @@ int main() {
     { am::fx::VoiceClean off(fs); off.set("denoise", 0.0); off.set("dereverb", 0.0); off.set("out", 0.5); tone(0.3, 500, L, R); const std::vector<float> ref = L; off.process(L.data(), R.data(), n); float d = 0; for (std::size_t i = 0; i < n; ++i) d = std::max(d, std::fabs(L[i] - ref[i])); CHECK(d < 1e-5f); }   // both off: the four bands add back to the input
     std::printf("fx_test: VOICE RIDER rides a quiet and a loud voice to -18 dBFS, holds when nobody speaks, respects RANGE; VOICE CLEAN has no delay, takes %.1f dB off steady hiss, leaves a voice-level sound and shortens a room's tail\n", inDb - outDb); }
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 48); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 49); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
@@ -155,11 +155,37 @@ int main() {
         CHECK(loud > 0.2f && loud < 0.95f);               // rounded off, not clipped hard and not silent
         for (std::size_t i = 0; i < n; ++i) CHECK(std::isfinite(l[i]) && std::fabs(l[i]) < 4.f); } }
     std::printf("fx_test: twenty-three effects as rack plug-ins (sample player, de-squash, reverb, delay, analog channel, pitch shifter, dual listen eq, sound barrier, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
-  { const auto& all = am::fx::presets(); CHECK(all.size() == 300); std::set<std::string> names; int perKind[4] = {0, 0, 0, 0};
+  { const auto& all = am::fx::presets(); CHECK(all.size() == 600); std::set<std::string> names; int perKind[5] = {0, 0, 0, 0, 0};
     for (const auto& p : all) { names.insert(p.name); auto e = am::fx::make(p.kind, 48000); CHECK(e); for (const auto& [id, v] : p.values) { CHECK(v >= 0 && v <= 1); e->set(id, v); } e->setMix(p.mix); bool known = false; for (const auto& prm : e->params()) for (const auto& [id, v] : p.values) if (prm.id == id) known = true; CHECK(known);
-      perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : 3]++; }
-    CHECK(names.size() == 300 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && am::fx::preset(1) && !am::fx::preset(301));
-    std::printf("fx_test: 300 presets, unique names, every parameter known to its effect\n"); }
+      perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : p.kind == "pingpong" ? 4 : 3]++; if (p.kind == "pingpong") CHECK(p.id > 300 && p.category == "Ping-Pong"); else CHECK(p.id <= 300); }
+    CHECK(names.size() == 600 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && perKind[4] == 300 && am::fx::preset(1) && am::fx::preset(301) && am::fx::preset(600) && !am::fx::preset(601));
+    CHECK(am::fx::preset(120)->kind == "delay");   // the first 300 keep their numbers: a saved console still loads the same preset
+    std::printf("fx_test: 600 presets (300 + 300 ping-pong), unique names, every parameter known to its effect\n"); }
+  { // PING-PONG DELAY: a click comes back on the LEFT after L TIME, on the RIGHT after L + R, on the left again after 2 L + R ...
+    using am::fx::PingPong;
+    auto run = [](double lMs, double rMs, double fb, double spread, double lowcut, std::vector<float>& l, std::vector<float>& r) { auto d = am::fx::make("pingpong", 48000); d->set("left", PingPong::knobOfMs(lMs)); d->set("right", PingPong::knobOfMs(rMs)); d->set("feedback", fb); d->set("tone", 1.0); d->set("spread", spread); d->set("lowcut", lowcut); d->setMix(1.0);
+      l.assign(96000, 0.f); r.assign(96000, 0.f); l[0] = r[0] = 1.f; d->process(l.data(), r.data(), l.size()); };
+    auto pk = [](const std::vector<float>& x, std::size_t at) { float p = 0; for (std::size_t i = at > 40 ? at - 40 : 0; i < at + 40 && i < x.size(); ++i) p = std::max(p, std::fabs(x[i])); return p; };
+    std::vector<float> l, r; run(250, 250, 0.5, 1.0, 0.0, l, r);   // 250 ms = 12000 samples
+    CHECK(pk(l, 12000) > 0.5 && pk(r, 12000) < 1e-4);              // first bounce: left only
+    CHECK(pk(r, 24000) > 0.3 && pk(l, 24000) < 1e-4);              // second: right only
+    CHECK(pk(l, 36000) > 0.1 && pk(r, 36000) < 1e-4 && pk(l, 36000) < pk(l, 12000));   // third: left again, quieter (feedback)
+    CHECK(pk(r, 48000) > 0.05 && pk(l, 6000) < 1e-6 && pk(r, 6000) < 1e-6);            // and nothing between the bounces
+    run(200, 300, 0.5, 1.0, 0.0, l, r);                             // uneven legs: left at 200 ms, right at 500 ms, left at 700 ms
+    CHECK(pk(l, 9600) > 0.5 && pk(r, 24000) > 0.3 && pk(l, 33600) > 0.1 && pk(r, 14400) < 1e-4 && pk(l, 24000) < 1e-4);
+    run(250, 250, 0.5, 0.0, 0.0, l, r); CHECK(std::fabs(pk(l, 12000) - pk(r, 12000)) < 1e-6 && pk(l, 12000) > 0.2);   // SPREAD 0: both sides alike
+    run(250, 250, 0.0, 1.0, 0.0, l, r); CHECK(pk(l, 12000) > 0.5 && pk(r, 24000) > 0.3 && pk(l, 36000) < 1e-6);        // FEEDBACK 0: one bounce each side, then silence
+    { // FEEDBACK at the top never runs away: ten seconds of full-scale noise stay bounded
+      auto d = am::fx::make("pingpong", 48000); d->set("feedback", 1.0); d->set("tone", 1.0); d->set("lowcut", 0.0); d->set("left", 0.0); d->set("right", 0.0); d->setMix(1.0); std::uint32_t s = 7; float worst = 0;
+      for (int b = 0; b < 1000; ++b) { float L[480], R[480]; for (int i = 0; i < 480; ++i) { s = s * 1664525u + 1013904223u; L[i] = R[i] = static_cast<float>(static_cast<int>(s >> 8) % 20001 - 10000) / 10000.f; } d->process(L, R, 480); for (int i = 0; i < 480; ++i) { CHECK(std::isfinite(L[i]) && std::isfinite(R[i])); worst = std::max(worst, std::max(std::fabs(L[i]), std::fabs(R[i]))); } }
+      CHECK(worst < 16.f); }
+    { // LOW CUT thins the repeats: a 60 Hz tone bounces back weaker with the cut at 800 Hz than without; the first bounce is the same
+      auto level = [](double cut, std::size_t from) { auto d = am::fx::make("pingpong", 48000); d->set("left", PingPong::knobOfMs(100)); d->set("right", PingPong::knobOfMs(100)); d->set("feedback", 0.9); d->set("tone", 1.0); d->set("lowcut", cut); d->setMix(1.0);
+        std::vector<float> a(48000), b(48000); for (std::size_t i = 0; i < a.size(); ++i) a[i] = b[i] = i < 4800 ? 0.5f * static_cast<float>(std::sin(2 * 3.14159265358979 * 60.0 * static_cast<double>(i) / 48000.0)) : 0.f; d->process(a.data(), b.data(), a.size()); double e = 0; for (std::size_t i = from; i < from + 4800; ++i) e += static_cast<double>(a[i]) * a[i]; return std::sqrt(e / 4800); };
+      CHECK(level(1.0, 14400) < 0.5 * level(0.0, 14400) && std::fabs(level(1.0, 4800) - level(0.0, 4800)) < 1e-6); }
+    auto d = am::fx::make("pingpong", 48000); CHECK(d && std::string(d->name()) == "PING-PONG DELAY" && d->params().size() == 6 && d->text("left", PingPong::knobOfMs(250)) == "250 ms" && d->text("lowcut", 0.0) == "OFF" && d->text("spread", 1.0) == "100 %" && d->text("left", 1.0) == "1500 ms");
+    const am::fx::Preset* tt = nullptr; for (const auto& p : am::fx::presets()) if (p.name == "Table Tennis") tt = &p; CHECK(tt && tt->kind == "pingpong");
+    std::printf("fx_test: PING-PONG DELAY bounces left / right at L TIME and R TIME, spread, feedback bounded, low cut on the repeats\n"); }
   { // SYNC DELAY: 120 BPM and a quarter note is half a second; an eighth is a quarter second; WIDTH 1 sends the first echo left and the second right
     auto echoAt = [](double note, double width, std::size_t at, int side) { auto d = am::fx::make("syncdelay", 48000); d->set("tempo", (120.0 - 60.0) / 140.0); d->set("note", note); d->set("feedback", 0.5); d->set("tone", 1.0); d->set("width", width); d->setMix(1.0);
       std::vector<float> l(60000, 0.f), r(60000, 0.f); l[0] = r[0] = 1.f; d->process(l.data(), r.data(), l.size()); return std::fabs(side == 0 ? l[at] : r[at]); };
