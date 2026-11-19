@@ -2,6 +2,17 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.5",
+      "date": "2026-11-19",
+      "title": "1.24.0.5: the console fits the screen (14 inches and under), RESPONSIVE zoom",
+      "items": [
+        "NEW · RESPONSIVE zoom (SETTINGS, Interface zoom): the console is drawn as large as the screen allows, on any screen",
+        "ENHANCEMENT · AUTO zoom now also enlarges the console on a screen of 14 inches or less (a 14-inch laptop at 1920 x 1080 and 100 % is drawn 25 % larger); larger monitors stay as Windows draws them",
+        "ENHANCEMENT · Interface zoom can be fixed at 110, 125 or 150 % as well",
+        "FIX · The window opens maximised when it does not fit the screen as designed, instead of hanging over the edges"
+      ]
+    },
+    {
       "version": "1.24.0.4",
       "date": "2026-11-19",
       "title": "1.24.0.4: PEAK REMOVER, AmF X1 Mixer app with players, new Android look",

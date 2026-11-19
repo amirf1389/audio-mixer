@@ -74,7 +74,7 @@ function paintFiles() {
 }
 $('upSys').addEventListener('change', paintFiles);
 $('myVerGo').addEventListener('click', () => {
-  const v = $('myVer').value.trim(); if (!/^\d+(\.\d+){1,3}$/.test(v)) { say($('myVerMsg'), 'Type a version like 1.24.0.4.', 'err'); return; }
+  const v = $('myVer').value.trim(); if (!/^\d+(\.\d+){1,3}$/.test(v)) { say($('myVerMsg'), 'Type a version like 1.24.0.5.', 'err'); return; }
   const c = cmpVersion(v, latest.version);
   say($('myVerMsg'), c < 0 ? 'An update is waiting: ' + latest.version + ' is newer than ' + v + '. In AmF X1: ENGINE CONTROL → CHECK NOW.' : c === 0 ? 'You have the newest version.' : 'Your copy (' + v + ') is newer than the published one (' + latest.version + ').', c < 0 ? 'err' : 'ok');
 });

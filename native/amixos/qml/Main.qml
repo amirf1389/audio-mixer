@@ -15,6 +15,10 @@ ApplicationWindow {
     title: Theme.product + " " + appVersion + " · " + Theme.vendor + " · build " + buildStamp
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
+    // FIT THE SCREEN: when the window as designed does not fit the work area (a small laptop, or an enlarged interface), or in RESPONSIVE
+    // zoom, it opens maximised instead of hanging over the edges. Not in the tests (offscreen), which need the designed size.
+    function fitScreen() { if (Qt.platform.pluginName === "offscreen") return
+        if (settings.uiZoom === -1 || Screen.desktopAvailableWidth < width + 24 || Screen.desktopAvailableHeight < height + 48) visibility = Window.Maximized }
     // the page shown. Read from the START PAGE setting ONCE: a binding to it ran again on every settings change (the settings object has
     // one change signal), so a setting saved before the first click (the audio starting, a device remembered) sent the window back to
     // the start page and logged a binding loop on "current"
@@ -25,7 +29,7 @@ ApplicationWindow {
     function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
     onActiveChanged: uiActivity()
     onVisibilityChanged: uiActivity()
-    Component.onCompleted: { if (current === "") current = settings.startPage; if (current === "mixer") mixerEver = true }
+    Component.onCompleted: { fitScreen(); if (current === "") current = settings.startPage; if (current === "mixer") mixerEver = true }
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }

@@ -133,8 +133,12 @@ int main(int argc, char* argv[]) {
     RECT wa{}; SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);   // the process is DPI aware (its manifest): device pixels
     HDC dc = GetDC(nullptr); const double dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96; if (dc) ReleaseDC(nullptr, dc);
     const double os = dpi > 0 ? dpi / 96.0 : 1.0, lw = (wa.right - wa.left) / os, lh = (wa.bottom - wa.top) / os;
-    const double z = autozoom::factor(lw, lh, userPct); zoomNote = autozoom::describe(os, lw, lh, z) + (userPct > 0 ? " (fixed in SETTINGS)" : " (AUTO)");
-    if (z < 0.999) qputenv("QT_SCALE_FACTOR", QByteArray::number(z, 'f', 2));
+    // the screen's real size (from the monitor's own data): a 14-inch laptop gets a larger interface than a desk monitor with the same pixels
+    HDC dc2 = GetDC(nullptr); const double mmW = dc2 ? GetDeviceCaps(dc2, HORZSIZE) : 0, mmH = dc2 ? GetDeviceCaps(dc2, VERTSIZE) : 0; if (dc2) ReleaseDC(nullptr, dc2);
+    const double inches = mmW > 50 && mmH > 30 ? std::sqrt(mmW * mmW + mmH * mmH) / 25.4 : 0;
+    const double z = autozoom::factor(lw, lh, userPct, inches);
+    zoomNote = autozoom::describe(os, lw, lh, z) + (inches > 0 ? QString(", %1-inch screen").arg(inches, 0, 'f', 1) : QString()) + (userPct > 0 ? " (fixed in SETTINGS)" : userPct == autozoom::kFill ? " (RESPONSIVE)" : " (AUTO)");
+    if (std::abs(z - 1.0) > 0.001) qputenv("QT_SCALE_FACTOR", QByteArray::number(z, 'f', 2));
   }
 #endif
   QGuiApplication app(argc, argv);
@@ -631,6 +635,11 @@ int main(int argc, char* argv[]) {
     { // AUTO ZOOM on a 14" laptop, 1920 x 1080 (work area 1920 x 1032 device pixels): 100 % and 125 % fit as they are; 150 % is zoomed
       // to fit (drawn as at about 130 %); a user's fixed zoom wins; a large screen is never zoomed
       const auto z = [](double os, int pct) { return autozoom::factor(1920 / os, 1032 / os, pct); };
+      { // 14 INCHES AND UNDER: AUTO enlarges to fill (1920 x 1080 at 100 % -> 1.25), a 27-inch monitor with the same pixels stays at 1.00;
+        // RESPONSIVE fills both; nothing ever goes past the screen; 13.3" 1366 x 768 still shrinks to fit
+        const double s14 = autozoom::factor(1920, 1032, 0, 14.0), s27 = autozoom::factor(1920, 1032, 0, 27.0), unk = autozoom::factor(1920, 1032, 0), fill27 = autozoom::factor(2560, 1392, autozoom::kFill, 27.0), small = autozoom::factor(1366, 728, 0, 13.3), fix125 = autozoom::factor(1920, 1032, 125, 14.0), s14at125 = autozoom::factor(1536, 824, 0, 14.0);
+        std::printf("amixos --smoke: RESPONSIVE ZOOM 14\" 1080p %.2f, 27\" 1080p %.2f, unknown size %.2f, RESPONSIVE on 27\" 1440p %.2f, 13.3\" 1366x768 %.2f, fixed 125 %% %.2f, 14\" at 125 %% %.2f\n", s14, s27, unk, fill27, small, fix125, s14at125);
+        if (!(s14 == 1.25 && 1480 * s14 <= 1920 && 800 * s14 <= 1032 && s27 == 1.0 && unk == 1.0 && fill27 == 1.70 && 1480 * fill27 <= 2560 && 800 * fill27 <= 1392 && small < 1.0 && 1480 * small <= 1366 + 15 && fix125 == 1.25 && s14at125 == 1.0)) { std::fprintf(stderr, "amixos --smoke: RESPONSIVE ZOOM failed\n"); return 102; } }
       const double z100 = z(1.0, 0), z125 = z(1.25, 0), z150 = z(1.5, 0), zUser = z(1.5, 90), z4k = autozoom::factor(3840 / 1.5, 2112 / 1.5, 0);
       std::printf("amixos --smoke: AUTO ZOOM 1920x1080: 100 %% -> %.2f, 125 %% -> %.2f, 150 %% -> %.2f (drawn as %.0f %%), fixed 90 %% -> %.2f, 4K at 150 %% -> %.2f\n", z100, z125, z150, z150 * 150, zUser, z4k);
       if (!(z100 == 1.0 && z125 == 1.0 && z150 < 0.9 && z150 * 1.5 >= 1.25 && z150 * 1.5 <= 1.35 && std::abs(zUser - 0.9) < 1e-9 && z4k == 1.0)) { std::fprintf(stderr, "amixos --smoke: AUTO ZOOM failed\n"); return 1; } }
