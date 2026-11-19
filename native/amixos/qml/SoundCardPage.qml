@@ -77,6 +77,8 @@ Item {
                             Btn { objectName: "access_" + modelData.key + "_on"; label: i18n.t("ON", i18n.lang); on: parent.lit; onColor: Theme.emerald; onClicked: parent.set(true) }
                             Btn { objectName: "access_" + modelData.key + "_off"; label: i18n.t("OFF", i18n.lang); on: !parent.lit; onColor: Theme.danger; onClicked: parent.set(false) } } }
                     Btn { objectName: "micPrivacyBtn"; label: i18n.t("WINDOWS MIC PRIVACY…", i18n.lang); onClicked: Qt.openUrlExternally("ms-settings:privacy-microphone") } }
+                Text { objectName: "micPrivacyNote"; visible: engine.micPrivacyOff; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9
+                    text: i18n.t("The microphone is switched off in Windows privacy. The console follows by itself: it opens no microphone and runs with outputs only. Nothing to change here.", i18n.lang) }
                 // MIC AT ENGINE ON: off (the default), ENGINE ON starts with outputs only; the microphone waits to be picked (no feedback at start)
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                 RowLayout { spacing: 8; Layout.fillWidth: true

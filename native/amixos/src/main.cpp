@@ -690,6 +690,16 @@ int main(int argc, char* argv[]) {
         engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
         std::printf("amixos --smoke: BUFFER 8192 opens and runs %d %d (%.0f ms a block); 0 opens with 256 %d; 20000 frames refused %d\n", ok, at, lat, zero, huge);
         if (!ok || !at || !zero || !huge) { std::fprintf(stderr, "amixos --smoke: BUFFER 8192 failed\n"); return 105; } }
+      { // WINDOWS MICROPHONE PRIVACY: switched off in Windows, the console opens no microphone by itself and takes it back when allowed again
+        const auto was = engine.privacyNow; int answer = 1; engine.privacyNow = [&answer] { return answer; };
+        engine.stop(); engine.checkMicPrivacy(); const bool seen = engine.micPrivacyOff();
+        const bool openOff = engine.open("null", "", "", 48000, 256, 2, 2) && engine.deviceInputs() == 0 && engine.deviceOutputs() == 2 && engine.micOffNote().contains("Windows privacy"); engine.stop();
+        answer = -1; engine.checkMicPrivacy(); const bool unknownKeeps = engine.micPrivacyOff();          // Windows gives no answer: nothing changes
+        int changes = 0; const auto c = QObject::connect(&engine, &Engine::micPrivacyChanged, [&changes] { ++changes; });
+        answer = 0; engine.checkMicPrivacy(); engine.checkMicPrivacy(); const bool back = !engine.micPrivacyOff() && changes == 1;
+        const bool openOn = engine.open("null", "", "", 48000, 256, 2, 2) && engine.deviceInputs() == 2; QObject::disconnect(c); engine.privacyNow = was; engine.checkMicPrivacy();
+        std::printf("amixos --smoke: MIC PRIVACY off is seen %d, opens outputs only %d, no answer keeps it %d, allowed again once %d, the microphone is back %d\n", seen, openOff, unknownKeeps, back, openOn);
+        if (!seen || !openOff || !unknownKeeps || !back || !openOn) { std::fprintf(stderr, "amixos --smoke: MIC PRIVACY failed\n"); return 106; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
