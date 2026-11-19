@@ -40,7 +40,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 38; radius: 8; color: Theme.card; border.color: Theme.line
-            RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+            ScrollRow { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: page.t("MASTERING:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Btn { label: page.m.on ? page.t("RACK: ON") : page.t("RACK: BYPASSED"); on: page.m.on; onColor: Theme.emerald; onClicked: page.put("on", !page.m.on) }
                 Btn { label: page.m.eqOn ? page.t("PROGRAM EQ: ON") : page.t("PROGRAM EQ: BYPASSED"); on: page.m.eqOn; onColor: Theme.cyan; onClicked: page.put("eqOn", !page.m.eqOn) }

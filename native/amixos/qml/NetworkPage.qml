@@ -61,7 +61,7 @@ Item {
                 Timer { id: hideTok; interval: 600000; onTriggered: remCard.shown = "" }
                 Component.onCompleted: remote.refreshTokens()
                 ColumnLayout { id: remCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 6
-                    RowLayout { spacing: 8
+                    ScrollRow { Layout.fillWidth: true; spacing: 8
                         Head { text: i18n.t("PHONE REMOTE · WI-FI", i18n.lang) }
                         Text { text: remote.running ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: remote.running ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                         Item { Layout.fillWidth: true }

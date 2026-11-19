@@ -88,7 +88,7 @@ Item {
                     Lab { text: page.t("LEVEL dBFS") } Num { text: page.level; implicitWidth: 44; onEditingFinished: page.level = parseFloat(text) || -12 }
                     Lab { text: page.t("POINTS / OCTAVE") } Repeater { model: [12, 24, 48, 96]; delegate: Btn { label: modelData + ""; on: page.ppo === modelData; onClicked: page.ppo = modelData } }
                     Item { Layout.fillWidth: true } }
-                RowLayout { spacing: 6
+                ScrollRow { Layout.fillWidth: true; spacing: 6
                     Btn { label: page.t("▶ LOG SWEEP"); on: measure.state !== "measuring"; onColor: Theme.cyan; onClicked: measure.runSweep(page.strip, page.seconds, page.f1, page.f2, page.level, page.ppo) }
                     Btn { label: page.t("▶ STEPPED SINE"); on: measure.state !== "measuring"; onColor: Theme.cyan; onClicked: measure.runStepped(page.strip, Math.min(page.ppo, 96), page.f1, page.f2, page.level) }
                     Btn { visible: measure.state === "measuring"; label: page.t("CANCEL") + "  " + Math.round(measure.progress * 100) + " %"; on: true; onColor: Theme.danger; onClicked: measure.cancel() }

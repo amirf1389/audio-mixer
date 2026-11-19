@@ -236,7 +236,7 @@ Item {
             Rectangle { z: 5; visible: !actFlick.atXEnd; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.margins: 1; width: 34; radius: 8
                 gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "transparent" } GradientStop { position: 0.6; color: Theme.card } }
                 Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: Theme.orange; font.pixelSize: 16; font.bold: true }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: actFlick.contentX = Math.max(0, actFlick.contentWidth - actFlick.width) } }
+                MouseArea { objectName: "scrollHintArea"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: actFlick.contentX = Math.max(0, actFlick.contentWidth - actFlick.width) } }
             Flickable {   // the action bar scrolls sideways when a language makes it wider than the window (nothing is cut off)
                 id: actFlick; anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; clip: true; contentWidth: bar.implicitWidth; contentHeight: height; flickableDirection: Flickable.HorizontalFlick; boundsBehavior: Flickable.StopAtBounds; interactive: contentWidth > width
             RowLayout {

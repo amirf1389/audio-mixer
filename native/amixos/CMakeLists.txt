@@ -59,6 +59,7 @@ qt_add_qml_module(amixos
         qml/AppPicker.qml
         qml/WindowsSoundPanel.qml
         qml/Combo.qml
+        qml/ScrollRow.qml
         qml/Knob.qml
         qml/PluginEditor.qml qml/PluginDock.qml qml/StripTone.qml
         qml/Field.qml

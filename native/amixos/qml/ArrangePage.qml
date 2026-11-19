@@ -29,7 +29,7 @@ Item {
         // transport + settings
         Rectangle {
             Layout.fillWidth: true; implicitHeight: 36; radius: 8; color: Theme.card; border.color: Theme.line
-            RowLayout {
+            ScrollRow {
                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("ARRANGE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Rectangle { id: gb3; implicitWidth: 28; implicitHeight: 22; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb3.color) } GradientStop { position: 1; color: Theme.btnBottom(gb3.color) } } Text { anchors.centerIn: parent; text: "⏮"; color: Theme.ink; font.pixelSize: 11 } MouseArea { anchors.fill: parent; onClicked: arrange.toStart() } }
