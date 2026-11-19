@@ -74,4 +74,13 @@ AmF X1 by AMFB Audio $VER - Windows x64
   Qt6*.dll, platforms\\, imageformats\\, qml\\   the Qt $HOSTQT runtime (MinGW build) the console needs; keep them next to amixos.exe
 Data goes to %APPDATA%\\AMFB Audio\\AmF X1, cache to %LOCALAPPDATA%\\AMFB Audio\\AmF X1 (docs/install-layout.md). Unsigned: sign with scripts/sign-windows.js.
 TXT
+# CODE SIGNING (only with YOUR certificate): with AMFX1_SIGN_PFX set, every program and library of ours is signed before it is packed.
+# Windows SmartScreen ("Windows protected your PC") and Defender judge an unsigned program by reputation it does not have; a signature
+# from a certificate authority is the way that warning goes away. No certificate is made here and nothing is switched off on the PC.
+if [ -n "${AMFX1_SIGN_PFX:-}" ]; then
+  echo "== signing with the certificate in AMFX1_SIGN_PFX"
+  ( cd "$OUT/$NAME" && for f in amixos.exe "AmF X1.exe" "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Diagnostics.exe" "AmF X1 Plugin Builder.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll" amix_soxr.dll; do [ -f "$f" ] && node "$ROOT/scripts/sign-windows.js" "$f"; done )
+else
+  echo "== NOT SIGNED: no AMFX1_SIGN_PFX. Windows will show its protection screen for this build until it is signed (docs/windows-defender.md)."
+fi
 (cd "$OUT" && rm -f "$NAME.zip" && zip -q -r -9 "$NAME.zip" "$NAME" && sha256sum "$NAME.zip" > "$NAME.zip.sha256" && ls -la "$NAME.zip" && cat "$NAME.zip.sha256")
