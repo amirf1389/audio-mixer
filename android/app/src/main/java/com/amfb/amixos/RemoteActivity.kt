@@ -100,6 +100,11 @@ class RemoteActivity : AppCompatActivity() {
         val mgBtn = Button(this).apply { text = getString(R.string.mute_groups); isEnabled = false; setOnClickListener { showMuteGroups() } }
         val inBtn = Button(this).apply { text = getString(R.string.remote_input); isEnabled = false; setOnClickListener { pickInput() } }
         row2.addView(recBtn, 1); row2.addView(mgBtn, 2); row2.addView(inBtn, 3)
+        // FADERS / KNOBS: the strips as big faders (five channels across: ten channels are two swipes) or with pan, gain and EQ on them
+        val viewName = { getString(if (Prefs.bigFaders(this)) R.string.remote_view_knobs else R.string.remote_view_faders) }
+        val viewBtn = Button(this).apply { contentDescription = "remoteView"; text = viewName() }
+        viewBtn.setOnClickListener { Prefs.remote(this).edit().putBoolean("bigFaders", !Prefs.bigFaders(this)).apply(); viewBtn.text = viewName(); state?.let { buildStrips(it) } }
+        row2.addView(viewBtn, 0)
         connected = listOf(busesBtn, monBtn, clipBtn, recBtn, mgBtn, inBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
             val ip = localIp(); if (ip == null) { status.text = getString(R.string.no_wifi); return@setOnClickListener }
@@ -124,7 +129,7 @@ class RemoteActivity : AppCompatActivity() {
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         strips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         desk.addView(android.widget.HorizontalScrollView(this).apply { addView(strips); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
-        val master = ConsoleUi.strip(this, Color.parseColor("#FFB590"), 200, master = true)
+        val master = ConsoleUi.strip(this, Color.parseColor("#FFB590"), 252, master = true)
         masterLabel = TextView(this).apply { setOnClickListener { showMaster() }; text = "MASTER"; setTextColor(Color.parseColor("#FFB590")); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
         planBadge = TextView(this).apply { text = ""; setTextColor(Color.parseColor("#FBBF24")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
         masterFader = FaderView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
@@ -188,19 +193,26 @@ class RemoteActivity : AppCompatActivity() {
 
     /** One column per channel the console's plan allows (the service opens only those): name (tap: channel page, long press: rename),
      *  pan, MUTE / SOLO, the fader with its meter, and the level. */
+    companion object {
+        /** the width of one channel strip so that [across] of them stand beside the master strip on a screen [screenPx] wide (never under 176 px) */
+        fun stripWidthFor(screenPx: Int, across: Int): Int = maxOf(176, (screenPx - 40 - (252 + 8)) / maxOf(1, across) - 8)
+    }
     private fun buildStrips(s: ConsoleState) {
         strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear(); toneUi.clear()
         val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
+        // FADERS view: exactly five channels beside the master, so the ten channels of a console are two pages and each fader is as wide
+        // as a finger and as tall as the screen allows. KNOBS view: narrower strips with pan, gain and the 3-band EQ above a shorter fader.
+        val big = Prefs.bigFaders(this); val stripW = if (big) stripWidthFor(resources.displayMetrics.widthPixels, 5) else 200
         for (st in s.strips.take(Prefs.stripCount(this))) {
             val tint = colors[(st.id / 8) % colors.size]
-            val col = ConsoleUi.strip(this, tint, 176)
+            val col = ConsoleUi.strip(this, tint, stripW)
             val name = TextView(this).apply { text = ConsoleUi.title(st.id, st.name); setTextColor(Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD
                 setOnClickListener { showChannel(st.id, st.name) }; setOnLongClickListener { rename(st.id, this); true } }
             col.addView(name)
-            if (Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
+            if (!big && Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } })
-            if (Prefs.showTone(this)) col.addView(toneBlock(st, tint))
+            if (!big && Prefs.showTone(this)) col.addView(toneBlock(st, tint))
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
             val mute = small(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } })

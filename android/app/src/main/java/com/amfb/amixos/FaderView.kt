@@ -24,23 +24,25 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : Vi
     private var hold = 0; private var holdAt = 0L
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF05080C.toInt() }
     private val tick = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3A4656.toInt(); strokeWidth = 2f }
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFC2C7CF.toInt(); textSize = 22f; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
-    private val cap = Paint(Paint.ANTI_ALIAS_FLAG); private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 4f }
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFC2C7CF.toInt(); textSize = 26f; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
+    private val cap = Paint(Paint.ANTI_ALIAS_FLAG); private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 6f }
     private val meter = Paint(); private val holdP = Paint().apply { color = 0xFFFFFFFF.toInt() }; private val clipP = Paint().apply { color = 0xFFEF4444.toInt() }
-    private val capH = 64f; private val pad = 40f
+    // BIGGER FADER: the cap grows with the strip (a finger-sized handle on a wide strip), the track and the scale with it
+    private val capH get() = (width * 0.40f).coerceIn(64f, 112f); private val pad get() = capH * 0.5f + 14f
 
     private val capRect = RectF(); private val topRect = RectF(); private val trackRect = RectF(); private val meterRect = RectF()
-    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {   // the meter's colours depend on the height only: made once per size, not on every frame
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        text.textSize = (w * 0.125f).coerceIn(18f, 26f)   // the scale's numbers fit beside the track on a narrow strip ("+10" was cut on the left)   // the meter's colours depend on the height only: made once per size, not on every frame
         meter.shader = LinearGradient(0f, h - pad, 0f, pad, intArrayOf(0xFF16A34A.toInt(), 0xFF16A34A.toInt(), 0xFFEAB308.toInt(), 0xFFEF4444.toInt()), floatArrayOf(0f, 0.7f, 0.86f, 1f), Shader.TileMode.CLAMP)
     }
     private fun yOf(p: Int) = pad + (1 - p / 1000f) * (height - 2 * pad)
     override fun onMeasure(w: Int, h: Int) { setMeasuredDimension(resolveSize(150, w), resolveSize(620, h)) }
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val tx = w * 0.42f; val mx = w * 0.74f; val mw = w * 0.12f
-        trackRect.set(tx - 6, pad, tx + 6, height - pad); c.drawRoundRect(trackRect, 6f, 6f, track)
+        trackRect.set(tx - 9, pad, tx + 9, height - pad); c.drawRoundRect(trackRect, 9f, 9f, track)
         for (db in listOf(10.0, 5.0, 0.0, -5.0, -10.0, -20.0, -30.0, -40.0, -60.0, -120.0)) {
-            val y = yOf((DaemonClient.dbToPos(db) * 1000).toInt()); c.drawLine(tx - 22, y, tx - 10, y, tick)
-            if (db == 10.0 || db == 0.0 || db == -10.0 || db == -20.0 || db == -40.0 || db == -120.0) c.drawText(if (db <= -120) "∞" else (if (db > 0) "+" else "") + db.toInt(), tx - 26, y + 8, text)
+            val y = yOf((DaemonClient.dbToPos(db) * 1000).toInt()); c.drawLine(tx - 26, y, tx - 13, y, tick)
+            if (db == 10.0 || db == 0.0 || db == -10.0 || db == -20.0 || db == -40.0 || db == -120.0) c.drawText(if (db <= -120) "∞" else (if (db > 0) "+" else "") + db.toInt(), tx - 30, y + 9, text)
         }
         // the meter: an LED ladder, 0..1000 of the meter range, green / amber / red by height
         meterRect.set(mx - 3, pad - 3, mx + mw + 3, height - pad + 3); c.drawRoundRect(meterRect, 5f, 5f, track)
@@ -50,8 +52,8 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : Vi
         val hy = pad + (1 - hold / 1000f) * (height - 2 * pad); if (hold > 0) c.drawRect(mx, hy - 2, mx + mw, hy + 2, holdP)
         clipP.color = if (clip) 0xFFEF4444.toInt() else 0xFF3A1D1D.toInt(); c.drawRoundRect(mx - 3, pad - 22, mx + mw + 3, pad - 8, 4f, 4f, clipP)
         // the cap
-        val y = yOf(progress); val r = capRect.apply { set(tx - w * 0.3f, y - capH / 2, tx + w * 0.3f, y + capH / 2) }
-        cap.color = 0xFF42474E.toInt(); c.drawRoundRect(r, 8f, 8f, cap); cap.color = 0xFF3B4658.toInt(); topRect.set(r.left, r.top, r.right, r.top + capH / 3); c.drawRoundRect(topRect, 8f, 8f, cap)
+        val y = yOf(progress); val r = capRect.apply { set(tx - w * 0.31f, y - capH / 2, tx + w * 0.31f, y + capH / 2) }
+        cap.color = 0xFF42474E.toInt(); c.drawRoundRect(r, 14f, 14f, cap); cap.color = 0xFF3B4658.toInt(); topRect.set(r.left, r.top, r.right, r.top + capH / 3); c.drawRoundRect(topRect, 14f, 14f, cap)
         cap.color = 0xFF272A2F.toInt(); for (k in listOf(-0.28f, 0.28f)) c.drawRect(r.left + 10, y + capH * k - 1.5f, r.right - 10, y + capH * k + 1.5f, cap)   // grip lines
         line.color = accent; c.drawLine(r.left + 6, y, r.right - 6, y, line)
     }

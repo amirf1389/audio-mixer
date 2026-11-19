@@ -41,8 +41,9 @@ struct Deck {
   amix_hr_resampler* rs = nullptr; double rsFrom = 0, rsTo = 0; std::vector<float> pending;   // resampled frames that did not fit yet (interleaved)
   ~Deck() { if (rs) amix_hr_resampler_destroy(rs); }
 };
+constexpr int kDecks = 4;                  // DECK A .. D: four stereo file players (a 10-channel phone mixer: 2 inputs + 4 stereo decks)
 struct Side {
-  Deck deck[2];
+  Deck deck[kDecks];
   Ring rec{262144};                         // about 5 s of master for the writer thread
   std::atomic<bool> recording{false}; std::atomic<unsigned long long> recDropped{0};
   std::atomic<long long> lastRead{0};       // when a mixer block last ran (ns): nobody reading = a flush can be done at once
@@ -52,7 +53,7 @@ inline long long nowNs() { return std::chrono::duration_cast<std::chrono::nanose
 // inside a mixer block: each routed deck's frames onto its strips (silence where it ran short), a requested flush done here
 inline void readDecks(Side* sd, const float** ptrs, int strips, int frames, float* const* bufL, float* const* bufR) {
   sd->lastRead.store(nowNs(), std::memory_order_relaxed);
-  for (int d = 0; d < 2; ++d) { Deck& k = sd->deck[d]; const int sl = k.stripL.load(std::memory_order_relaxed); if (sl < 0 || sl + 1 >= strips) continue;
+  for (int d = 0; d < kDecks; ++d) { Deck& k = sd->deck[d]; const int sl = k.stripL.load(std::memory_order_relaxed); if (sl < 0 || sl + 1 >= strips) continue;
     if (k.flushReq.load(std::memory_order_acquire)) { k.ring.r.store(k.ring.w.load(std::memory_order_acquire), std::memory_order_release); k.flushReq.store(false, std::memory_order_release); }
     const std::size_t got = k.ring.pop(bufL[d], bufR[d], static_cast<std::size_t>(frames));
     for (int i = static_cast<int>(got); i < frames; ++i) { bufL[d][i] = 0.f; bufR[d][i] = 0.f; }

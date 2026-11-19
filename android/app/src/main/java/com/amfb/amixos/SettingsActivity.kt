@@ -26,6 +26,7 @@ object Prefs {
     fun bootAnim(c: Context) = remote(c).getBoolean("bootAnim", true)                  // the boot animation when the app starts               // AUTO-DETECT: search the Wi-Fi for the console by itself
     fun keepScreenOn(c: Context) = remote(c).getBoolean("keepScreenOn", true)
     fun showPan(c: Context) = remote(c).getBoolean("showPan", true)
+    fun bigFaders(c: Context) = remote(c).getBoolean("bigFaders", true)             // the remote's FADERS view: five channels across, the fader over the whole height (KNOBS view: pan, gain and EQ on the strip)
     fun showTone(c: Context) = remote(c).getBoolean("showTone", true)               // GAIN and the analog 3-band EQ on every strip
     fun haptics(c: Context) = remote(c).getBoolean("haptics", true)
     fun startInPhoneMixer(c: Context) = remote(c).getBoolean("startPhoneMixer", false)   // STANDALONE: the app opens straight into the phone's own mixer
