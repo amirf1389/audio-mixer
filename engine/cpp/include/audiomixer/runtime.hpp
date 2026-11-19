@@ -244,8 +244,8 @@ class Runtime {
   bool autoPol_[kMaxStrips] = {}; double apXY_[kMaxStrips] = {}, apXX_[kMaxStrips] = {}, apYY_[kMaxStrips] = {}, apBad_[kMaxStrips] = {}, apHold_[kMaxStrips] = {}, apCorr_[kMaxStrips] = {};
   std::vector<std::vector<float>> busBuf_;   // 2 * kMaxBuses blocks for the aux bus outputs   // one channel DSP and one scratch block per strip (sized in open())
   // control ring: many producers (under a mutex), one consumer (the audio thread)
-  static constexpr unsigned kRing = 8192;   // room for a whole console pushed at once (32 strips x their EQ bands, sends and dynamics)
-  Cmd ring_[kRing]; std::atomic<unsigned> head_{0}, tail_{0}; std::mutex producers_;
+  static constexpr unsigned kRing = 65536;   // room for a whole console pushed at once (300 strips x their EQ bands, sends and dynamics)
+  std::vector<Cmd> ring_ = std::vector<Cmd>(kRing); std::atomic<unsigned> head_{0}, tail_{0}; std::mutex producers_;   // on the heap: 65536 commands do not fit a thread stack
   // published meters (sequence counter)
   mutable std::atomic<unsigned> seq_{0}; Snapshot pub_{}; std::uint64_t blocks_ = 0, frames_ = 0;
   double loadPct_ = 0, blockUs_ = 0, maxBlockUs_ = 0, jitterUs_ = 0; std::int64_t lastStartNs_ = 0;   // profiler (audio thread)

@@ -30,7 +30,7 @@ Item {
                 Text { text: (engine.speakerArray ? page.t("10 SPEAKERS in front on outputs 1-10 (ear level 1-5, above 6-8, below 9-10) · the binaural stage rests") : page.t("binaural placement for headphones · azimuth · elevation · distance · spread · IAMF elements (violet)")); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
                 Item { Layout.fillWidth: true }
                 Btn { objectName: "front10Btn"; label: engine.speakerArray ? page.t("SPEAKERS: FRONT 180° · 10 ON") : page.t("SPEAKERS: FRONT 180° · 10"); on: engine.speakerArray; onColor: "#f472b6"; onClicked: engine.speakerArray = !engine.speakerArray }
-                Btn { label: page.t("ALL OFF"); onClicked: { for (let i = 0; i < 32; i++) { const s = engine.spatial(i); if (s.on) engine.setSpatial(i, false, s.az, s.el, s.dist, s.spread) } page.rev++ } } } }
+                Btn { label: page.t("ALL OFF"); onClicked: { for (let i = 0; i < engine.strips; i++) { const s = engine.spatial(i); if (s.on) engine.setSpatial(i, false, s.az, s.el, s.dist, s.spread) } page.rev++ } } } }
         Rectangle {   // THE SCENE: cinema hall (10 fixed points + 10 travelling objects), head tracking, and a map of every object from above
             objectName: "spatialScene"; Layout.fillWidth: true; implicitHeight: 150; radius: 8; color: Theme.card; border.color: engine.cinemaHall ? Theme.emerald : Theme.line
             Connections { target: engine; function onSpatialMoved() { sceneMap.requestPaint(); page.rev++ } }
@@ -71,20 +71,21 @@ Item {
                         ctx.fillStyle = Theme.ov(0.5); ctx.beginPath(); ctx.arc(cx, cy, 7, 0, 2 * Math.PI); ctx.fill(); ctx.beginPath(); ctx.moveTo(cx - 4, cy - 6); ctx.lineTo(cx, cy - 12); ctx.lineTo(cx + 4, cy - 6); ctx.fill()
                         if (engine.speakerArray) { const L = engine.speakerLayout(); for (let k = 0; k < L.length; k++) { const sp = L[k], a = sp.az * Math.PI / 180, r = rad * 0.98 * Math.cos(sp.el * Math.PI / 180), x = cx + Math.sin(a) * r, y = cy - Math.cos(a) * r
                             ctx.fillStyle = sp.el > 0 ? "#f9a8d4" : sp.el < 0 ? "#be185d" : "#f472b6"; ctx.fillRect(x - 7, y - 5, 14, 10); ctx.fillStyle = "#000"; ctx.font = "bold 7px monospace"; ctx.fillText(sp.out, x - (sp.out > 9 ? 5 : 2.5), y + 3) } }   // the ten speakers: ear level pink, above light, below dark; the number is the output
-                        for (let i = 0; i < 32; i++) { const s = engine.spatial(i); if (!s.on && i !== page.sel) continue; const a = s.az * Math.PI / 180, r = Math.min(1, Math.log(1 + s.dist) / Math.log(11)) * rad * Math.cos(s.el * Math.PI / 180), x = cx + Math.sin(a) * r, y = cy - Math.cos(a) * r
+                        for (let i = 0; i < engine.strips; i++) { const s = engine.spatial(i); if (!s.on && i !== page.sel) continue; const a = s.az * Math.PI / 180, r = Math.min(1, Math.log(1 + s.dist) / Math.log(11)) * rad * Math.cos(s.el * Math.PI / 180), x = cx + Math.sin(a) * r, y = cy - Math.cos(a) * r
                             ctx.fillStyle = i === page.sel ? Theme.orange : Theme.cyan; ctx.globalAlpha = s.on ? 1 : 0.4; ctx.beginPath(); ctx.arc(x, y, i === page.sel ? 9 : 6, 0, 2 * Math.PI); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = "#000"; ctx.font = "bold 8px monospace"; ctx.fillText(i + 1, x - (i > 8 ? 5 : 2.5), y + 3) } }
                     MouseArea { anchors.fill: parent
                         function place(mx, my) { const dx = mx - width / 2, dy = height / 2 - my, r = Math.min(1, Math.hypot(dx, dy) / dial.rad), c = page.cur; page.put(true, Math.round(Math.atan2(dx, dy) * 180 / Math.PI), 0, Math.max(0.3, Math.pow(11, r) - 1), c.spread) }
                         onPressed: function (m) { place(m.x, m.y) } onPositionChanged: function (m) { if (pressed) place(m.x, m.y) } } } }
             ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: chFlow.implicitHeight + 16; Layout.maximumHeight: 160; clip: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
-                    Flow { id: chFlow; x: 8; y: 8; width: parent.width - 16; spacing: 4
-                        Repeater { model: 32; delegate: Rectangle { width: 74; height: 22; radius: 4; ToolTip.visible: chH.hovered; ToolTip.text: (index + 1) + "  " + ((page.strips[index] && page.strips[index].name) || ""); HoverHandler { id: chH } readonly property bool on: { page.rev; return engine.spatial(index).on }
+                    Flickable { id: chScroll; x: 8; y: 8; width: parent.width - 16; height: parent.height - 16; contentHeight: chFlow.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds; ScrollIndicator.vertical: ScrollIndicator { }   // 300 channels do not fit: the list scrolls
+                    Flow { id: chFlow; width: chScroll.width; spacing: 4
+                        Repeater { model: engine.strips; delegate: Rectangle { width: 74; height: 22; radius: 4; ToolTip.visible: chH.hovered; ToolTip.text: (index + 1) + "  " + ((page.strips[index] && page.strips[index].name) || ""); HoverHandler { id: chH } readonly property bool on: { page.rev; return engine.spatial(index).on }
                                 readonly property bool iamf: { page.rev; return engine.spatial(index).iamf === true }
                                 color: page.sel === index ? Theme.orange : on ? (iamf ? "#9b7bff" : Theme.cyan) : Theme.ov(0.08); border.color: Theme.lineSoft
                                 Text { anchors.fill: parent; anchors.leftMargin: 4; anchors.rightMargin: 4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight   // the channel number and as much of its name as fits (the full name on hover): "LIVE" twice told nothing
                                     text: (index + 1) + " " + ((page.strips[index] && page.strips[index].name) ? page.strips[index].name : "CH " + (index + 1)); color: (page.sel === index || parent.on) ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
-                                MouseArea { anchors.fill: parent; onClicked: page.sel = index } } } } }
+                                MouseArea { anchors.fill: parent; onClicked: page.sel = index } } } } } }
                 Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                     ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 10
                         RowLayout { spacing: 8

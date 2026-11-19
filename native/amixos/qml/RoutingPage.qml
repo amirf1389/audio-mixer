@@ -10,7 +10,8 @@ Item {
     id: page
     objectName: "routingPage"
     property int tab: 0          // 0 inputs, 1 outputs
-    property int bank: 0         // strips 1-16 / 17-32 (inputs) ; outputs 1-16 / 17-32
+    property int bank: 0         // strips in pages of 16 (inputs) ; outputs 1-16 / 17-32
+    readonly property int inCols: Math.max(32, Math.min(engine.inputCap, engine.deviceInputs))   // the input columns: 32 as ever, more when a larger device is open on a larger console
     readonly property var inRoutes: engine.inputRoutes
     readonly property var outRoutes: engine.outputRoutes
     readonly property var sources: engine.outputSources
@@ -25,13 +26,13 @@ Item {
                 Text { text: i18n.t("ROUTING:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: ["INPUTS → STRIPS", "SOURCES → OUTPUTS"]; delegate: Rectangle { implicitWidth: tl.implicitWidth + 16; implicitHeight: 20; radius: 4; color: page.tab === index ? Theme.amber : Theme.ov(0.06)
                     Text { id: tl; anchors.centerIn: parent; text: modelData; color: page.tab === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.tab = index } } }
-                Repeater { model: page.tab === 0 ? ["CH 01-16", "CH 17-32"] : ["OUT 1-16", "OUT 17-32"]; delegate: Rectangle { id: gb125; implicitWidth: 66; implicitHeight: 20; radius: 7; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb125.color) } GradientStop { position: 1; color: Theme.btnBottom(gb125.color) } } Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
+                BankBar { bank: page.bank; count: page.tab === 0 ? engine.strips : 32; prefix: page.tab === 0 ? "CH" : "OUT"; pad: page.tab === 0; onPicked: b => page.bank = b }
                 Item { Layout.fillWidth: true }
                 Text { text: engine.running ? (engine.deviceInputs + i18n.t(" device inputs · ", i18n.lang) + engine.deviceOutputs + i18n.t(" outputs", i18n.lang)) : i18n.t("no device open: the matrix is stored and applied when one opens", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                 Rectangle { id: gb126; implicitWidth: Math.max(70, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb126.color) } GradientStop { position: 1; color: Theme.btnBottom(gb126.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("DEFAULTS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.resetRouting() } }
             }
         }
-        // INPUTS -> STRIPS: rows = strips of this bank, columns = device inputs 1..32 (+ NONE)
+        // INPUTS -> STRIPS: rows = strips of this bank, columns = device inputs 1..32 or more (+ NONE)
         Rectangle {
             visible: page.tab === 0
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
@@ -40,12 +41,13 @@ Item {
                     RowLayout { spacing: 2
                         Text { Layout.preferredWidth: 96; text: i18n.t("STRIP  ⟵  INPUT", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                         Rectangle { implicitWidth: page.cell + 8; implicitHeight: page.cell; color: "transparent"; Text { anchors.centerIn: parent; text: i18n.t("NONE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
-                        Repeater { model: 32; delegate: Rectangle { implicitWidth: page.cell; implicitHeight: page.cell; color: "transparent"
+                        Repeater { model: page.inCols; delegate: Rectangle { implicitWidth: page.cell; implicitHeight: page.cell; color: "transparent"
                             Text { anchors.centerIn: parent; text: index + 1; color: index < engine.deviceInputs ? Theme.ink : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: index < engine.deviceInputs } } } }
                     Repeater { model: 16
                         delegate: RowLayout { spacing: 2
                             readonly property int strip: page.bank * 16 + index
-                            readonly property var st: engine.stripAt(strip, engine.stripTick)
+                            visible: strip < engine.strips
+                            readonly property var st: engine.stripAt(Math.min(strip, engine.strips - 1), engine.stripTick)
                             readonly property int route: page.inRoutes[strip] === undefined ? strip : page.inRoutes[strip]
                             Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Theme.ov(0.04)
                                 Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 3; radius: 1; color: Theme.stripColors[st ? st.color : 0] }
@@ -53,7 +55,7 @@ Item {
                             Rectangle { implicitWidth: page.cell + 8; implicitHeight: page.cell; radius: 3; color: route < 0 ? Theme.danger : Theme.ov(0.04); border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: route < 0 ? "—" : ""; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                                 MouseArea { anchors.fill: parent; onClicked: engine.setInputRoute(strip, -1) } }
-                            Repeater { model: 32
+                            Repeater { model: page.inCols
                                 delegate: Rectangle { implicitWidth: page.cell; implicitHeight: page.cell; radius: 3
                                     readonly property bool on: route === index
                                     readonly property bool avail: index < engine.deviceInputs

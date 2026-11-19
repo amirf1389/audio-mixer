@@ -7,9 +7,11 @@
 //   node scripts/license.js change-pin [--dir D]                  new PIN for a locked key folder
 // A locked folder holds private.pem.enc only; issue / batch / manifest ask for the PIN (or read AUDIO_MIXER_VENDOR_PIN).
 //   node scripts/license.js embed [--dir D]                       write the public key into bridge/license-public.json and index.html
-//   node scripts/license.js issue --plan basic|pro|studio|master [--name "Jane Doe"] [--email e] [--days 365] [--machine XXXX-...] [--seats 1] [--dir D]
+//   node scripts/license.js issue --plan basic|pro|studio|master|ultimate [--name "Jane Doe"] [--email e] [--days 365] [--machine XXXX-...] [--seats 1] [--dir D]
 //                                                                  (no --name: an automatic one from the key's random id, "Customer 3F9A12C4B7E0")
 //   node scripts/license.js batch --plan pro|studio|master --count 10 [--days 365] [--dir D]   that many random keys, one CSV line each: id,plan,expires,key
+//   node scripts/license.js extend --machine XXXX-XXXX-XXXX-XXXX-XXXX [--days 365] [--dir D]   a CHANNEL EXTEND pack: +30 channels on PRO / STUDIO /
+//                                                                  MASTER for that one computer (several packs add up, 300 channels at most)
 //   node scripts/license.js show <key>                             decode and verify a key
 //   node scripts/license.js manifest [--dir D]                     sign releases/update.json for the OTA updater (see scripts/make-update.js)
 // The key directory can also be set with AUDIO_MIXER_VENDOR_DIR. Keep a backup of private.pem: without it no further keys can be issued
@@ -98,11 +100,16 @@ async function main(argv) {
         console.log([r.payload.id, r.payload.plan, r.payload.expires ? new Date(r.payload.expires).toISOString().slice(0, 10) : '', r.key].join(','));
       }
       console.error(`\n${n} ${lic.PLANS[arg(a, '--plan')].name} key(s), random ids, not bound to a computer`);
+    } else if (cmd === 'extend') {
+      const dir = vendorDir(a), r = lic.signExtend({ machine: arg(a, '--machine'), days: Number(arg(a, '--days', 0)) || 0 }, await keyFor(dir));
+      console.log(r.key);
+      console.error(`\nCHANNEL EXTEND ${r.payload.id}: +${r.payload.channels} channels for the computer ${r.payload.mid}, ${r.payload.expires ? 'expires ' + new Date(r.payload.expires).toISOString().slice(0, 10) : 'no expiry'}`);
     } else if (cmd === 'show') {
+      if (String(a[0] || '').startsWith(lic.EXTEND.prefix + '.')) { const x = lic.verifyExtend(a[0]); console.log(JSON.stringify(x, null, 2)); return x.ok ? 0 : 1; }
       const v = lic.verifyKey(a[0]);
       console.log(JSON.stringify(v.ok ? { ok: true, plan: v.plan.name, payload: v.payload } : { ok: false, reason: v.reason, message: v.message, payload: v.payload }, null, 2));
       return v.ok ? 0 : 1;
-    } else { console.error('Usage: node scripts/license.js init | lock | change-pin | embed | issue | batch | show | manifest (see the header of this file)'); return 2; }
+    } else { console.error('Usage: node scripts/license.js init | lock | change-pin | embed | issue | batch | extend | show | manifest (see the header of this file)'); return 2; }
     return 0;
   } catch (e) { console.error('Error: ' + e.message); return 1; }
 }

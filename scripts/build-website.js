@@ -154,11 +154,13 @@ ${files.length > 1 ? `<p class="dl-more">Also: ${files.filter(d => d !== main).m
 <h2>Editions</h2>
 <p class="sub">Start with Basic. Upgrade when you need more channels and studio tools; existing keys can be checked before you activate them.</p>
 <div class="editions">
-<article class="card edition"><span class="tag">Basic</span><h3>8 channels</h3><p>The core mixer, EQ, dynamics and meters.</p></article>
-<article class="card edition"><span class="tag">Pro</span><h3>16 channels</h3><p>Adds plugins and in-app updates.</p></article>
+<article class="card edition"><span class="tag">Basic</span><h3>10 channels</h3><p>The core mixer, EQ, dynamics and meters.</p></article>
+<article class="card edition"><span class="tag">Pro</span><h3>20 channels</h3><p>Adds plugins and in-app updates.</p></article>
 <article class="card edition"><span class="tag">Studio</span><h3>32 channels</h3><p>Adds the studio tool set.</p></article>
-<article class="card edition"><span class="tag">Master</span><h3>All access</h3><p>Every feature and every channel.</p></article>
-<article class="card edition"><span class="tag">Paid editions</span><h3>AmF X1 Pro and Studio Master</h3><p>Buy once on WhatsApp and get your own installer: it activates by itself on first start, no key to type.</p></article>
+<article class="card edition"><span class="tag">Master</span><h3>32 channels, all access</h3><p>Every feature of the 32 channel console.</p></article>
+<article class="card edition"><span class="tag">Ultimate</span><h3>300 channels</h3><p>The big console: 300 channels in pages of 16. Channels with no input use no processor time.</p></article>
+<article class="card edition"><span class="tag">Channel Extend</span><h3>+30 channels</h3><p>A pack for Pro, Studio or Master on one computer. Packs add up, to 300 channels at most.</p></article>
+<article class="card edition"><span class="tag">Paid editions</span><h3>AmF X1 Pro, Studio Master and Ultimate</h3><p>Buy once on WhatsApp and get your own installer: it activates by itself on first start, no key to type.</p></article>
 </div>
 <p class="sub mt">Buy Pro or Studio Master on <a href="/keys">the editions page</a> or ask a question on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>. In the app, UPGRADE TO PRO / STUDIO MASTER on the LICENSE page opens the same chat with your machine code.</p>
 </div></section>`,

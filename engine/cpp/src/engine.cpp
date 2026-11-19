@@ -278,7 +278,7 @@ void Mixer::setWidth(double w) { width_ = w < 0 ? 0 : w > 2 ? 2 : w; }
 void Mixer::setBusReturn(int b, double db) { if (b >= 0 && b < kMaxBuses) buses_[b].returnLin = db <= -60.0 ? 0.0 : linOf(std::min(db, 10.0)); }
 void Mixer::clearClips() { for (auto& s : strips_) s.meter.state().clearClip(); master_[0].state().clearClip(); master_[1].state().clearClip(); }
 
-void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut, const float* extL, const float* extR) {
+void Mixer::process(const float* const* in, std::size_t frames, float* outL, float* outR, float* const* busOut, const float* extL, const float* extR, const unsigned char* idle) {
   double limMin = 1.0;   // the lowest limiter gain of this call, for the reduction meter
   constexpr std::size_t kChunk = 512;
   bool anySolo = false; for (const auto& s : strips_) anySolo = anySolo || s.solo;
@@ -297,6 +297,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     }
     for (int s = 0; s < n_; ++s) {
       Strip& st = strips_[static_cast<std::size_t>(s)];
+      if (idle && idle[s] && !st.sp.on && std::fabs(st.anLp) < 1e-9) { st.anLp = 0; st.inPk = 0; continue; }   // silence in, nothing ringing: nothing to add (the meter decays in end())
       const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang); const bool audible = !st.mute && (!anySolo || st.solo);
       double ipk = done == 0 ? 0.0 : st.inPk; const double g = st.gainLin * (st.automix ? st.amGain : 1.0);
       if (analog_) {   // ANALOG: the channel's output stage (see setAnalogChannels), before the fader

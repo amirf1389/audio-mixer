@@ -42,10 +42,17 @@ int main(int argc, char** argv) {
   { const lic::Verdict v = lic::verifyKey("hello", now, "", {test}); CHECK(!v.ok && v.reason == "malformed"); }
   { const lic::Verdict v = lic::verifyToken(vec["token"].asString(), now, {test}); CHECK(v.ok && v.planId == "master" && v.payload["serial"].asString().rfind("AMFX-SM-", 0) == 0 && v.payload["order"].asString() == "SHOP-77"); }
   { const lic::Verdict v = lic::verifyToken(vec["key"].asString(), now, {test}); CHECK(!v.ok && v.reason == "malformed"); }
+  // ULTIMATE: its own plan above MASTER, 300 channels, from a signed key or a signed edition token only
+  { const lic::Plan* u = lic::plan("ultimate"); CHECK(u && u->channels == 300 && u->rank == 4 && std::string(u->name) == "ULTIMATE" && lic::plan("master")->channels == 32 && !lic::plan("extend")); }
+  { const lic::Verdict v = lic::verifyKey(vec["keyUltimate"].asString(), now, "", {test}); CHECK(v.ok && v.planId == "ultimate"); }
+  { const lic::Verdict v = lic::verifyKey(vec["keyUltimate"].asString(), now, "", {lic::kVendorJwk}); CHECK(!v.ok && v.reason == "bad-signature"); }
+  { const lic::Verdict v = lic::verifyToken(vec["tokenUltimate"].asString(), now, {test}); CHECK(v.ok && v.planId == "ultimate" && v.payload["serial"].asString().rfind("AMFX-ULT-", 0) == 0); }
+  { const lic::Verdict v = lic::verifyToken(vec["tokenUltimateWrongPlan"].asString(), now, {test}); CHECK(!v.ok && v.reason == "wrong-edition"); }   // an ULTIMATE edition must carry the ULTIMATE plan
 
   // the store: a temp home, activate, status, deactivate
   const std::string dir = std::string(argc > 2 ? argv[2] : "/tmp") + "/amixos-lic-test"; 
   setenv("AMIXOS_LICENSE_FILE", (dir + "/license.json").c_str(), 1); setenv("AMIXOS_EDITION_FILE", (dir + "/edition.json").c_str(), 1); setenv("AMIXOS_EDITION_TOKEN_FILE", (dir + "/edition-token.json").c_str(), 1);
+  setenv("AMIXOS_EXTEND_FILE", (dir + "/extend.json").c_str(), 1); std::remove((dir + "/extend.json").c_str());
   setenv("AMIXOS_ACTIVATION_FILE", (dir + "/activation.json").c_str(), 1); setenv("AMIXOS_REVOCATIONS_FILE", (dir + "/revocations.json").c_str(), 1); setenv("AMIXOS_CLOCK_FILE", (dir + "/clock.json").c_str(), 1);
   auto clockReset = [&]() { std::remove((dir + "/clock.json").c_str()); };
   std::remove((dir + "/license.json").c_str()); std::remove((dir + "/edition.json").c_str()); std::remove((dir + "/edition-token.json").c_str()); std::remove((dir + "/activation.json").c_str()); std::remove((dir + "/revocations.json").c_str()); clockReset();
@@ -85,6 +92,40 @@ int main(int argc, char** argv) {
         { const lic::Status s = lic::status(now + 400LL * 86400000LL, {tk}); CHECK(s.state == "expired" && s.channels == 10); }   // the year is over
         { const lic::Status s = lic::status(now, {tk}); CHECK(s.state == "expired"); }   // and setting the clock back does not bring it back
       }
+    }
+    { // CHANNEL EXTEND: +30 channels per pack on PRO / STUDIO / MASTER, never on BASIC, nothing to add on ULTIMATE, 300 at most
+      const std::string out = dir + "/ext.json", cmd = std::string("node \"") + gen + "\" --mid " + lic::machineId() + " --out \"" + out + "\" > /dev/null";
+      CHECK(std::system(cmd.c_str()) == 0); std::ifstream f(out); std::ostringstream t; t << f.rdbuf(); bool aok = false; const json::Value av = json::Value::parse(t.str(), aok); CHECK(aok);
+      const lic::Jwk tk{av["jwk"]["x"].asString(), av["jwk"]["y"].asString()}; const json::Value& ex = av["extends"];
+      std::remove((dir + "/activation.json").c_str()); std::remove((dir + "/revocations.json").c_str()); std::remove((dir + "/license.json").c_str()); std::remove((dir + "/extend.json").c_str()); clockReset();
+      { const lic::Verdict v = lic::verifyExtend(ex.at(0).asString(), now, lic::machineId(), {tk}); CHECK(v.ok && v.payload["channels"].asInt() == 30); }
+      { const lic::Verdict v = lic::verifyExtend(ex.at(0).asString(), now, lic::machineId(), {lic::kVendorJwk}); CHECK(!v.ok && v.reason == "bad-signature"); }
+      { const lic::Verdict v = lic::addExtend(av["extendOther"].asString(), now, {tk}); CHECK(!v.ok && v.reason == "wrong-machine"); }
+      { const lic::Verdict v = lic::addExtend(av["extendUnbound"].asString(), now, {tk}); CHECK(!v.ok && v.reason == "malformed"); }   // a pack is always for one computer
+      { const lic::Verdict v = lic::addExtend(av["extendBig"].asString(), now, {tk}); CHECK(!v.ok && v.reason == "malformed"); }       // a pack is 30 channels, nothing else
+      { const lic::Verdict v = lic::addExtend(av["extendExpired"].asString(), now, {tk}); CHECK(!v.ok && v.reason == "expired"); }
+      { const lic::Verdict v = lic::addExtend(av["proBound"].asString(), now, {tk}); CHECK(!v.ok && v.reason == "malformed"); }        // a licence key is not a pack
+      CHECK(lic::addExtend(ex.at(0).asString(), now, {tk}).ok);
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.state == "basic" && s.channels == 10 && s.extendPacks == 0 && s.extendChannels == 0); }   // BASIC: a pack adds nothing
+      CHECK(lic::activate(av["proBound"].asString(), now, {tk}).ok);
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.planId == "pro" && s.baseChannels == 20 && s.extendPacks == 1 && s.channels == 50 && s.extendChannels == 30); }
+      { const lic::Verdict v = lic::addExtend(ex.at(0).asString(), now, {tk}); CHECK(!v.ok && v.reason == "duplicate"); }             // the same pack twice counts once
+      CHECK(lic::addExtend(ex.at(1).asString(), now, {tk}).ok);
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.channels == 80 && s.extendPacks == 2); }
+      { const lic::Status s = lic::status(now, {lic::kVendorJwk}); CHECK(s.channels == 10); }                                           // packs signed by another key: nothing
+      CHECK(lic::storeRevocations(av["revocationsExt"].asString(), {tk}));
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.channels == 50 && s.extendPacks == 1); }                                  // a revoked pack stops counting
+      { const lic::Verdict v = lic::addExtend(ex.at(1).asString(), now, {tk}); CHECK(!v.ok && v.reason == "revoked"); }
+      std::remove((dir + "/revocations.json").c_str()); CHECK(lic::removeExtends()); clockReset();
+      CHECK(lic::activate(av["masterBound"].asString(), now, {tk}).ok);
+      for (std::size_t i = 0; i < 9; ++i) CHECK(lic::addExtend(ex.at(i).asString(), now, {tk}).ok);
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.planId == "master" && s.extendPacks == 9 && s.channels == 300 && s.extendChannels == 268); }   // 32 + 270 stops at 300
+      { const lic::Verdict v = lic::addExtend(ex.at(9).asString(), now, {tk}); CHECK(!v.ok && v.reason == "full"); }
+      CHECK(lic::activate(av["ultimateBound"].asString(), now, {tk}).ok);
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.planId == "ultimate" && s.planName == "ULTIMATE" && s.channels == 300 && s.extendPacks == 0 && s.boundToThisPc); }
+      CHECK(lic::removeExtends()); CHECK(lic::deactivate());
+      { const lic::Status s = lic::status(now, {tk}); CHECK(s.state == "basic" && s.channels == 10); }
+      std::printf("license_test: ULTIMATE (300 channels) and CHANNEL EXTEND packs (+30, bound, revocable, 300 at most) OK\n");
     }
     std::printf("license_test: activation (perpetual / annual), revocation list, clock roll-back OK\n");
   } else std::printf("license_test: AMIX_LICENSE_VECTOR_GEN not set: activation store tests skipped\n");

@@ -37,7 +37,35 @@ const PLANS = {
   pro:    { id: 'pro',    name: 'PRO',    channels: 20, features: ['core', 'plugins', 'ota'] },
   studio: { id: 'studio', name: 'STUDIO', channels: 32, features: ['core', 'plugins', 'ota', 'studio'] },
   master: { id: 'master', name: 'MASTER', channels: 32, features: ['core', 'plugins', 'ota', 'studio', 'master'] },   // all access: every feature, every channel
+  ultimate: { id: 'ultimate', name: 'ULTIMATE', channels: 300, features: ['core', 'plugins', 'ota', 'studio', 'master', 'ultimate'] },   // its own edition: the 300 channel console
 };
+// CHANNEL EXTEND: a signed pack that adds 30 channels to PRO / STUDIO / MASTER on ONE computer ("AMXX1." + payload + "." + signature,
+// payload { v: 1, kind: 'amfx1-extend', id, channels: 30, mid, issued, expires? }); several packs add up, to 300 channels at most
+const EXTEND = { prefix: 'AMXX1', kind: 'amfx1-extend', channels: 30, max: 300 };
+function signExtend({ machine, days = 0, now = Date.now(), id } = {}, privateKey) {
+  const mid = String(machine || '').trim().toUpperCase();
+  if (!/^[0-9A-F]{4}(-[0-9A-F]{4}){4}$/.test(mid)) { const e = new Error('an extend pack is always for one computer: give its machine code (XXXX-XXXX-XXXX-XXXX-XXXX)'); e.status = 400; throw e; }
+  const payload = { v: 1, kind: EXTEND.kind, id: id || 'EXT-' + crypto.randomBytes(6).toString('hex').toUpperCase(), channels: EXTEND.channels, mid, issued: now };
+  if (days) payload.expires = now + Math.round(days * 86400000);
+  const body = b64u(Buffer.from(JSON.stringify(payload)));
+  return { key: `${EXTEND.prefix}.${body}.${b64u(crypto.sign('sha256', Buffer.from(body), { key: privateKey, dsaEncoding: 'ieee-p1363' }))}`, payload };
+}
+function verifyExtend(key, { now = Date.now(), machine = null, jwk = null } = {}) {
+  const parts = String(key || '').trim().replace(/\s+/g, '').split('.');
+  if (parts.length !== 3 || parts[0] !== EXTEND.prefix) return { ok: false, reason: 'malformed', message: 'This is not an AmF X1 channel extend key.' };
+  let payload;
+  try {
+    const keys = jwk ? [jwk] : [PUBLIC_JWK, adminJwk(), sandboxJwk()].filter(Boolean);
+    const good = keys.some(k => crypto.verify('sha256', Buffer.from(parts[1]), { key: crypto.createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: k.x, y: k.y }, format: 'jwk' }), dsaEncoding: 'ieee-p1363' }, unb64u(parts[2])));
+    if (!good) return { ok: false, reason: 'bad-signature', message: 'The extend key was not signed by the vendor key (changed or forged).' };
+    payload = JSON.parse(unb64u(parts[1]).toString('utf8'));
+  } catch (_) { return { ok: false, reason: 'malformed', message: 'This is not an AmF X1 channel extend key.' }; }
+  if (!payload || payload.v !== 1 || payload.kind !== EXTEND.kind || !payload.id || payload.channels !== EXTEND.channels || !payload.mid) return { ok: false, reason: 'malformed', message: 'The extend key is not complete.' };
+  const nd = s => String(s || '').replace(/-/g, '').toUpperCase();
+  if (machine && nd(payload.mid) !== nd(machine)) return { ok: false, reason: 'wrong-machine', message: 'This extend key was issued for a different computer.', payload };
+  if (payload.expires && payload.expires < now) return { ok: false, reason: 'expired', message: 'The extend key expired.', payload };
+  return { ok: true, payload };
+}
 const PREFIX = 'AMIX1';
 
 const b64u = buf => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -95,7 +123,7 @@ function readStored() {
 
 // What the app should run as right now. A paid edition (bridge/edition.js: AmF X1 Pro / Studio Master, activated automatically from the
 // installer's signed token) counts like a key for its plan; a stored key for a higher plan still wins. opts.edition === false: keys only.
-const RANK_OF = id => ({ basic: 0, pro: 1, studio: 2, master: 3 })[id] || 0;
+const RANK_OF = id => ({ basic: 0, pro: 1, studio: 2, master: 3, ultimate: 4 })[id] || 0;
 function status(opts = {}) {
   const machine = opts.machine || machineId();
   const stored = opts.key !== undefined ? { key: opts.key } : readStored();
@@ -126,7 +154,7 @@ function request({ plan = 'pro', name = '', email = '', now = Date.now(), machin
 
 // "Check key" (like checking a Windows product key before an edition upgrade): is the key genuine, for this PC, not expired, and what would
 // it change compared with the plan active now (upgrade / same / downgrade, channels, features unlocked). Reads only: nothing is stored.
-const RANK = { basic: 0, pro: 1, studio: 2, master: 3 };
+const RANK = { basic: 0, pro: 1, studio: 2, master: 3, ultimate: 4 };
 function compare(from, to) {
   const a = PLANS[from] || PLANS.basic, b = PLANS[to] || PLANS.basic, d = RANK[b.id] - RANK[a.id];
   return { from: a.id, to: b.id, change: d > 0 ? 'upgrade' : d < 0 ? 'downgrade' : 'same', channels: [a.channels, b.channels],
@@ -162,4 +190,4 @@ function deactivate(opts = {}) {
 
 const hasFeature = (st, f) => !!(st && st.plan && st.plan.features.includes(f));
 
-module.exports = { check, compare, fingerprint, PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };
+module.exports = { EXTEND, signExtend, verifyExtend, check, compare, fingerprint, PLANS, PREFIX, PUBLIC_JWK, sandboxJwk, adminJwk, request, publicKeyOf: publicKey, signKey, verifyKey, machineId, status, activate, deactivate, hasFeature, readStored, storeFile, b64u, unb64u };

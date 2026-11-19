@@ -18,9 +18,10 @@ const PREFIX = 'AMFXE1', KIND = 'amfx1-edition';
 const EDITIONS = {
   pro: { id: 'pro', plan: 'pro', name: 'AmF X1 Pro', short: 'PRO', serial: 'AMFX-PRO' },
   'studio-master': { id: 'studio-master', plan: 'master', name: 'AmF X1 Studio Master', short: 'STUDIO MASTER', serial: 'AMFX-SM' },
+  ultimate: { id: 'ultimate', plan: 'ultimate', name: 'AmF X1 Ultimate', short: 'ULTIMATE', serial: 'AMFX-ULT' },   // the 300 channel console
 };
 const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';   // 32 symbols, no 0/O/1/I: read over the phone without mistakes
-const SERIAL_RE = /^AMFX-(PRO|SM)-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
+const SERIAL_RE = /^AMFX-(PRO|SM|ULT)-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
 
 const lic = () => require('./license');
 const b64u = buf => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

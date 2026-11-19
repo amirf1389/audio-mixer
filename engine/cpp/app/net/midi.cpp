@@ -81,7 +81,7 @@ bool MidiMap::offer(const MidiMsg& m) {
 std::string MidiMap::save() const { std::lock_guard<std::mutex> g(m_); std::ostringstream o; for (const Entry& e : e_) o << e.type << ',' << e.channel << ',' << e.number << ',' << static_cast<int>(e.kind) << ',' << e.strip << ';'; return o.str(); }
 void MidiMap::load(const std::string& s) {
   std::lock_guard<std::mutex> g(m_); e_.clear(); std::istringstream in(s); std::string item;
-  while (std::getline(in, item, ';')) { int t, c, n, k, st; if (std::sscanf(item.c_str(), "%d,%d,%d,%d,%d", &t, &c, &n, &k, &st) == 5 && (t == 0xb0 || t == 0x90) && c >= 0 && c < 16 && n >= 0 && n < 128 && k > 0 && k <= MidiAction::Master && st >= 0 && st < 64 && e_.size() < 512) e_.push_back({t, c, n, static_cast<MidiAction::Kind>(k), st}); }
+  while (std::getline(in, item, ';')) { int t, c, n, k, st; if (std::sscanf(item.c_str(), "%d,%d,%d,%d,%d", &t, &c, &n, &k, &st) == 5 && (t == 0xb0 || t == 0x90) && c >= 0 && c < 16 && n >= 0 && n < 128 && k > 0 && k <= MidiAction::Master && st >= 0 && st < 1024 && e_.size() < 512) e_.push_back({t, c, n, static_cast<MidiAction::Kind>(k), st}); }
 }
 void MidiMap::clear() { std::lock_guard<std::mutex> g(m_); e_.clear(); pending_ = false; }
 int MidiMap::learned() const { std::lock_guard<std::mutex> g(m_); return static_cast<int>(e_.size()); }

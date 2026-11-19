@@ -539,7 +539,7 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
   if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
   if (o["routes"].isObject()) {   // the console's ROUTING: what feeds each strip, what each output carries
     initRoutes(); const json::Value& ri = o["routes"]["in"]; const json::Value& ro = o["routes"]["out"];
-    for (std::size_t i = 0; i < ri.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) inRoute_[i] = std::max(-1, std::min(kMaxStrips - 1, ri.at(i).asInt(static_cast<int>(i))));
+    for (std::size_t i = 0; i < ri.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) inRoute_[i] = std::max(-1, std::min(Runtime::kNetInBase - 1, ri.at(i).asInt(static_cast<int>(i))));
     for (std::size_t k = 0; k < ro.size() && k < static_cast<std::size_t>(Runtime::kMaxOutputs); ++k) outRoute_[k] = std::max(Runtime::kSrcOff, std::min(Runtime::kSrcMasterMono, ro.at(k).asInt(0))); }
   if (o["masterChain"].isObject()) {   // the console's RTA EQ and mastering: they keep sounding while the service plays
     const json::Value& m = o["masterChain"]; mp_.eqOn = m["eqOn"].asBool(mp_.eqOn);
@@ -726,7 +726,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
     return ok;
   }
-  if (op == "inRoute") { if (!strip(s)) return {}; initRoutes(); inRoute_[s] = std::max(-1, std::min(kMaxStrips - 1, cmd["input"].asInt(-1))); if (rt_) rt_->setInputRoute(s, inRoute_[s]); ++version_; return ok; }
+  if (op == "inRoute") { if (!strip(s)) return {}; initRoutes(); inRoute_[s] = std::max(-1, std::min(Runtime::kNetInBase - 1, cmd["input"].asInt(-1))); if (rt_) rt_->setInputRoute(s, inRoute_[s]); ++version_; return ok; }
   if (op == "outRoute") { const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; }
     const int src = cmd["source"].asInt(0); if (src < Runtime::kSrcOff || src > Runtime::kSrcMasterMono) { err = "source out of range"; return {}; }
     initRoutes(); outRoute_[o] = src; if (rt_) rt_->setOutputRoute(o, src); ++version_; return ok; }

@@ -7,6 +7,7 @@ import QtQuick.Layouts
 
 Item {
     id: page
+    objectName: "sendToPage"
     property int bus: 0
     property int bank: 0
     readonly property var b: engine.busState[bus]
@@ -21,7 +22,7 @@ Item {
                 Repeater { model: engine.busState; delegate: Rectangle { id: gb136; implicitWidth: bl.implicitWidth + 12; implicitHeight: 20; radius: 7; color: page.bus === index ? (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb136.color) } GradientStop { position: 1; color: Theme.btnBottom(gb136.color) } } border.color: modelData.kind === "fx" ? Qt.rgba(0.65, 0.55, 1, 0.4) : Qt.rgba(0.2, 0.9, 0.5, 0.35)
                     Text { id: bl; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.bus === index ? "#000" : (modelData.kind === "fx" ? "#a78bfa" : Theme.emerald); font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
-                Repeater { model: ["CH 01-16", "CH 17-32"]; delegate: Rectangle { id: gb137; implicitWidth: 70; implicitHeight: 20; radius: 7; color: page.bank === index ? Theme.ov(0.16) : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb137.color) } GradientStop { position: 1; color: Theme.btnBottom(gb137.color) } } Text { anchors.centerIn: parent; text: modelData; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bank = index } } }
+                BankBar { bank: page.bank; buttonWidth: 70; onPicked: b => page.bank = b }
             }
         }
         RowLayout {
@@ -34,10 +35,12 @@ Item {
                         model: 16
                         delegate: Item {
                             property int strip: page.bank * 16 + index
-                            property var st: engine.stripAt(strip, engine.stripTick)
-                            property var sd: engine.send(strip, page.bus)
+                            visible: strip < engine.strips
+                            readonly property int src: Math.min(strip, engine.strips - 1)   // the last page of a console whose count is not a multiple of 16: the hidden columns read a real strip
+                            property var st: engine.stripAt(src, engine.stripTick)
+                            property var sd: engine.send(src, page.bus)
                             width: (parent.width - 15 * 4) / 16; height: parent.height
-                            Connections { target: engine; function onStripsChanged() { sd = engine.send(strip, page.bus) } }
+                            Connections { target: engine; function onStripsChanged() { sd = engine.send(src, page.bus) } }
                             Rectangle { anchors.fill: parent; radius: 6; color: index % 2 ? Theme.ov(0.025) : Qt.rgba(0, 0, 0, 0.25); border.color: sd && sd.db > -60 ? Qt.rgba(0.984, 0.749, 0.141, 0.35) : Theme.lineSoft }
                             ColumnLayout {
                                 anchors.fill: parent; anchors.margins: 4; spacing: 4

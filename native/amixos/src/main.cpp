@@ -154,9 +154,13 @@ int main(int argc, char* argv[]) {
   app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/AmixOS/icons/amfx1.png")));   // the mixer logo in the title bar and the task bar
   QQuickStyle::setStyle("Fusion");   // the one stock style that draws from the application palette (set dark below); Basic ignores the palette and paints light grey boxes on Windows
 
-  bool smoke = false, bench = false; QString shots, lang, film, filmScript;
+  bool smoke = false, bench = false; QString shots, lang, film, filmScript, bigShots;
   const QString smokeWav = QDir::tempPath() + "/amixos-smoke-tone.wav", smokeOut = QDir::tempPath() + "/amixos-smoke-export.wav";   // used by the smoke and by its end-of-run lambda: must outlive both
-  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); else if (a == "--film" && i + 2 < argc) { smoke = true; filmScript = QString::fromLocal8Bit(argv[++i]); film = QString::fromLocal8Bit(argv[++i]); } }
+  for (int i = 1; i < argc; ++i) { const QString a = QString::fromLocal8Bit(argv[i]); if (a == "--smoke") smoke = true; else if (a == "--bench") { smoke = true; bench = true; } else if (a == "--shots" && i + 1 < argc) { smoke = true; shots = QString::fromLocal8Bit(argv[++i]); } else if (a == "--lang" && i + 1 < argc) lang = QString::fromLocal8Bit(argv[++i]); else if (a == "--film" && i + 2 < argc) { smoke = true; filmScript = QString::fromLocal8Bit(argv[++i]); film = QString::fromLocal8Bit(argv[++i]); }
+#ifdef AMIXOS_TEST_LICENSE
+    else if (a == "--big" && i + 1 < argc) { smoke = true; bigShots = QString::fromLocal8Bit(argv[++i]); }   // test builds: the 300-channel console, checked and photographed
+#endif
+  }
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
 #if defined(_WIN32) && defined(_WIN64)
@@ -387,7 +391,7 @@ int main(int argc, char* argv[]) {
     }
     remote.stop(); waitMs(500); return 0;
   }
-  if (smoke) {
+  if (smoke && bigShots.isEmpty()) {
     std::printf("amixos --smoke: start master %.1f dB, monitor %.1f dB; %s\n", engine.masterDb(), engine.monitor()["db"].toDouble(), qPrintable(engine.status()));
     if (engine.masterDb() <= -60.0) { std::fprintf(stderr, "amixos --smoke: the console started with the master at -inf\n"); return 166; }
     // the null device: a timed "sound card" that needs no hardware; the strips read silence, the meters must publish blocks
@@ -1604,5 +1608,68 @@ int main(int argc, char* argv[]) {
       QCoreApplication::exit(blocks > 100 && engine.pageCount() >= 30 ? 0 : 4);
     });
   }
+#ifdef AMIXOS_TEST_LICENSE
+  // THE BIG CONSOLE (test builds only: --big DIR). The console is run as PRO + one EXTEND pack (50 channels) and as ULTIMATE (300), on
+  // the null device with its test tone, and every claim is checked: the strips shown, the pages of 16, strips built only when their
+  // page opens, the last strip mixing, the saved console keeping every strip, and the first 32 strips untouched. Pictures go to DIR.
+  if (!bigShots.isEmpty()) QTimer::singleShot(1500, &app, [&] {
+    auto fail = [&](int code, const char* what) { std::fprintf(stderr, "amixos --big: %s\n", what); engine.stop(); std::exit(code); };
+    auto settle = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+    QDir().mkpath(bigShots); auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+    auto shot = [&](const char* name) { win->grabWindow().save(bigShots + "/" + name + ".png"); };
+    std::function<void(QQuickItem*, const QString&, bool, bool, QList<QQuickItem*>&)> walk = [&](QQuickItem* it, const QString& n, bool shownOnly, bool up, QList<QQuickItem*>& out) {
+      if (!it || (shownOnly && !it->isVisible())) return; Q_UNUSED(up); if (it->objectName() == n) out << it; for (QQuickItem* c : it->childItems()) walk(c, n, shownOnly, up, out); };
+    auto items = [&](const char* n, bool shownOnly = false) { QList<QQuickItem*> out; walk(win->contentItem(), QString::fromLatin1(n), shownOnly, false, out); return out; };
+    auto item = [&](const char* n) -> QQuickItem* { const QList<QQuickItem*> l = items(n); return l.isEmpty() ? nullptr : l.first(); };
+    auto mixer = [&]() -> QObject* { QObject* mp = nullptr; for (QQuickItem* o : items("mixerPage", true)) mp = o; return mp; };
+    settings.finishSetup(); engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); settle(400);
+    // 1. as shipped: 32 strips shown, 10 licensed (BASIC), every list 32 long
+    if (engine.strips() != 32 || engine.licensedChannels() != 10 || engine.stripState().size() != 32 || engine.meters().size() != 32 || engine.inputRoutes().size() != 32 || engine.inputCap() != 32) fail(2, "BASIC is not the 32-strip console it was");
+    win->setProperty("current", "mixer"); settle(900); QObject* mp = mixer(); if (!mp) fail(3, "no mixer page");
+    if (mp->property("big").toBool() || items("stripFader").size() != 32) fail(4, "BASIC: the mixer does not build its 32 strips at once");
+    // 2. PRO + one EXTEND pack: 50 strips, four pages, the last page holds two
+    engine.setTestChannels(50); settle(900); mp = mixer();
+    if (engine.strips() != 50 || engine.stripState().size() != 50 || engine.meters().size() != 50 || engine.license().value("extendPacks").toInt() != 1) fail(5, "50 channels: the lists do not follow the licence");
+    if (!mp || !mp->property("big").toBool() || mp->property("bank").toInt() != 0) fail(6, "50 channels: the mixer is not paged");
+    { QObject* bar = item("mixerBankBar"); if (!bar || bar->property("banks").toInt() != 4 || !bar->property("paged").toBool()) fail(7, "50 channels: not four pages"); }
+    mp->setProperty("bank", 3); settle(700); shot("extend-50-last-page");
+    { const int vis = static_cast<int>(items("stripFader", true).size());
+      if (vis != 2) { std::fprintf(stderr, "amixos --big: page 4 of 50 channels shows %d strips\n", vis); fail(8, "the last page of 50 channels does not show its 2 strips"); } }
+    // 3. ULTIMATE: 300 strips, nineteen pages; strips are built when their page opens, not before
+    engine.setTestChannels(300); settle(900); mp = mixer();
+    if (engine.strips() != 300 || engine.licensedChannels() != 300 || engine.stripState().size() != 300 || engine.meters().size() != 300 || engine.inputRoutes().size() != 300 || engine.inputCap() != 256 || engine.edition() != "ULTIMATE") fail(9, "ULTIMATE: not 300 strips");
+    const int builtFirst = static_cast<int>(items("stripFader").size());
+    if (builtFirst > 64) { std::fprintf(stderr, "amixos --big: %d strips built before their pages were opened\n", builtFirst); fail(10, "ULTIMATE: every strip is built at once"); }
+    { QObject* bar = item("mixerBankBar"); if (!bar || bar->property("banks").toInt() != 19) fail(11, "ULTIMATE: not nineteen pages"); }
+    shot("ultimate-mixer-page-1");
+    mp->setProperty("bank", 18); settle(900); if (!item("stripMute299") || item("stripMute200") || items("stripFader", true).size() != 12) fail(12, "ULTIMATE: the last page did not build CH 289-300 (or built others)");
+    // CH 300 mixes: route the test tone to it, hear it on the master; its neighbour stays silent
+    engine.setMaster(0); for (int i = 0; i < 300; ++i) engine.setInputRoute(i, -1); settle(700);
+    const double quiet = engine.telemetry().value("masterPeakDb").toDouble();
+    engine.setInputRoute(299, 0); engine.setGain(299, 0); engine.setMute(299, false); settle(700);
+    const double m299 = engine.meters()[299].toMap()["inDb"].toDouble(), m298 = engine.meters()[298].toMap()["inDb"].toDouble(), heard = engine.telemetry().value("masterPeakDb").toDouble();
+    if (std::fabs(m299 + 12.0) > 1.0 || m298 > -100 || heard < -20 || quiet > -100) { std::fprintf(stderr, "amixos --big: CH 300 in %.1f dBFS, CH 299 in %.1f, master %.1f (silent before: %.1f)\n", m299, m298, heard, quiet); fail(13, "ULTIMATE: CH 300 does not mix"); }
+    engine.setName(299, "LAST"); engine.setSolo(299, true); settle(500); shot("ultimate-mixer-page-19"); engine.setSolo(299, false);
+    // the processor load with 300 strips, one live
+    const double load = engine.telemetry().value("loadPct").toDouble(); if (load > 50) { std::fprintf(stderr, "amixos --big: load %.1f %%\n", load); fail(14, "ULTIMATE: idle strips cost processor time"); }
+    // the whole console is saved and comes back: CH 300's name and route, and a scene keeps it
+    { const QJsonObject c = engine.consoleExport(); if (c.value("strips").toArray().size() != 300 || c.value("inputRoutes").toArray().size() != 300) fail(15, "ULTIMATE: the saved console does not hold 300 strips");
+      engine.storeScene(14, "big"); engine.setName(299, "X"); engine.setGain(299, -30); engine.recallScene(14);
+      if (engine.stripState()[299].toMap()["name"].toString() != "LAST" || std::fabs(engine.stripState()[299].toMap()["db"].toDouble()) > 1e-9) fail(16, "ULTIMATE: a scene does not bring CH 300 back");
+      engine.setGain(299, -6); engine.recordHistory(); engine.setGain(299, -9); engine.recordHistory(); engine.undo(); if (std::fabs(engine.stripState()[299].toMap()["db"].toDouble() + 6) > 1e-9) fail(17, "ULTIMATE: undo does not reach CH 300"); engine.setGain(299, 0);
+      engine.setArmed(299, true); engine.setRecallSafe(250, true); if (!engine.armed(299) || engine.armed(298) || engine.armedCount() != 1 || !engine.recallSafe(250) || engine.recallSafe(249)) fail(18, "ULTIMATE: REC arm / recall safe above strip 32"); engine.setArmed(299, false); engine.setRecallSafe(250, false); }
+    // the pages that work in pages of 16, on their last page, and the lists of every channel
+    for (const char* pg : {"bus", "routing", "ai", "miceq", "surround", "tools", "renew", "engctl", "dca", "scenes", "dsp", "home"}) { win->setProperty("current", pg); settle(900);
+      for (const char* nm : {"sendToPage", "routingPage", "aiMixPage", "micEqPage"}) for (QQuickItem* o : items(nm, true)) o->setProperty("bank", 18);
+      settle(500); shot((QByteArray("ultimate-") + pg).constData()); }
+    // 4. the licence goes away (a key expires): back to 32 strips, and nothing of the 300 is lost when the console is saved
+    engine.setTestChannels(-1); settle(900);
+    if (engine.strips() != 32 || engine.licensedChannels() != 10 || engine.stripState().size() != 32) fail(19, "back to BASIC: not 32 strips again");
+    if (engine.consoleExport().value("strips").toArray().size() != 300 || engine.consoleExport().value("strips").toArray()[299].toObject().value("name").toString() != "LAST") fail(20, "back to BASIC: the strips above 32 are dropped from the saved console");
+    win->setProperty("current", "mixer"); settle(900); mp = mixer(); if (!mp || mp->property("big").toBool() || mp->property("bank").toInt() != 0) fail(21, "back to BASIC: the mixer is still paged"); shot("basic-again");
+    std::printf("amixos --big: BASIC 32 strips; EXTEND 50 in 4 pages; ULTIMATE 300 in 19 pages (%d strips built at first), CH 300 heard at %.1f dBFS, load %.1f %%, console / scene / undo / REC arm reach CH 300; back to BASIC keeps all 300 saved\n", builtFirst, heard, load);
+    engine.stop(); QCoreApplication::exit(0);
+  });
+#endif
   return app.exec();
 }

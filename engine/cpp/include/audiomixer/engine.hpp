@@ -21,7 +21,7 @@
 namespace am {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
-constexpr int kMaxStrips = 32;
+constexpr int kMaxStrips = 300;   // the ULTIMATE console; a licence runs fewer (BASIC 10 ... MASTER 32). Strips that get no input cost nothing (see Mixer::process idle)
 
 // ───────── level meter ─────────
 struct ClipConfig {
@@ -187,7 +187,9 @@ class Mixer {
   void setDepth(int strip, double depth);
   double depth(int strip) const { return strip >= 0 && strip < n_ ? strips_[static_cast<std::size_t>(strip)].depth : 1; }
   void process5(const float* const* inputs, std::size_t frames, float* const* outs);
-  void process(const float* const* inputs, std::size_t frames, float* outL, float* outR, float* const* busOut = nullptr, const float* extL = nullptr, const float* extR = nullptr);
+  // idle (optional): one flag per strip; a strip marked idle carries digital silence this block (no input, no insert), so it is left out
+  // of the sums and its meter falls to nothing: a 300-strip console costs what its live strips cost.
+  void process(const float* const* inputs, std::size_t frames, float* outL, float* outR, float* const* busOut = nullptr, const float* extL = nullptr, const float* extR = nullptr, const unsigned char* idle = nullptr);
   const Strip& strip(int i) const { return strips_[i]; }
   const MeterState& masterMeter(int ch) const { return master_[ch].state(); }
   const Loudness& loudness() const { return loudness_; }

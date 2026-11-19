@@ -1,4 +1,4 @@
-// MIXER: 32 strips in two pages of 16 (or all), each with colour, name, INPUT pick, pan, mute, solo, AI automix chip, ⋯ / right-click menu, fader (always, with the 8 AUX / 8 FX sends beside it in a send view), post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
+// MIXER: 32 strips in two pages of 16 (or all; with EXTEND packs or ULTIMATE up to 300 strips in pages of 16), each with colour, name, INPUT pick, pan, mute, solo, AI automix chip, ⋯ / right-click menu, fader (always, with the 8 AUX / 8 FX sends beside it in a send view), post-fader meter (bars or an analogue VU face), input meter, gain-reduction meter,
 // DSP badges (GATE / EQ / X / COMP / LIM / DLY / Ø: lit when that stage is on, click to open its page for this channel), DCA / mute-group /
 // sends readout; click a strip to select it and edit its whole chain in the side panel; the master and the MONITOR (control room: source, level, dim, mono, mute) on the right.
 import QtQuick
@@ -9,7 +9,9 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "mixerPage"
-    property int bank: 0      // 0 = 1-16, 1 = 17-32, 2 = all
+    property int bank: 0      // up to 32 strips: 0 = 1-16, 1 = 17-32, 2 = all. More (EXTEND, ULTIMATE): the page of 16, 0 .. 18
+    readonly property bool big: engine.strips > 32
+    onBigChanged: bank = 0
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
     property int tick: visible ? engine.meterTick : -1
@@ -106,8 +108,9 @@ Item {
             Flow {
                 id: barFlow; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("PAGES:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                BankBar { visible: page.big; objectName: "mixerBankBar"; bank: page.bank; prefix: "CH"; accent: true; onPicked: b => page.bank = b }
                 Repeater {
-                    model: ["PAGE 1: CH 01-16", "PAGE 2: CH 17-32", "ALL 32 CH"]
+                    model: page.big ? [] : ["PAGE 1: CH 01-16", "PAGE 2: CH 17-32", "ALL 32 CH"]
                     delegate: Rectangle {
                         implicitWidth: lbl.implicitWidth + 16; implicitHeight: 20; radius: 7
                         color: page.bank === index ? Theme.amber : Theme.ov(0.06)
@@ -447,7 +450,7 @@ Item {
                                 id: stripItem
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
-                                visible: page.bank === 2 || Math.floor(index / 16) === page.bank
+                                visible: (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank
                                 width: visible ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, engine.stripTick)
@@ -455,6 +458,12 @@ Item {
                                 property var mt: visible ? (page.tick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
                                 property color sc: Theme.stripColors[st ? st.color : 0]
                                 property bool selected: page.sel === index
+                                // BUILT ON DEMAND: a console of up to 32 strips builds them all at once, as ever; of a larger one (EXTEND, ULTIMATE: up to
+                                // 300) only the strips of a page that has been opened are built, so the page opens as fast with 300 strips as with 32.
+                                property bool built: index < 32
+                                onVisibleChanged: if (visible) built = true
+                                Component.onCompleted: if (visible) built = true
+                                Loader { anchors.fill: parent; active: stripItem.built; sourceComponent: Component { Item {
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Theme.ov(0.06) : (index % 2 ? Theme.ov(0.025) : (Theme.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.05))); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
                                     MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onPressed: function (m) { engine.selectedStrip = index; if (m.button === Qt.RightButton) { moreL.active = true; moreL.item.popup(); m.accepted = true } else m.accepted = false } } }
                                 // THE STRIP'S OWN COLOUR: a soft wash from the top (stronger on the selected strip) and a lit cap
@@ -468,7 +477,7 @@ Item {
                                     ColumnLayout { anchors.centerIn: parent; spacing: 6
                                         Text { Layout.alignment: Qt.AlignHCenter; text: "⊘"; color: Theme.amber; font.pixelSize: 18 }
                                         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("CH ", i18n.lang) + (index + 1); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
-                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 20 ? i18n.t("PRO", i18n.lang) : i18n.t("STUDIO", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                        Text { Layout.alignment: Qt.AlignHCenter; text: index < 20 ? i18n.t("PRO", i18n.lang) : index < 32 ? i18n.t("STUDIO", i18n.lang) : i18n.t("ULTIMATE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                         Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("UNLOCK ›", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7 } }
                                     MouseArea { anchors.fill: parent; onClicked: page.go("renew") } }
                                 ColumnLayout {
@@ -662,6 +671,7 @@ Item {
                                         Text { visible: st && st.sendsTo.length; text: st && st.sendsTo.length ? "→" + st.sendsTo.join("") : ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6 }
                                         Rectangle { visible: st && st.plugins > 0; implicitWidth: 24; implicitHeight: 11; radius: 2; color: Qt.rgba(0.6, 0.4, 1, 0.25); Text { anchors.centerIn: parent; text: i18n.t("FX ", i18n.lang) + (st ? st.plugins : 0); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { engine.selectedStrip = index; page.rack = true } } } }
                                 }
+                                } } }
                             }
                         }
                     }

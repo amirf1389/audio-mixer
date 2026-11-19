@@ -54,6 +54,7 @@ qt_add_qml_module(amixos
         qml/EffectsPage.qml
         qml/WaveformPage.qml
         qml/PhasePage.qml
+        qml/BankBar.qml
         qml/Combo.qml
         qml/Knob.qml
         qml/PluginEditor.qml qml/PluginDock.qml qml/StripTone.qml
@@ -155,6 +156,12 @@ qt_add_qml_module(amixos
 string(TIMESTAMP AMIX_BUILD_STAMP "%Y-%m-%d %H:%M" UTC)   # when this build was configured: shown next to the version, so two builds of one version can be told apart
 target_compile_definitions(amixos PRIVATE AMIX_VERSION="${AMIX_VERSION}" AMIX_BUILD_STAMP="${AMIX_BUILD_STAMP}")
 target_compile_definitions(amixos PRIVATE AMIX_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+# TEST BUILDS ONLY: lets AMIX_TEST_CHANNELS show the console with more licensed channels (the 300-channel surface) without a vendor key.
+# OFF for every package; the release scripts never set it.
+option(AMIXOS_TEST_LICENSE "test builds: AMIX_TEST_CHANNELS overrides the licensed channel count" OFF)
+if(AMIXOS_TEST_LICENSE)
+  target_compile_definitions(amixos PRIVATE AMIXOS_TEST_LICENSE)
+endif()
 target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
 # libsoxr (LGPL 2.1) stays its own library next to the program, loaded at run time (app/hires): copied beside amixos on every build
 if(TARGET amix_soxr)
