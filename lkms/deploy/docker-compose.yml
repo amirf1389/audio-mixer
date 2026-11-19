@@ -1,0 +1,53 @@
+# The whole central server: database, API and an HTTPS front door. Run from this folder:  docker compose up -d
+# Only ports 80 and 443 are open to the outside. The database and the API are reachable only inside this compose network.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: lkms
+      POSTGRES_DB: lkms
+      POSTGRES_PASSWORD: ${LKMS_DB_PASSWORD:?set LKMS_DB_PASSWORD in .env}
+    volumes:
+      - lkms-db:/var/lib/postgresql/data
+      - ../schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    networks: [inside]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lkms -d lkms"]
+      interval: 10s
+      retries: 10
+
+  api:
+    build: ..
+    environment:
+      LKMS_DATABASE_URL: postgresql://lkms:${LKMS_DB_PASSWORD}@db:5432/lkms
+      LKMS_ADMIN_KEY_HASH: ${LKMS_ADMIN_KEY_HASH:?}
+      LKMS_KEY_PEPPER: ${LKMS_KEY_PEPPER:?}
+      LKMS_SIGNING_KEY: ${LKMS_SIGNING_KEY:?}
+      LKMS_LEASE_HOURS: ${LKMS_LEASE_HOURS:-168}
+      LKMS_GRANT_HOURS: ${LKMS_GRANT_HOURS:-720}
+      LKMS_ADMIN_UI: ${LKMS_ADMIN_UI:-1}
+      LKMS_TRUST_PROXY: "1"          # behind Caddy below, which sets the real client address
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [inside]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    environment:
+      LKMS_DOMAIN: ${LKMS_DOMAIN:?set LKMS_DOMAIN in .env, e.g. licence.example.com}
+      LKMS_ADMIN_ALLOW: ${LKMS_ADMIN_ALLOW:?set LKMS_ADMIN_ALLOW in .env to your own address(es)}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [api]
+    networks: [inside]
+    restart: unless-stopped
+
+volumes:
+  lkms-db:
+  caddy-data:
+networks:
+  inside:

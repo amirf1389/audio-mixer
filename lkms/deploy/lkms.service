@@ -1,0 +1,23 @@
+# Without Docker: a systemd service. Put the project in /opt/lkms, the settings in /etc/lkms/env (mode 600), then:
+#   systemctl enable --now lkms
+# PostgreSQL and the HTTPS reverse proxy are installed separately in that case.
+[Unit]
+Description=LKMS licence server
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=lkms
+Group=lkms
+WorkingDirectory=/opt/lkms
+EnvironmentFile=/etc/lkms/env
+ExecStart=/opt/lkms/venv/bin/uvicorn --factory lkms.main:app --host 127.0.0.1 --port 8088 --no-server-header
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

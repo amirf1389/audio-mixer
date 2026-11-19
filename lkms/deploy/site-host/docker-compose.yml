@@ -1,0 +1,13 @@
+# The SITE HOST, for a customer with a volume licence. They run this once inside their own network:
+#   docker compose up -d
+# The site's computers then use http://<this machine>:8090 as their licence server address.
+services:
+  site-host:
+    build: ../../host
+    env_file: .env
+    ports: ["8090:8090"]
+    volumes:
+      - site-host-data:/data
+    restart: unless-stopped
+volumes:
+  site-host-data:
