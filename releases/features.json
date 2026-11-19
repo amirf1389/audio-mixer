@@ -14,7 +14,9 @@
         "FIX · The console could close by itself on NETWORK, DANTE + CLOCK when the list of sound cards or network clocks changed",
         "FIX · AMP / SYSTEM: a system that needs more outputs than the sound card has is no longer set up (before, headphones could get bass on one ear and treble on the other); a warning shows when a saved system is too big, and RESET puts the outputs back to normal stereo",
         "FIX · AMP / SYSTEM: the SYSTEM SETUP choices no longer pile on top of each other; they wrap to a second line on a narrow window",
-        "FIX · Not responding: dragging a slider on AMP / SYSTEM no longer writes the whole console to disk on every step, and the window keeps answering while phone tokens are made, listed or revoked"
+        "FIX · Not responding: a save now writes only what changed (not every scene and preset each time); dragging a slider on AMP / SYSTEM no longer saves on every step; the list of network cards is read at most every 3 seconds; the window keeps answering while phone tokens are made, listed or revoked",
+        "FIX · NETWORK, pairing QR code: the code could stay blank for up to a minute when the page was opened with the phone remote already on; it now draws at once and follows the network. A message says so when the computer has no address a phone can reach, and a note lists what to check when a phone cannot connect",
+        "ENHANCEMENT · If the window ever stops answering for more than 0.4 s, console.log gets a STALL line with the page and the time, so the cause can be found"
       ]
     },
     {

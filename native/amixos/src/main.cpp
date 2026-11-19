@@ -1808,5 +1808,13 @@ int main(int argc, char* argv[]) {
     engine.stop(); QCoreApplication::exit(0);
   });
 #endif
+  // STALL LOG: when the interface thread was away from its event loop for more than 0.4 s, one line goes into console.log with the page
+  // that was open and how long it lasted. A "Not Responding" on a customer's computer can then be traced to a page (DIAGNOSTICS shows the log).
+  if (!smoke && !bench && shots.isEmpty()) {
+    auto* beat = new QTimer(&app); auto* since = new QElapsedTimer; since->start(); beat->setInterval(100);
+    QObject::connect(beat, &QTimer::timeout, &app, [since, &qml] { const qint64 gap = since->restart();
+      if (gap > 500) { const QObject* w = qml.rootObjects().isEmpty() ? nullptr : qml.rootObjects().first(); qWarning("STALL: the interface did not answer for %lld ms (page %s)", static_cast<long long>(gap - 100), w ? qPrintable(w->property("current").toString()) : "?"); } });
+    beat->start();
+  }
   return app.exec();
 }

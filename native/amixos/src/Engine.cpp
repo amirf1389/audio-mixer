@@ -1,4 +1,6 @@
 #include "fx/fx_plugin.hpp"
+#include <QHash>
+#include <QCryptographicHash>
 #include <QSettings>
 #include <QFile>
 #ifdef _WIN32
@@ -1883,13 +1885,19 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   emit stripsChanged(); emit busesChanged(); emit groupsChanged();
 }
 void Engine::save() {
-  settings_.setValue("console/state", QString::fromUtf8(QJsonDocument(consoleJson()).toJson(QJsonDocument::Compact)));
+  // only what changed is written: the scenes and the user presets are large and rarely change, and on Windows every value written goes
+  // to the registry. Writing all of it again for one moved fader made the window stop for a moment on every save.
+  static QHash<QString, QByteArray> written;
+  auto put = [this](const char* key, const QString& v) { const QString k = QString::fromLatin1(key); const QByteArray h = QCryptographicHash::hash(v.toUtf8(), QCryptographicHash::Sha1);
+    if (written.value(k) == h && settings_.contains(k)) return; settings_.setValue(k, v); written[k] = h; };
+  put("console/state", QString::fromUtf8(QJsonDocument(consoleJson()).toJson(QJsonDocument::Compact)));
   QJsonArray sc; for (const SceneUi& x : scenes_) { QJsonObject o; o["name"] = x.name; o["at"] = x.at; o["data"] = x.data; sc << o; }
-  settings_.setValue("console/scenes", QString::fromUtf8(QJsonDocument(sc).toJson(QJsonDocument::Compact)));
+  put("console/scenes", QString::fromUtf8(QJsonDocument(sc).toJson(QJsonDocument::Compact)));
   { qulonglong low = 0; QStringList high; for (int i = 0; i < kStrips; ++i) if (recallSafe_.test(static_cast<std::size_t>(i))) { if (i < 32) low |= 1ull << i; else high << QString::number(i); }
-    settings_.setValue("console/recallSafe", low); settings_.setValue("console/recallSafeHigh", high.join(QLatin1Char(','))); }   // strips 1-32 as the number older versions read, the rest as a list
+    if (settings_.value("console/recallSafe").toULongLong() != low || !settings_.contains("console/recallSafe")) settings_.setValue("console/recallSafe", low);
+    put("console/recallSafeHigh", high.join(QLatin1Char(','))); }   // strips 1-32 as the number older versions read, the rest as a list
   QJsonArray pr; for (const PresetUi& x : userPresets_) { QJsonObject o; o["name"] = x.name; o["category"] = x.category; o["dsp"] = x.dsp; pr << o; }
-  settings_.setValue("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
+  put("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
 }
 // A NEW INSTALL STARTS FROM THE FACTORY CONSOLE: the setup writes install.id next to the program once per fresh install (an update keeps it).
 // When it differs from the id last seen, the console state of an earlier install (left by an uninstall run as another account, or written
