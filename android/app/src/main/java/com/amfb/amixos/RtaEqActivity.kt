@@ -36,8 +36,8 @@ class RtaEqView(ctx: Context) : View(ctx) {
     var onChange: ((Int, Boolean) -> Unit)? = null   // band, finished (the finger lifted)
     private val range = 15.0
     private val grid = Paint().apply { color = 0xFF233040.toInt(); strokeWidth = 2f }
-    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8B98A8.toInt(); textSize = 24f; typeface = Typeface.MONOSPACE }
-    private val eqLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFEA580C.toInt(); strokeWidth = 5f; style = Paint.Style.STROKE }
+    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFC2C7CF.toInt(); textSize = 24f; typeface = Typeface.MONOSPACE }
+    private val eqLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFB590.toInt(); strokeWidth = 5f; style = Paint.Style.STROKE }
     private val propLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFA78BFA.toInt(); strokeWidth = 4f; style = Paint.Style.STROKE; pathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f) }
     private val rtaFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x5522D3EE; style = Paint.Style.FILL }
     private val rtaLine = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xAA22D3EE.toInt(); strokeWidth = 2.5f; style = Paint.Style.STROKE }
@@ -60,7 +60,7 @@ class RtaEqView(ctx: Context) : View(ctx) {
         eqLine.alpha = if (on) 255 else 90; curve(gains, eqLine)
         proposal?.let { curve(it, propLine) }
         RtaEq.ISO.forEachIndexed { i, f -> val x = xOf(f); val y = yOf(gains[i])
-            dot.color = if (i == dragging) Color.WHITE else 0xFFEA580C.toInt(); dot.alpha = if (on) 255 else 120; c.drawCircle(x, y, if (i == dragging) 24f else 16f, dot) }
+            dot.color = if (i == dragging) Color.WHITE else 0xFFFFB590.toInt(); dot.alpha = if (on) 255 else 120; c.drawCircle(x, y, if (i == dragging) 24f else 16f, dot) }
     }
     private var dragging = -1
     @SuppressLint("ClickableViewAccessibility")
@@ -90,7 +90,7 @@ class RtaEqActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val p = Prefs.remote(this); val host = p.getString("host", "").orEmpty(); val token = p.getString("token", "").orEmpty()
         if (host.isNotEmpty()) client = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), token))
-        val accent = Color.parseColor("#EA580C"); val dim = Color.parseColor("#8B98A8")
+        val accent = Color.parseColor("#FFB590"); val dim = Color.parseColor("#C2C7CF")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
         root.addView(TextView(this).apply { text = getString(R.string.rta_title); setTextColor(accent); textSize = 18f; setTypeface(null, Typeface.BOLD) })
         graph = RtaEqView(this); graph.onChange = { _, done -> if (done) send() }
@@ -111,7 +111,7 @@ class RtaEqActivity : AppCompatActivity() {
         note = TextView(this).apply { setTextColor(Color.parseColor("#C4B5FD")); typeface = Typeface.MONOSPACE; textSize = 12f; setPadding(0, 8, 0, 8) }
         root.addView(note)
         root.addView(TextView(this).apply { text = getString(if (client == null) R.string.eq_offline else R.string.rta_help); setTextColor(dim); textSize = 12f; setPadding(0, 12, 0, 0) })
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
         showOn(); showSrc()
         client?.let { c -> io.execute { runCatching { val st = c.state(); val pe = c.programEqNow(); ui.post { strips = st.strips.size; graph.gains = pe.gains.toDoubleArray(); graph.on = pe.on; showOn(); graph.invalidate() } } } }
     }

@@ -30,7 +30,7 @@ class PluginsActivity : AppCompatActivity() {
     private var info: Map<String, Any?> = emptyMap(); private var tab = 0; private var filter = ""
     internal var liveRacks: Map<String, Any?>? = null; private var client: DaemonClient? = null   // LIVE: the console's plug-ins as the service plays them (tap one to control it)
     private val tabs = ArrayList<Button>()
-    private val accent = Color.parseColor("#EA580C"); private val cyan = Color.parseColor("#00F2FF"); private val dim = Color.parseColor("#8B98A8"); private val card = Color.parseColor("#141B26")
+    private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF"); private val card = Color.parseColor("#1D2024")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +44,7 @@ class PluginsActivity : AppCompatActivity() {
             addTextChangedListener(object : TextWatcher { override fun afterTextChanged(e: Editable?) { filter = e.toString().trim().lowercase(); render() }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}; override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {} }) })
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; root.addView(body)
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
         load()
     }
     fun load() {
@@ -74,7 +74,7 @@ class PluginsActivity : AppCompatActivity() {
         l.addView(t); if (badge.isNotEmpty()) l.addView(TextView(this).apply { text = badge; setTextColor(badgeColor); typeface = Typeface.MONOSPACE; textSize = 12f })
         body.addView(l)
     }
-    private fun section(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(accent); typeface = Typeface.MONOSPACE; setPadding(0, 24, 0, 4) })
+    private fun section(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(accent); typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, 24, 0, 4) })
     private fun empty(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(dim); setPadding(0, 16, 0, 0) })
     fun tabTo(i: Int) { tab = i; render() }
     fun render() {
@@ -138,7 +138,7 @@ class PluginsActivity : AppCompatActivity() {
         fun refresh(j: Map<String, Any?>) { holder.removeAllViews(); lastFace = faceView(c, strip, slot, j) { io.execute { @Suppress("UNCHECKED_CAST") val r = runCatching { c.racks(strip) }.getOrNull()
             @Suppress("UNCHECKED_CAST") val nj = ((r?.get("racks") as? List<Map<String, Any?>>)?.firstOrNull()?.get("slots") as? List<Map<String, Any?>>)?.firstOrNull { (it["slot"] as? Number)?.toInt() == slot }
             if (nj != null) ui.post { refresh(nj) } } }; holder.addView(lastFace) }
-        refresh(json); dlg.setView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(holder) }); dlg.setOnDismissListener { load() }; dlg.show()
+        refresh(json); dlg.setView(ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(holder) }); dlg.setOnDismissListener { load() }; dlg.show()
     }
     override fun onDestroy() { io.shutdownNow(); super.onDestroy() }
 }

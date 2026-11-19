@@ -50,13 +50,13 @@ class RtaView(ctx: android.content.Context) : View(ctx) {
         val w = width.toFloat(); val h = height.toFloat(); val padB = h * 0.09f; val padL = w * 0.085f; val plotH = h - padB; val bw = (w - padL) / 31f
         c.drawColor(0xFF0B0F15.toInt()); p.textSize = h * 0.045f; p.typeface = Typeface.MONOSPACE
         for (k in 0..4) { val db = top - range * k / 4; val y = plotH * k / 4f; p.color = 0xFF1E2733.toInt(); p.strokeWidth = 1f; c.drawLine(padL, y, w, y, p)
-            p.color = 0xFF8B98A8.toInt(); c.drawText(String.format("%.0f", db), 2f, minOf(plotH - 2f, y + p.textSize), p) }
+            p.color = 0xFFC2C7CF.toInt(); c.drawText(String.format("%.0f", db), 2f, minOf(plotH - 2f, y + p.textSize), p) }
         fun yOf(db: Double) = (plotH * ((top - db) / range)).toFloat().coerceIn(0f, plotH)
         for (i in 0 until 31) { val x = padL + i * bw
             val y = yOf(bands[i]); p.color = if (bands[i] > top - 6) 0xFFEF4444.toInt() else if (bands[i] > top - 20) 0xFFFBBF24.toInt() else 0xFF34D399.toInt()
             c.drawRect(x + 1, y, x + bw - 1, plotH, p)
             p.color = Color.WHITE; val hy = yOf(hold[i]); if (hold[i] > top - range) c.drawRect(x + 1, hy, x + bw - 1, hy + 2, p)
-            if (i % 3 == 2) { val f = SignalMath.thirdOctaveCentres[i]; p.color = 0xFF8B98A8.toInt(); val t = if (f >= 1000) String.format("%.0fk", f / 1000) else String.format("%.0f", f); c.drawText(t, x + bw / 2 - p.measureText(t) / 2, h - 3f, p) } }
+            if (i % 3 == 2) { val f = SignalMath.thirdOctaveCentres[i]; p.color = 0xFFC2C7CF.toInt(); val t = if (f >= 1000) String.format("%.0fk", f / 1000) else String.format("%.0f", f); c.drawText(t, x + bw / 2 - p.measureText(t) / 2, h - 3f, p) } }
     }
 }
 
@@ -65,7 +65,7 @@ class RtaView(ctx: android.content.Context) : View(ctx) {
 class ToolsActivity : AppCompatActivity() {
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var body: LinearLayout; private val tabs = ArrayList<Button>()
-    private val accent = Color.parseColor("#EA580C"); private val cyan = Color.parseColor("#00F2FF"); private val dim = Color.parseColor("#8B98A8")
+    private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF")
     var tool = 0; private set
     private var askedMic = false
     @Volatile private var micOn = false; private var micThread: Thread? = null
@@ -84,7 +84,7 @@ class ToolsActivity : AppCompatActivity() {
         listOf(R.string.tools_tuner, R.string.tools_spl, R.string.tools_gen, R.string.tools_rta).forEachIndexed { i, r -> row.addView(Button(this).apply { text = getString(r); setOnClickListener { show(i) } }.also { tabs.add(it) }) }
         root.addView(row)
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 16, 0, 0) }; root.addView(body)
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, Nav.Tab.TOOLS))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, Nav.Tab.TOOLS))
         show(intent.getIntExtra("tool", 0))
     }
 

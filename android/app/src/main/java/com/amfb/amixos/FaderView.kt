@@ -15,7 +15,7 @@ import com.amfb.amixos.remote.DaemonClient
 /** A console fader: a vertical track with the dB scale (+10 .. -∞, the console's fader law), a cap you drag, and the channel's meter
  *  beside it (green / yellow / red, with a peak hold). progress 0..1000 is the fader position; level 0..1000 the meter.
  *  Drag moves relative to where the finger went down (no jump); a double tap puts the fader at 0 dB. */
-class FaderView(ctx: Context, private val accent: Int = 0xFFEA580C.toInt()) : View(ctx) {
+class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : View(ctx) {
     var progress = 750; set(v) { field = v.coerceIn(0, 1000); invalidate() }
     var level = 0; set(v) { field = v.coerceIn(0, 1000); if (v >= hold) { hold = v; holdAt = System.currentTimeMillis() }; invalidate() }
     var clip = false; set(v) { field = v; invalidate() }
@@ -24,7 +24,7 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFEA580C.toInt()) : Vi
     private var hold = 0; private var holdAt = 0L
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF05080C.toInt() }
     private val tick = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3A4656.toInt(); strokeWidth = 2f }
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8B98A8.toInt(); textSize = 22f; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFC2C7CF.toInt(); textSize = 22f; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
     private val cap = Paint(Paint.ANTI_ALIAS_FLAG); private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 4f }
     private val meter = Paint(); private val holdP = Paint().apply { color = 0xFFFFFFFF.toInt() }; private val clipP = Paint().apply { color = 0xFFEF4444.toInt() }
     private val capH = 64f; private val pad = 40f
@@ -51,8 +51,8 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFEA580C.toInt()) : Vi
         clipP.color = if (clip) 0xFFEF4444.toInt() else 0xFF3A1D1D.toInt(); c.drawRoundRect(mx - 3, pad - 22, mx + mw + 3, pad - 8, 4f, 4f, clipP)
         // the cap
         val y = yOf(progress); val r = capRect.apply { set(tx - w * 0.3f, y - capH / 2, tx + w * 0.3f, y + capH / 2) }
-        cap.color = 0xFF2A3342.toInt(); c.drawRoundRect(r, 8f, 8f, cap); cap.color = 0xFF3B4658.toInt(); topRect.set(r.left, r.top, r.right, r.top + capH / 3); c.drawRoundRect(topRect, 8f, 8f, cap)
-        cap.color = 0xFF1B222E.toInt(); for (k in listOf(-0.28f, 0.28f)) c.drawRect(r.left + 10, y + capH * k - 1.5f, r.right - 10, y + capH * k + 1.5f, cap)   // grip lines
+        cap.color = 0xFF42474E.toInt(); c.drawRoundRect(r, 8f, 8f, cap); cap.color = 0xFF3B4658.toInt(); topRect.set(r.left, r.top, r.right, r.top + capH / 3); c.drawRoundRect(topRect, 8f, 8f, cap)
+        cap.color = 0xFF272A2F.toInt(); for (k in listOf(-0.28f, 0.28f)) c.drawRect(r.left + 10, y + capH * k - 1.5f, r.right - 10, y + capH * k + 1.5f, cap)   // grip lines
         line.color = accent; c.drawLine(r.left + 6, y, r.right - 6, y, line)
     }
     private var downY = 0f; private var downP = 0; private var lastTap = 0L

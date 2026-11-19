@@ -19,7 +19,7 @@ import androidx.appcompat.app.AppCompatActivity
  *  · LATENCY (buffer to milliseconds, round trip) · STORAGE (recording size). */
 class CalculatorActivity : AppCompatActivity() {
     private lateinit var body: LinearLayout
-    private val accent = Color.parseColor("#EA580C"); private val cyan = Color.parseColor("#00F2FF"); private val dim = Color.parseColor("#8B98A8")
+    private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF")
     private val tools = listOf("DELAY", "ALIGN", "dB", "FREQUENCY", "LATENCY", "STORAGE")
     private val tabs = ArrayList<Button>()
     var current = 0; private set
@@ -33,7 +33,7 @@ class CalculatorActivity : AppCompatActivity() {
         root.addView(HorizontalScrollView(this).apply { addView(row) })
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 16, 0, 0) }
         root.addView(body)
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
         show(intent.getIntExtra("tool", 0))
     }
 

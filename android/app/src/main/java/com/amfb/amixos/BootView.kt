@@ -25,7 +25,7 @@ class BootView(context: Context, private val done: () -> Unit = {}) : View(conte
     var t = 0f; set(v) { field = v.coerceIn(0f, 1f); invalidate() }
     private var anim: ValueAnimator? = null; private var finished = false
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val bg = Color.parseColor("#0F141C")
+    private val bg = Color.parseColor("#111418")
     // the icon's colours: caps white, white, amber; tracks violet, pink, orange (top -> bottom of each gradient)
     private val trackTop = intArrayOf(Color.parseColor("#C4B5FD"), Color.parseColor("#F9A8D4"), Color.parseColor("#FCD34D"))
     private val trackBot = intArrayOf(Color.parseColor("#7C3AED"), Color.parseColor("#DB2777"), Color.parseColor("#F97316"))
@@ -72,7 +72,7 @@ class BootView(context: Context, private val done: () -> Unit = {}) : View(conte
             c.drawRoundRect(RectF(X(colX[i] - 1.5f), Y(cy), X(colX[i] + 1.5f), Y(75f)), 1.5f * s, 1.5f * s, p); p.shader = null
             p.color = capCol[i]; p.alpha = alpha
             c.drawRoundRect(RectF(X(colX[i] - 8.3f), Y(cy - 3f), X(colX[i] + 8.3f), Y(cy + 3f)), 1.8f * s, 1.8f * s, p)
-            p.color = Color.parseColor("#1E293B"); p.alpha = alpha
+            p.color = Color.parseColor("#272A2F"); p.alpha = alpha
             c.drawRect(X(colX[i] - 4f), Y(cy - 0.5f), X(colX[i] + 4f), Y(cy + 0.5f), p)
         }
         // the line through the caps, drawn left to right
@@ -86,7 +86,7 @@ class BootView(context: Context, private val done: () -> Unit = {}) : View(conte
         val tx = easeOut(stage(t, 0.46f, 0.70f))
         if (tx > 0f) { p.color = Color.parseColor("#EA580C"); p.alpha = (tx * alpha).toInt(); p.textAlign = Paint.Align.CENTER; p.typeface = Typeface.DEFAULT_BOLD
             p.textSize = 0.11f * min(w, h); p.letterSpacing = 0.18f + (1f - tx) * 0.25f; c.drawText("AMF X1", w / 2, Y(92f) + p.textSize * 0.4f, p)
-            p.color = Color.parseColor("#8B98A8"); p.alpha = (tx * alpha).toInt(); p.textSize = 0.035f * min(w, h); p.letterSpacing = 0.3f; p.typeface = Typeface.MONOSPACE
+            p.color = Color.parseColor("#C2C7CF"); p.alpha = (tx * alpha).toInt(); p.textSize = 0.035f * min(w, h); p.letterSpacing = 0.3f; p.typeface = Typeface.MONOSPACE
             c.drawText("BY AMFB AUDIO", w / 2, Y(92f) + 0.11f * min(w, h) * 0.4f + p.textSize * 2.2f, p); p.letterSpacing = 0f }
         // the meter row: each bar rises, peaks and settles at its own level
         val m = stage(t, 0.30f, 0.86f)

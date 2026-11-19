@@ -43,12 +43,12 @@ object Prefs {
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var box: LinearLayout
-    private val accent = Color.parseColor("#EA580C"); private val dim = Color.parseColor("#8B98A8")
+    private val accent = Color.parseColor("#FFB590"); private val dim = Color.parseColor("#C2C7CF")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 48) }
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(box) }, Nav.Tab.SETTINGS))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(box) }, Nav.Tab.SETTINGS))
         title(getString(R.string.settings))
         val r = Prefs.remote(this); val l = Prefs.local(this)
 
@@ -87,7 +87,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun title(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD); setPadding(0, 0, 0, 16) })
-    private fun section(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); textSize = 13f; typeface = Typeface.MONOSPACE; setPadding(0, 36, 0, 8); letterSpacing = 0.1f })
+    private fun section(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); textSize = 13f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, 36, 0, 8); letterSpacing = 0.1f })
     private fun note(t: String) = TextView(this).apply { text = t; setTextColor(dim); textSize = 12f }
     private fun info(label: String, value: String) {
         if (label.isNotEmpty()) box.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 15f; setPadding(0, 12, 0, 0) })

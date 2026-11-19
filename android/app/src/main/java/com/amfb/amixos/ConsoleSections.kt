@@ -27,7 +27,7 @@ import java.util.concurrent.Executors
 abstract class ConsoleSection : AppCompatActivity() {
     protected var client: DaemonClient? = null
     protected val io = Executors.newSingleThreadExecutor(); protected val ui = Handler(Looper.getMainLooper())
-    protected val accent = Color.parseColor("#EA580C"); protected val dim = Color.parseColor("#8B98A8"); protected val cyan = Color.parseColor("#22D3EE")
+    protected val accent = Color.parseColor("#FFB590"); protected val dim = Color.parseColor("#C2C7CF"); protected val cyan = Color.parseColor("#22D3EE")
     protected lateinit var root: LinearLayout; protected lateinit var note: TextView
     abstract val titleRes: Int
     abstract fun build()
@@ -40,7 +40,7 @@ abstract class ConsoleSection : AppCompatActivity() {
         note = TextView(this).apply { setTextColor(dim); textSize = 12f; setPadding(0, 6, 0, 10); text = if (client == null) getString(R.string.eq_offline) else "" }
         root.addView(note)
         build()
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
     }
     protected fun send(f: (DaemonClient) -> Unit) { val c = client ?: return; io.execute { runCatching { f(c) }.onFailure { e -> ui.post { note.text = e.message ?: e.toString() } } } }
     override fun onDestroy() { io.shutdown(); super.onDestroy() }
@@ -58,8 +58,8 @@ class SamplePadsActivity : ConsoleSection() {
     internal var view = "PADS"; internal var bank = 0; internal var family = ""; internal var selPad = 1; internal var version = -1
     private var cat = ""; private lateinit var grid: GridLayout; private lateinit var tabs: LinearLayout; private lateinit var sub: LinearLayout
     internal var lastPlayed = 0; internal var lastPad = 0; internal var lastSfx = 0
-    private val colors = mapOf("Drums" to "#EA580C", "Percussion" to "#FBBF24", "Bass" to "#A78BFA", "Leads" to "#22D3EE", "Pads" to "#34D399", "Keys" to "#60A5FA", "FX" to "#F472B6")
-    private val padColors = listOf("#F59E0B", "#22D3EE", "#34D399", "#A78BFA", "#F472B6", "#FB7185", "#38BDF8", "#94A3B8")
+    private val colors = mapOf("Drums" to "#FFB590", "Percussion" to "#FBBF24", "Bass" to "#A78BFA", "Leads" to "#22D3EE", "Pads" to "#34D399", "Keys" to "#60A5FA", "FX" to "#F472B6")
+    private val padColors = listOf("#F59E0B", "#22D3EE", "#34D399", "#A78BFA", "#F472B6", "#FB7185", "#38BDF8", "#C2C7CF")
     private val poll = object : Runnable { override fun run() { checkPads(); ui.postDelayed(this, 2000) } }
     override fun build() {
         tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; root.addView(HorizontalScrollView(this).apply { addView(tabs); isHorizontalScrollBarEnabled = false })
@@ -107,14 +107,14 @@ class SamplePadsActivity : ConsoleSection() {
     private fun flash(v: android.view.View) { v.alpha = 0.5f; v.animate().alpha(1f).setDuration(250).start(); if (Prefs.haptics(this)) v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
     internal fun showGrid() { grid.removeAllViews(); val w = (resources.displayMetrics.widthPixels - 48) / 4
         when (view) {
-            "PADS" -> for (p in pads) grid.addView(tile("${p.n}${if (p.custom) " ✎" else ""}", if (p.kind == "empty") getString(R.string.pads_empty) else p.name, padColors.getOrElse(p.color) { "#94A3B8" }, p.kind == "empty", w).apply {
+            "PADS" -> for (p in pads) grid.addView(tile("${p.n}${if (p.custom) " ✎" else ""}", if (p.kind == "empty") getString(R.string.pads_empty) else p.name, padColors.getOrElse(p.color) { "#C2C7CF" }, p.kind == "empty", w).apply {
                 if (p.n == selPad) (background as GradientDrawable).setStroke(6, Color.WHITE)
                 setOnClickListener { v -> lastPad = p.n; selPad = p.n; flash(v); if (p.kind != "empty") send { it.playPad(p.n) } else note.text = getString(R.string.pads_empty_help) }
                 setOnLongClickListener { selPad = p.n; editPad(p); true } })
             "EFFECTS" -> for (e in effects.filter { it.family == family }) grid.addView(tile("#${e.id}", e.name, "#22D3EE", false, w).apply {
                 setOnClickListener { v -> lastSfx = e.id; flash(v); send { it.playSfx(e.id) } }
                 setOnLongClickListener { putOnPad("sfx:${e.id}", e.name); true } })
-            else -> for (s in samples.filter { cat.isEmpty() || it.category == cat }) grid.addView(tile("${s.id}", s.name, colors[s.category] ?: "#94A3B8", false, w).apply {
+            else -> for (s in samples.filter { cat.isEmpty() || it.category == cat }) grid.addView(tile("${s.id}", s.name, colors[s.category] ?: "#C2C7CF", false, w).apply {
                 setOnClickListener { v -> lastPlayed = s.id; flash(v); send { it.sample(s.id) } }
                 setOnLongClickListener { putOnPad("sample:${s.id}", s.name); true } })
         }
@@ -235,12 +235,12 @@ class LevelsView(ctx: Context) : View(ctx) {
         val bw = width.toFloat() / n; val h = height - 24f
         p.color = Color.parseColor("#233040"); for (db in listOf(-6, -12, -24, -48)) { val y = h * (-db / 60f); c.drawLine(0f, y, width.toFloat(), y, p) }
         levels.forEachIndexed { i, (pk, rms) -> val x = i * bw + bw * 0.15f; val w = bw * 0.7f; val master = i >= n - 2
-            p.color = Color.parseColor("#1A2230"); c.drawRect(x, 0f, x + w, h, p)
+            p.color = Color.parseColor("#272A2F"); c.drawRect(x, 0f, x + w, h, p)
             val ypk = h * (1 - pos(pk)); val yr = h * (1 - pos(rms))
-            p.color = if (pos(pk) > 0.95f) Color.parseColor("#EF4444") else if (pos(pk) > 0.8f) Color.parseColor("#FBBF24") else if (master) Color.parseColor("#EA580C") else Color.parseColor("#22D3EE")
+            p.color = if (pos(pk) > 0.95f) Color.parseColor("#EF4444") else if (pos(pk) > 0.8f) Color.parseColor("#FBBF24") else if (master) Color.parseColor("#FFB590") else Color.parseColor("#22D3EE")
             c.drawRect(x, ypk, x + w, h, p); p.color = Color.argb(140, 255, 255, 255); c.drawRect(x + w * 0.3f, yr, x + w * 0.7f, h, p)
             if (clips.getOrElse(i) { false }) { p.color = Color.parseColor("#EF4444"); c.drawRect(x, 0f, x + w, 6f, p) }
-            p.color = Color.parseColor("#8B98A8"); p.textSize = 18f; p.textAlign = android.graphics.Paint.Align.CENTER
+            p.color = Color.parseColor("#C2C7CF"); p.textSize = 18f; p.textAlign = android.graphics.Paint.Align.CENTER
             c.drawText(if (i == n - 2) "L" else if (i == n - 1) "R" else "${i + 1}", x + w / 2, height - 4f, p) }
     }
 }

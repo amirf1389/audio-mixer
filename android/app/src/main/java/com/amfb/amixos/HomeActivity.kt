@@ -42,7 +42,7 @@ class HomeActivity : AppCompatActivity() {
             Tile("PluginsActivity", "⧉", R.string.home_plugins, R.string.home_plugins_sub, v) { Nav.go(this, PluginsActivity::class.java) },
             Tile("MixdownActivity", "⊕", R.string.home_mixdown, R.string.home_mixdown_sub, o) { Nav.go(this, MixdownActivity::class.java) },
             Tile("DevicesActivity", "⇄", R.string.home_devices, R.string.home_devices_sub, c) { Nav.go(this, DevicesActivity::class.java) },
-            Tile("SettingsActivity", "⚙", R.string.home_settings, R.string.home_settings_sub, Color.parseColor("#94A3B8")) { Nav.go(this, SettingsActivity::class.java) })
+            Tile("SettingsActivity", "⚙", R.string.home_settings, R.string.home_settings_sub, Color.parseColor("#C2C7CF")) { Nav.go(this, SettingsActivity::class.java) })
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +96,7 @@ class HomeActivity : AppCompatActivity() {
     }
     private fun chip(parent: LinearLayout, text: String, color: Int, f: () -> Unit) = parent.addView(TextView(this).apply {
         this.text = text; setTextColor(color); textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setPadding(26, 16, 26, 16); isClickable = true; setOnClickListener { f() }
-        background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 40f; setColor(Color.parseColor("#1A2230")); setStroke(2, Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))) }
+        background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 40f; setColor(Color.parseColor("#272A2F")); setStroke(2, Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))) }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 14, 0) } })
     // ---- THIS PHONE: the local mixer's card. What it is set to, OPEN, whether the app starts in it, one-tap chains for CH 1, and the
     //      other things the phone does by itself (recorder, mixdown, tools, its inputs and outputs).
@@ -181,7 +181,7 @@ class HomeActivity : AppCompatActivity() {
         live = com.amfb.amixos.remote.DaemonClient(com.amfb.amixos.remote.Endpoint(host, (p.getString("port", null) ?: Prefs.defaultPort(this).toString()).toIntOrNull() ?: 8765, tok)); ui.post(poll)
     }
     private fun showLive() {
-        dot?.text = if (online) "● " + getString(R.string.home_online) else "○ " + getString(R.string.home_offline); dot?.setTextColor(Color.parseColor(if (online) "#34D399" else "#8B98A8"))
+        dot?.text = if (online) "● " + getString(R.string.home_online) else "○ " + getString(R.string.home_offline); dot?.setTextColor(Color.parseColor(if (online) "#34D399" else "#C2C7CF"))
         liveText?.text = if (online) liveState else getString(R.string.home_offline_sub); meterView?.set(if (online) meterL else 0.0, if (online) meterR else 0.0)
     }
     /** The console card: from what the remote saved at its last connection (nothing is fetched here). */
@@ -219,6 +219,6 @@ class MeterBar(c: android.content.Context) : View(c) {
     private var l = 0.0; private var r = 0.0; private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
     fun set(left: Double, right: Double) { l = left; r = right; invalidate() }
     private fun pos(v: Double) = if (v <= 1e-6) 0f else ((20 * Math.log10(v) + 60) / 60).toFloat().coerceIn(0f, 1f)
-    override fun onDraw(cv: android.graphics.Canvas) { val h = height / 2f - 3; for ((i, v) in listOf(l, r).withIndex()) { val y = i * (h + 6); p.color = Color.parseColor("#1E293B"); cv.drawRoundRect(0f, y, width.toFloat(), y + h, 6f, 6f, p)
+    override fun onDraw(cv: android.graphics.Canvas) { val h = height / 2f - 3; for ((i, v) in listOf(l, r).withIndex()) { val y = i * (h + 6); p.color = Color.parseColor("#272A2F"); cv.drawRoundRect(0f, y, width.toFloat(), y + h, 6f, 6f, p)
         val x = pos(v); p.color = Color.parseColor(if (x > 0.95f) "#EF4444" else if (x > 0.8f) "#FBBF24" else "#34D399"); cv.drawRoundRect(0f, y, width * x, y + h, 6f, 6f, p) } }
 }
