@@ -2,6 +2,19 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.4",
+      "date": "2026-11-19",
+      "title": "1.24.0.4: PEAK REMOVER, AmF X1 Mixer app with players, new Android look",
+      "items": [
+        "NEW · PEAK REMOVER: an insert effect that pulls down only short peaks (clicks, pops, hits) with SENSITIVITY, AMOUNT, RELEASE and LISTEN; steady sound passes unchanged (50 effects in all)",
+        "NEW · AmF X1 MIXER: the phone mixer as its own Android app, installed beside AmF X1, with MIXER, PLAYERS, TOOLS and SETTINGS",
+        "NEW · PLAYERS in AmF X1 Mixer: the official embedded player of YouTube, Spotify, TIDAL or Deezer from a pasted link; the song is not sent through the mixer and is not recorded",
+        "NEW · PHONE: NO PEAKS quick chain in the phone mixer",
+        "ENHANCEMENT · PHONE: a Material look on every screen (tonal surfaces, pill buttons, a navigation bar with a marker on the open tab)",
+        "FIX · The console could close by itself on NETWORK, DANTE + CLOCK when the list of sound cards or network clocks changed"
+      ]
+    },
+    {
       "version": "1.24.0.3",
       "date": "2026-11-19",
       "title": "1.24.0.3: ULTIMATE (300 channels), app capture, ping-pong delay, headroom mode",
