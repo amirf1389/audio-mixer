@@ -23,14 +23,22 @@ function build({ releases, flatUrls = false, version, base, notes = [], features
     // a channel build (1.22.1.0 Beta) names its Windows installers "<version>-beta"; both spellings are found
     'win-x64-exe': [`AmF-X1-${version}-setup.exe`, `AmF X1-${version}-beta.exe`, `AmF X1-${version}.exe`, `Audio Mixer-${version}.exe`], 'win-x64-msi': [`AudioMixer-${version}-beta-x64.msi`, `AudioMixer-${version}-x64.msi`], 'win-x86-msi': [`AudioMixer-${version}-beta-x86.msi`, `AudioMixer-${version}-x86.msi`],
     'linux-deb': `audio-mixer_${version}_all.deb`, 'linux-tar': `AudioMixer-${version}-linux.tar.gz`, 'macos': `AudioMixer-${version}-macos.tar.gz`, 'macos-dmg': `AudioMixer-${version}-macos.dmg`,
-    'android-apk': `AudioMixer-${version}-android.apk`, 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz`,
+    // the Android packages carry a build number (AmF-X1-<version>-b<N>-android.apk): the highest build of this version is taken
+    'android-apk': [new RegExp('^AmF-X1-' + version.replace(/\./g, '\\.') + '-b(\\d+)-android\\.apk$'), `AudioMixer-${version}-android.apk`], 'android-mixer-apk': [new RegExp('^AmF-X1-Mixer-' + version.replace(/\./g, '\\.') + '-b(\\d+)-android\\.apk$')], 'ios-project': `AudioMixer-${version}-ios-xcode-project.tar.gz`,
     'win-asio-driver': `AudioMixer-${version}-asio-driver-windows.zip`,
     'win-x64-native': ['AmF X1.exe', `AudioMixer-${version}-native-windows-x64.exe`], 'win-x86-native': ['AmF X1 (32-bit).exe', `AudioMixer-${version}-native-windows-x86.exe`],   // AmF X1.exe --update (the old name is still found)
   };
   const files = {};
   for (const [key, names] of Object.entries(want)) {
     let name = null, f = null;
-    for (const n of [].concat(names)) { const c = releases ? path.join(releases, n) : findRelease(n, osOfKey(key)); if (c && fs.existsSync(c)) { name = n; f = c; break; } }
+    for (let n of [].concat(names)) {
+      if (n instanceof RegExp) {   // a name with a build number: the newest build in the folder
+        const dir = releases || path.join(ROOT, 'releases', osOfKey(key) || ''); let best = null;
+        try { for (const e of fs.readdirSync(dir)) { const m = n.exec(e); if (m && (!best || Number(m[1]) > best.b)) best = { e, b: Number(m[1]) }; } } catch (_) {}
+        if (best) { name = best.e; f = path.join(dir, best.e); break; }
+        continue;
+      }
+      const c = releases ? path.join(releases, n) : findRelease(n, osOfKey(key)); if (c && fs.existsSync(c)) { name = n; f = c; break; } }
     if (!f) continue;
     const rel = releases || flatUrls ? '' : path.relative(ROOT, path.dirname(f)).split(path.sep).map(encodeURIComponent).join('/') + '/';   // where the file really is (releases/<os>/ or platforms/<os>/releases/)
     files[key] = { name, url: `${base}/${rel}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
@@ -54,6 +62,17 @@ if (require.main === module) (async () => {
   try {
     const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
     const manifest = build({ version, base: arg(a, '--base', 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main'), notes: String(arg(a, '--notes', '')).split('|').filter(Boolean) });
+    // BUILD MANAGEMENT (no key needed): every package build runs --prepare. It writes the manifest of the packages just built, UNSIGNED, to
+    // releases/update.pending.json and says whether the published, signed update.json is behind. Installed consoles only take a manifest
+    // signed with the vendor key, so the release goes out to them when the vendor runs this script without --prepare (it asks for the key's PIN).
+    if (a.includes('--prepare') || a.includes('--check')) {
+      let live = null; try { live = JSON.parse(fs.readFileSync(path.join(ROOT, 'releases', 'update.json'), 'utf8')).payload; if (typeof live === 'string') live = JSON.parse(live); } catch (_) {}
+      const same = live && live.version === version && Object.entries(manifest.files).every(([k, f]) => live.files && live.files[k] && live.files[k].sha256 === f.sha256);
+      if (a.includes('--prepare')) { fs.writeFileSync(path.join(ROOT, 'releases', 'update.pending.json'), JSON.stringify(manifest, null, 2) + '\n'); console.log(`releases/update.pending.json written (unsigned): version ${version}, ${Object.keys(manifest.files).join(', ')}`); }
+      console.log(same ? `releases/update.json is signed for ${version} and matches these packages: installed consoles are offered this release.`
+        : `releases/update.json is signed for ${live ? live.version : 'nothing'}; the packages are ${version}. Installed consoles are NOT offered ${version} until the vendor signs it:  node scripts/make-update.js`);
+      process.exit(a.includes('--check') && !same ? 2 : 0);
+    }
     const env = signManifest(manifest, await keyFor(vendorDir(a)));   // a locked key folder asks for the PIN
     fs.writeFileSync(path.join(ROOT, 'releases', 'update.json'), JSON.stringify(env, null, 2) + '\n');
     console.log(`releases/update.json signed: version ${version}, ${Object.keys(manifest.files).length} files`);
