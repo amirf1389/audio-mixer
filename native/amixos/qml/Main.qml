@@ -322,6 +322,8 @@ ApplicationWindow {
             else if (t === "Light look" || t === "Dark look") { const d = settings.darkTheme; it.triggered(); if (settings.darkTheme === d) bad.push(t); settings.darkTheme = d }
             else if (t.indexOf("Colour motion") === 0) { const c = settings.colorMotion; it.triggered(); if (settings.colorMotion === c) bad.push(t); settings.colorMotion = c }
             else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
+            else if (t.indexOf("LIVE MODE") === 0) { it.triggered(); if (!engine.liveMode) bad.push(t); engine.stopLive(); if (engine.liveMode) bad.push(t + " (stop)") }
+            else if (t.indexOf("AUTO LIVE") >= 0) { const d = apps.autoLive; it.triggered(); if (apps.autoLive === d) bad.push(t); apps.autoLive = d }
             else if (t === "Volume Enhancer") { it.triggered(); if (!enhancer.opened && !enhancer.visible) bad.push(t) }
             else if (t === "Master Analyzer") { it.triggered(); if (!analyzer.opened && !analyzer.visible) bad.push(t) }
             else if (t === "Mute all channels") { it.triggered(); if (!engine.stripAt(3, engine.stripTick).mute) bad.push(t) }

@@ -930,12 +930,13 @@ int main(int argc, char* argv[]) {
         if (!down || std::fabs(engine.masterDb() + 4.5) > 1e-6 || engine.masterMuted()) { std::fprintf(stderr, "amixos --smoke: master mute\n"); return 212; } engine.setMaster(0);
         { // LIVE MODE: START puts the voice chain on the channel, holds the master and switches the watchdog on; STOP takes out exactly what it put in
           auto kinds = [&](int st) { QStringList l; for (const QVariant& v : engine.plugins(st)) { const QString k = v.toMap()["kind"].toString(); if (!k.isEmpty()) l << k; } return l; };
-          const QStringList before = kinds(5); const int hWas = engine.headroomDb(); const bool wWas = engine.watchdog(); engine.setPlugin(5, 0, "fx:rider");   // the user's own VOICE RIDER is already there
+          const QStringList before = kinds(5); const int hWas = engine.headroomDb(); const bool wWas = engine.watchdog(); const bool hadRider = before.contains("fx:rider");
+          const int riderSlot = engine.addToRack(5, "fx:rider");   // the user's own VOICE RIDER is already there (the channel may carry other effects from the tests before)
           const QStringList mine = kinds(5); engine.startLive(5); const QStringList on = kinds(5);
           const bool chain = on.contains("fx:clean") && on.contains("fx:automiceq") && on.contains("fx:peakremover") && on.count("fx:rider") == 1 && engine.liveMode() && engine.liveStrip() == 5 && engine.headroomDb() >= 3 && engine.watchdog();
           const bool twice = engine.startLive(2).contains("already") && engine.liveStrip() == 5;
           engine.stopLive(); const QStringList off = kinds(5); const bool back = off == mine && !engine.liveMode() && engine.headroomDb() == hWas && engine.watchdog() == wWas;
-          engine.setPlugin(5, 0, QString()); const bool clean = kinds(5) == before;
+          if (!hadRider && riderSlot >= 0) engine.setPlugin(5, riderSlot, QString()); const bool clean = kinds(5) == before;
           { // AUTO LIVE: a streaming program in the list of running programs starts LIVE MODE, once per run of that program; other programs do not
             const bool names = Apps::streamAppOf("TikTok LIVE Studio.exe") == "TikTok LIVE Studio" && Apps::streamAppOf("obs64.exe") == "OBS Studio" && Apps::streamAppOf("OBS") == "OBS Studio" && Apps::streamAppOf("Streamlabs Desktop.exe") == "Streamlabs"
               && Apps::streamAppOf("jobs.exe").isEmpty() && Apps::streamAppOf("chrome.exe").isEmpty() && Apps::streamAppOf("observer.exe").isEmpty() && Apps::streamAppOf("").isEmpty();
