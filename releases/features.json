@@ -2,6 +2,24 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.3",
+      "date": "2026-11-19",
+      "title": "1.24.0.3: ULTIMATE (300 channels), app capture, ping-pong delay, headroom mode",
+      "items": [
+        "NEW · ULTIMATE edition: 300 channels in pages of 16; a channel with no input uses no processor time",
+        "NEW · CHANNEL EXTEND: a signed pack adds 30 channels to PRO, STUDIO or MASTER on one computer (up to 300)",
+        "NEW · PING-PONG DELAY: L TIME, R TIME, FEEDBACK, TONE, SPREAD and LOW CUT, with 300 presets of its own (600 presets in all)",
+        "NEW · APP CAPTURE: up to 8 programs at once, each on its own strip, picked on a strip's INPUT, on MEDIA or in a picker with window pictures; a live picture of a captured program's window",
+        "NEW · WINDOWS SOUND: any Windows recording device on its own strip beside the sound card, its properties as Windows reports them, buttons for Windows' own sound panels",
+        "NEW · HEADROOM MODE on MASTERING: the master is held under -3, -6, -9 or -12 dBFS",
+        "NEW · SOFTWARE UPDATE notice: a banner (UPDATE NOW, LATER, SKIP THIS VERSION), a dot on the menu, one Windows notification per version",
+        "NEW · PHONE: THIS PHONE card on HOME and QUICK CHAINS (VOICE, PODCAST, LIVE STREAM, KARAOKE, SINGER) in the phone mixer",
+        "FIX · A network input kept on a strip is no longer lost when the console is loaded again",
+        "FIX · REC arm and recall safe work for every channel, not only the first 32",
+        "ENHANCEMENT · The MEDIA page scrolls when its panels need more room"
+      ]
+    },
+    {
       "version": "1.24.0.2",
       "date": "2026-11-18",
       "title": "Patch 1.24.0.2: features, fixes, enhancements, security",
