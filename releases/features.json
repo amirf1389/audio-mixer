@@ -13,7 +13,12 @@
         "NEW · RESPONSIVE zoom (SETTINGS, Interface zoom): the console is drawn as large as the screen allows, on any screen",
         "ENHANCEMENT · AUTO zoom now also enlarges the console on a screen of 14 inches or less (a 14-inch laptop at 1920 x 1080 and 100 % is drawn 25 % larger); larger monitors stay as Windows draws them",
         "ENHANCEMENT · Interface zoom can be fixed at 110, 125 or 150 % as well",
-        "FIX · The window opens maximised when it does not fit the screen as designed, instead of hanging over the edges"
+        "FIX · The window opens maximised when it does not fit the screen as designed, instead of hanging over the edges",
+        "SECURITY · Sound path audit: ASIO stop can no longer be lost during a driver reset (a stream could keep running into a console that was closing); the device is fully closed before its buffers are rebuilt; a device that did not open is not kept",
+        "SECURITY · Windows' own audio library is loaded from the Windows system folder only; block sizes and sample rates that make no sense are refused before a device is opened",
+        "FIX · ASIO: other drivers are not probed while an ASIO stream is open; the channel names and formats are read safely during a driver reset",
+        "FIX · WASAPI exclusive mode: a device that grants another buffer size than the one asked for now says so instead of opening a silent stream",
+        "FIX · DirectSound, input only: one block per real period (every other block used to be silence)"
       ]
     },
     {

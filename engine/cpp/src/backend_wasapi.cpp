@@ -87,7 +87,7 @@ class ActivateDone final : public IActivateAudioInterfaceCompletionHandler {
 // loaded at run time (older Windows: a clear error)
 HRESULT activateProcessLoopback(IAudioClient** ac, std::string& err, DWORD pid = 0) {
   using ActivateFn = HRESULT(WINAPI*)(LPCWSTR, REFIID, PROPVARIANT*, IActivateAudioInterfaceCompletionHandler*, IActivateAudioInterfaceAsyncOperation**);
-  HMODULE mm = LoadLibraryW(L"Mmdevapi.dll"); const auto fn = mm ? reinterpret_cast<ActivateFn>(reinterpret_cast<void*>(GetProcAddress(mm, "ActivateAudioInterfaceAsync"))) : nullptr;
+  static const HMODULE mm = LoadLibraryExW(L"mmdevapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);   /* Windows' own copy only (never one beside the program), loaded once */ const auto fn = mm ? reinterpret_cast<ActivateFn>(reinterpret_cast<void*>(GetProcAddress(mm, "ActivateAudioInterfaceAsync"))) : nullptr;
   if (!fn) { err = "computer sound capture needs Windows 10 version 2004 or later"; return E_NOTIMPL; }
   AmActivationParams prm{}; prm.ActivationType = kActivationProcessLoopback; prm.ProcessLoopbackParams.TargetProcessId = pid ? pid : GetCurrentProcessId(); prm.ProcessLoopbackParams.ProcessLoopbackMode = pid ? kIncludeTree : kExcludeTree;
   PROPVARIANT pv; PropVariantInit(&pv); pv.vt = VT_BLOB; pv.blob.cbSize = sizeof prm; pv.blob.pBlobData = reinterpret_cast<BYTE*>(&prm);
@@ -216,6 +216,9 @@ class WasapiBackend : public Backend {
       }
       dev->Release();
       if (FAILED(r)) { err = hr("Initialize (exclusive)", r) + (r == AUDCLNT_E_DEVICE_IN_USE ? ": another program holds the device" : r == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED ? ": exclusive mode is switched off for this device in the Windows sound settings" : ""); return false; }
+      // an exclusive, event-driven stream is handed over one whole device buffer at a time: when the device grants another size than the
+      // block asked for, the loop below could never fill it (silence, or every write refused). Say so instead of opening a dead stream.
+      { UINT32 got = 0; if (SUCCEEDED((*ac)->GetBufferSize(&got)) && got != cfg_.frames) { err = "exclusive mode: this device works in blocks of " + std::to_string(got) + " frames at this rate, not " + std::to_string(cfg_.frames) + ". Set the buffer to " + std::to_string(got) + " frames, or use shared mode."; return false; } }
     }
     r = flow == eRender && !loop ? (*ac)->GetService(kIidRenderClient, reinterpret_cast<void**>(rc)) : (*ac)->GetService(kIidCaptureClient, reinterpret_cast<void**>(cc));   // a loopback reads the render endpoint through a CAPTURE client (asking it for a render client into a null pointer was the "GetService failed (0x80004003)" of APP AUDIO)
     if (FAILED(r)) { err = hr("GetService", r); return false; }
@@ -242,7 +245,8 @@ class WasapiBackend : public Backend {
         }
       }
       UINT32 pad = 0, room = bufFrames;
-      if (out_ && SUCCEEDED(out_->GetCurrentPadding(&pad))) room = bufFrames - pad;
+      if (out_ && cfg_.exclusive) room = bufFrames;   // exclusive: each event wants the whole buffer (the padding has no meaning there)
+      else if (out_ && SUCCEEDED(out_->GetCurrentPadding(&pad))) room = pad <= bufFrames ? bufFrames - pad : 0;
       else if (!out_) room = ci > 0 ? static_cast<UINT32>(fifo_[0].size() / cfg_.frames * cfg_.frames) : cfg_.frames;   // input only: every whole block the capture side has delivered (this loop used to start with room = 0, the callback never ran)
       while (room >= cfg_.frames && !stop_) {
         for (int c = 0; c < ci; ++c) { auto& q = fifo_[static_cast<std::size_t>(c)]; for (UINT32 i = 0; i < cfg_.frames; ++i) { if (q.size() == 0) { inBuf_[static_cast<std::size_t>(c)][i] = 0.0f; ++xruns_; } else inBuf_[static_cast<std::size_t>(c)][i] = q.pop(); } }
