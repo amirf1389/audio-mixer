@@ -9,16 +9,17 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import androidx.test.core.app.ApplicationProvider
 
-/** THE REMOTE'S FADERS VIEW: five channels beside the master (ten channels = two pages), and the switch to the KNOBS view. */
+/** THE REMOTE'S FADERS VIEW: four wide channels beside the master (swipe for the rest), and the switch to the KNOBS view. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
 class RemoteLayoutTest {
-    @Test fun fiveChannelsStandBesideTheMaster() {
-        val w = RemoteActivity.stripWidthFor(1233, 5)
-        assertTrue(5 * (w + 8) + 252 + 8 + 40 <= 1233)                      // five strips, their margins, the master and the page padding fit
-        assertTrue(6 * (w + 8) + 252 + 8 + 40 > 1233)                       // and a sixth does not: a page is exactly five channels
-        assertEquals(176, RemoteActivity.stripWidthFor(600, 5))              // a narrow screen: never thinner than a finger
-        assertTrue(RemoteActivity.stripWidthFor(2400, 5) > RemoteActivity.stripWidthFor(1233, 5))   // a tablet: wider faders, still five across
+    @Test fun fourChannelsStandBesideTheMaster() {
+        assertEquals(4, RemoteActivity.ACROSS); val w = RemoteActivity.stripWidthFor(1233, 4)
+        assertTrue(4 * (w + 8) + 252 + 8 + 40 <= 1233)                      // four strips, their margins, the master and the page padding fit
+        assertTrue(5 * (w + 8) + 252 + 8 + 40 > 1233)                       // and a fifth does not: a page is exactly four channels
+        assertTrue(w > RemoteActivity.stripWidthFor(1233, 5))                // each one wider than when five stood across
+        assertEquals(176, RemoteActivity.stripWidthFor(600, 4))              // a narrow screen: never thinner than a finger
+        assertTrue(RemoteActivity.stripWidthFor(2400, 4) > RemoteActivity.stripWidthFor(1233, 4))   // a tablet: wider faders, still four across
     }
     @Test fun theViewSwitchIsRemembered() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()

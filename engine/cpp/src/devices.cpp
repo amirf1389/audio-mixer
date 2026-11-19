@@ -78,6 +78,16 @@ const GUID kClsidDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0x
 const GUID kIidDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
 const GUID kIidClient = {0x1CB9AD4C, 0xDBFA, 0x4C32, {0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2}};
 const PROPERTYKEY kFormFactor = {{0x1DA5D803, 0xD492, 0x4EDD, {0x8C, 0x23, 0xE0, 0xC0, 0xFF, 0xEE, 0x7F, 0x0E}}, 0};      // PKEY_AudioEndpoint_FormFactor
+// A CAPTURE ENDPOINT IS NEVER TOUCHED BY THE LIST: its format is read from the endpoint's property store (PKEY_AudioEngine_DeviceFormat),
+// not by activating an audio client on the microphone. Listing or re-scanning the devices therefore cannot count as microphone use for
+// Windows privacy; a microphone is activated only when the user opens it.
+const PROPERTYKEY kDeviceFormat = {{0xF19F064D, 0x082C, 0x4E27, {0xBC, 0x73, 0x68, 0x82, 0xA1, 0xBB, 0x8E, 0x4C}}, 0};
+bool storeFormat(IPropertyStore* ps, int& ch, DWORD& rate) {
+  PROPVARIANT v; PropVariantInit(&v); bool ok = false;
+  if (SUCCEEDED(ps->GetValue(kDeviceFormat, &v)) && v.vt == VT_BLOB && v.blob.cbSize >= sizeof(WAVEFORMATEX) && v.blob.pBlobData) {
+    WAVEFORMATEX f; std::memcpy(&f, v.blob.pBlobData, sizeof f); if (f.nChannels > 0 && f.nSamplesPerSec > 0) { ch = f.nChannels; rate = f.nSamplesPerSec; ok = true; } }
+  PropVariantClear(&v); return ok;
+}
 const PROPERTYKEY kFriendlyName = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 14};   // PKEY_Device_FriendlyName
 
 std::string utf8(const wchar_t* w) {
@@ -126,17 +136,19 @@ void addWasapi(std::vector<DeviceInfo>& out) {
       IMMDevice* d = nullptr;
       if (FAILED(col->Item(i, &d))) continue;
       DeviceInfo info; info.backend = "wasapi"; info.id = endpointId(d); int form = -1;
+      int sCh = 2; DWORD sRate = 48000; bool gotFmt = false;
       IPropertyStore* ps = nullptr;
       if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) {
         PROPVARIANT v; PropVariantInit(&v);
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &v)) && v.vt == VT_LPWSTR) info.name = utf8(v.pwszVal);
         PropVariantClear(&v); PropVariantInit(&v);
         if (SUCCEEDED(ps->GetValue(kFormFactor, &v)) && v.vt == VT_UI4) form = static_cast<int>(v.ulVal);
-        PropVariantClear(&v); ps->Release();
+        PropVariantClear(&v); if (flow == eCapture) gotFmt = storeFormat(ps, sCh, sRate); ps->Release();
       }
       int ch = 2;
+      if (flow == eCapture) { if (gotFmt) ch = sCh; info.defaultRate = gotFmt ? sRate : 48000; info.sampleRates.push_back(static_cast<double>(info.defaultRate)); }
       IAudioClient* ac = nullptr;
-      if (SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) {
+      if (flow == eRender && SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) {
         WAVEFORMATEX* f = nullptr;
         if (SUCCEEDED(ac->GetMixFormat(&f)) && f) {
           ch = f->nChannels; info.defaultRate = f->nSamplesPerSec;
@@ -194,8 +206,8 @@ std::vector<EndpointInfo> wasapiEndpoints() {
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &pv)) && pv.vt == VT_LPWSTR) e.name = utf8(pv.pwszVal);
         PropVariantClear(&pv); PropVariantInit(&pv);
         if (SUCCEEDED(ps->GetValue(kFormFactor, &pv)) && pv.vt == VT_UI4) form = static_cast<int>(pv.ulVal);
-        PropVariantClear(&pv); ps->Release(); }
-      if (st == DEVICE_STATE_ACTIVE) { IAudioClient* ac = nullptr;   // only an active endpoint can say its format
+        PropVariantClear(&pv); if (flow == eCapture) { int c = 0; DWORD r = 0; if (storeFormat(ps, c, r)) { e.channels = c; e.rate = r; } } ps->Release(); }
+      if (st == DEVICE_STATE_ACTIVE && flow == eRender) { IAudioClient* ac = nullptr;   // only an active endpoint can say its format
         if (SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) { WAVEFORMATEX* f = nullptr;
           if (SUCCEEDED(ac->GetMixFormat(&f)) && f) { e.channels = f->nChannels; e.rate = f->nSamplesPerSec; CoTaskMemFree(f); } ac->Release(); } }
       if (e.name.empty()) e.name = e.id;

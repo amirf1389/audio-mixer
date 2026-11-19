@@ -335,6 +335,41 @@ int main(int argc, char* argv[]) {
         stallMs = 0; QElapsedTimer hb; hb.start(); qint64 last = 0;
         while (hb.elapsed() < 450) { QCoreApplication::processEvents(QEventLoop::AllEvents, 5); const qint64 now = hb.elapsed(); stallMs = std::max(stallMs, double(now - last)); last = now; QThread::msleep(2); }
         stallMs = std::max(stallMs, blockMs); };
+      if (qEnvironmentVariableIsSet("AMIX_BENCH_FIT")) {   // BUTTON AUDIT: every page at several window sizes; a clickable area cut off by the window or its panel, or lying on another one, is listed
+        const QList<QSize> sizes{{1380, 860}, {1920, 1010}, {1600, 812}, {1280, 700}, {1100, 640}}; int found = 0; long long checked = 0; QStringList seen;
+        auto isButton = [](QQuickItem* it) { return it->inherits("QQuickMouseArea") && it->objectName() != QLatin1String("scrollHintArea") && it->isEnabled() && it->width() >= 8 && it->height() >= 8 && it->width() <= 460 && it->height() <= 90; };
+        auto nameOf = [](QQuickItem* it) { QString n, l; for (QQuickItem* p = it; p && n.isEmpty(); p = p->parentItem()) { n = p->objectName(); if (l.isEmpty()) l = p->property("label").toString(); if (l.isEmpty()) l = p->property("text").toString(); }
+          if (l.isEmpty()) for (QQuickItem* sib : it->parentItem() ? it->parentItem()->childItems() : QList<QQuickItem*>{}) { l = sib->property("text").toString(); if (!l.isEmpty()) break; }
+          return (n.isEmpty() ? QStringLiteral("(no name)") : n) + (l.isEmpty() ? QString() : " \"" + l.left(28) + "\""); };
+        for (const QSize& sz : sizes) { win->setWidth(sz.width()); win->setHeight(sz.height());
+          QVariantList pages = engine.pages(); pages.prepend(QVariantMap{{"id", "mixer"}});
+          for (const QVariant& v : pages) { const QString id = v.toMap().value("id").toString(); double b = 0, st = 0; openPage(id, b, st);
+            const QRectF winR(0, 0, win->width(), win->height()); QList<QPair<QQuickItem*, QRectF>> all;
+            auto report = [&](QQuickItem* it, const QString& why) { ++found; const QString key = id + "|" + nameOf(it) + "|" + why.section(' ', 0, 3);
+              if (!seen.contains(key)) { seen << key; std::printf("amixos --bench: FIT %dx%d [%s] %s: %s\n", sz.width(), sz.height(), qPrintable(id), qPrintable(nameOf(it)), qPrintable(why)); } };
+            std::function<void(QQuickItem*, QRectF, bool)> walk = [&](QQuickItem* it, QRectF clip, bool scrolls) {
+              if (!it->isVisible() || it->opacity() <= 0.01) return;
+              const QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+              if (isButton(it)) { ++checked;
+                if (!scrolls) { QString why;
+                  if (r.right() > clip.right() + 1.5) why = QStringLiteral("cut off on the right by %1 px").arg(qRound(r.right() - clip.right()));
+                  else if (r.left() < clip.left() - 1.5) why = QStringLiteral("cut off on the left by %1 px").arg(qRound(clip.left() - r.left()));
+                  else if (r.bottom() > clip.bottom() + 1.5) why = QStringLiteral("cut off at the bottom by %1 px").arg(qRound(r.bottom() - clip.bottom()));
+                  else if (r.top() < clip.top() - 1.5) why = QStringLiteral("cut off at the top by %1 px").arg(qRound(clip.top() - r.top()));
+                  if (!why.isEmpty()) report(it, why); }
+                if (r.intersects(clip)) all << qMakePair(it, r.intersected(clip)); }
+              const bool fl = it->inherits("QQuickFlickable"); QRectF c2 = clip; if (it->clip() || fl) c2 = clip.intersected(r);
+              for (QQuickItem* ch : it->childItems()) walk(ch, c2, scrolls || fl); };
+            walk(win->contentItem(), winR, false);
+            auto related = [](QQuickItem* a, QQuickItem* b) { QQuickItem* pa = a->parentItem(); QQuickItem* pb = b->parentItem(); if (pa == pb) return true;
+              for (QQuickItem* p = pb; p; p = p->parentItem()) if (p == pa) return true; for (QQuickItem* p = pa; p; p = p->parentItem()) if (p == pb) return true; return false; };
+            for (int x = 0; x < all.size(); ++x) for (int y = x + 1; y < all.size(); ++y) { const QRectF o = all[x].second.intersected(all[y].second); const double oa = o.width() * o.height();
+              if (o.width() <= 2 || o.height() <= 2 || oa < 0.2 * std::min(all[x].second.width() * all[x].second.height(), all[y].second.width() * all[y].second.height())) continue;
+              if (related(all[x].first, all[y].first)) continue;
+              report(all[x].first, QStringLiteral("lies on ") + nameOf(all[y].first)); } } }
+        std::printf("amixos --bench: FIT %lld clickable areas looked at\n", checked);
+        std::printf("amixos --bench: FIT %d button problems on %lld pages x %lld window sizes (%lld different)\n", found, static_cast<long long>(engine.pages().size() + 1), static_cast<long long>(sizes.size()), static_cast<long long>(seen.size()));
+        engine.stop(); return found ? 107 : 0; }
       if (qEnvironmentVariableIsSet("AMIX_BENCH_LEAK")) {   // which page keeps memory: each page opened 6 times (and the mixer between), memory after vs before
         // deferred deletes (an old page) are only delivered by a running event loop; this audit runs before app.exec(), so it delivers them
         // itself, as the real event loop does after every page switch (without this the audit itself would keep every old page alive)
@@ -690,6 +725,16 @@ int main(int argc, char* argv[]) {
         engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
         std::printf("amixos --smoke: BUFFER 8192 opens and runs %d %d (%.0f ms a block); 0 opens with 256 %d; 20000 frames refused %d\n", ok, at, lat, zero, huge);
         if (!ok || !at || !zero || !huge) { std::fprintf(stderr, "amixos --smoke: BUFFER 8192 failed\n"); return 105; } }
+      { // WINDOWS MICROPHONE PRIVACY: switched off in Windows, the console opens no microphone by itself and takes it back when allowed again
+        const auto was = engine.privacyNow; int answer = 1; engine.privacyNow = [&answer] { return answer; };
+        engine.stop(); engine.checkMicPrivacy(); const bool seen = engine.micPrivacyOff();
+        const bool openOff = engine.open("null", "", "", 48000, 256, 2, 2) && engine.deviceInputs() == 0 && engine.deviceOutputs() == 2 && engine.micOffNote().contains("Windows privacy"); engine.stop();
+        answer = -1; engine.checkMicPrivacy(); const bool unknownKeeps = engine.micPrivacyOff();          // Windows gives no answer: nothing changes
+        int changes = 0; const auto c = QObject::connect(&engine, &Engine::micPrivacyChanged, [&changes] { ++changes; });
+        answer = 0; engine.checkMicPrivacy(); engine.checkMicPrivacy(); const bool back = !engine.micPrivacyOff() && changes == 1;
+        const bool openOn = engine.open("null", "", "", 48000, 256, 2, 2) && engine.deviceInputs() == 2; QObject::disconnect(c); engine.privacyNow = was; engine.checkMicPrivacy();
+        std::printf("amixos --smoke: MIC PRIVACY off is seen %d, opens outputs only %d, no answer keeps it %d, allowed again once %d, the microphone is back %d\n", seen, openOff, unknownKeeps, back, openOn);
+        if (!seen || !openOff || !unknownKeeps || !back || !openOn) { std::fprintf(stderr, "amixos --smoke: MIC PRIVACY failed\n"); return 106; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);

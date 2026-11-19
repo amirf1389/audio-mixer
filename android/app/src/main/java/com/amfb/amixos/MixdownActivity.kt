@@ -38,7 +38,7 @@ import java.io.File
  *  channel-mixing processor sets each one's volume (mono files go to both sides). Nothing leaves the phone: the result is saved where
  *  the user picks. */
 @OptIn(UnstableApi::class)
-class MixdownActivity : AppCompatActivity() {
+class MixdownActivity : FitActivity() {
     private data class Track(val uri: Uri, val name: String, var volume: Float = 1f)
     private val tracks = mutableListOf<Track>()
     private lateinit var list: LinearLayout

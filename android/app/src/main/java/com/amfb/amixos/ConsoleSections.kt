@@ -24,7 +24,7 @@ import java.util.concurrent.Executors
 
 /** The console's sections on the phone that are not on the mixer screen: SAMPLE PADS, MASTERING and CONSOLE STATUS. Each talks to
  *  the console's remote service with the remembered pairing; without one they say so. */
-abstract class ConsoleSection : AppCompatActivity() {
+abstract class ConsoleSection : FitActivity() {
     protected var client: DaemonClient? = null
     protected val io = Executors.newSingleThreadExecutor(); protected val ui = Handler(Looper.getMainLooper())
     protected val accent = Color.parseColor("#FFB590"); protected val dim = Color.parseColor("#C2C7CF"); protected val cyan = Color.parseColor("#22D3EE")

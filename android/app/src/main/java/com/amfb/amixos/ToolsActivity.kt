@@ -62,7 +62,7 @@ class RtaView(ctx: android.content.Context) : View(ctx) {
 
 /** TOOLS on the phone itself (no console needed): TUNER (YIN pitch from the microphone), SOUND LEVEL (the microphone's level with a
  *  calibration offset, slow / fast, max hold) and SIGNAL GENERATOR (sine, pink, white, sweep through the phone's output, for checking a PA). */
-class ToolsActivity : AppCompatActivity() {
+class ToolsActivity : FitActivity() {
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var body: LinearLayout; private val tabs = ArrayList<Button>()
     private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF")

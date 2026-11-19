@@ -56,6 +56,8 @@ ApplicationWindow {
     function autoAudio() { if (root.testRun || engine.running || engine.busy) return; root.autoFailed = !settings.startLastDevice() }   // the remembered card, else AUTO DETECT (default output + the default microphone)
     onCurrentChanged: { gcTimer.restart(); if (current === "mixer" && !mixerEver) mixerEver = true; if ((current === "mixer" || current === "home") && !engine.running) autoAudio() }
     Connections { target: engine; function onStateChanged() { if (engine.running) root.autoFailed = false } }
+    // WINDOWS MICROPHONE PRIVACY changed: the sound card restarts by itself, without the microphone (released at once) or with it again
+    Connections { target: engine; function onMicPrivacyChanged() { if (engine.running) root.softRestart() } }
     Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
     function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }

@@ -27,7 +27,7 @@ import com.amfb.amixos.remote.MiniJson
  *  interface, or a stereo mic). OUTPUT: speaker, headphones, USB, Bluetooth ... Each channel: fader, pan, mute and an INSERT RACK of
  *  AmF X1 effects (the console's rack effects; desktop VST / VST3 plug-ins are Windows / macOS / Linux binaries and cannot load on Android);
  *  MASTER: fader, limiter and its own rack. What is chosen is kept for next time. Rate and buffer come from the phone's audio HAL. */
-class LocalMixerActivity : AppCompatActivity() {
+class LocalMixerActivity : FitActivity() {
     companion object {
         /** A 10-CHANNEL DIGITAL MIXER: the engine's strips are 0-1 the inputs (mic / interface), then DECK A, B, C and D as stereo pairs
          *  (2-3, 4-5, 6-7, 8-9). Every channel has a fader, MUTE and its own FX rack; the master has the limiter and a rack. */
@@ -56,7 +56,17 @@ class LocalMixerActivity : AppCompatActivity() {
     private var pickFor = 0
     private val pickFile = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { u -> if (u != null) loadDeck(pickFor, u, true) }
     private val deckViews = HashMap<Int, DeckViews>()
-    private class DeckViews(val title: TextView, val time: TextView, val seek: SeekBar, val play: PadButton, val loop: PadButton)
+    private class DeckViews(val title: TextView, val time: TextView, val seek: SeekBar, val play: PadButton, val loop: PadButton, val video: PadButton)
+    // THE PICTURE of a video on a deck: one pane above the desk, for the deck whose VIDEO button is on (-1: hidden)
+    private var videoDeck = -1; private var videoPane: android.widget.FrameLayout? = null; private var deckVideo: DeckVideo? = null
+    private fun showVideo(d: Int) {
+        val pane = videoPane ?: return; val k = decks.getOrNull(d); val u = k?.source
+        if (d < 0 || k == null || u == null || !k.hasVideo) { videoDeck = -1; deckVideo?.close(); pane.visibility = View.GONE; showDecks(); return }
+        videoDeck = d; pane.visibility = View.VISIBLE
+        val w = resources.displayMetrics.widthPixels - 64; pane.layoutParams = pane.layoutParams.apply { height = minOf(DeckVideo.heightFor(w, 0, 0), resources.displayMetrics.heightPixels / 3) }
+        deckVideo?.apply { onSize = { vw, vh -> pane.layoutParams = pane.layoutParams.apply { height = minOf(DeckVideo.heightFor(w, vw, vh), resources.displayMetrics.heightPixels / 3) }; pane.requestLayout() }; show(u) }
+        showDecks()
+    }
     // MASTER RECORDER: the stereo master to a file (FLAC 24-bit, the recorder's folder)
     @Volatile private var recWriter: HiRes.Writer? = null; private var recThread: Thread? = null; private var recFile: java.io.File? = null; private lateinit var recBtn: PadButton
     private val ui = Handler(Looper.getMainLooper())
@@ -126,14 +136,25 @@ class LocalMixerActivity : AppCompatActivity() {
         for (c in LocalChains.chains) chainRow.addView(PadButton(this, c.glyph + " " + c.title, cyan, 11f).apply { on = nowChain == c.id; contentDescription = c.sub; setPadding(22, 0, 22, 0)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 80).apply { setMargins(0, 0, 8, 0) }; setOnClickListener { applyChain(c) } })
         body.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; setPadding(0, 0, 0, 10); addView(chainRow) })
+        // ---- THE PICTURE of a video deck (hidden until a deck's VIDEO button is on); its sound is the deck's channel on the desk
+        val tv = android.view.TextureView(this); deckVideo = DeckVideo(this, tv)
+        videoPane = android.widget.FrameLayout(this).apply { tag = "localVideo"; setBackgroundColor(Color.BLACK); visibility = View.GONE; addView(tv, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.view.Gravity.CENTER))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0).apply { setMargins(0, 0, 0, 10) } }
+        body.addView(videoPane)
         // ---- THE DESK
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         // ---- DECKS: two song players (a card each: the file, time, seek, LOAD / PLAY / STOP / LOOP); their channels are on the desk
+        // BIG FADERS: the deck cards fold away behind one button, so the desk gets the height (a deck's channel stays on the desk either way)
+        val deckBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "deckBox"; visibility = if (prefs().getBoolean("decksOpen", false)) View.VISIBLE else View.GONE }
+        val deckBtn = PadButton(this, "", cyan, 11f).apply { contentDescription = "decksToggle"; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 72).apply { setMargins(0, 0, 0, 8) } }
+        fun deckLabel() { val open = deckBox.visibility == View.VISIBLE; deckBtn.on = open; deckBtn.text = getString(if (open) R.string.lm_decks_hide else R.string.lm_decks_show) }
+        deckBtn.setOnClickListener { val open = deckBox.visibility != View.VISIBLE; deckBox.visibility = if (open) View.VISIBLE else View.GONE; prefs().edit().putBoolean("decksOpen", open).apply(); deckLabel() }
+        deckLabel(); body.addView(deckBtn); body.addView(deckBox)
         for (r in 0 until DECKS / 2) { val deckRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 8) }
             for (d in 2 * r..2 * r + 1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d % 2 == 0) 0 else 6, 0, if (d % 2 == 0) 6 else 0, 0) } })
-            body.addView(deckRow) }
-        // the channels side by side, five across (swipe for the rest), the master fixed on the right: every fader stays finger-wide
-        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels, 5)
+            deckBox.addView(deckRow) }
+        // the channels side by side, four across (swipe for the rest), the master fixed on the right: every fader stays finger-wide
+        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels, RemoteActivity.ACROSS)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until inChannels()) chans.addView(fixed(stripView(s)))
         for (d in 0 until DECKS) chans.addView(fixed(deckStripView(d)))
@@ -319,7 +340,7 @@ class LocalMixerActivity : AppCompatActivity() {
         for (d in 0 until DECKS) faders[100 + d]?.apply { val l = deckStrip(d); val m = maxOf(p.getOrElse(l) { 0f }, p.getOrElse(l + 1) { 0f }); level = lvl(m); clip = m >= 1f }
         faders[-1]?.apply { val m = maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }); level = lvl(m); clip = m >= 1f }
     }
-    override fun onDestroy() { stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
+    override fun onDestroy() { deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
 
     // ---- DECKS
     private fun loadDeck(d: Int, u: android.net.Uri, fresh: Boolean) {
@@ -340,12 +361,13 @@ class LocalMixerActivity : AppCompatActivity() {
         c.addView(seek)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun btn(t: String, col: Int, f: () -> Unit) = PadButton(this, t, col, 11f).apply { layoutParams = LinearLayout.LayoutParams(0, 76, 1f).apply { setMargins(2, 4, 2, 0) }; setOnClickListener { f() } }.also { row.addView(it) }
-        btn(getString(R.string.lm_deck_load), cyan) { pickFor = d; runCatching { pickFile.launch(arrayOf("audio/*")) } }
+        btn(getString(R.string.lm_deck_load), cyan) { pickFor = d; runCatching { pickFile.launch(arrayOf("audio/*", "video/*")) } }
         val play = btn("▶", ConsoleUi.GREEN) { val k = decks.getOrNull(d) ?: return@btn; if (k.playing) k.pause() else { if (loop == null) startAudio(); k.play() } }
         btn("■", ConsoleUi.RED) { decks.getOrNull(d)?.stop() }
         val lp = btn(getString(R.string.lm_deck_loop), ConsoleUi.AMBER) { decks.getOrNull(d)?.let { k -> k.loop = !k.loop; prefs().edit().putBoolean("deckLoop$d", k.loop).apply(); showDecks() } }
+        val vid = btn(getString(R.string.lm_deck_video), ConsoleUi.AMBER) { showVideo(if (videoDeck == d) -1 else d) }.apply { contentDescription = "deckVideo$d" }
         c.addView(row)
-        deckViews[d] = DeckViews(title, time, seek, play, lp)
+        deckViews[d] = DeckViews(title, time, seek, play, lp, vid)
         // the deck chosen last time comes back (if Android still lets the app read it)
         val saved = prefs().getString("deckUri$d", null)
         if (saved != null && decks.getOrNull(d)?.loaded == false) { decks[d].loop = prefs().getBoolean("deckLoop$d", false); runCatching { loadDeck(d, android.net.Uri.parse(saved), false) } }
@@ -353,9 +375,11 @@ class LocalMixerActivity : AppCompatActivity() {
     }
     private fun showDecks() { for (d in 0 until DECKS) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d)
         v.title.text = when { k == null -> getString(R.string.lm_no_engine); k.error.isNotEmpty() -> getString(R.string.lm_deck_error, k.error); k.loaded -> k.title; else -> getString(R.string.lm_deck_empty) }
-        v.play.text = if (k?.playing == true) "❚❚" else "▶"; v.play.on = k?.playing == true; v.loop.on = k?.loop == true }
+        v.play.text = if (k?.playing == true) "❚❚" else "▶"; v.play.on = k?.playing == true; v.loop.on = k?.loop == true; v.video.on = videoDeck == d; v.video.visibility = if (k?.hasVideo == true) View.VISIBLE else View.GONE }
+        if (videoDeck >= 0 && decks.getOrNull(videoDeck)?.hasVideo != true) showVideo(-1)
         showDeckTimes() }
-    private fun showDeckTimes() { for (d in 0 until DECKS) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d) ?: continue
+    private fun showDeckTimes() { if (videoDeck >= 0) decks.getOrNull(videoDeck)?.let { k -> deckVideo?.follow(k.playing, k.positionUs / 1000) }
+        for (d in 0 until DECKS) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d) ?: continue
         val pos = k.positionUs; v.time.text = DeckPlayer.clock(pos) + " / " + DeckPlayer.clock(k.durationUs)
         if (!v.seek.isPressed && k.durationUs > 0) v.seek.progress = (pos * 1000 / k.durationUs).toInt() } }
     /** a deck's channel on the desk: one stereo strip (its left and right strips together): name, MUTE, fader with meter, level */

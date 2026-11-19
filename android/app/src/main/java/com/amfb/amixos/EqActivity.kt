@@ -91,7 +91,7 @@ fun drawSpectrum(c: Canvas, r: com.amfb.amixos.remote.Rta, w: Float, h: Float, x
 
 /** EQ CONTROLLER for one strip of the console: 8 bands (type, frequency, gain, Q) on a curve you drag, presets, flat, bypass.
  *  The settings are kept on this phone per strip (so the screen opens where you left it) and sent to the console as you move. */
-class EqActivity : AppCompatActivity() {
+class EqActivity : FitActivity() {
     private val io = Executors.newSingleThreadExecutor(); private val ui = Handler(Looper.getMainLooper())
     private var client: DaemonClient? = null; private var strip = 0
     internal lateinit var curve: EqCurveView

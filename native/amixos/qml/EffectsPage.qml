@@ -47,9 +47,12 @@ Item {
                     Text { text: i18n.t("EFFECT", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === "" ? Theme.ov(0.16) : Theme.ov(0.05); border.color: Theme.lineSoft
                         Text { anchors.centerIn: parent; text: i18n.t("NONE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, "") } }
-                    Repeater { model: page.catalog; delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 30; radius: 6; color: page.fx.kind === modelData.kind ? Theme.violet : Theme.ov(0.05); border.color: Theme.lineSoft
-                        Text { anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.fx.kind === modelData.kind ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, modelData.kind) } } }
-                    Item { Layout.fillHeight: true }
+                    // THE LIST SCROLLS: 51 effects do not fit the panel's height (the lower ones were cut off and could not be reached)
+                    Flickable { id: fxList; objectName: "fxList"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; contentHeight: fxCol.implicitHeight; boundsBehavior: Flickable.StopAtBounds; flickableDirection: Flickable.VerticalFlick
+                    Column { id: fxCol; width: fxList.width - 8; spacing: 4
+                    Repeater { model: page.catalog; delegate: Rectangle { width: fxCol.width; height: 30; implicitHeight: 30; radius: 6; color: page.fx.kind === modelData.kind ? Theme.violet : Theme.ov(0.05); border.color: Theme.lineSoft
+                        Text { anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang); color: page.fx.kind === modelData.kind ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setBusFx(page.bus, modelData.kind) } } } }
+                    Rectangle { visible: fxList.contentHeight > fxList.height; anchors.right: parent.right; width: 4; radius: 2; color: Theme.ov(0.35); y: fxList.height > 0 ? fxList.contentY / fxList.contentHeight * fxList.height : 0; height: Math.max(24, fxList.height * fxList.height / Math.max(1, fxList.contentHeight)) } }
                     Text { Layout.fillWidth: true; text: i18n.t("Send strips to this bus on SEND TO (POST for effects). The wet signal returns to the master at RETURN and to the bus outputs ", i18n.lang) + (page.b ? page.b.outputs : "") + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                 }
             }

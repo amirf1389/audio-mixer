@@ -267,6 +267,12 @@ class Engine : public QObject {
   // array, headset, Bluetooth hands-free, webcam, line-in. Outputs keep playing; Windows shows no "microphone in use". ASIO interfaces are not
   // touched (their inputs are the studio's, chosen on purpose). Takes effect at the next open (the switch re-opens at once).
   Q_PROPERTY(bool micAccessOff READ micAccessOff WRITE setMicAccessOff NOTIFY recordChanged)
+  // WINDOWS MICROPHONE PRIVACY: when the user has switched the microphone off in Windows, the console follows by itself: it opens no
+  // microphone (outputs only), asks for nothing, and takes the microphone back when Windows allows it again.
+  Q_PROPERTY(bool micPrivacyOff READ micPrivacyOff NOTIFY micPrivacyChanged)
+  bool micPrivacyOff() const { return privacyOff_; }
+  Q_INVOKABLE void checkMicPrivacy();
+  std::function<int()> privacyNow;   // 1: Windows denies the microphone, 0: allows it, -1: not known (the tests put their own answer here)
   bool micAccessOff() const { return settings_.value("audio/micAccessOff", false).toBool(); } void setMicAccessOff(bool v) { settings_.setValue("audio/micAccessOff", v); emit recordChanged(); }
   bool headsetMicOff() const { return settings_.value("audio/headsetMicOff", false).toBool(); } void setHeadsetMicOff(bool v) { settings_.setValue("audio/headsetMicOff", v); emit recordChanged(); }
   // SECURE INPUT: only input devices on the allowed list are ever opened (by hand, AUTO DETECT, SMART START, Bluetooth, every driver),
@@ -736,6 +742,7 @@ class Engine : public QObject {
   Q_INVOKABLE void save();
 
  signals:
+  void micPrivacyChanged();
   void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
   void ecoUiChanged();
   void watchdogChanged();
@@ -827,6 +834,7 @@ class Engine : public QObject {
   std::vector<StripUi> strips_;
   double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100; int headroom_ = 0;
   static constexpr int kOutputs = 32;
+  bool privacyOff_ = false; QTimer privacyTimer_;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; std::string curBackend_, curIn_, curOut_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   int openBits_ = 0; bool openExclusive_ = false;
   bool spkOn_ = false; QVariantMap spkSaved_; void feedSpeakers(int strip);

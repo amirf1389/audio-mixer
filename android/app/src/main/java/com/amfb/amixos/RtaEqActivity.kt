@@ -79,7 +79,7 @@ class RtaEqView(ctx: Context) : View(ctx) {
 
 /** RTA EQ: the console's master program EQ (10 octave bells) shaped against the live spectrum of the master or any strip. AUTO EQ
  *  measures for 6 seconds and proposes gains towards a target (FLAT, HOUSE, WARM); APPLY sends them, CANCEL drops them. */
-class RtaEqActivity : AppCompatActivity() {
+class RtaEqActivity : FitActivity() {
     private var client: DaemonClient? = null
     private val io = Executors.newSingleThreadExecutor(); private val ui = Handler(Looper.getMainLooper())
     lateinit var graph: RtaEqView; private lateinit var note: TextView; private lateinit var onBtn: Button; private lateinit var srcBtn: Button

@@ -93,6 +93,19 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   live_ = settings_.value("live/on", false).toBool(); liveStrip_ = std::clamp(settings_.value("live/strip", 0).toInt(), 0, kStrips - 1);   // closed in LIVE MODE: it starts in it again
   saveTimer_.setSingleShot(true); saveTimer_.setInterval(2000); connect(&saveTimer_, &QTimer::timeout, this, [this] { if (!restoring_) { save(); settings_.sync(); } });
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::masterChainChanged, &Engine::routingChanged, &Engine::groupsChanged}) connect(this, sig, this, [this] { if (!saveTimer_.isActive()) saveTimer_.start(); });   // two seconds after the FIRST change: a stream of changes (a controller being moved for a minute) cannot keep pushing the save away
+  privacyNow = [] {
+#ifdef _WIN32
+    // what Windows Settings → Privacy & security → Microphone holds: the device switch, the user's switch, and the one for desktop apps
+    const QString k = QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone"); bool any = false;
+    for (const QString& root : {QStringLiteral("HKEY_LOCAL_MACHINE\\"), QStringLiteral("HKEY_CURRENT_USER\\")}) for (const QString& sub : {QString(), QStringLiteral("\\NonPackaged")}) {
+      const QString v = QSettings(root + k + sub, QSettings::NativeFormat).value(QStringLiteral("Value")).toString();
+      if (v.compare(QLatin1String("Deny"), Qt::CaseInsensitive) == 0) return 1; if (!v.isEmpty()) any = true; }
+    return any ? 0 : -1;
+#else
+    return -1;
+#endif
+  };
+  privacyOff_ = privacyNow() == 1; privacyTimer_.setInterval(3000); connect(&privacyTimer_, &QTimer::timeout, this, &Engine::checkMicPrivacy); privacyTimer_.start();
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
   taps_.b.store(&scope_); sources_.b.store(&gen_);   // removed plug-ins die on the UI thread, after the audio thread has let go
   QTimer::singleShot(0, this, [this] { startupScan(); });   // after the window is up: the first scan never delays the start
@@ -222,6 +235,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
     if (ik == "headset" || ik == "bluetooth" || (inDevice.isEmpty() && (ok == "headphones" || ok == "headset" || ok == "bluetooth"))) {
       inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("WASAPI: the headset's microphone is kept off. Outputs only."); }
   }
+  if (privacyOff_ && inCh > 0 && backend != "asio" && !inDev.startsWith("loopback:")) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("The microphone is switched off in Windows privacy, so the console opens none (outputs only). It comes back by itself when Windows allows it again."); }
   if (micAccessOff() && inCh > 0 && backend != "asio" && !inDev.startsWith("loopback:")) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
   rt_ = std::make_unique<am::Runtime>(kStrips);
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.bits = openBits_; if (openExclusive_) cfg.exclusive = true; cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
@@ -758,6 +772,7 @@ QVariantMap Engine::setInputSource(const QString& source) {
   const QString backend = QString::fromStdString(curBackend_);
   if (music && backend != "wasapi") { status_ = QStringLiteral("%1 as the input is a Windows audio (WASAPI) stream: open the headphones or speakers on WASAPI first (SOUND CARD).").arg(what); emit stateChanged(); return {}; }
   if (music && !computerSoundAvailable()) { status_ = QStringLiteral("COMPUTER SOUND needs Windows 10 version 2004 or later; on older Windows pick APP AUDIO on STREAM & MEDIA with a different output device."); emit stateChanged(); return {}; }
+  if (!music && privacyOff_ && backend != "asio") { status_ = QStringLiteral("The microphone is switched off in Windows privacy: the console follows and opens none. Allow it in Windows when you want it back."); emit stateChanged(); return {}; }
   if (!music && micAccessOff() && backend != "asio") { status_ = QStringLiteral("MIC ACCESS is OFF on SOUND CARD → AUDIO ACCESS: switch it on to use the microphone."); emit stateChanged(); return {}; }
   // what plays now, to come back to if the microphone cannot be opened (the sound is never left off by a press on INPUT)
   const std::string keepB = curBackend_, keepIn = curIn_, keepOut = curOut_; const int keepInCh = devIn_, keepOutCh = devOut_;
@@ -1563,6 +1578,11 @@ int Engine::playSampleOnStrip(int i, int id) {
   return k;
 }
 // ---- LIVE MODE
+void Engine::checkMicPrivacy() {
+  const int v = privacyNow ? privacyNow() : -1; if (v < 0) return;
+  const bool off = v == 1; if (off == privacyOff_) return;
+  privacyOff_ = off; emit micPrivacyChanged(); emit recordChanged();   // the window restarts the sound card: without the microphone, or with it again
+}
 QString Engine::startLive(int strip) {
   if (live_) return QStringLiteral("LIVE MODE is already on (channel %1).").arg(liveStrip_ + 1);
   if (strip < 0 || strip >= shownStrips()) strip = 0;
