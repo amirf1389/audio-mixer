@@ -195,6 +195,7 @@ class RemoteActivity : FitActivity() {
      *  pan, MUTE / SOLO, the fader with its meter, and the level. */
     companion object {
         /** the width of one channel strip so that [across] of them stand beside the master strip on a screen [screenPx] wide (never under 176 px) */
+        const val ACROSS = 4   // channels beside the master in the FADERS view: four, so each fader is wide enough for a thumb
         fun stripWidthFor(screenPx: Int, across: Int): Int = maxOf(176, (screenPx - 40 - (252 + 8)) / maxOf(1, across) - 8)
     }
     private fun buildStrips(s: ConsoleState) {
@@ -202,7 +203,7 @@ class RemoteActivity : FitActivity() {
         val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         // FADERS view: exactly five channels beside the master, so the ten channels of a console are two pages and each fader is as wide
         // as a finger and as tall as the screen allows. KNOBS view: narrower strips with pan, gain and the 3-band EQ above a shorter fader.
-        val big = Prefs.bigFaders(this); val stripW = if (big) stripWidthFor(resources.displayMetrics.widthPixels, 5) else 200
+        val big = Prefs.bigFaders(this); val stripW = if (big) stripWidthFor(resources.displayMetrics.widthPixels, ACROSS) else 200
         for (st in s.strips.take(Prefs.stripCount(this))) {
             val tint = colors[(st.id / 8) % colors.size]
             val col = ConsoleUi.strip(this, tint, stripW)

@@ -22,6 +22,8 @@ class DeckPlayer(private val ctx: Context, private val engine: Engine, val index
     @Volatile var playing = false; private set
     @Volatile var loop = false
     @Volatile var error: String = ""; private set
+    @Volatile var hasVideo = false; private set          // the file also carries a picture (the VIDEO button shows it)
+    val source: Uri? get() = uri
     @Volatile private var uri: Uri? = null
     @Volatile private var startUs = 0L                 // where the frames now being played began (after a seek or a loop)
     @Volatile private var playedAtStart = 0L
@@ -36,8 +38,8 @@ class DeckPlayer(private val ctx: Context, private val engine: Engine, val index
         val p = startUs + ((engine.deckPlayed(index) - playedAtStart) * 1_000_000.0 / rate).toLong(); return if (durationUs > 0) p.coerceIn(0, durationUs) else p }
 
     fun load(u: Uri, name: String) {
-        stop(); uri = u; title = name; error = ""; durationUs = 0
-        runCatching { MediaExtractor().apply { setDataSource(ctx, u, null) }.also { ex -> trackOf(ex)?.let { durationUs = ex.getTrackFormat(it).let { f -> if (f.containsKey(MediaFormat.KEY_DURATION)) f.getLong(MediaFormat.KEY_DURATION) else 0L } }; ex.release() } }
+        stop(); uri = u; title = name; error = ""; durationUs = 0; hasVideo = false
+        runCatching { MediaExtractor().apply { setDataSource(ctx, u, null) }.also { ex -> hasVideo = (0 until ex.trackCount).any { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }; trackOf(ex)?.let { durationUs = ex.getTrackFormat(it).let { f -> if (f.containsKey(MediaFormat.KEY_DURATION)) f.getLong(MediaFormat.KEY_DURATION) else 0L } }; ex.release() } }
             .onFailure { error = it.message ?: "cannot open"; uri = null }
         listener?.changed(this)
     }
