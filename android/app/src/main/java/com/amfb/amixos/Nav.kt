@@ -18,14 +18,21 @@ object Nav {
         if (android.os.Build.VERSION.SDK_INT >= 34) a.overrideActivityTransition(android.app.Activity.OVERRIDE_TRANSITION_OPEN, 0, 0) else a.overridePendingTransition(0, 0) }
     enum class Tab(val label: Int, val glyph: String, val target: Class<out Activity>) {
         HOME(R.string.nav_home, "⌂", HomeActivity::class.java), MIXER(R.string.nav_mixer, "☰", RemoteActivity::class.java),
-        TOOLS(R.string.nav_tools, "♪", ToolsActivity::class.java), SETTINGS(R.string.nav_settings, "⚙", SettingsActivity::class.java)
+        TOOLS(R.string.nav_tools, "♪", ToolsActivity::class.java), SETTINGS(R.string.nav_settings, "⚙", SettingsActivity::class.java),
+        PLAYERS(R.string.nav_players, "▶", StreamPlayerActivity::class.java)
     }
+    // AmF X1 MIXER (the separate app, package ...mixer): the phone's own mixer without the console remote. Its bar is MIXER · PLAYERS ·
+    // TOOLS · SETTINGS, the MIXER tab is always THIS PHONE, and there is no THIS PHONE / CONSOLE switch.
+    fun standalone(c: android.content.Context) = isStandalonePackage(c.packageName)
+    fun isStandalonePackage(pkg: String) = pkg.endsWith(".mixer")
+    fun tabs(standalone: Boolean): List<Tab> = if (standalone) listOf(Tab.MIXER, Tab.PLAYERS, Tab.TOOLS, Tab.SETTINGS) else listOf(Tab.HOME, Tab.MIXER, Tab.TOOLS, Tab.SETTINGS)
     // DUAL MODE MIXER: one MIXER with two modes, THIS PHONE (the standalone mixer: the phone's own sound) and CONSOLE (the remote of the
     // Windows console). The MIXER tab opens the mode used last; the bar at the top of each switches to the other.
-    fun phoneMode(a: android.content.Context) = Prefs.remote(a).getString("mixerMode", "console") == "phone"
+    fun phoneMode(a: android.content.Context) = standalone(a) || Prefs.remote(a).getString("mixerMode", "console") == "phone"
     fun mixerTarget(a: Activity): Class<out Activity> = if (phoneMode(a)) LocalMixerActivity::class.java else RemoteActivity::class.java
     /** the two-mode bar for the top of a mixer screen; [phone] = this screen is the phone's own mixer */
     fun modeBar(a: Activity, phone: Boolean): View {
+        if (standalone(a)) return View(a).apply { visibility = View.GONE; contentDescription = "mixerMode" }
         Prefs.remote(a).edit().putString("mixerMode", if (phone) "phone" else "console").apply()
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 12); contentDescription = "mixerMode" }
         for ((isPhone, label) in listOf(true to a.getString(R.string.mode_phone), false to a.getString(R.string.mode_console))) {
@@ -51,7 +58,7 @@ object Nav {
         // a Material navigation bar: a tonal surface (no divider line), the open tab's icon on a pill, labels under the icons
         val d = a.resources.displayMetrics.density
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(a.getColor(R.color.md_surface_container)); setPadding(0, (12 * d).toInt(), 0, (12 * d).toInt()) }
-        for (t in Tab.values()) {
+        for (t in tabs(standalone(a))) {
             val on = t == current
             bar.addView(LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; contentDescription = a.getString(t.label)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setOnClickListener { go(a, if (t == Tab.MIXER) mixerTarget(a) else t.target) }

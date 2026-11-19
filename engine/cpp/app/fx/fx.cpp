@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"pingpong", "PING-PONG DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"pingpong", "PING-PONG DELAY"}, {"peakremover", "PEAK REMOVER"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "aec") return std::make_unique<EchoCanceller>(fs);
   if (k == "hybrid") return std::make_unique<PhoneHybrid>(fs);
@@ -22,6 +22,7 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
   if (k == "syncdelay") return std::make_unique<SyncDelay>(fs);
   if (k == "pingpong") return std::make_unique<PingPong>(fs);
+  if (k == "peakremover") return std::make_unique<PeakRemover>(fs);
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "analog") return std::make_unique<Analog>(fs);
@@ -377,6 +378,30 @@ SyncDelay::SyncDelay(double fs) : Simple(fs) { for (int i = 0; i < 5; ++i) k_[i]
 double SyncDelay::beatsOf(int note) { static const double b[] = {2.0, 1.0, 0.75, 0.5, 1.0 / 3.0, 0.25}; return b[note < 0 ? 0 : note > 5 ? 5 : note]; }   // in quarter notes
 void SyncDelay::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 2.1), 0.f); reset(); }   // the longest: a half note at 60 BPM = 2 s
 void SyncDelay::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); w_ = 0; lp_[0] = lp_[1] = 0; }
+// ---------------------------------------------------------------- Peak remover
+PeakRemover::PeakRemover(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); reset(); }
+void PeakRemover::reset() { body_ = 0; g_ = 1; red_ = 0; }
+std::string PeakRemover::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "sens") return fmt("%.0f %%", v * 100); if (id == "amount") return fmt("%.1f dB", amountDb(v));
+  if (id == "release") return fmt("%.0f ms", releaseMs(v)); return v >= 0.5 ? "ON" : "OFF";
+}
+void PeakRemover::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) { red_ = 0; return; }
+  const float crest = static_cast<float>(std::pow(10.0, crestDb(k_[0].load()) / 20.0)), floorG = static_cast<float>(std::pow(10.0, -amountDb(k_[1].load()) / 20.0));
+  const float aBody = static_cast<float>(1.0 - std::exp(-1.0 / (0.080 * fs_))), aUp = static_cast<float>(1.0 - std::exp(-1.0 / (0.020 * fs_))), aRel = static_cast<float>(1.0 - std::exp(-1.0 / (releaseMs(k_[2].load()) * 0.001 * fs_)));
+  const bool listen = k_[3].load() >= 0.5; float deepest = 1.f;
+  for (std::size_t i = 0; i < n; ++i) {
+    const float p = std::max(std::fabs(L[i]), std::fabs(R[i]));
+    const float line = std::max(body_ * crest, 0.001f);            // nothing under -60 dBFS counts as a peak
+    float want = p > line ? line / p : 1.f; if (want < floorG) want = floorG;
+    g_ = want < g_ ? want : g_ + (1.f - g_) * aRel;               // down at once, back in RELEASE
+    if (g_ > 0.9999f) g_ = 1.f;                                    // fully back: the sound passes bit for bit again
+    body_ += (p - body_) * (p > body_ ? aUp : aBody);              // the body learns a sound that stays in 20 ms (a click is too short to move it) and falls in 80 ms
+    if (g_ < deepest) deepest = g_;
+    if (listen) { L[i] *= (1.f - g_); R[i] *= (1.f - g_); } else { L[i] *= g_; R[i] *= g_; }
+  }
+  red_ = deepest < 1.f ? -20.0 * std::log10(static_cast<double>(deepest)) : 0.0;
+}
 // ---------------------------------------------------------------- Ping-pong delay
 PingPong::PingPong(double fs) : Simple(fs) { for (int i = 0; i < 6; ++i) k_[i] = knobDef(i); setSampleRate(fs); }
 void PingPong::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 1.6), 0.f); reset(); }   // the longest leg is 1.5 s

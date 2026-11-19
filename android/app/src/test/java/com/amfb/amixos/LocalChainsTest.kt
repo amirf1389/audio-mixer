@@ -13,7 +13,7 @@ class LocalChainsTest {
         Regex("\\{\"([a-z0-9]+)\", \"").findAll(line).map { it.groupValues[1] }.toSet()
     }
     @Test fun everyChainNamesRealEffectsAndFitsTheRack() {
-        assertTrue(catalog.size >= 49 && "pingpong" in catalog)
+        assertTrue(catalog.size >= 50 && "pingpong" in catalog && "peakremover" in catalog)
         assertEquals(LocalChains.chains.size, LocalChains.chains.map { it.id }.toSet().size)
         for (c in LocalChains.chains) { assertTrue(c.id, c.slots.size <= Engine.MAX_INSERTS); assertTrue(c.title.isNotBlank() && c.sub.isNotBlank())
             for (f in c.slots) { assertTrue("${c.id}: ${f.kind} is not a rack effect", f.kind in catalog); for (v in f.params.values) assertTrue(v in 0.0..1.0) } }
@@ -25,6 +25,7 @@ class LocalChainsTest {
         assertEquals("rider|doubler", LocalChains.rackString(k, 2))                       // a shorter rack takes the start of the chain
         assertEquals("clean|rider|deesser|", LocalChains.rackString(LocalChains.byId("voice")!!, 4))
         assertEquals("|||", LocalChains.rackString(LocalChains.byId("clear")!!, 4))
+        assertEquals("peakremover|rider||", LocalChains.rackString(LocalChains.byId("nopeaks")!!, 4))
         val p = LocalChains.paramString(k.slots[2])
         assertTrue(p.contains("left=0.1351") && p.contains("right=0.2095") && p.contains("spread=1.0000") && p.split(';').size == 6)
         assertEquals("", LocalChains.paramString(LocalChains.Fx("hall")))
