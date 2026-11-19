@@ -914,11 +914,11 @@ int main(int argc, char* argv[]) {
         { // HEADROOM MODE: the master stays under the chosen level, whatever the faders say; OFF gives the limiter back as it was
           auto pause2 = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
           const bool nt = engine.nullTestInput(); const double m0 = engine.masterDb(), g0 = engine.stripState()[0].toMap()["db"].toDouble();
-          engine.setNullTestInput(true); engine.setMaster(10); engine.setGain(0, 10); engine.setHeadroomDb(6); pause2(700);
+          engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); engine.setInputRoute(0, 0); engine.setMute(0, false); engine.setMaster(10); engine.setGain(0, 10); engine.setHeadroomDb(6); pause2(900);   // the null device with its -12 dBFS tone, pushed 20 dB up
           const double pk6 = engine.telemetry().value("masterPeakDb").toDouble(); const bool held = pk6 <= -5.9 && pk6 > -9 && engine.headroomDb() == 6 && engine.ceilingNow() == -6.0 && engine.limiterOnNow();
           engine.setHeadroomDb(7); const bool stepped = engine.headroomDb() == 9; engine.setHeadroomDb(99); const bool top = engine.headroomDb() == 12 && engine.ceilingNow() == -12.0;
           engine.setHeadroomDb(0); pause2(700); const double pk0 = engine.telemetry().value("masterPeakDb").toDouble(); const bool off = engine.headroomDb() == 0 && engine.ceilingNow() > -1.0 && pk0 > pk6 + 3;
-          engine.setMaster(m0); engine.setGain(0, g0); engine.setNullTestInput(nt);
+          engine.setMaster(m0); engine.setGain(0, g0); engine.setNullTestInput(nt); engine.open("null", "", "", 48000, 256, 2, 2);
           std::printf("amixos --smoke: HEADROOM MODE -6 dB holds the master at %.1f dBFS %d, steps %d, -12 at most %d, OFF gives it back (%.1f dBFS) %d\n", pk6, held, stepped, top, pk0, off);
           if (!(held && stepped && top && off)) { std::fprintf(stderr, "amixos --smoke: HEADROOM MODE failed\n"); return 101; } }
         engine.limitAllChannels(true); const bool allOn = engine.allChannelsLimited(); engine.limitAllChannels(false); if (!allOn || engine.allChannelsLimited() || engine.channelParams(7)["limiterOn"].toBool()) { std::fprintf(stderr, "amixos --smoke: limit channels\n"); return 213; }
