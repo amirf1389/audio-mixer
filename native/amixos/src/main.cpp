@@ -679,6 +679,14 @@ int main(int argc, char* argv[]) {
         std::printf("amixos --smoke: SAMPLE PADS on a channel heard: CH 2 %.1f dBFS (master %.1f), CH %d %.1f dBFS (master %.1f)\n", h0.first, h0.second, last + 1, h1.first, h1.second);
         if (k >= 0) engine.setPlugin(21, k, "");
         if (!ok || h0.first < -40 || h0.second < -40 || h1.first < -40 || h1.second < -40) { std::fprintf(stderr, "amixos --smoke: play a sample on a strip (slot %d) / not heard\n", k); return 159; } }
+      { // BUFFER 8192: the largest block opens on the null device, runs and passes sound; a block of 0 or 20000 frames is refused and the old device stays as it was asked back
+        const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
+        const bool ok = engine.open("null", "", "", 48000, 8192, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        const bool at = engine.blockFrames() == 8192 && engine.running(); const double lat = 8192 * 1000.0 / 48000.0; engine.stop();
+        const bool zero = !engine.open("null", "", "", 48000, 0, 2, 2), huge = !engine.open("null", "", "", 48000, 20000, 2, 2);
+        engine.stop(); engine.open("null", "", "", r0 > 0 ? r0 : 48000, f0 > 0 ? f0 : 256, 2, 2);
+        std::printf("amixos --smoke: BUFFER 8192 opens and runs %d %d (%.0f ms a block); 0 and 20000 frames refused %d %d\n", ok, at, lat, zero, huge);
+        if (!ok || !at || !zero || !huge) { std::fprintf(stderr, "amixos --smoke: BUFFER 8192 failed\n"); return 105; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);

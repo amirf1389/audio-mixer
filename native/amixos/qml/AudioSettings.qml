@@ -79,7 +79,7 @@ Popup {
                 Combo { Layout.fillWidth: true; readonly property var l: { const d = pop.dev(pop.outId); return d && d.sampleRates && d.sampleRates.length ? d.sampleRates : [44100, 48000, 88200, 96000] }
                     model: l.map(function (r) { return r + " Hz" }); currentIndex: Math.max(0, l.indexOf(pop.rate)); onActivated: function (i) { pop.rate = l[i] } } }
             Line { label: i18n.t("Audio buffer size:", i18n.lang)
-                Combo { Layout.fillWidth: true; readonly property var l: [32, 64, 128, 256, 512, 1024, 2048]
+                Combo { Layout.fillWidth: true; readonly property var l: [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
                     model: l.map(function (f) { return f + i18n.t(" samples (", i18n.lang) + (f * 1000 / pop.rate).toFixed(1) + " ms)" }); currentIndex: Math.max(0, l.indexOf(pop.frames)); onActivated: function (i) { pop.frames = l[i] } } }
             Item { height: 2 }
             Line { label: i18n.t("Active MIDI inputs:", i18n.lang)
