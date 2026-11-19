@@ -15,7 +15,9 @@
 #include <windows.h>
 #include <audioclient.h>
 #include <objbase.h>
-namespace am { long wasapiAppCaptureClient(unsigned long pid, double rate, void** audioClient, void** captureClient, std::string& err); }
+namespace am { long wasapiAppCaptureClient(unsigned long pid, double rate, void** audioClient, void** captureClient, std::string& err);
+long wasapiDeviceCaptureClient(const std::string& endpointId, double rate, void** audioClient, void** captureClient, std::string& err);
+bool wasapiCaptureProperties(const std::string& endpointId, int& channels, double& rate, int& bits, float& level, bool& muted, int& enhancements, std::string& err); }
 #endif
 
 namespace am::app {
@@ -48,7 +50,7 @@ struct Capture::Slot {
   std::atomic<int> state{0}; std::atomic<bool> stop{false}, test{false}, primed{false}, flush{false};   // flush: the audio thread empties the ring before it reads (a slot taken again)
   std::atomic<double> rate{48000}, hz{440}; double phase = 0;                        // phase: audio thread only
   std::atomic<float> peak{0}; std::atomic<std::uint64_t> gaps{0}, silentFrames{0};
-  std::thread thread; mutable std::mutex mu; std::uint32_t pid = 0; std::string label, error;   // mu guards pid / label / error
+  std::thread thread; mutable std::mutex mu; std::uint32_t pid = 0; std::string label, error, device; bool isDevice = false;   // mu guards pid / label / error / device
   std::vector<float> scratch;                                                       // audio thread only: one block, interleaved
 };
 
@@ -74,7 +76,7 @@ int Capture::open(std::uint32_t pid, const std::string& label, double sampleRate
   if (!available()) { err = "capturing a program needs Windows 10 version 2004 or later"; return -1; }
   const int k = wantSlot >= 0 && wantSlot < kSlots && s_[wantSlot]->state.load() == 0 ? wantSlot : freeSlot(); if (k < 0) { err = "eight programs are captured already: release one first"; return -1; }
   Slot& s = *s_[k]; if (s.thread.joinable()) s.thread.join();
-  { std::lock_guard<std::mutex> g(s.mu); s.pid = pid; s.label = label; s.error.clear(); }
+  { std::lock_guard<std::mutex> g(s.mu); s.pid = pid; s.label = label; s.error.clear(); s.device.clear(); s.isDevice = false; }
   s.rate = sampleRate > 0 ? sampleRate : 48000; s.test = false; s.stop = false; s.flush = true; s.peak = 0; s.gaps = 0; s.silentFrames = 0;
   s.state = 1; s.thread = std::thread([this, k] { run(k); });
   return k;
@@ -82,14 +84,40 @@ int Capture::open(std::uint32_t pid, const std::string& label, double sampleRate
 int Capture::openFeed(const std::string& label, double sampleRate, std::string& err) {
   const int k = freeSlot(); if (k < 0) { err = "eight programs are captured already: release one first"; return -1; }
   Slot& s = *s_[k]; if (s.thread.joinable()) s.thread.join();
-  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label = label; s.error.clear(); }
+  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label = label; s.error.clear(); s.device.clear(); s.isDevice = false; }
   s.rate = sampleRate > 0 ? sampleRate : 48000; s.test = false; s.stop = false; s.flush = true; s.peak = 0; s.gaps = 0; s.silentFrames = 0;
   s.state = 2; return k;
+}
+bool Capture::deviceAvailable() {
+#ifdef _WIN32
+  return true;
+#else
+  return false;
+#endif
+}
+Capture::DeviceProps Capture::deviceProps(const std::string& endpointId) {
+  DeviceProps p;
+#ifdef _WIN32
+  float level = -1; p.ok = wasapiCaptureProperties(endpointId, p.channels, p.rate, p.bits, level, p.muted, p.enhancements, p.error); p.level = level;
+#else
+  (void)endpointId; p.error = "Windows' sound properties are read on Windows";
+#endif
+  return p;
+}
+int Capture::openDevice(const std::string& endpointId, const std::string& label, double sampleRate, std::string& err, int wantSlot) {
+  for (int k = 0; k < kSlots; ++k) { Slot& s = *s_[k]; if (s.state.load() == 0) continue; std::lock_guard<std::mutex> g(s.mu); if (s.isDevice && s.device == endpointId) { err = label + " is already captured"; return -1; } }
+  if (!deviceAvailable()) { err = "Windows' recording devices are captured on Windows"; return -1; }
+  const int k = wantSlot >= 0 && wantSlot < kSlots && s_[wantSlot]->state.load() == 0 ? wantSlot : freeSlot(); if (k < 0) { err = "eight sources are captured already: release one first"; return -1; }
+  Slot& s = *s_[k]; if (s.thread.joinable()) s.thread.join();
+  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label = label; s.error.clear(); s.device = endpointId; s.isDevice = true; }
+  s.rate = sampleRate > 0 ? sampleRate : 48000; s.test = false; s.stop = false; s.flush = true; s.peak = 0; s.gaps = 0; s.silentFrames = 0;
+  s.state = 1; s.thread = std::thread([this, k] { run(k); });
+  return k;
 }
 int Capture::openTest(const std::string& label, double hz, double sampleRate, std::string& err) {
   const int k = freeSlot(); if (k < 0) { err = "eight programs are captured already: release one first"; return -1; }
   Slot& s = *s_[k]; if (s.thread.joinable()) s.thread.join();
-  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label = label; s.error.clear(); }
+  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label = label; s.error.clear(); s.device.clear(); s.isDevice = false; }
   s.rate = sampleRate > 0 ? sampleRate : 48000; s.hz = hz; s.test = true; s.stop = false; s.primed = false; s.peak = 0; s.gaps = 0; s.silentFrames = 0;
   s.state = 2; return k;
 }
@@ -97,7 +125,7 @@ void Capture::close(int slot) {
   if (slot < 0 || slot >= kSlots) return; Slot& s = *s_[slot];
   s.stop = true; if (s.thread.joinable()) s.thread.join();
   s.state = 0; s.test = false; s.peak = 0;
-  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label.clear(); s.error.clear(); }
+  { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label.clear(); s.error.clear(); s.device.clear(); s.isDevice = false; }
 }
 void Capture::closeAll() { for (int k = 0; k < kSlots; ++k) close(k); }
 void Capture::setSampleRate(double sampleRate) {
@@ -112,7 +140,7 @@ void Capture::setSampleRate(double sampleRate) {
 Capture::Info Capture::info(int slot) const {
   Info i; if (slot < 0 || slot >= kSlots) return i; const Slot& s = *s_[slot]; const int st = s.state.load(); if (st == 0) return i;
   i.used = true; i.test = s.test.load(); i.peak = s.peak.load(); i.gaps = s.gaps.load();
-  { std::lock_guard<std::mutex> g(s.mu); i.pid = s.pid; i.label = s.label; i.error = s.error; }
+  { std::lock_guard<std::mutex> g(s.mu); i.pid = s.pid; i.label = s.label; i.error = s.error; i.device = s.device; i.isDevice = s.isDevice; }
   i.state = st == 1 ? "opening" : st == 3 ? "failed" : (!i.test && s.silentFrames.load() > static_cast<std::uint64_t>(s.rate.load() * 3) ? "silent" : "live");
   return i;
 }
@@ -153,18 +181,18 @@ void Capture::pull(float* const* ch, int channels, std::size_t frames, double sa
 void Capture::run(int slot) {
   Slot& s = *s_[slot];
 #ifdef _WIN32
-  std::uint32_t pid; { std::lock_guard<std::mutex> g(s.mu); pid = s.pid; }
+  std::uint32_t pid; std::string device; bool isDevice; { std::lock_guard<std::mutex> g(s.mu); pid = s.pid; device = s.device; isDevice = s.isDevice; }
   auto fail = [&](const std::string& why) { { std::lock_guard<std::mutex> g(s.mu); s.error = why; } s.state = 3; };
   const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   void* acv = nullptr; void* ccv = nullptr; std::string err;
-  if (wasapiAppCaptureClient(pid, s.rate.load(), &acv, &ccv, err) != 0) { fail(err.empty() ? "Windows could not open that program's sound" : err); if (SUCCEEDED(co)) CoUninitialize(); return; }
+  if ((isDevice ? wasapiDeviceCaptureClient(device, s.rate.load(), &acv, &ccv, err) : wasapiAppCaptureClient(pid, s.rate.load(), &acv, &ccv, err)) != 0) { fail(err.empty() ? "Windows could not open that sound" : err); if (SUCCEEDED(co)) CoUninitialize(); return; }
   IAudioClient* ac = static_cast<IAudioClient*>(acv); IAudioCaptureClient* cc = static_cast<IAudioCaptureClient*>(ccv);
   if (FAILED(ac->Start())) { fail("cannot start that program's stream"); cc->Release(); ac->Release(); if (SUCCEEDED(co)) CoUninitialize(); return; }
   s.state = 2;
   std::vector<float> zeros(2 * 4096, 0.0f); int idle = 0;
   while (!s.stop.load()) {
     Sleep(5); UINT32 n = 0; HRESULT r = cc->GetNextPacketSize(&n);
-    if (FAILED(r)) { fail("the program closed or its sound device changed"); break; }
+    if (FAILED(r)) { fail(isDevice ? "the recording device was unplugged or switched off" : "the program closed or its sound device changed"); break; }
     // a program that plays nothing delivers no packets: the console still gets a steady (silent) stream, so the cushion stays
     if (n == 0) { if (++idle >= 4) { const std::size_t want = static_cast<std::size_t>(s.rate.load() * 0.005) * 2; if (s.ring.size() < static_cast<std::size_t>(s.rate.load() * 0.06) * 2) s.ring.push(zeros.data(), std::min(want, zeros.size())); } continue; }
     idle = 0;

@@ -4,6 +4,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
+#include <QDesktopServices>
+#include <QProcess>
+#include <QUrl>
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QThread>
@@ -53,10 +56,11 @@ QVariantList Apps::captures() const {
     const Capture::Info i = cap_ ? cap_->info(k) : Capture::Info(); if (!i.used && waiting_[k].isEmpty()) continue;
     QVariantList strips; for (int s = 0; s < routes.size(); ++s) if (slotOfInput(routes[s].toInt()) == k) strips << s;
     QVariantMap m; m["slot"] = k; m["strips"] = strips;
+    m["device"] = i.used ? i.isDevice : !waitingDev_[k].isEmpty();
     if (i.used) { m["name"] = QString::fromStdString(i.label); m["pid"] = static_cast<qulonglong>(i.pid); m["state"] = QString::fromStdString(i.state); m["test"] = i.test; m["gaps"] = static_cast<qulonglong>(i.gaps);
       m["peakDb"] = i.peak > 1e-6 ? 20.0 * std::log10(i.peak) : -120.0;
       m["message"] = i.state == "failed" ? QString::fromStdString(i.error) : i.state == "silent" ? QStringLiteral("captured, but the program plays nothing now (or its stream is protected)") : i.state == "opening" ? QStringLiteral("opening") : QString(); }
-    else { m["name"] = waiting_[k]; m["pid"] = 0; m["state"] = "waiting"; m["test"] = false; m["gaps"] = 0; m["peakDb"] = -120.0; m["message"] = QStringLiteral("waiting for the program to play again"); }
+    else { m["name"] = waiting_[k]; m["pid"] = 0; m["state"] = "waiting"; m["test"] = false; m["gaps"] = 0; m["peakDb"] = -120.0; m["message"] = waitingDev_[k].isEmpty() ? QStringLiteral("waiting for the program to play again") : QStringLiteral("waiting for the device to be plugged in again"); }
     l << m; }
   return l;
 }
@@ -94,6 +98,46 @@ QVariantMap Apps::capture(const QString& id, const QString& name, int strip, boo
   std::string err; const int slot = cap().open(pid, name.toStdString(), engine_->runtime()->sampleRate(), err, want);
   return finish(slot, name, strip, stereo, err);
 }
+// ---- WINDOWS RECORDING DEVICES
+QVariantList Apps::recordingDevices() {
+  QVariantList out; const QVariantList src = testMode ? testDevices : engine_->devices();
+  for (const QVariant& v : src) { const QVariantMap d = v.toMap(); const QString id = d["id"].toString();
+    if (d["backend"].toString() != "wasapi" || d["inChannels"].toInt() <= 0 || id.startsWith(QLatin1String("loopback:"))) continue;
+    int slot = -1; if (cap_) for (int k = 0; k < Capture::kSlots; ++k) { const Capture::Info i = cap_->info(k); if (i.used && i.isDevice && QString::fromStdString(i.device) == id) slot = k; }
+    out << QVariantMap{{"id", id}, {"name", d["name"]}, {"kind", d["kind"]}, {"isDefault", d["defaultIn"].toBool()}, {"channels", d["inChannels"]}, {"rate", d["defaultRate"]}, {"slot", slot}}; }
+  return out;
+}
+QVariantMap Apps::captureDevice(const QString& id, const QString& name, int strip, bool stereo) {
+  auto refuse = [&](const QString& why) { note_ = why; emit changed(); return QVariantMap{{"ok", false}, {"slot", -1}, {"message", why}}; };
+  if (strip < 0 || strip >= engine_->strips()) return refuse(QStringLiteral("Pick a strip first."));
+  if (strip >= engine_->licensedChannels() || (stereo && strip + 1 >= engine_->licensedChannels())) return refuse(QStringLiteral("That strip is not part of this edition."));
+  if (!engine_->runtime()) return refuse(QStringLiteral("Start the sound card first (SOUND CARD), then pick the device."));
+  if (id.isEmpty() || id.startsWith(QLatin1String("loopback:"))) return refuse(QStringLiteral("That is not a recording device."));
+  if (QString::fromStdString(engine_->currentInputId()) == id) return refuse(QStringLiteral("%1 is the sound card's own input already: it is on the strips as IN 1, IN 2 ...").arg(name));
+  for (int k = 0; cap_ && k < Capture::kSlots; ++k) { const Capture::Info i = cap_->info(k); if (i.used && i.isDevice && QString::fromStdString(i.device) == id) return finish(k, name, strip, stereo, {}); }
+  int want = -1; for (int k = 0; k < Capture::kSlots; ++k) if (waitingDev_[k] == id) want = k;
+  std::string err; const int slot = cap().openDevice(id.toStdString(), name.toStdString(), engine_->runtime()->sampleRate(), err, want);
+  if (slot >= 0) waitingDev_[slot].clear();
+  return finish(slot, name, strip, stereo, err);
+}
+void Apps::readProperties(const QString& id) {
+  auto pack = [](const Capture::DeviceProps& p) { return QVariantMap{{"ok", p.ok}, {"channels", p.channels}, {"rate", p.rate}, {"bits", p.bits}, {"levelPct", p.level < 0 ? -1 : int(p.level * 100 + 0.5)}, {"muted", p.muted},
+    {"enhancements", p.enhancements == 1 ? "on" : p.enhancements == 0 ? "off" : "unknown"}, {"error", QString::fromStdString(p.error)}}; };
+  if (testMode) { Capture::DeviceProps p; p.ok = true; p.channels = 2; p.rate = 48000; p.bits = 24; p.level = 0.8; p.enhancements = 1; emit propertiesReady(id, pack(p)); return; }
+  QPointer<Apps> self(this); const std::string dev = id.toStdString();   // Windows' audio service can take its time: never on the interface thread
+  std::thread([self, dev, id, pack] { const Capture::DeviceProps p = Capture::deviceProps(dev); QMetaObject::invokeMethod(qApp, [self, id, p, pack] { if (self) emit self->propertiesReady(id, pack(p)); }, Qt::QueuedConnection); }).detach();
+}
+bool Apps::openWindowsSound(const QString& what) {
+  if (what != "settings" && what != "recording" && what != "playback" && what != "mixer") return false;
+  lastPanel = what; if (testMode) return true;
+#ifdef Q_OS_WIN
+  if (what == "settings") return QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:sound")));
+  if (what == "mixer") return QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:apps-volume")));
+  return QProcess::startDetached(QStringLiteral("control.exe"), {what == "recording" ? QStringLiteral("mmsys.cpl,,1") : QStringLiteral("mmsys.cpl,,0")});   // the classic Sound panel on its Recording / Playback tab
+#else
+  return false;
+#endif
+}
 QVariantMap Apps::captureTest(const QString& name, double hz, int strip, bool stereo) {
   if (strip < 0 || strip >= engine_->strips() || !engine_->runtime()) { note_ = QStringLiteral("Start the sound card first (SOUND CARD), then pick the program."); emit changed(); return QVariantMap{{"ok", false}, {"slot", -1}, {"message", note_}}; }
   std::string err; const int slot = cap().openTest(name.toStdString(), hz, engine_->runtime()->sampleRate(), err);
@@ -103,14 +147,14 @@ void Apps::release(int slot) {
   if (slot < 0 || slot >= Capture::kSlots) return;
   placing_ = true; const QVariantList routes = engine_->inputRoutes();
   for (int s = 0; s < routes.size(); ++s) if (slotOfInput(routes[s].toInt()) == slot) engine_->setInputRoute(s, -1);
-  placing_ = false; waiting_[slot].clear(); if (cap_) cap_->close(slot); save(); emit changed();
+  placing_ = false; waiting_[slot].clear(); waitingDev_[slot].clear(); if (cap_) cap_->close(slot); save(); emit changed();
 }
 // a slot no strip listens to is given back
 void Apps::prune() {
   bool heard[Capture::kSlots] = {}; const QVariantList routes = engine_->inputRoutes();
   for (const QVariant& r : routes) { const int k = slotOfInput(r.toInt()); if (k >= 0) heard[k] = true; }
   bool any = false;
-  for (int k = 0; k < Capture::kSlots; ++k) { if (heard[k]) continue; if (cap_ && cap_->info(k).used) { cap_->close(k); any = true; } if (!waiting_[k].isEmpty()) { waiting_[k].clear(); any = true; } }
+  for (int k = 0; k < Capture::kSlots; ++k) { if (heard[k]) continue; if (cap_ && cap_->info(k).used) { cap_->close(k); any = true; } if (!waiting_[k].isEmpty()) { waiting_[k].clear(); waitingDev_[k].clear(); any = true; } }
   if (any) save();
 }
 // once a second: a program that closed leaves its slot waiting; a waiting slot looks for its program among those that play now
@@ -118,14 +162,21 @@ void Apps::poll() {
   bool wait = false; QString sig;
   for (int k = 0; k < Capture::kSlots; ++k) {
     if (cap_) { const Capture::Info i = cap_->info(k);
-      if (i.used && i.state == "failed") { waiting_[k] = QString::fromStdString(i.label); cap_->close(k); }
+      if (i.used && i.state == "failed") { waiting_[k] = QString::fromStdString(i.label); waitingDev_[k] = i.isDevice ? QString::fromStdString(i.device) : QString(); cap_->close(k); }
       if (i.used) sig += QString::fromStdString(i.state) + QLatin1Char('|'); }
     if (!waiting_[k].isEmpty()) { wait = true; sig += QStringLiteral("w|"); } }
   if (sig != lastSig_) { lastSig_ = sig; emit changed(); }
-  if (!wait || looking_ || !engine_->runtime()) return;
+  if (!wait || !engine_->runtime()) return;
+  // a recording device that waits: tried again every 5 seconds (it opens the moment Windows has it back)
+  if (++devTick_ >= 5) { devTick_ = 0; bool got = false;
+    for (int k = 0; k < Capture::kSlots; ++k) { if (waitingDev_[k].isEmpty() || !Capture::deviceAvailable()) continue; std::string err;
+      if (cap().openDevice(waitingDev_[k].toStdString(), waiting_[k].toStdString(), engine_->runtime()->sampleRate(), err, k) == k) { waiting_[k].clear(); waitingDev_[k].clear(); got = true; } }
+    if (got) emit changed(); }
+  bool progWait = false; for (int k = 0; k < Capture::kSlots; ++k) if (!waiting_[k].isEmpty() && waitingDev_[k].isEmpty()) progWait = true;
+  if (!progWait || looking_) return;
   auto take = [this](const std::vector<std::pair<quint32, QString>>& now) {
     looking_ = false; if (!engine_->runtime()) return; bool got = false;
-    for (int k = 0; k < Capture::kSlots; ++k) { if (waiting_[k].isEmpty()) continue;
+    for (int k = 0; k < Capture::kSlots; ++k) { if (waiting_[k].isEmpty() || !waitingDev_[k].isEmpty()) continue;
       for (const auto& [pid, name] : now) if (name == waiting_[k]) { std::string err; if (cap().open(pid, name.toStdString(), engine_->runtime()->sampleRate(), err, k) == k) { waiting_[k].clear(); got = true; } break; } }
     if (got) emit changed(); };
   if (sessionsNow) { take(sessionsNow()); return; }
@@ -137,13 +188,14 @@ void Apps::poll() {
 
 // remembered by name: [{slot, name}] of the programs on slots (a test tone is not kept)
 void Apps::save() {
-  QJsonArray a; for (int k = 0; k < Capture::kSlots; ++k) { QString n = waiting_[k]; if (cap_) { const Capture::Info i = cap_->info(k); if (i.used && !i.test && i.pid != 0) n = QString::fromStdString(i.label); else if (i.used) n.clear(); }
-    if (!n.isEmpty()) a << QJsonObject{{"slot", k}, {"name", n}}; }
+  QJsonArray a; for (int k = 0; k < Capture::kSlots; ++k) { QString n = waiting_[k], dev = waitingDev_[k]; if (cap_) { const Capture::Info i = cap_->info(k); if (i.used && !i.test && (i.pid != 0 || i.isDevice)) { n = QString::fromStdString(i.label); dev = i.isDevice ? QString::fromStdString(i.device) : QString(); } else if (i.used) n.clear(); }
+    if (!n.isEmpty()) { QJsonObject o{{"slot", k}, {"name", n}}; if (!dev.isEmpty()) o["dev"] = dev; a << o; } }
   s_.setValue("apps/captures", QString::fromUtf8(QJsonDocument(a).toJson(QJsonDocument::Compact)));
 }
 void Apps::load() {
   const QJsonArray a = QJsonDocument::fromJson(s_.value("apps/captures").toString().toUtf8()).array();
   for (const QJsonValue& v : a) { const QJsonObject o = v.toObject(); const int k = o.value("slot").toInt(-1); QString n = o.value("name").toString().left(80); n.remove(QRegularExpression(QStringLiteral("[\\x00-\\x1f<>]")));
-    if (k >= 0 && k < Capture::kSlots && !n.isEmpty()) waiting_[k] = n; }
+    QString dev = o.value("dev").toString().left(200); dev.remove(QRegularExpression(QStringLiteral("[\\x00-\\x1f<>]")));
+    if (k >= 0 && k < Capture::kSlots && !n.isEmpty()) { waiting_[k] = n; waitingDev_[k] = dev; } }
   prune();   // a slot the saved console no longer listens to is not waited for
 }

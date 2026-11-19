@@ -13,6 +13,7 @@ Rectangle {
     function refresh() { progs = apps.programs() }
     implicitHeight: col.implicitHeight + 24; radius: Theme.radius; color: Theme.card; border.color: Theme.line
     Component.onCompleted: refresh()
+    AppPicker { id: picker; onClosed: panel.refresh() }
     component Key: Rectangle { id: key; property string label; property color hue: Theme.cyan; property bool solid: false; signal hit()
         implicitWidth: kt.implicitWidth + 16; implicitHeight: 20; radius: 7; color: solid ? hue : Theme.ov(0.06); border.color: hue
         gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(key.color) } GradientStop { position: 1; color: Theme.btnBottom(key.color) } }
@@ -23,6 +24,7 @@ Rectangle {
             Text { text: i18n.t("APP CAPTURE  ·  SEVERAL PROGRAMS, EACH ON ITS OWN STRIP", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
             Item { Layout.fillWidth: true }
             Text { text: apps.count + " / 8"; color: apps.count > 0 ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+            Key { objectName: "appPickerOpen"; label: i18n.t("PICK WITH PICTURES…", i18n.lang); solid: true; onHit: picker.show(panel.strip) }
             Key { objectName: "appCaptureRefresh"; label: i18n.t("LOOK AGAIN", i18n.lang); onHit: panel.refresh() } }
         Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
             text: i18n.t("Each program below can go onto its own strip beside the microphones: a player on one, a browser on another, a call on a third. MONO puts it on the selected strip; STEREO on that strip (left) and the next (right). It is the sound Windows plays for that program only; a protected stream may stay silent. Up to 8 programs.", i18n.lang) }
@@ -37,7 +39,7 @@ Rectangle {
                 Key { objectName: "appStereo" + index; label: i18n.t("STEREO → CH ", i18n.lang) + (panel.strip + 1) + "-" + (panel.strip + 2); hue: Theme.cyan; onHit: { apps.capture(modelData.id, modelData.name, panel.strip, true); panel.refresh() } } } }
         // what is captured
         Rectangle { visible: apps.captures.length > 0; Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
-        Repeater { model: apps.captures
+        Repeater { model: apps.captures.filter(c => !c.device)
             delegate: RowLayout { objectName: "appSlot" + modelData.slot; Layout.fillWidth: true; spacing: 8
                 Rectangle { implicitWidth: 54; implicitHeight: 16; radius: 3
                     color: modelData.state === "live" ? Theme.emerald : modelData.state === "failed" ? Theme.danger : Theme.amber
@@ -47,7 +49,14 @@ Rectangle {
                 Rectangle { Layout.preferredWidth: 90; implicitHeight: 6; radius: 3; color: Theme.ov(0.08)
                     Rectangle { height: parent.height; radius: 3; color: Theme.emerald; width: parent.width * Math.max(0, Math.min(1, (modelData.peakDb + 60) / 60)) } }
                 Text { Layout.fillWidth: true; text: modelData.message + (modelData.gaps > 0 ? (modelData.message ? " · " : "") + modelData.gaps + i18n.t(" gaps", i18n.lang) : ""); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight }
-                Key { objectName: "appRelease" + modelData.slot; label: i18n.t("RELEASE", i18n.lang); hue: Theme.muted; onHit: { apps.release(modelData.slot); panel.refresh() } } } }
+                Key { objectName: "appPicture" + modelData.slot; visible: appWindows.available && modelData.pid > 0; label: (appWindows.watched, appWindows.isWatched(modelData.pid)) ? i18n.t("PICTURE: ON", i18n.lang) : i18n.t("PICTURE: OFF", i18n.lang); hue: Theme.amber; solid: (appWindows.watched, appWindows.isWatched(modelData.pid)); onHit: appWindows.watch(modelData.pid, !appWindows.isWatched(modelData.pid)) }
+                Key { objectName: "appRelease" + modelData.slot; label: i18n.t("RELEASE", i18n.lang); hue: Theme.muted; onHit: { appWindows.forget(modelData.pid); apps.release(modelData.slot); panel.refresh() } } } }
+        // PROGRAM VIEW: the live picture of every captured program that has PICTURE on
+        Flow { objectName: "programView"; visible: appWindows.watched.length > 0; Layout.fillWidth: true; spacing: 8
+            Repeater { model: appWindows.watched
+                delegate: Rectangle { width: 328; height: 204; radius: 6; color: "#0e1014"; border.color: Theme.amber; clip: true
+                    Image { x: 4; y: 4; width: 320; height: 180; fillMode: Image.PreserveAspectFit; cache: false; source: "image://appwin/window/" + modelData + "?" + appWindows.tick }
+                    Text { anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 4; text: { appWindows.tick; return appWindows.titleOf(modelData) } color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideRight } } } }
         Text { visible: apps.note !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: apps.note; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
     }
 }

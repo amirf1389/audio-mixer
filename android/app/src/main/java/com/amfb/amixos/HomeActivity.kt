@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 /** HOME: one place for the whole app. The console card (which computer, which plan, paired or not), then a tile for every part:
  *  the console mixer, this phone's own mixer, EQ, scenes, tools, calculator, plug-ins and settings. */
 class HomeActivity : AppCompatActivity() {
+    private lateinit var phoneCard: LinearLayout
     private lateinit var card: LinearLayout; private lateinit var quick: LinearLayout; private lateinit var news: LinearLayout; private lateinit var recentRow: LinearLayout; private lateinit var grid: GridLayout
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor(); private val ui = android.os.Handler(android.os.Looper.getMainLooper())
     private var live: com.amfb.amixos.remote.DaemonClient? = null; private var online = false; private var liveState: String = ""; private var meterL = 0.0; private var meterR = 0.0; private var lastOk = 0L
@@ -52,6 +53,10 @@ class HomeActivity : AppCompatActivity() {
         box.addView(TextView(this).apply { text = getString(R.string.home_by) + "   ·   " + (runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""); setTextColor(getColor(R.color.dim)); textSize = 12f; letterSpacing = 0.2f; setPadding(0, 0, 0, 24) })
         card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.card_bg); setPadding(32, 28, 32, 28) }
         box.addView(card)
+        // THIS PHONE: the phone's own mixer, with its quick chains and what else runs on the phone itself
+        phoneCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.card_bg); setPadding(32, 28, 32, 28)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 18, 0, 0) } }
+        box.addView(phoneCard)
         // QUICK ACTIONS: the things a show needs in one tap
         quick = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 18, 0, 0) }
         box.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(quick) })
@@ -73,7 +78,7 @@ class HomeActivity : AppCompatActivity() {
         if (durationMs > 0) v.start(durationMs); return v
     }
     companion object { @JvmStatic internal var bootShown = false }
-    override fun onResume() { super.onResume(); showCard(); drawQuick(); drawNews(); drawRecent(); drawTiles(); startLive() }
+    override fun onResume() { super.onResume(); showCard(); drawPhone(); drawQuick(); drawNews(); drawRecent(); drawTiles(); startLive() }
     override fun onPause() { ui.removeCallbacks(poll); super.onPause() }
     override fun onDestroy() { ui.removeCallbacks(poll); io.shutdownNow(); super.onDestroy() }
     // ---- THE TILES: pinned first (long press pins / unpins, ★ on the tile)
@@ -93,6 +98,36 @@ class HomeActivity : AppCompatActivity() {
         this.text = text; setTextColor(color); textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setPadding(26, 16, 26, 16); isClickable = true; setOnClickListener { f() }
         background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 40f; setColor(Color.parseColor("#1A2230")); setStroke(2, Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))) }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 14, 0) } })
+    // ---- THIS PHONE: the local mixer's card. What it is set to, OPEN, whether the app starts in it, one-tap chains for CH 1, and the
+    //      other things the phone does by itself (recorder, mixdown, tools, its inputs and outputs).
+    internal fun drawPhone() {
+        phoneCard.removeAllViews(); val cyan = getColor(R.color.cyan); val dim = getColor(R.color.dim); val p = Prefs.local(this)
+        phoneCard.addView(TextView(this).apply { text = getString(R.string.home_phone_card); setTextColor(cyan); textSize = 12f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.15f })
+        val hal = runCatching { AudioHal.read(this) }.getOrNull()
+        val inText = if (!Prefs.localInputOn(this)) getString(R.string.home_phone_input_off) else getString(if (p.getInt("inChannels", 1) == 2) R.string.lm_stereo else R.string.lm_mono)
+        val chain = LocalChains.byId(LocalChains.current(p, 0))
+        phoneCard.addView(TextView(this).apply { tag = "phoneStatus"; setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 6, 0, 14)
+            text = getString(R.string.home_phone_io, inText, chain?.title ?: "—", hal?.nativeRate?.takeIf { it in 8000..192000 } ?: 48000, hal?.nativeFrames?.takeIf { it in 32..2048 } ?: 256) })
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(PadButton(this, getString(R.string.home_phone_open), cyan, 13f).apply { tag = "phoneOpen"; on = true; layoutParams = LinearLayout.LayoutParams(0, 96, 1f).apply { setMargins(0, 0, 12, 0) }; setOnClickListener { Nav.go(this@HomeActivity, LocalMixerActivity::class.java) } })
+        val atStart = Prefs.startInPhoneMixer(this)
+        row.addView(PadButton(this, getString(if (atStart) R.string.home_phone_start_on else R.string.home_phone_start_off), getColor(R.color.accent), 11f).apply { tag = "phoneAtStart"; on = atStart; layoutParams = LinearLayout.LayoutParams(0, 96, 1f)
+            setOnClickListener { Prefs.remote(this@HomeActivity).edit().putBoolean("startPhoneMixer", !atStart).apply(); drawPhone() } })
+        phoneCard.addView(row)
+        phoneCard.addView(TextView(this).apply { text = getString(R.string.home_phone_chains); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 18, 0, 8) })
+        val chains = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "phoneChains" }
+        for (c in LocalChains.chains) chip(chains, c.glyph + " " + c.title, if (chain?.id == c.id) Color.parseColor("#34D399") else cyan) {
+            LocalChains.save(p, 0, c, Engine.MAX_INSERTS); android.widget.Toast.makeText(this, getString(R.string.home_phone_chain_set, c.title), android.widget.Toast.LENGTH_SHORT).show(); drawPhone() }
+        phoneCard.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chains) })
+        phoneCard.addView(TextView(this).apply { text = getString(R.string.home_phone_more); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 18, 0, 8) })
+        val more = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "phoneMore" }
+        chip(more, "● " + getString(R.string.home_recorder), Color.parseColor("#F87171")) { Nav.go(this, RecorderActivity::class.java) }
+        chip(more, "⊕ " + getString(R.string.home_mixdown), getColor(R.color.accent)) { Nav.go(this, MixdownActivity::class.java) }
+        chip(more, "⧉ " + getString(R.string.home_plugins), Color.parseColor("#A78BFA")) { Nav.go(this, PluginsActivity::class.java) }
+        chip(more, "♪ " + getString(R.string.home_tools), Color.parseColor("#FBBF24")) { Nav.go(this, ToolsActivity::class.java) }
+        chip(more, "⇄ " + getString(R.string.home_devices), cyan) { Nav.go(this, DevicesActivity::class.java) }
+        phoneCard.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(more) })
+    }
     // ---- QUICK ACTIONS
     internal fun drawQuick() {
         quick.removeAllViews(); val paired = !Prefs.remote(this).getString("token", "").isNullOrEmpty()

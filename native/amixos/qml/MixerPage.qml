@@ -334,6 +334,7 @@ Item {
                 MenuItem { text: i18n.t("Bypass / enable", i18n.lang); onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
                 MenuItem { text: i18n.t("Clear slot", i18n.lang); onTriggered: engine.setPlugin(page.sel, chooser.slot, "") }
             }
+            AppPicker { id: stripPicker }
             Dialog { id: confirmReset; title: i18n.t("Reset every fader?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.resetFaders(); Text { text: i18n.t("All 32 strips and the master go to 0 dB, pans to centre. Mutes, solos and DSP stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
             Dialog { id: confirmFlatten; title: i18n.t("Flatten the DSP of every channel?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: engine.flattenAllDsp(); Text { text: i18n.t("Gate, EQ, crossover, compressor, limiter, delay and polarity are switched off on all 32 channels. Faders, sends and names stay.", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 300 } }
         }
@@ -504,7 +505,11 @@ Item {
                                                             MouseArea { anchors.fill: parent; onClicked: { engine.setInputRoute(page.sel, inp); inPop.close() } } } }
                                                     Text { visible: engine.deviceInputs <= 0; text: i18n.t("no device open", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                                                 // A PROGRAM on this strip (APP CAPTURE): mono here, or stereo here and on the next strip
-                                                Text { text: i18n.t("PROGRAM → CH ", i18n.lang) + (index + 1); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; Layout.topMargin: 4 }
+                                                RowLayout { Layout.fillWidth: true; Layout.topMargin: 4; spacing: 4
+                                                    Text { Layout.fillWidth: true; text: i18n.t("PROGRAM → CH ", i18n.lang) + (index + 1); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                                    Rectangle { objectName: "inProgPicker"; implicitWidth: pkT2.implicitWidth + 10; implicitHeight: 16; radius: 3; color: Theme.cyan
+                                                        Text { id: pkT2; anchors.centerIn: parent; text: i18n.t("WITH PICTURES…", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                                        MouseArea { anchors.fill: parent; onClicked: { inPop.close(); stripPicker.show(page.sel) } } } }
                                                 Text { visible: inPop.progs.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: apps.available ? i18n.t("no program plays sound now", i18n.lang) : i18n.t("needs Windows 10 (2004) or later", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                                                 Repeater { model: inPop.progs
                                                     delegate: RowLayout { Layout.fillWidth: true; spacing: 3

@@ -30,6 +30,13 @@ class Capture final : public Runtime::NetInput {
    *  the reason: every slot taken, the program is already captured, or this system has no process loopback. The stream itself is
    *  opened on the slot's thread: info().state tells how it went. */
   int open(std::uint32_t pid, const std::string& label, double sampleRate, std::string& err, int wantSlot = -1);   // wantSlot: that slot when it is free (a program coming back to the strips that wait for it)
+  /** WINDOWS RECORDING DEVICES: capture one recording device of Windows (its endpoint id from the device list; "" = the default one)
+   *  beside the sound card: a second microphone, a webcam's microphone, line in, Stereo Mix. Same slots, same three inputs. */
+  int openDevice(const std::string& endpointId, const std::string& label, double sampleRate, std::string& err, int wantSlot = -1);
+  static bool deviceAvailable();   // this system has such devices (Windows)
+  /** what Windows' Sound properties say about a recording device */
+  struct DeviceProps { bool ok = false; int channels = 0; double rate = 0; int bits = 0; double level = -1; bool muted = false; int enhancements = -1; std::string error; };   // level 0 .. 1 (-1 unknown); enhancements 1 on, 0 off, -1 unknown
+  static DeviceProps deviceProps(const std::string& endpointId);
   /** a slot that carries a steady tone (hz) instead of a program */
   int openTest(const std::string& label, double hz, double sampleRate, std::string& err);
   void close(int slot);
@@ -40,6 +47,7 @@ class Capture final : public Runtime::NetInput {
   struct Info {
     bool used = false, test = false;
     std::uint32_t pid = 0; std::string label;
+    std::string device; bool isDevice = false;   // a Windows recording device (its endpoint id) instead of a program
     std::string state;        // "opening" | "live" | "silent" (live, but the program plays nothing) | "failed"
     std::string error;        // why it failed (the program closed, Windows refused ...)
     double peak = 0;          // the loudest sample of the last blocks, 0 .. 1

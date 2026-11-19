@@ -56,6 +56,8 @@
 #include "Links.h"
 #include "Apps.h"
 #include "SysNotify.h"
+#include "AppWindows.h"
+#include <QPainter>
 #include "zip/zipstore.hpp"
 #include <QHostAddress>
 #include <QSettings>
@@ -179,6 +181,7 @@ int main(int argc, char* argv[]) {
   engine.remoteInput = [&](const QString& in) { return remote.send(QVariantMap{{"op", "input"}, {"in", in}}); };   // INPUT while phones are linked
   engine.remoteInProcess = [&] { return remote.inProcess(); };
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
+  AppWindows appWindows;   // PROGRAM PICTURES for the app picker and the live program view (before the interface: it outlives it)
   Apps apps(&engine);   // before the interface, so it outlives it: every strip reads it (a page must never see it gone at exit)
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -191,6 +194,7 @@ int main(int argc, char* argv[]) {
   const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) engine.setWatchdog(false);   // test runs: no automatic restarts under the other checks
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
+  qml.rootContext()->setContextProperty("appWindows", &appWindows); qml.addImageProvider(QStringLiteral("appwin"), new AppWindowImages(&appWindows));   // the engine owns the provider
   qml.rootContext()->setContextProperty("apps", &apps);   // APP CAPTURE: several programs, each on its own strips
   qml.rootContext()->setContextProperty("samples", &samples);
   update.pluginDir = settings.vstUserFolder(); QObject::connect(&update, &Update::pluginInstalled, &settings, [&] { settings.rescanVst(); });   // PLUG-IN DOWNLOADS land in the console's own plug-in folder
@@ -561,6 +565,37 @@ int main(int argc, char* argv[]) {
         // a real program where Windows cannot capture one: refused with the reason, the strip keeps its input
         bool refused = true; if (!am::app::Capture::available()) { const QVariantMap x = apps.capture("loopback:app:1001", "Spotify", 8, false); refused = !x["ok"].toBool() && x["message"].toString().contains("Windows") && engine.inputRoutes()[8].toInt() == routes0[8].toInt() && apps.count() == 2; }
         const bool bad = !apps.capture("not-a-program", "x", 8, false)["ok"].toBool() && !apps.capture("loopback:app:1001", "Spotify", 999, false)["ok"].toBool();
+        // WINDOWS RECORDING DEVICES: the list is Windows' recording devices only; capture, properties and the panels
+        apps.testDevices = QVariantList{QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{mic}"}, {"name", "Microphone (USB)"}, {"kind", "microphone"}, {"inChannels", 1}, {"outChannels", 0}, {"defaultRate", 48000.0}, {"defaultIn", true}},
+          QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{cam}"}, {"name", "Webcam microphone"}, {"kind", "microphone"}, {"inChannels", 2}, {"outChannels", 0}, {"defaultRate", 44100.0}},
+          QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.0.0}.{spk}"}, {"name", "Speakers"}, {"inChannels", 0}, {"outChannels", 2}}, QVariantMap{{"backend", "wasapi"}, {"id", "loopback:system"}, {"name", "Computer sound"}, {"inChannels", 2}},
+          QVariantMap{{"backend", "asio"}, {"id", "X"}, {"name", "ASIO box"}, {"inChannels", 8}}};
+        const QVariantList rd = apps.recordingDevices(); QVariantMap gotProps; QString gotId;
+        const auto pc = QObject::connect(&apps, &Apps::propertiesReady, &app, [&](const QString& id, const QVariantMap& p) { gotId = id; gotProps = p; }); apps.readProperties("{0.0.1.0}.{cam}"); QObject::disconnect(pc);
+        const bool devList = rd.size() == 2 && rd[0].toMap()["isDefault"].toBool() && rd[1].toMap()["name"].toString() == "Webcam microphone" && rd[1].toMap()["slot"].toInt() == -1 && apps.devicesAvailable();
+        const bool devProps = gotId == "{0.0.1.0}.{cam}" && gotProps["ok"].toBool() && gotProps["bits"].toInt() == 24 && gotProps["enhancements"].toString() == "on" && gotProps["levelPct"].toInt() == 80;
+        bool devRefused = !apps.captureDevice("loopback:system", "Computer sound", 8, false)["ok"].toBool() && !apps.captureDevice("", "nothing", 8, false)["ok"].toBool() && !apps.captureDevice("{0.0.1.0}.{cam}", "Webcam microphone", 999, false)["ok"].toBool();
+        if (!am::app::Capture::deviceAvailable()) { const QVariantMap x = apps.captureDevice("{0.0.1.0}.{cam}", "Webcam microphone", 8, false); devRefused = devRefused && !x["ok"].toBool() && x["message"].toString().contains("Windows") && engine.inputRoutes()[8].toInt() == routes0[8].toInt() && apps.count() == 2; }
+        const bool panels = apps.openWindowsSound("recording") && apps.lastPanel == "recording" && apps.openWindowsSound("mixer") && apps.openWindowsSound("settings") && apps.openWindowsSound("playback") && !apps.openWindowsSound("cmd.exe") && apps.lastPanel == "playback";
+        apps.testDevices.clear();
+        std::printf("amixos --smoke: WINDOWS SOUND recording devices listed %d, properties %d, bad picks refused %d, panels %d\n", devList, devProps, devRefused, panels);
+        if (!(devList && devProps && devRefused && panels)) { std::fprintf(stderr, "amixos --smoke: WINDOWS SOUND failed\n"); return 99; }
+        { // PROGRAM PICTURES: the picker's icons and window pictures, a live picture that follows the program, and nothing left when it is forgotten
+          int made = 0; appWindows.testSource = [&made](quint32 pid, bool icon) { ++made; QImage i(icon ? 32 : 320, icon ? 32 : 180, QImage::Format_RGB32); i.fill(QColor(int(pid % 200), 60, made % 255)); return i; };
+          appWindows.testTitle = [](quint32 pid) { return QStringLiteral("Window of %1").arg(pid); };
+          AppWindowImages prov(&appWindows); QSize sz; const QImage none = prov.requestImage("window/1001?0", &sz, QSize());
+          const bool placeholder = !none.isNull() && sz == QSize(320, 180) && none.pixelColor(5, 5) == QColor(18, 20, 24);            // no picture yet: a dark tile, never an error
+          const int t0 = appWindows.tick(); appWindows.snapshot(1001); pause(300);
+          const QImage one = prov.requestImage("window/1001?1", &sz, QSize()); const bool snap = appWindows.tick() > t0 && one.pixelColor(5, 5).red() == 1001 % 200;
+          const QImage ic = prov.requestImage("icon/1001", &sz, QSize(20, 20)); const bool icon = sz == QSize(20, 20) && !ic.isNull();
+          const int t1 = appWindows.tick(); appWindows.watch(1001, true); pause(700); const int frames = appWindows.tick() - t1; const bool live = appWindows.isWatched(1001) && appWindows.watched().size() == 1 && frames >= 3 && frames <= 12;   // about 8 a second
+          appWindows.watch(1001, false); pause(300); const int t2 = appWindows.tick(); pause(400); const bool stopped = appWindows.tick() == t2 && appWindows.watched().isEmpty();
+          for (quint32 p = 2000; p < 2012; ++p) appWindows.watch(p, true); const bool capped = appWindows.watched().size() == 8; for (quint32 p = 2000; p < 2012; ++p) appWindows.forget(p);
+          appWindows.forget(1001); const bool forgotten = prov.requestImage("window/1001?2", &sz, QSize()).pixelColor(5, 5) == QColor(18, 20, 24) && appWindows.titleOf(1001) == "Window of 1001";
+          const bool junk = !prov.requestImage("window/abc", &sz, QSize()).isNull() && !prov.requestImage("", &sz, QSize()).isNull() && !prov.requestImage("icon/0", &sz, QSize()).isNull();
+          appWindows.testSource = nullptr; appWindows.testTitle = nullptr;
+          std::printf("amixos --smoke: PROGRAM PICTURES placeholder %d, snapshot %d, icon %d, live %d (%d pictures in 0.7 s), stops %d, 8 at most %d, forgotten %d, odd requests %d\n", placeholder, snap, icon, live, frames, stopped, capped, forgotten, junk);
+          if (!(placeholder && snap && icon && live && stopped && capped && forgotten && junk)) { std::fprintf(stderr, "amixos --smoke: PROGRAM PICTURES failed\n"); return 100; } }
         // a slot stays while a strip listens to it, and is given back with its last strip
         engine.setInputRoute(5, -1); const bool stays = apps.count() == 2; engine.setInputRoute(6, routes0[6].toInt()); const bool freed = apps.count() == 1;
         apps.release(0); pause(300); const bool released = apps.count() == 0 && engine.inputRoutes()[4].toInt() == -1 && inDb(4) < -100 && apps.captures().isEmpty();
@@ -1327,7 +1362,19 @@ int main(int argc, char* argv[]) {
             const QVariantList r0 = engine.inputRoutes(); const QVariantList st0 = engine.stripState();
             apps.captureTest("Spotify", 440, 2, false); apps.captureTest("Chrome (YouTube, web players)", 660, 3, true); engine.setName(2, "SPOTIFY"); engine.setName(3, "WEB L"); engine.setName(4, "WEB R");
             win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-app-capture.png");
-            win->setProperty("current", "media"); settle(900); win->grabWindow().save(shots + "/media-app-capture.png");
+            apps.testDevices = QVariantList{QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{mic}"}, {"name", "Microphone (USB Audio Device)"}, {"kind", "microphone"}, {"inChannels", 1}, {"defaultRate", 48000.0}, {"defaultIn", true}}, QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{cam}"}, {"name", "Microphone (HD Webcam)"}, {"kind", "microphone"}, {"inChannels", 2}, {"defaultRate", 44100.0}}, QVariantMap{{"backend", "wasapi"}, {"id", "{0.0.1.0}.{mix}"}, {"name", "Stereo Mix (Realtek Audio)"}, {"kind", "line"}, {"inChannels", 2}, {"defaultRate", 48000.0}}};
+            apps.readProperties("{0.0.1.0}.{cam}");
+            win->setProperty("current", "media"); settle(900); apps.readProperties("{0.0.1.0}.{cam}"); settle(300); win->grabWindow().save(shots + "/media-app-capture.png"); apps.testDevices.clear();
+            { // the picker with icons and window pictures, and the live PROGRAM VIEW (drawn pictures stand in for the windows here)
+              appWindows.testTitle = [](quint32 pid) { return pid == 1001 ? QStringLiteral("Spotify Premium") : pid == 1002 ? QStringLiteral("AMFB live set - YouTube - Google Chrome") : QStringLiteral("Zoom Meeting"); };
+              appWindows.testSource = [](quint32 pid, bool icon) { const QColor c = pid == 1001 ? QColor(30, 185, 84) : pid == 1002 ? QColor(219, 68, 55) : QColor(45, 140, 255);
+                if (icon) { QImage i(32, 32, QImage::Format_ARGB32_Premultiplied); i.fill(Qt::transparent); QPainter p(&i); p.setRenderHint(QPainter::Antialiasing); p.setBrush(c); p.setPen(Qt::NoPen); p.drawEllipse(2, 2, 28, 28); return i; }
+                QImage i(640, 360, QImage::Format_RGB32); i.fill(QColor(24, 26, 32)); QPainter p(&i); p.fillRect(0, 0, 640, 34, c.darker(160)); p.fillRect(20, 60, 180, 280, QColor(36, 40, 48)); p.fillRect(220, 60, 400, 200, c.darker(220)); p.fillRect(220, 280, 400, 12, QColor(60, 64, 72)); p.fillRect(220, 280, 150, 12, c); return i; };
+              if (QObject* pk = win->findChild<QObject*>("appPickerOpen")) QMetaObject::invokeMethod(pk, "hit");
+              settle(900); win->grabWindow().save(shots + "/app-picker.png");
+              for (QObject* o : win->findChildren<QObject*>("appPicker")) QMetaObject::invokeMethod(o, "close");
+              appWindows.watch(1002, true); settle(900); win->grabWindow().save(shots + "/media-program-view.png"); appWindows.forget(1002); appWindows.forget(1001); appWindows.forget(1003);
+              appWindows.testSource = nullptr; appWindows.testTitle = nullptr; }
             for (int k = 0; k < 8; ++k) apps.release(k);
             for (int i2 : {2, 3, 4}) { engine.setInputRoute(i2, r0[i2].toInt()); engine.setName(i2, st0[i2].toMap()["name"].toString()); engine.setPan(i2, st0[i2].toMap()["pan"].toDouble()); }
             apps.testMode = false; apps.testPrograms.clear(); }

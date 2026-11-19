@@ -34,6 +34,15 @@ class Apps : public QObject {
   Q_INVOKABLE void release(int slot);                              // the slot is given back; its strips go to no input
   Q_INVOKABLE QString inputName(int input) const;                  // "Spotify" / "Spotify L" / "Spotify R" for an app input, "" otherwise
   Q_INVOKABLE int slotOfInput(int input) const;
+  // WINDOWS RECORDING DEVICES: every device of Windows' Recording tab, each on its own strip beside the sound card
+  Q_PROPERTY(bool devicesAvailable READ devicesAvailable CONSTANT)
+  bool devicesAvailable() const { return am::app::Capture::deviceAvailable() || testMode; }
+  Q_INVOKABLE QVariantList recordingDevices();                     // [{id, name, kind, isDefault, channels, rate, slot (-1 = not captured)}]
+  Q_INVOKABLE QVariantMap captureDevice(const QString& id, const QString& name, int strip, bool stereo);
+  Q_INVOKABLE void readProperties(const QString& id);              // asks Windows on a thread of its own; propertiesReady follows
+  Q_INVOKABLE bool openWindowsSound(const QString& what);          // "settings" | "recording" | "playback" | "mixer": Windows' own panels
+  QString lastPanel;                                               // tests: the panel that would have been opened
+  QVariantList testDevices;
   // tests and the screenshots: a steady tone in place of a program (the same path from the slot to the strip)
   Q_INVOKABLE QVariantMap captureTest(const QString& name, double hz, int strip, bool stereo);
   bool testMode = false;                                           // tests: programs come from testPrograms, nothing is asked of Windows
@@ -41,11 +50,13 @@ class Apps : public QObject {
   std::function<std::vector<std::pair<quint32, QString>>()> sessionsNow;   // tests: what "plays now" (pid, name); empty = ask Windows
   void poll();                                                     // what the timer does (tests call it)
  signals:
+  void propertiesReady(const QString& id, const QVariantMap& props);   // {ok, channels, rate, bits, levelPct, muted, enhancements: "on" | "off" | "unknown", error}
   void changed();
  private:
   void attach(); void prune(); void save(); void load(); void place(int slot, int strip, bool stereo); am::app::Capture& cap();
   QVariantMap finish(int slot, const QString& name, int strip, bool stereo, const std::string& err);
   Engine* engine_; QSettings s_; QTimer timer_; std::unique_ptr<am::app::Capture> cap_; am::Runtime* rt_ = nullptr; double rate_ = 0;
   QString waiting_[am::app::Capture::kSlots];                      // the program a free slot waits for ("" = none)
+  QString waitingDev_[am::app::Capture::kSlots]; int devTick_ = 0;   // ... or the recording device (its endpoint id; the name is in waiting_)
   QString note_; bool looking_ = false, placing_ = false; QString lastSig_;
 };

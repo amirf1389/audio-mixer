@@ -293,6 +293,7 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
   // while phones are linked the console's engine is stopped and the remote service plays: the input choice goes there (main.cpp sets it)
   std::function<bool(const QString& in)> remoteInput;
+  std::string currentInputId() const { return rt_ ? curIn_ : std::string(); }   // the device the sound card stream reads now ("" = the default one or none)
   std::function<QString(int input)> appInputName;   // APP CAPTURE (Apps): the name of a program input, e.g. "Spotify L"
   static int cleanRoute(int input) { return (input >= am::Runtime::kNetInBase && input < am::Runtime::kNetInBase + am::Runtime::kNetInputs) || am::Runtime::isAppInput(input) ? input : std::clamp(input, -1, am::Runtime::kNetInBase - 1); }   // a device input 0 .. 255, a network input, a program input, or -1 (none)
   std::function<bool()> remoteInProcess;   // the network service plays the sound inside this program (phones linked): no working-set trim then

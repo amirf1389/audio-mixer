@@ -14,8 +14,10 @@ Item {
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 26; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+    // the page scrolls when its panels need more room than the window has (several captured programs, a live program picture)
+    Flickable { id: mediaScroll; anchors.fill: parent; clip: true; contentHeight: mediaCol.height + 20; boundsBehavior: Flickable.StopAtBounds; ScrollIndicator.vertical: ScrollIndicator { }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 10; spacing: 8
+        id: mediaCol; x: 10; y: 10; width: mediaScroll.width - 20; height: Math.max(mediaScroll.height - 20, implicitHeight); spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: i18n.t("STREAM & MEDIA:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
@@ -45,6 +47,7 @@ Item {
             Component.onCompleted: appPanel = this
         }
         AppCapturePanel { Layout.fillWidth: true }
+        WindowsSoundPanel { Layout.fillWidth: true }
         // transport
         Rectangle { Layout.fillWidth: true; implicitHeight: 118; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8
@@ -68,7 +71,7 @@ Item {
                     MeterBar { Layout.preferredWidth: 160; implicitHeight: 10; peakDb: media.peakDb }
                     Text { Layout.preferredWidth: 56; text: media.peakDb > -119 ? media.peakDb.toFixed(1) + i18n.t(" dBFS", i18n.lang) : "—"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; horizontalAlignment: Text.AlignRight } } } }
         // playlist
-        Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
+        Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 200; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
                 RowLayout { spacing: 6; Layout.fillWidth: true
                     Text { text: i18n.t("PLAYLIST", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
@@ -88,5 +91,6 @@ Item {
                         MouseArea { anchors.fill: parent; z: -1; onClicked: media.select(index) } }
                     Text { visible: media.playlist.length === 0; anchors.centerIn: parent; text: i18n.t("Empty. Type the path of a WAV or a folder and press ADD. The player feeds the master before its fader; mix it with LEVELS and the master.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; width: parent.width - 40; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap } }
                 Text { Layout.fillWidth: true; text: i18n.t("WAV, FLAC and AIFF are read by the console itself; M4A, MP3, WMA and ALAC by Windows; OGG, Opus, WavPack, APE, DSD, AC-3, DTS and more by the FFmpeg decoders installed with it. Other rates are resampled to the engine rate. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+    }
     }
 }
