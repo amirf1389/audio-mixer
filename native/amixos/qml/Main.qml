@@ -15,6 +15,10 @@ ApplicationWindow {
     title: Theme.product + " " + appVersion + " · " + Theme.vendor + " · build " + buildStamp
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
     color: Theme.obsidian
+    // FIT THE SCREEN: when the window as designed does not fit the work area (a small laptop, or an enlarged interface), or in RESPONSIVE
+    // zoom, it opens maximised instead of hanging over the edges. Not in the tests (offscreen), which need the designed size.
+    function fitScreen() { if (Qt.platform.pluginName === "offscreen") return
+        if (settings.uiZoom === -1 || Screen.desktopAvailableWidth < width + 24 || Screen.desktopAvailableHeight < height + 48) visibility = Window.Maximized }
     // the page shown. Read from the START PAGE setting ONCE: a binding to it ran again on every settings change (the settings object has
     // one change signal), so a setting saved before the first click (the audio starting, a device remembered) sent the window back to
     // the start page and logged a binding loop on "current"
@@ -25,7 +29,7 @@ ApplicationWindow {
     function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
     onActiveChanged: uiActivity()
     onVisibilityChanged: uiActivity()
-    Component.onCompleted: { if (current === "") current = settings.startPage; if (current === "mixer") mixerEver = true }
+    Component.onCompleted: { fitScreen(); if (current === "") current = settings.startPage; if (current === "mixer") mixerEver = true }
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
@@ -91,6 +95,9 @@ ApplicationWindow {
                         MItem { text: i18n.t("Clear solo", i18n.lang); onTriggered: engine.clearSolo() }
                         MItem { text: i18n.t("Clear clip lamps", i18n.lang); onTriggered: engine.clearClips() } }
                     Menu { id: toolsMenu; objectName: "toolsMenu"; width: 260
+                        MItem { objectName: "menuLive"; text: i18n.t("LIVE MODE (stream or guest)…", i18n.lang); onTriggered: root.say(engine.startLive(engine.selectedStrip)) }
+                        MItem { objectName: "menuAutoLive"; text: (apps.autoLive ? "✓ " : "") + i18n.t("AUTO LIVE: start it when a streaming program opens", i18n.lang); onTriggered: apps.autoLive = !apps.autoLive }
+                        MenuSeparator {}
                         MItem { text: i18n.t("Plug-ins", i18n.lang); onTriggered: root.current = "plugins" }
                         MItem { text: i18n.t("Plug-in Builder (separate app)…", i18n.lang); onTriggered: settings.openPluginBuilder() }
                         MItem { text: i18n.t("Sound card", i18n.lang); onTriggered: root.current = "asio" }
@@ -315,6 +322,8 @@ ApplicationWindow {
             else if (t === "Light look" || t === "Dark look") { const d = settings.darkTheme; it.triggered(); if (settings.darkTheme === d) bad.push(t); settings.darkTheme = d }
             else if (t.indexOf("Colour motion") === 0) { const c = settings.colorMotion; it.triggered(); if (settings.colorMotion === c) bad.push(t); settings.colorMotion = c }
             else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
+            else if (t.indexOf("LIVE MODE") === 0) { it.triggered(); if (!engine.liveMode) bad.push(t); engine.stopLive(); if (engine.liveMode) bad.push(t + " (stop)") }
+            else if (t.indexOf("AUTO LIVE") >= 0) { const d = apps.autoLive; it.triggered(); if (apps.autoLive === d) bad.push(t); apps.autoLive = d }
             else if (t === "Volume Enhancer") { it.triggered(); if (!enhancer.opened && !enhancer.visible) bad.push(t) }
             else if (t === "Master Analyzer") { it.triggered(); if (!analyzer.opened && !analyzer.visible) bad.push(t) }
             else if (t === "Mute all channels") { it.triggered(); if (!engine.stripAt(3, engine.stripTick).mute) bad.push(t) }
@@ -395,5 +404,43 @@ ApplicationWindow {
         Text { id: updT; anchors.centerIn: parent; color: "#000"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true
             text: updater.failedUpdate !== "" ? i18n.t("The update to ", i18n.lang) + updater.failedUpdate + i18n.t(" did not complete: this is still ", i18n.lang) + updater.current : i18n.t("UPDATED TO ", i18n.lang) + updater.justUpdated + "  ·  " + i18n.t("click to see what is new", i18n.lang) }
         MouseArea { anchors.fill: parent; onClicked: { const ok = updater.failedUpdate === ""; updater.acknowledgeUpdate(); if (ok) whatsNew.open() } } }
+    // LIVE SCREEN: all that is shown in LIVE MODE. The console behind it is covered and takes no clicks or keys; leaving needs the console's
+    // PIN, so a guest at the desk (or a stream running unattended) cannot change the mix. The sound and the watchdog carry on underneath.
+    Rectangle { id: liveScreen; objectName: "liveScreen"; anchors.fill: parent; z: 90; visible: engine.liveMode; color: Theme.obsidian
+        readonly property var m: (engine.meterTick, engine.meterAt(engine.liveStrip)); readonly property var st: engine.stripAt(engine.liveStrip, engine.stripTick)
+        property string note: ""; property bool asking: false
+        function lvl(db) { return Math.max(0, Math.min(1, (db + 60) / 60)) }
+        function arm() { if (Qt.platform.pluginName !== "offscreen") access.lock(); asking = false; note = "" }   // the tests look at the screen without locking their own console
+        onVisibleChanged: if (visible) arm()
+        Component.onCompleted: if (visible) arm()
+        MouseArea { anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.AllButtons; onWheel: function (w) { w.accepted = true } }   // nothing behind is reachable
+        focus: visible; Keys.onPressed: function (e) { e.accepted = true }
+        Column { anchors.centerIn: parent; spacing: 18; width: Math.min(560, parent.width - 80)
+            Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 12
+                Rectangle { width: 18; height: 18; radius: 9; color: "#ef4444"; anchors.verticalCenter: parent.verticalCenter; SequentialAnimation on opacity { loops: Animation.Infinite; running: liveScreen.visible; NumberAnimation { to: 0.25; duration: 700 } NumberAnimation { to: 1; duration: 700 } } }
+                Text { text: i18n.t("LIVE MODE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 30; font.bold: true; font.letterSpacing: 6 } }
+            Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10
+                   text: (apps.streamApp !== "" ? apps.streamApp + i18n.t(" is running. ", i18n.lang) : "") + i18n.t("The console runs by itself: the voice chain is on the microphone, the master is limited, the watchdog restarts the sound if the sound card stops. The controls are locked.", i18n.lang) }
+            Repeater { model: [{ t: "MICROPHONE · CH " + (engine.liveStrip + 1), v: liveScreen.m.inDb ?? -120, c: Theme.cyan }, { t: "MASTER", v: engine.telv("masterPeakDb", engine.meterTick), c: Theme.orange }]
+                delegate: Column { width: parent.width; spacing: 4
+                    Row { width: parent.width; Text { width: parent.width - 90; text: i18n.t(modelData.t, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+                        Text { width: 90; horizontalAlignment: Text.AlignRight; text: Theme.dbText(modelData.v) + " dBFS"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10 } }
+                    Rectangle { width: parent.width; height: 12; radius: 6; color: Theme.deep; border.color: Theme.lineSoft
+                        Rectangle { height: parent.height; radius: 6; width: parent.width * liveScreen.lvl(modelData.v); color: modelData.v > -1 ? "#ef4444" : modelData.c } } } }
+            Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 12
+                Rectangle { objectName: "liveMute"; width: 200; height: 46; radius: 8; color: liveScreen.st.mute ? "#ef4444" : Theme.ov(0.10); border.color: liveScreen.st.mute ? "#ef4444" : Theme.lineSoft
+                    Text { anchors.centerIn: parent; text: liveScreen.st.mute ? i18n.t("MICROPHONE IS MUTED", i18n.lang) : i18n.t("MUTE MICROPHONE", i18n.lang); color: liveScreen.st.mute ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMute(engine.liveStrip, !liveScreen.st.mute) } }   // the one control a guest keeps
+                Rectangle { objectName: "liveUnlock"; width: 200; height: 46; radius: 8; color: Theme.ov(0.06); border.color: Theme.lineSoft
+                    Text { anchors.centerIn: parent; text: i18n.t("UNLOCK AND STOP", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { liveScreen.asking = true; livePin.text = ""; livePin.forceActiveFocus() } } } }
+            Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 8; visible: liveScreen.asking
+                TextField { id: livePin; objectName: "livePin"; width: 160; echoMode: TextInput.Password; inputMethodHints: Qt.ImhDigitsOnly; maximumLength: 8; placeholderText: i18n.t("Console PIN", i18n.lang); font.family: Theme.mono
+                    onAccepted: liveGo.go() }
+                Rectangle { id: liveGo; width: 90; height: livePin.height; radius: 6; color: Theme.orange
+                    function go() { if (access.unlock(livePin.text)) { liveScreen.note = ""; liveScreen.asking = false; root.say(engine.stopLive()) } else { liveScreen.note = i18n.t("Wrong PIN.", i18n.lang); livePin.text = "" } }
+                    Text { anchors.centerIn: parent; text: i18n.t("UNLOCK", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: liveGo.go() } } }
+            Text { visible: liveScreen.note !== ""; anchors.horizontalCenter: parent.horizontalCenter; text: liveScreen.note; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } } }
     SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

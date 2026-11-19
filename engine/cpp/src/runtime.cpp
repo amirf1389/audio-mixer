@@ -48,10 +48,13 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
 enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
-Runtime::~Runtime() { stop(); }
+Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
 
 bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
-  stop();
+  stop(); backend_.reset();   // the old device is fully gone (no callback can still run) before the buffers below are made again
+  // a block size or a rate that makes no sense is refused here: the backends divide by them and loop on them
+  if (cfg.frames < 16 || cfg.frames > 16384) { err = "the block size must be 16 .. 16384 frames (asked: " + std::to_string(cfg.frames) + ")"; return false; }
+  if (!(cfg.sampleRate >= 8000.0 && cfg.sampleRate <= 1100000.0)) { err = "the sample rate must be 8000 .. 1100000 Hz"; return false; }   // the same range the console offers (custom rates up to 1100 kHz)
   std::string name = cfg.backend;
   if (name == "auto") name = availableBackends().front();
   backend_ = createBackend(name);
@@ -66,7 +69,8 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f)); mono_.assign(n, 0.0f);
   for (int o = 0; o < kMaxOutputs; ++o) { amp_[o].prepare(cfg.sampleRate); amp_[o].set(ampUi_[o]); }   // the delay lines sized at the device rate, the settings kept
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
-  return backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err);
+  if (!backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err)) { backend_.reset(); return false; }   // a device that did not open is not kept: start() then says "open() first"
+  return true;
 }
 bool Runtime::start(std::string& err) { if (!backend_) { err = "open() first"; return false; } if (running_) return true; running_ = backend_->start(err); return running_; }
 void Runtime::stop() { if (backend_ && running_) backend_->stop(); running_ = false; }

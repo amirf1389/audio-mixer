@@ -30,8 +30,8 @@ Flickable {
                 Toggle { objectName: "spatialToggle"; on: settings.spatialEnabled; onToggled: function (v) { settings.spatialEnabled = v
                     if (!v) { for (let i = 0; i < engine.strips; ++i) { const sp = engine.spatial(i); if (sp && sp.on) { engine.setSpatialOrbit(i, 0); engine.setSpatial(i, false, sp.az || 0, sp.el || 0, sp.dist || 1, sp.spread || 0) } }
                         if (Window.window.current === "surround") Window.window.current = "mixer" } } } }
-            Opt { label: i18n.t("Interface zoom", i18n.lang); hint: (settings.zoomNote !== "" ? settings.zoomNote + ". " : "") + i18n.t("AUTO fits the console to the screen (a 14-inch laptop at 150 % is drawn as at about 130 %). Takes effect at the next start.", i18n.lang)
-                Choice { options: [{t: "AUTO", v: 0}, {t: "100 %", v: 100}, {t: "90 %", v: 90}, {t: "80 %", v: 80}, {t: "75 %", v: 75}]; value: settings.uiZoom; onPicked: function (v) { settings.uiZoom = v } } }
+            Opt { label: i18n.t("Interface zoom", i18n.lang); hint: (settings.zoomNote !== "" ? settings.zoomNote + ". " : "") + i18n.t("AUTO fits the console to the screen: smaller when it does not fit, larger on a screen of 14 inches or less. RESPONSIVE fills any screen. Takes effect at the next start.", i18n.lang)
+                Choice { options: [{t: "AUTO", v: 0}, {t: "RESPONSIVE", v: -1}, {t: "150 %", v: 150}, {t: "125 %", v: 125}, {t: "110 %", v: 110}, {t: "100 %", v: 100}, {t: "90 %", v: 90}, {t: "80 %", v: 80}, {t: "75 %", v: 75}]; value: settings.uiZoom; onPicked: function (v) { settings.uiZoom = v } } }
             Opt { label: i18n.t("ECO interface (low CPU)", i18n.lang); hint: i18n.t("Meters redraw at 15 fps instead of 30 in front. Behind another app (Chrome, a game) they always drop to 4 fps, minimised to 1 fps; the sound is never slowed.", i18n.lang); Toggle { on: engine.ecoUi; onToggled: function (v) { engine.ecoUi = v } } }
             Opt { label: i18n.t("Tooltips", i18n.lang); hint: i18n.t("Short help when the pointer rests on a control", i18n.lang); Toggle { on: settings.tooltips; onToggled: function (v) { settings.tooltips = v } } }
         }

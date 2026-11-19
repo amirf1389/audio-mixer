@@ -1,0 +1,35 @@
+1
+00:00:00,000 --> 00:00:04,000
+AmF X1: penggunaan pemproses rendah untuk penstriman langsung
+
+2
+00:00:04,000 --> 00:00:08,000
+LIVE MODE: one switch for a stream or a guest
+
+3
+00:00:08,000 --> 00:00:12,000
+Rantaian suara pada mikrofon: membersihkan, menyamakan, melaraskan paras, membuang puncak
+
+4
+00:00:12,000 --> 00:00:16,000
+Tahap keluaran terhad, jadi aliran tidak boleh terdistorsi. Jika kad bunyi berhenti, bunyi akan bermula semula dengan sendirinya.
+
+5
+00:00:16,000 --> 00:00:20,000
+Antaramuka melambatkan sendiri: 30, 4 atau 1 lukisan semula sesaat
+
+6
+00:00:20,000 --> 00:00:24,000
+Diukur pada mesin ujian kami: program ini menggunakan kira-kira 7 peratus daripada satu teras pemproses semasa tetingkapnya terbuka, dan kira-kira 4 peratus semasa ia diminiaturkan.
+
+7
+00:00:24,000 --> 00:00:28,000
+Komputer anda akan memberikan angka yang berbeza. Belum diukur pada Windows.
+
+8
+00:00:28,000 --> 00:00:32,000
+AUTO LIVE memulakannya apabila program penstriman dibuka.
+
+9
+00:00:32,000 --> 00:00:36,000
+AmF X1 1.24.0.5 oleh AMFB Audio

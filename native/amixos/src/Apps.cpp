@@ -158,7 +158,46 @@ void Apps::prune() {
   if (any) save();
 }
 // once a second: a program that closed leaves its slot waiting; a waiting slot looks for its program among those that play now
+// ---- AUTO LIVE
+QString Apps::streamAppOf(const QString& processName) {
+  QString n = processName.trimmed().toLower(); if (n.endsWith(QLatin1String(".exe"))) n.chop(4);
+  static const std::pair<const char*, const char*> known[] = {{"tiktok live studio", "TikTok LIVE Studio"}, {"tiktoklivestudio", "TikTok LIVE Studio"}, {"obs64", "OBS Studio"}, {"obs32", "OBS Studio"}, {"obs studio", "OBS Studio"},
+    {"streamlabs obs", "Streamlabs"}, {"streamlabs desktop", "Streamlabs"}, {"streamlabs", "Streamlabs"}, {"xsplit.core", "XSplit"}, {"xsplit broadcaster", "XSplit"}, {"vmix64", "vMix"}, {"vmix", "vMix"},
+    {"twitch studio", "Twitch Studio"}, {"twitchstudio", "Twitch Studio"}, {"prism live studio", "PRISM Live Studio"}, {"prismlivestudio", "PRISM Live Studio"}};
+  if (n == QLatin1String("obs")) return QStringLiteral("OBS Studio");
+  for (const auto& [key, name] : known) if (n == QLatin1String(key) || n.startsWith(QLatin1String(key))) return QString::fromLatin1(name);
+  return QString();
+}
+void Apps::setAutoLive(bool on) { s_.setValue("live/auto", on); streamHandled_ = false; if (!on && !streamApp_.isEmpty()) streamApp_.clear(); emit changed(); }
+void Apps::checkStreamApps(const QStringList& names) {
+  QString found; for (const QString& n : names) { found = streamAppOf(n); if (!found.isEmpty()) break; }
+  if (found.isEmpty()) { if (!streamApp_.isEmpty()) { streamApp_.clear(); streamHandled_ = false; emit changed(); } return; }   // it was closed: the next start counts again
+  if (found != streamApp_) { streamApp_ = found; streamHandled_ = false; emit changed(); }
+  if (!autoLive() || streamHandled_) return;
+  streamHandled_ = true;   // once per run of the program
+  if (!engine_->liveMode()) { note_ = found + QStringLiteral(" is running: ") + engine_->startLive(engine_->selectedStrip()); emit changed(); }
+}
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <tlhelp32.h>
+static QStringList runningProgramNames() {   // names only (a snapshot of the process list); nothing is opened or read from the programs
+  QStringList l; HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); if (snap == INVALID_HANDLE_VALUE) return l;
+  PROCESSENTRY32W e; e.dwSize = sizeof e; if (Process32FirstW(snap, &e)) do { l << QString::fromWCharArray(e.szExeFile); } while (Process32NextW(snap, &e));
+  CloseHandle(snap); return l;
+}
+#else
+static QStringList runningProgramNames() { return {}; }
+#endif
 void Apps::poll() {
+  if (autoLive() && ++procTick_ >= 5 && !procLooking_) { procTick_ = 0;   // every 5 seconds, on a thread of its own
+    if (processesNow) checkStreamApps(processesNow());
+    else { procLooking_ = true; QPointer<Apps> self(this); std::thread([self] { const QStringList names = runningProgramNames(); QMetaObject::invokeMethod(qApp, [self, names] { if (self) { self->procLooking_ = false; self->checkStreamApps(names); } }, Qt::QueuedConnection); }).detach(); } }
   bool wait = false; QString sig;
   for (int k = 0; k < Capture::kSlots; ++k) {
     if (cap_) { const Capture::Info i = cap_->info(k);

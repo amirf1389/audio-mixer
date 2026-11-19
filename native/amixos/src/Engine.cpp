@@ -90,6 +90,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   // plug-in windows: their editors are idled (VST2 editors redraw there), and a window whose plug-in left its slot (removed, replaced, reloaded) is closed
   connect(&pluginIdle_, &QTimer::timeout, this, [this] { for (int k = pluginWins_.size() - 1; k >= 0; --k) { const PluginWin& w = pluginWins_[k];
       if (strips_[static_cast<std::size_t>(w.strip)].plugins[w.slot].vst != w.pl) closePluginWin(k); else w.pl->editorIdle(); } });
+  live_ = settings_.value("live/on", false).toBool(); liveStrip_ = std::clamp(settings_.value("live/strip", 0).toInt(), 0, kStrips - 1);   // closed in LIVE MODE: it starts in it again
   saveTimer_.setSingleShot(true); saveTimer_.setInterval(2000); connect(&saveTimer_, &QTimer::timeout, this, [this] { if (!restoring_) { save(); settings_.sync(); } });
   for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::masterChainChanged, &Engine::routingChanged, &Engine::groupsChanged}) connect(this, sig, this, [this] { if (!saveTimer_.isActive()) saveTimer_.start(); });   // two seconds after the FIRST change: a stream of changes (a controller being moved for a minute) cannot keep pushing the save away
   graveTimer_.setSingleShot(true); graveTimer_.setInterval(1500); connect(&graveTimer_, &QTimer::timeout, this, [this] { graveyard_.clear(); fxGraveyard_.clear(); });
@@ -1560,6 +1561,28 @@ int Engine::playSampleOnStrip(int i, int id) {
   setPluginParam(i, k, 0, (id - 1) / 99.0);   // SAMPLE
   setPluginParam(i, k, 1, 0.0); setPluginParam(i, k, 1, 1.0);   // PLAY off, then on: from the top
   return k;
+}
+// ---- LIVE MODE
+QString Engine::startLive(int strip) {
+  if (live_) return QStringLiteral("LIVE MODE is already on (channel %1).").arg(liveStrip_ + 1);
+  if (strip < 0 || strip >= shownStrips()) strip = 0;
+  QStringList added;   // the slots this start filled: STOP empties these and nothing else
+  for (const char* k : {"fx:clean", "fx:automiceq", "fx:rider", "fx:peakremover"}) { const QString kind = QString::fromLatin1(k); bool had = false;
+    for (int sl = 0; sl < kPluginSlots; ++sl) if (strips_[static_cast<std::size_t>(strip)].plugins[sl].kind == kind) had = true;
+    if (!had) { const int sl = addToRack(strip, kind); if (sl >= 0) added << QString::number(sl); } }
+  settings_.setValue("live/strip", strip); settings_.setValue("live/slots", added.join(QLatin1Char(','))); settings_.setValue("live/headroomWas", headroom_); settings_.setValue("live/watchdogWas", watchdog_);
+  if (headroom_ < 3) setHeadroomDb(3); setWatchdog(true);
+  live_ = true; liveStrip_ = strip; settings_.setValue("live/on", true); settings_.sync(); emit liveChanged();
+  return QStringLiteral("LIVE MODE is on: channel %1 has the voice chain (%2 added), the master is held under -%3 dBFS, the watchdog is on.").arg(strip + 1).arg(added.size()).arg(headroom_);
+}
+QString Engine::stopLive() {
+  if (!live_) return QStringLiteral("LIVE MODE is off.");
+  const int strip = liveStrip_; int n = 0;
+  for (const QString& t : settings_.value("live/slots").toString().split(QLatin1Char(','), Qt::SkipEmptyParts)) { const int sl = t.toInt(); if (sl >= 0 && sl < kPluginSlots && strip >= 0 && strip < kStrips) {
+    const QString k = strips_[static_cast<std::size_t>(strip)].plugins[sl].kind; if (k == "fx:clean" || k == "fx:automiceq" || k == "fx:rider" || k == "fx:peakremover") { setPlugin(strip, sl, QString()); ++n; } } }   // only if the slot still holds what LIVE MODE put there
+  setHeadroomDb(settings_.value("live/headroomWas", 0).toInt()); setWatchdog(settings_.value("live/watchdogWas", watchdog_).toBool());
+  live_ = false; settings_.setValue("live/on", false); settings_.remove("live/slots"); settings_.sync(); emit liveChanged();
+  return QStringLiteral("LIVE MODE is off: %1 effects taken out of channel %2, the master and the watchdog are as before.").arg(n).arg(strip + 1);
 }
 int Engine::addToRack(int i, const QString& kind) {
   if (i < 0 || i >= kStrips || kind.isEmpty()) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];

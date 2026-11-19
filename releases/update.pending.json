@@ -1,10 +1,31 @@
 {
   "product": "audio-mixer",
-  "version": "1.24.0.4",
+  "version": "1.24.0.5",
   "channel": "stable",
   "released": "2026-11-19",
   "notes": [],
   "features": [
+    {
+      "version": "1.24.0.5",
+      "date": "2026-11-19",
+      "title": "1.24.0.5: LIVE MODE, AUTO MIC EQ, the console fits the screen (14 inches and under)",
+      "items": [
+        "NEW · LIVE MODE (TOOLS menu) for a stream or a guest at the desk: the microphone channel gets the voice chain (VOICE CLEAN, AUTO MIC EQ, VOICE RIDER, PEAK REMOVER), the master is held 3 dB under full scale, the watchdog is on, and the window shows only a locked LIVE screen with the levels and MUTE MICROPHONE; leaving needs the console PIN; a console closed in LIVE MODE starts in it again",
+        "NEW · AUTO LIVE (TOOLS menu): when a streaming program opens (TikTok LIVE Studio, OBS Studio, Streamlabs, XSplit, vMix, Twitch Studio, PRISM Live Studio) LIVE MODE starts by itself; only the names of the running programs are looked at",
+        "NEW · AUTO MIC EQ: an insert effect that shapes a voice towards a TARGET (NATURAL, CLARITY, BROADCAST, WARM, BRIGHT) while it sounds, with AMOUNT, RANGE and SPEED; eight bands follow the singer in real time and hold between phrases (51 effects in all)",
+        "NEW · Buffer sizes 2048, 4096 and 8192 samples on SOUND CARD, CONNECTIONS and the audio settings (8192 is 171 ms a block at 48 kHz: for slow computers and recording, not for live monitoring)",
+        "NEW · PHONE: AUTO EQ quick chain in the phone mixer",
+        "NEW · RESPONSIVE zoom (SETTINGS, Interface zoom): the console is drawn as large as the screen allows, on any screen",
+        "ENHANCEMENT · AUTO zoom now also enlarges the console on a screen of 14 inches or less (a 14-inch laptop at 1920 x 1080 and 100 % is drawn 25 % larger); larger monitors stay as Windows draws them",
+        "ENHANCEMENT · Interface zoom can be fixed at 110, 125 or 150 % as well",
+        "FIX · The window opens maximised when it does not fit the screen as designed, instead of hanging over the edges",
+        "SECURITY · Sound path audit: ASIO stop can no longer be lost during a driver reset (a stream could keep running into a console that was closing); the device is fully closed before its buffers are rebuilt; a device that did not open is not kept",
+        "SECURITY · Windows' own audio library is loaded from the Windows system folder only; block sizes and sample rates that make no sense are refused before a device is opened",
+        "FIX · ASIO: other drivers are not probed while an ASIO stream is open; the channel names and formats are read safely during a driver reset",
+        "FIX · WASAPI exclusive mode: a device that grants another buffer size than the one asked for now says so instead of opening a silent stream",
+        "FIX · DirectSound, input only: one block per real period (every other block used to be silence)"
+      ]
+    },
     {
       "version": "1.24.0.4",
       "date": "2026-11-19",
@@ -222,22 +243,22 @@
   ],
   "files": {
     "win-x64-exe": {
-      "name": "AmF-X1-1.24.0.4-setup.exe",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.24.0.4-setup.exe",
-      "size": 27933906,
-      "sha256": "675934b0f8749e2434d8f840a17ae2c66460642b37e6d4806c359e4a48ae0b0f"
+      "name": "AmF-X1-1.24.0.5-setup.exe",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.24.0.5-setup.exe",
+      "size": 27970498,
+      "sha256": "eb769f063d35440e7510d5ec189af7b03196ddb4b7a840327422978d50f3b1b7"
     },
     "android-apk": {
-      "name": "AmF-X1-1.24.0.4-b1-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.4-b1-android.apk",
-      "size": 14558009,
-      "sha256": "215834c606b854656ee6110096f8397ccf00964d412fc6f1f84a1fc5dedcaea3"
+      "name": "AmF-X1-1.24.0.5-b1-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.5-b1-android.apk",
+      "size": 14591693,
+      "sha256": "226c1a674cfb3ce46ceb5b6c991e24a4f1133a33884bac08a62ee263e23f9b99"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.24.0.4-b1-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.4-b1-android.apk",
-      "size": 14557729,
-      "sha256": "b4c5a23e82e5cd6cf710e92d8a587e0462dfff53c78ac7200c8cb0171ec37e9f"
+      "name": "AmF-X1-Mixer-1.24.0.5-b1-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.5-b1-android.apk",
+      "size": 14591417,
+      "sha256": "724aa436c5cd9fe2155c18d338b71471d48835654dcee978ed2f7a28d981d5a4"
     }
   },
   "plugins": []

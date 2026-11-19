@@ -194,7 +194,7 @@ Item {
                                        page.rateNote = ""; page.reopen(Math.round(k * 1000), engine.blockFrames || settings.defaultFrames) } } }
                 Text { visible: page.rateNote !== ""; text: page.rateNote; color: Theme.amber; font.pixelSize: 9 }
                 RowLayout { spacing: 4; Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
-                    Repeater { model: [32, 64, 128, 256, 512, 1024]; delegate: Btn { label: modelData; on: engine.running && engine.blockFrames === modelData; onClicked: page.reopen(engine.sampleRate || settings.defaultRate, modelData) } } }
+                    Repeater { model: [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]; delegate: Btn { label: modelData; on: engine.running && engine.blockFrames === modelData; onClicked: page.reopen(engine.sampleRate || settings.defaultRate, modelData) } } }
                 Note { text: i18n.t("A click re-opens the remembered device at that rate or block (SMART START). Lower blocks mean less latency and more risk of overruns; watch the profiler below. Every rate the device takes is offered, up to 768 kHz; they run natively in double precision.", i18n.lang) } }
             Card { RowLayout { Head { text: i18n.t("DSP PROFILER", i18n.lang) } Item { Layout.fillWidth: true } Btn { label: i18n.t("RESET", i18n.lang); onClicked: engine.resetProfiler() } }
                 KV { k: "LOAD"; v: engine.running ? page.tel.loadPct.toFixed(1) + " % of the block" : "—"; c: page.tel.loadPct > 70 ? Theme.danger : page.tel.loadPct > 40 ? Theme.amber : Theme.emerald }

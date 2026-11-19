@@ -130,6 +130,9 @@ class DsoundBackend : public Backend {
         DWORD ahead = (writePos_ + total - write) % total;                     // how far our data is ahead of the write cursor
         if (ahead > total / 2) { ++xruns_; writePos_ = (write + need) % total; ahead = need; }   // the cursor overtook us: restart ahead of it
         int guard = kPeriods; while (ahead < 2 * need && guard-- > 0) { period(); ahead += need; }
+      } else if (in_) {   // input only: one block per period the capture ring really delivered (it used to run twice per period, every other block silent)
+        DWORD cap = 0, rd = 0; const DWORD needIn = periodBytes(nIn_), totalIn = inBytes(); int guard = kPeriods;
+        while (guard-- > 0 && SUCCEEDED(in_->GetCurrentPosition(&cap, &rd)) && ((rd + totalIn - readPos_) % totalIn) >= needIn) period();
       } else period();
       const double ms = 1000.0 * frames_ / cfg_.sampleRate; Sleep(static_cast<DWORD>(std::max(1.0, ms / 2)));
     }

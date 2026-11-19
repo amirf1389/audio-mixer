@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"pingpong", "PING-PONG DELAY"}, {"peakremover", "PEAK REMOVER"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"pingpong", "PING-PONG DELAY"}, {"peakremover", "PEAK REMOVER"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"automiceq", "AUTO MIC EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "aec") return std::make_unique<EchoCanceller>(fs);
   if (k == "hybrid") return std::make_unique<PhoneHybrid>(fs);
@@ -22,6 +22,7 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
   if (k == "syncdelay") return std::make_unique<SyncDelay>(fs);
   if (k == "pingpong") return std::make_unique<PingPong>(fs);
+  if (k == "automiceq") return std::make_unique<AutoMicEq>(fs);
   if (k == "peakremover") return std::make_unique<PeakRemover>(fs);
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
@@ -245,6 +246,48 @@ void DualEq::process(float* L, float* R, std::size_t n) {
     const double nowL = 20.0 * std::log10(gl_), nowH = 20.0 * std::log10(gh_), nl = tl + aG * (nowL - tl), nh = th + aG * (nowH - th);
     gl_ = std::pow(10.0, nl / 20.0); gh_ = std::pow(10.0, nh / 20.0); gLowDb_ = nl; gHighDb_ = nh;
   }
+}
+// ---------------------------------------------------------------- Auto mic EQ
+const char* AutoMicEq::targetName(int t) { static const char* n[] = {"NATURAL", "CLARITY", "BROADCAST", "WARM", "BRIGHT"}; return n[t < 0 ? 0 : t >= kTargets ? kTargets - 1 : t]; }
+double AutoMicEq::bandHz(int b) { static const double f[] = {100, 200, 400, 800, 1600, 3200, 6400, 10000}; return f[b < 0 ? 0 : b >= kBands ? kBands - 1 : b]; }
+// each band's level against the average of the voice's bands, in dB: how a voice with that character is spread over the spectrum
+double AutoMicEq::targetDb(int t, int b) {
+  static const double T[kTargets][kBands] = {
+    { 4,  6,  6,  5,  2, -2,  -7, -14},    // NATURAL: full, even, a gentle fall towards the top
+    { 0,  4,  4,  5,  3,  1,  -4, -13},    // CLARITY: less boom, more of the range where words are understood
+    { 6,  7,  5,  4,  2,  0,  -5, -19},    // BROADCAST: a close, full voice with presence and a soft top
+    { 6,  8,  7,  5,  1, -4, -10, -13},    // WARM: more body, less edge
+    { 2,  5,  5,  5,  3,  1,  -2, -19}};   // BRIGHT: open and airy
+  static bool centred = false; static double C[kTargets][kBands];
+  if (!centred) { for (int i = 0; i < kTargets; ++i) { double m = 0; for (int k = 0; k < kBands; ++k) m += T[i][k]; m /= kBands; for (int k = 0; k < kBands; ++k) C[i][k] = T[i][k] - m; } centred = true; }
+  return C[t < 0 ? 0 : t >= kTargets ? kTargets - 1 : t][b < 0 ? 0 : b >= kBands ? kBands - 1 : b];
+}
+AutoMicEq::AutoMicEq(double fs) : Simple(fs) { for (int i = 0; i < 4; ++i) k_[i] = knobDef(i); for (auto& g : g_) g = 0; targetDb(0, 0); setSampleRate(fs); }
+void AutoMicEq::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (int b = 0; b < kBands; ++b) { an_[b].design(Biquad::BandPass, fs_, std::min(bandHz(b), fs_ * 0.45), 2.0, 0); an2_[b] = an_[b]; } reset(); }   // two band-passes in a row per band: a loud neighbour band leaks in far less
+void AutoMicEq::reset() { for (int b = 0; b < kBands; ++b) { an_[b].clear(); an2_[b].clear(); eq_[0][b].clear(); eq_[1][b].clear(); e_[b] = 0; now_[b] = 0; g_[b] = 0; } design(); }
+void AutoMicEq::design() { for (int b = 0; b < kBands; ++b) { const Biquad::Kind kd = b == 0 ? Biquad::LowShelf : b == kBands - 1 ? Biquad::HighShelf : Biquad::Peak; const double f = std::min(bandHz(b), fs_ * 0.45), q = b == 0 || b == kBands - 1 ? 0.7 : 1.4;
+    for (int c = 0; c < 2; ++c) { const double z1 = eq_[c][b].z1, z2 = eq_[c][b].z2; eq_[c][b].design(kd, fs_, f, q, now_[b]); eq_[c][b].z1 = z1; eq_[c][b].z2 = z2; } } }
+std::string AutoMicEq::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "target") return targetName(targetOf(v)); if (id == "amount") return fmt("%.0f %%", v * 100); if (id == "range") return fmt("%.0f dB", v * 12.0); return fmt("%.1f s", 4.0 * std::pow(0.075, v));
+}
+void AutoMicEq::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load()) return;
+  const int t = targetOf(k_[0].load()); const double amount = k_[1].load(), range = k_[2].load() * 12.0, tau = 4.0 * std::pow(0.075, k_[3].load());
+  const double aE = std::exp(-1.0 / (0.3 * fs_)), aG = std::exp(-static_cast<double>(n) / (tau * fs_));   // band loudness over 0.3 s; the gains move once a block
+  const float wet = static_cast<float>(mix_.load()), dry = 1.f - wet;
+  for (std::size_t i = 0; i < n; ++i) {
+    const float m = 0.5f * (L[i] + R[i]);                                    // what it listens to: the voice before its own bands
+    for (int b = 0; b < kBands; ++b) { const double y = an2_[b].run(an_[b].run(m)); e_[b] = y * y + aE * (e_[b] - y * y); }
+    float l = L[i], r = R[i]; for (int b = 0; b < kBands; ++b) { l = eq_[0][b].run(l); r = eq_[1][b].run(r); }
+    L[i] = dry * L[i] + wet * l; R[i] = dry * R[i] + wet * r;
+  }
+  double sum = 0; for (int b = 0; b < kBands; ++b) sum += e_[b];
+  if (sum > 1e-5) {   // a voice is there (above about -50 dBFS): listen and move; below that, hold
+    double db[kBands], mean = 0; for (int b = 0; b < kBands; ++b) { db[b] = 10.0 * std::log10(e_[b] + 1e-12); mean += db[b]; } mean /= kBands;
+    for (int b = 0; b < kBands; ++b) { const double want = std::max(-range, std::min(range, amount * (targetDb(t, b) - (db[b] - mean)))); now_[b] = want + aG * (now_[b] - want); g_[b] = now_[b]; }
+    design();
+  }
+  for (int b = 0; b < kBands; ++b) for (int c = 0; c < 2; ++c) { if (std::fabs(eq_[c][b].z1) < 1e-25) eq_[c][b].z1 = 0; if (std::fabs(eq_[c][b].z2) < 1e-25) eq_[c][b].z2 = 0; }
 }
 // ---------------------------------------------------------------- Pitch shifter
 Pitch::Pitch(double fs) : Simple(fs) { for (int i = 0; i < 3; ++i) k_[i] = knobDef(i); reset(); }

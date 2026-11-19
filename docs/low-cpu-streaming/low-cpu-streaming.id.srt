@@ -1,0 +1,35 @@
+1
+00:00:00,000 --> 00:00:04,000
+AmF X1: penggunaan prosesor rendah saat siaran langsung
+
+2
+00:00:04,000 --> 00:00:08,000
+LIVE MODE: one switch for a stream or a guest
+
+3
+00:00:08,000 --> 00:00:12,000
+Rangkaian pengolahan suara pada mikrofon: membersihkan, menyetel ekualisasi, menyesuaikan level, dan menghilangkan puncak
+
+4
+00:00:12,000 --> 00:00:16,000
+Tingkat keluaran dibatasi, sehingga aliran suara tidak akan terdistorsi. Jika kartu suara berhenti, suara akan mulai lagi dengan sendirinya.
+
+5
+00:00:16,000 --> 00:00:20,000
+Antarmuka menjadi lambat dengan sendirinya: 30, 4, atau 1 pembaruan tampilan per detik
+
+6
+00:00:20,000 --> 00:00:24,000
+Berdasarkan pengukuran pada mesin uji kami: program tersebut menggunakan sekitar 7 persen dari satu inti prosesor saat jendelanya terbuka, dan sekitar 4 persen saat jendelanya diminimalkan.
+
+7
+00:00:24,000 --> 00:00:28,000
+Komputer Anda akan menampilkan angka yang berbeda. Belum diuji pada Windows.
+
+8
+00:00:28,000 --> 00:00:32,000
+AUTO LIVE akan menjalankannya saat program streaming dibuka
+
+9
+00:00:32,000 --> 00:00:36,000
+AmF X1 1.24.0.5 oleh AMFB Audio

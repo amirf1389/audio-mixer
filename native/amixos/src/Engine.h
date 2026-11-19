@@ -142,6 +142,14 @@ class Engine : public QObject {
   // WATCHDOG FAILOVER: the sound stops arriving (a stalled driver) or the sound card is unplugged: the engine starts again by itself, on the
   // same device first, else on the best one left (AUTO DETECT). At most three times a minute. watchdogNote says what it did.
   Q_PROPERTY(bool watchdog READ watchdog WRITE setWatchdog NOTIFY watchdogChanged)
+  // LIVE MODE (a stream, a guest at the desk): the microphone channel gets the voice chain (VOICE CLEAN, AUTO MIC EQ, VOICE RIDER, PEAK
+  // REMOVER), the master is held 3 dB under full scale, the watchdog is on, and the window shows only the LIVE screen until it is unlocked.
+  // It is remembered: a console closed in LIVE MODE starts in it again. STOP takes out exactly what START put in.
+  Q_PROPERTY(bool liveMode READ liveMode NOTIFY liveChanged)
+  Q_PROPERTY(int liveStrip READ liveStrip NOTIFY liveChanged)
+  bool liveMode() const { return live_; } int liveStrip() const { return liveStrip_; }
+  Q_INVOKABLE QString startLive(int strip);
+  Q_INVOKABLE QString stopLive();
   Q_PROPERTY(QString watchdogNote READ watchdogNote NOTIFY watchdogChanged)
   Q_PROPERTY(int failovers READ failovers NOTIFY watchdogChanged)
   Q_PROPERTY(QString oneVoiceNote READ oneVoiceNote NOTIFY oneVoiceChanged)   // what it did on this device ("" = nothing)
@@ -731,6 +739,7 @@ class Engine : public QObject {
   void pluginDockChanged();   // the docked plug-in window closed (its plug-in left the slot, or UNDOCK)
   void ecoUiChanged();
   void watchdogChanged();
+  void liveChanged();
   void oneVoiceChanged();
   void compTargetChanged();
   void stateChanged();
@@ -836,5 +845,6 @@ class Engine : public QObject {
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
+  bool live_ = false; int liveStrip_ = 0;
   mutable QSettings settings_;
 };
