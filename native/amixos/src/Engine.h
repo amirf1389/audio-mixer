@@ -57,6 +57,14 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList pages READ pages CONSTANT)
   Q_PROPERTY(QString edition READ edition NOTIFY licenseChanged)
   Q_PROPERTY(QVariantMap license READ license NOTIFY licenseChanged)          // state, plan, planName, channels, source, id, name, serial, expires, machine, message
+  // HEADROOM MODE: the master never goes above -3 / -6 / -9 / -12 dBFS (0 = off). The master limiter is held on with its ceiling at
+  // that level (or lower, if the user's own ceiling is lower): room is left for whatever comes after the console (a stream encoder, a
+  // recorder, an amplifier that clips early). Saved with the console's settings.
+  Q_PROPERTY(int headroomDb READ headroomDb WRITE setHeadroomDb NOTIFY stripsChanged)
+ public:
+  int headroomDb() const { return headroom_; } void setHeadroomDb(int db);
+  bool limiterOnNow() const { return masterLim_ || headroom_ > 0; } double ceilingNow() const { return headroom_ > 0 ? std::min(masterCeil_, -double(headroom_)) : masterCeil_; }
+ private:
   Q_PROPERTY(int inputCap READ inputCap NOTIFY licenseChanged)
   Q_PROPERTY(int licensedChannels READ licensedChannels NOTIFY licenseChanged)   // strips beyond this are locked (muted in the engine)
   Q_PROPERTY(QVariantList busState READ busState NOTIFY busesChanged)
@@ -805,7 +813,7 @@ class Engine : public QObject {
   BusUi buses_[kBuses]; DcaUi dcas_[kGroups]; MuteGroupUi muteGroups_[kGroups];
   QVariantMap telemetry_;
   std::vector<StripUi> strips_;
-  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100;
+  double masterDb_ = 0; bool masterLim_ = true; double masterCeil_ = -0.5, masterRel_ = 100; int headroom_ = 0;
   static constexpr int kOutputs = 32;
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; std::string curBackend_, curIn_, curOut_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   int openBits_ = 0; bool openExclusive_ = false;

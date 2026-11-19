@@ -911,6 +911,16 @@ int main(int argc, char* argv[]) {
           if (!follow || !back || !free) { std::fprintf(stderr, "amixos --smoke: master / monitor SYNC\n"); return 153; } }
         engine.setMaster(-4.5); engine.setMasterMuted(true); const bool down = engine.masterDb() <= -59.9; engine.setMasterMuted(false);
         if (!down || std::fabs(engine.masterDb() + 4.5) > 1e-6 || engine.masterMuted()) { std::fprintf(stderr, "amixos --smoke: master mute\n"); return 212; } engine.setMaster(0);
+        { // HEADROOM MODE: the master stays under the chosen level, whatever the faders say; OFF gives the limiter back as it was
+          auto pause2 = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
+          const bool nt = engine.nullTestInput(); const double m0 = engine.masterDb(), g0 = engine.stripState()[0].toMap()["db"].toDouble();
+          engine.setNullTestInput(true); engine.setMaster(10); engine.setGain(0, 10); engine.setHeadroomDb(6); pause2(700);
+          const double pk6 = engine.telemetry().value("masterPeakDb").toDouble(); const bool held = pk6 <= -5.9 && pk6 > -9 && engine.headroomDb() == 6 && engine.ceilingNow() == -6.0 && engine.limiterOnNow();
+          engine.setHeadroomDb(7); const bool stepped = engine.headroomDb() == 9; engine.setHeadroomDb(99); const bool top = engine.headroomDb() == 12 && engine.ceilingNow() == -12.0;
+          engine.setHeadroomDb(0); pause2(700); const double pk0 = engine.telemetry().value("masterPeakDb").toDouble(); const bool off = engine.headroomDb() == 0 && engine.ceilingNow() > -1.0 && pk0 > pk6 + 3;
+          engine.setMaster(m0); engine.setGain(0, g0); engine.setNullTestInput(nt);
+          std::printf("amixos --smoke: HEADROOM MODE -6 dB holds the master at %.1f dBFS %d, steps %d, -12 at most %d, OFF gives it back (%.1f dBFS) %d\n", pk6, held, stepped, top, pk0, off);
+          if (!(held && stepped && top && off)) { std::fprintf(stderr, "amixos --smoke: HEADROOM MODE failed\n"); return 101; } }
         engine.limitAllChannels(true); const bool allOn = engine.allChannelsLimited(); engine.limitAllChannels(false); if (!allOn || engine.allChannelsLimited() || engine.channelParams(7)["limiterOn"].toBool()) { std::fprintf(stderr, "amixos --smoke: limit channels\n"); return 213; }
         engine.resetRouting(); const int pulled = engine.infUnused();   // the null device has 2 inputs: strips 3-32 have none
         if (pulled != 30 || engine.stripState()[0].toMap()["db"].toDouble() < -100 || engine.stripState()[9].toMap()["db"].toDouble() > -59.9 || engine.infUnused() != 0) { std::fprintf(stderr, "amixos --smoke: AUTO -INF pulled %d\n", pulled); return 214; }

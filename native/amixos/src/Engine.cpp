@@ -76,6 +76,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   am::sysopt::setFastCoresForAudio(sysFast_); warmSystemInfo();
   vuRef_ = std::clamp(settings_.value("ui/vuRef", -18).toInt(), -24, -8);
   for (int i = 0; i < kStrips; ++i) inRoute_[i] = i;
+  headroom_ = std::clamp(settings_.value("console/headroomDb", 0).toInt(), 0, 12); if (headroom_ % 3) headroom_ = 0;
   for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   refreshLicense();
   histTimer_.setSingleShot(true); histTimer_.setInterval(400); connect(&histTimer_, &QTimer::timeout, this, &Engine::recordHistory);
@@ -269,7 +270,7 @@ void Engine::pushAll() {
     rt_->setDelayMs(i, p.delayMs); rt_->setPolarity(i, p.polarityInvert); rt_->setCrossover(i, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(i, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs);
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
-  pushMasterLevel(); rt_->setLimiter(masterLim_, masterCeil_, masterRel_);
+  pushMasterLevel(); rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_);
   rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
   scope_.setSampleRate(rt_->sampleRate()); rt_->setTap(&taps_);
   for (int k = 0; k < kBuses; ++k) makeBusFx(k);
@@ -546,7 +547,11 @@ void Engine::syncSystemVolume() {
 }
 void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore_); weMuted_ = false; QSettings().remove("mixer/weMutedWindows"); } }
 bool Engine::inputMutedBySystem() const { return rt_ && running() && rt_->inputSilentSeconds() > 2.0; }
-void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(on, masterCeil_, masterRel_); emit stripsChanged(); emit masterChainChanged(); }
+void Engine::setHeadroomDb(int db) {
+  db = db <= 0 ? 0 : db <= 3 ? 3 : db <= 6 ? 6 : db <= 9 ? 9 : 12; if (db == headroom_) return;
+  headroom_ = db; settings_.setValue("console/headroomDb", db); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); emit stripsChanged();
+}
+void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); emit stripsChanged(); emit masterChainChanged(); }
 QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_; m["ceiling"] = masterCeil_; m["release"] = masterRel_; return m; }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
 // ---- licence (engine/cpp/app/license): the vendor public key is compiled in; keys and tokens are verified offline
