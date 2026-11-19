@@ -36,7 +36,7 @@ Rectangle {
                 // 0 WELCOME
                 ColumnLayout { spacing: 12
                     Head { text: i18n.t("Welcome to ", i18n.lang) + Theme.product }
-                    Body { text: i18n.t("A mixing console and DSP workstation: 32 channels, 16 buses (8 AUX + 8 FX), EQ with RTA, dynamics, 300 effect presets, 100 samples, VST plug-ins, recording, remote control. Pick your language; everything else can be changed later on SETTINGS.", i18n.lang) }
+                    Body { text: i18n.t("A mixing console and DSP workstation: 32 channels, 16 buses (8 AUX + 8 FX), EQ with RTA, dynamics, 300 effect presets, 100 samples, VST plug-ins, recording, remote control. Pick your language; everything else can be changed later on SETTINGS.", i18n.lang).replace("300", "600").replace("۳۰۰", "۶۰۰") }
                     Text { text: i18n.t("LANGUAGE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 2 }
                     Flickable { Layout.fillWidth: true; Layout.fillHeight: true; contentHeight: langFlow.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds; ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn }
                         Flow { id: langFlow; width: parent.width - 14; spacing: 6

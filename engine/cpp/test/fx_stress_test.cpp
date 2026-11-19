@@ -36,8 +36,8 @@ int main() {
         double pk = 0; bool fin = true; for (int i = 0; i < len; ++i) { fin = fin && std::isfinite(L[i]) && std::isfinite(R[i]); pk = std::max({pk, static_cast<double>(std::fabs(L[i])), static_cast<double>(std::fabs(R[i]))}); }
         CHECK(fin, "%s @%.0f knobs %d signal %d: NaN or inf", kind.c_str(), fs, mode, sig);
         CHECK(pk < 32, "%s @%.0f knobs %d signal %d: peak %.1f (runaway)", kind.c_str(), fs, mode, sig, pk);
-        if (sig == 3 && !generator && mode != 1 && !(mode == 2 && (kind == "hall" || kind == "room" || kind == "reverb" || kind == "delay" || kind == "syncdelay"))) {   // random knobs may ask a reverb or delay for a 20 s tail: that is not a fault   // after an impulse the tail must die (reverbs get 3 s, everything else 1 s)
-          const bool longTail = kind == "hall" || kind == "room" || kind == "reverb" || kind == "delay" || kind == "syncdelay";
+        if (sig == 3 && !generator && mode != 1 && !(mode == 2 && (kind == "hall" || kind == "room" || kind == "reverb" || kind == "delay" || kind == "syncdelay" || kind == "pingpong"))) {   // random knobs may ask a reverb or delay for a 20 s tail: that is not a fault   // after an impulse the tail must die (reverbs get 3 s, everything else 1 s)
+          const bool longTail = kind == "hall" || kind == "room" || kind == "reverb" || kind == "delay" || kind == "syncdelay" || kind == "pingpong";
           const int tail = static_cast<int>(fs * (longTail ? 6.0 : 1.0)); std::vector<float> z(tail, 0.f), z2(tail, 0.f);
           for (int i = 0; i < tail; i += 512) e->process(z.data() + i, z2.data() + i, static_cast<std::size_t>(std::min(512, tail - i)));
           double last = 0; for (int i = tail - static_cast<int>(fs * 0.05); i < tail; ++i) last = std::max(last, static_cast<double>(std::fabs(z[i])));

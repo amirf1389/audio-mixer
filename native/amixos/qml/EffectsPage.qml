@@ -1,4 +1,4 @@
-// EFFECTS: one card per bus (FX 1-8 are meant for these; AUX buses can carry one too). 300 PRESETS: a browser by family, one click loads kind + values on the bus. Pick an effect (REVERB, TAPE DELAY, CHORUS, DRIVE, or none), set its parameters with the plug-in's own display
+// EFFECTS: one card per bus (FX 1-8 are meant for these; AUX buses can carry one too). 600 PRESETS: a browser by family, one click loads kind + values on the bus. Pick an effect (REVERB, TAPE DELAY, CHORUS, DRIVE, or none), set its parameters with the plug-in's own display
 // text, MIX (dry/wet), BYPASS and the bus RETURN into the master. Feed a bus from SEND TO: the effect runs on the bus sum, after the bus level.
 import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
@@ -32,7 +32,7 @@ Item {
                     Text { id: bl; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.fx !== "" ? " ·" : ""); color: page.bus === index ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.bus = index } } }
                 Item { Layout.fillWidth: true }
                 Rectangle { id: gb32; implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: page.browse ? Theme.violet : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb32.color) } GradientStop { position: 1; color: Theme.btnBottom(gb32.color) } } border.color: Theme.lineSoft
-                    Text { anchors.centerIn: parent; text: i18n.t("300 PRESETS", i18n.lang); color: page.browse ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.browse = !page.browse } }
+                    Text { anchors.centerIn: parent; text: i18n.t("300 PRESETS", i18n.lang).replace("300", "600").replace("۳۰۰", "۶۰۰"); color: page.browse ? "#000" : Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.browse = !page.browse } }
                 Text { visible: page.fx.preset > 0; text: i18n.t("preset #", i18n.lang) + page.fx.preset; color: Theme.violet; font.family: Theme.mono; font.pixelSize: 8 }
                 Text { text: page.fx.kind !== "" ? page.fx.name + i18n.t(" on ", i18n.lang) + (page.b ? page.b.name : "") : i18n.t("no effect on this bus", i18n.lang); color: page.fx.kind !== "" ? Theme.violet : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
             }
@@ -53,7 +53,7 @@ Item {
                     Text { Layout.fillWidth: true; text: i18n.t("Send strips to this bus on SEND TO (POST for effects). The wet signal returns to the master at RETURN and to the bus outputs ", i18n.lang) + (page.b ? page.b.outputs : "") + "."; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
                 }
             }
-            // the preset browser: 300 presets by family; one click loads the preset onto this bus
+            // the preset browser: 600 presets by family; one click loads the preset onto this bus
             Rectangle {
                 visible: page.browse; Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout {

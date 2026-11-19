@@ -13,7 +13,7 @@ double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 std::string fmt(const char* f, double v) { char b[32]; std::snprintf(b, sizeof b, f, v); return b; }
 }  // namespace
 
-std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
+std::vector<std::pair<std::string, std::string>> catalog() { return {{"reverb", "PLATE REVERB"}, {"aec", "ECHO CANCELLER (AEC)"}, {"hybrid", "TELEPHONE HYBRID"}, {"logic", "LOGIC / GPIO"}, {"delay", "TAPE DELAY"}, {"syncdelay", "SYNC DELAY"}, {"pingpong", "PING-PONG DELAY"}, {"antifeedback", "FEEDBACK KILLER"}, {"analog", "ANALOG CHANNEL"}, {"barrier", "SOUND BARRIER"}, {"dualeq", "DUAL LISTEN EQ"}, {"pitch", "PITCH SHIFTER"}, {"sampler", "SAMPLE PLAYER"}, {"desquash", "DE-SQUASH"}, {"chorus", "STEREO CHORUS"}, {"drive", "TUBE DRIVE"}, {"flanger", "FLANGER"}, {"phaser", "PHASER"}, {"tremolo", "TREMOLO"}, {"wah", "AUTO WAH"}, {"crusher", "BIT CRUSHER"}, {"exciter", "EXCITER"}, {"subsynth", "SUB SYNTH"}, {"tubeamp", "TUBE AMP"}, {"preamp", "PRE AMP"}, {"postamp", "POST AMP"}, {"regulator", "POWER REGULATOR"}, {"protect", "SHORT PROTECT"}, {"rider", "VOICE RIDER"}, {"clean", "VOICE CLEAN"}, {"hall", "HALL REVERB"}, {"room", "ROOM REVERB"}, {"mseq", "MS COLOUR EQ"}, {"isoeq", "ISO EQ 10"}, {"mod", "MOD MACHINE"}, {"opto", "OPTO LEVELER"}, {"glue", "GLUE COMP"}, {"tape", "TAPE MACHINE"}, {"transient", "TRANSIENT SHAPER"}, {"deesser", "DE-ESSER"}, {"maximizer", "MAXIMIZER"}, {"multiband", "MULTIBAND COMP"}, {"imager", "STEREO IMAGER"}, {"autopan", "AUTO PAN"}, {"doubler", "VOCAL DOUBLER"}, {"iamfelement", "IAMF ELEMENT"}, {"iamfrender", "IAMF RENDERER"}, {"wshape", "W-SHAPE TUNER"}, {"convclip", "CONVERTER CLIP"}}; }
 std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "aec") return std::make_unique<EchoCanceller>(fs);
   if (k == "hybrid") return std::make_unique<PhoneHybrid>(fs);
@@ -21,6 +21,7 @@ std::unique_ptr<Effect> make(const std::string& k, double fs) {
   if (k == "reverb") return std::make_unique<Reverb>(fs);
   if (k == "delay") return std::make_unique<TapeDelay>(fs);
   if (k == "syncdelay") return std::make_unique<SyncDelay>(fs);
+  if (k == "pingpong") return std::make_unique<PingPong>(fs);
   if (k == "antifeedback") return std::make_unique<FeedbackKiller>(fs);
   if (k == "chorus") return std::make_unique<Chorus>(fs);
   if (k == "analog") return std::make_unique<Analog>(fs);
@@ -376,6 +377,35 @@ SyncDelay::SyncDelay(double fs) : Simple(fs) { for (int i = 0; i < 5; ++i) k_[i]
 double SyncDelay::beatsOf(int note) { static const double b[] = {2.0, 1.0, 0.75, 0.5, 1.0 / 3.0, 0.25}; return b[note < 0 ? 0 : note > 5 ? 5 : note]; }   // in quarter notes
 void SyncDelay::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 2.1), 0.f); reset(); }   // the longest: a half note at 60 BPM = 2 s
 void SyncDelay::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); w_ = 0; lp_[0] = lp_[1] = 0; }
+// ---------------------------------------------------------------- Ping-pong delay
+PingPong::PingPong(double fs) : Simple(fs) { for (int i = 0; i < 6; ++i) k_[i] = knobDef(i); setSampleRate(fs); }
+void PingPong::setSampleRate(double fs) { fs_ = fs > 0 ? fs : 48000; for (auto& b : buf_) b.assign(static_cast<std::size_t>(fs_ * 1.6), 0.f); reset(); }   // the longest leg is 1.5 s
+void PingPong::reset() { for (auto& b : buf_) std::fill(b.begin(), b.end(), 0.f); w_ = 0; lp_[0] = lp_[1] = 0; hp_ = 0; }
+std::string PingPong::text(const std::string& id, double v) const {
+  v = clamp01(v); if (id == "left" || id == "right") return fmt("%.0f ms", msOf(v));
+  if (id == "tone") return fmt("%.1f kHz", (600.0 + v * v * 11400.0) / 1000.0);
+  if (id == "lowcut") { const double hz = lowCutHz(v); return hz <= 0 ? std::string("OFF") : fmt("%.0f Hz", hz); }
+  return fmt("%.0f %%", v * 100);
+}
+void PingPong::process(float* L, float* R, std::size_t n) {
+  if (bypass_.load() || buf_[0].empty()) return;
+  const std::size_t len = buf_[0].size();
+  const std::size_t dL = std::max<std::size_t>(1, std::min(len - 1, static_cast<std::size_t>(msOf(k_[0].load()) * 0.001 * fs_ + 0.5)));
+  const std::size_t dR = std::max<std::size_t>(1, std::min(len - 1, static_cast<std::size_t>(msOf(k_[1].load()) * 0.001 * fs_ + 0.5)));
+  const float fb = static_cast<float>(k_[2].load() * 0.92), wet = static_cast<float>(mix_.load()), dry = 1.f - wet;
+  const double tone = k_[3].load(); const float a = static_cast<float>(std::exp(-2.0 * kPi * (600.0 + tone * tone * 11400.0) / fs_));
+  const float spread = static_cast<float>(k_[4].load()), near = 0.5f + 0.5f * spread, far = 0.5f - 0.5f * spread;
+  const double cut = lowCutHz(k_[5].load()); const float h = cut > 0 ? static_cast<float>(std::exp(-2.0 * kPi * cut / fs_)) : 0.f;
+  for (std::size_t i = 0; i < n; ++i) {
+    const float dl = buf_[0][(w_ + len - dL) % len], dr = buf_[1][(w_ + len - dR) % len];   // what the two lines give now
+    lp_[0] = dl * (1 - a) + lp_[0] * a; lp_[1] = dr * (1 - a) + lp_[1] * a;                  // every leg makes the echo a little darker
+    float back = lp_[1]; if (cut > 0) { hp_ = back * (1 - h) + hp_ * h; back -= hp_; }       // LOW CUT on what starts the next bounce
+    buf_[0][w_] = 0.5f * (L[i] + R[i]) + fb * back;                                          // in on the left ...
+    buf_[1][w_] = lp_[0];                                                                    // ... then across to the right
+    w_ = (w_ + 1) % len;
+    L[i] = L[i] * dry + (dl * near + dr * far) * wet; R[i] = R[i] * dry + (dr * near + dl * far) * wet;
+  }
+}
 std::string SyncDelay::text(const std::string& id, double v) const {
   v = clamp01(v); if (id == "tempo") return fmt("%.0f BPM", bpmOf(v));
   if (id == "note") { static const char* n[] = {"1/2", "1/4", "1/8 dotted", "1/8", "1/8 triplet", "1/16"}; return n[noteOf(v)]; }

@@ -21,7 +21,7 @@ Flickable {
     property string note: ""
     readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "barrier", "rider", "clean", "antifeedback"],
         "SATURATION": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
-        "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay"], "SPATIAL": ["iamfelement", "iamfrender", "imager", "sampler"], "SYSTEM": ["aec", "hybrid", "logic"] })
+        "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay", "pingpong"], "SPATIAL": ["iamfelement", "iamfrender", "imager", "sampler"], "SYSTEM": ["aec", "hybrid", "logic"] })
     readonly property var groupIcon: ({ "EQ / TONE": "tone", "DYNAMICS": "comp", "SATURATION": "drive", "MODULATION": "sine", "SPACE / DELAY": "reverb", "SPATIAL": "orbit", "SYSTEM": "rack", "EXTENSIONS": "extension", "VST PLUG-INS": "vst", "OTHER": "fx" })
     readonly property var groupHue: ({ "EQ / TONE": "#38bdf8", "DYNAMICS": "#f59e0b", "SATURATION": "#f97316", "MODULATION": "#a78bfa", "SPACE / DELAY": "#34d399", "SPATIAL": "#22d3ee", "SYSTEM": "#94a3b8", "EXTENSIONS": "#f472b6", "VST PLUG-INS": "#818cf8", "OTHER": "#94a3b8" })
     readonly property var featured: ["fx:subsynth", "fx:antifeedback", "fx:barrier", "fx:dualeq"]

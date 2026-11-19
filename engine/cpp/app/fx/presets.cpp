@@ -1,5 +1,6 @@
 #include "presets.hpp"
 
+#include <algorithm>
 #include <cstdio>
 
 namespace am::fx {
@@ -49,6 +50,34 @@ std::vector<Preset> build() {
   const double driveP[][3] = {{0.2, 0.6, 0.7}, {0.3, 0.5, 0.65}, {0.12, 0.7, 0.75}, {0.4, 0.3, 0.6}, {0.45, 0.55, 0.6}, {0.5, 0.6, 0.6}, {0.6, 0.5, 0.55}, {0.9, 0.4, 0.45}, {0.85, 0.2, 0.5}, {0.5, 0.25, 0.6}, {0.8, 0.15, 0.5}, {0.08, 0.8, 0.8}, {0.1, 0.9, 0.78}, {0.55, 0.65, 0.6}, {0.35, 0.3, 0.65}, {0.65, 0.8, 0.55}, {0.7, 0.5, 0.5}, {0.4, 0.7, 0.6}, {0.5, 0.1, 0.6}, {0.5, 1.0, 0.6}};
   for (int i = 0; i < 20; ++i) add(driveN[i], "drive", "Drive", {{"drive", driveP[i][0]}, {"tone", driveP[i][1]}, {"out", driveP[i][2]}}, 1.0);
   for (int d = 0; d < 20; ++d) { char b[48]; std::snprintf(b, sizeof b, "Drive %.1f dB", (d + 1) / 20.0 * 36); add(b, "drive", "Drive", {{"drive", (d + 1) / 20.0}, {"tone", 0.6}, {"out", 0.7 - 0.2 * (d / 19.0)}}, 1.0); }
+  // ---- PING-PONG: 300 (ids 301 .. 600) for the PING-PONG DELAY: tempo bounces, named characters, and one series per control
+  { const std::size_t first = out.size();
+    auto pp = [&](const std::string& name, double lMs, double rMs, double fb, double tone, double spread, double lowcut, double mix) {
+      add(name, "pingpong", "Ping-Pong", {{"left", (std::max(20.0, std::min(1500.0, lMs)) - 20.0) / 1480.0}, {"right", (std::max(20.0, std::min(1500.0, rMs)) - 20.0) / 1480.0}, {"feedback", fb}, {"tone", tone}, {"spread", spread}, {"lowcut", lowcut}}, mix); };
+    struct Pat { const char* name; double l, r; };   // the two legs in quarter notes
+    const Pat pats[] = {{"1/8 + 1/8", 0.5, 0.5}, {"1/8 + 1/8 dotted", 0.5, 0.75}, {"1/8 dotted + 1/8", 0.75, 0.5}, {"1/4 + 1/4", 1.0, 1.0}, {"1/4 + 1/8", 1.0, 0.5}, {"1/16 + 1/16", 0.25, 0.25}, {"1/8 triplet", 1.0 / 3.0, 1.0 / 3.0}, {"1/4 + 1/8 dotted", 1.0, 0.75}};
+    for (int bpm : bpms) for (const Pat& q : pats) { const double beat = 60000.0 / bpm; char b[64]; std::snprintf(b, sizeof b, "Ping-Pong %d BPM %s", bpm, q.name); pp(b, beat * q.l, beat * q.r, 0.45, 0.6, 1.0, 0.15, 0.35); }   // 96
+    struct Named { const char* name; double l, r, fb, tone, spread, cut, mix; };
+    const Named named[] = {{"Table Tennis", 180, 180, 0.55, 0.8, 1.0, 0.2, 0.4}, {"Long Rally", 240, 240, 0.8, 0.65, 1.0, 0.2, 0.35}, {"Short Rally", 110, 110, 0.6, 0.75, 1.0, 0.25, 0.35}, {"Smash", 70, 95, 0.35, 0.9, 1.0, 0.3, 0.4},
+      {"Serve And Return", 300, 150, 0.5, 0.7, 1.0, 0.2, 0.35}, {"Wide Slap", 90, 120, 0.15, 0.7, 1.0, 0.1, 0.4}, {"Stereo Slapback", 115, 140, 0.1, 0.6, 1.0, 0.1, 0.45}, {"Dub Bounce", 375, 375, 0.75, 0.3, 1.0, 0.35, 0.4},
+      {"Dub Swing", 375, 250, 0.7, 0.3, 1.0, 0.35, 0.4}, {"Reggae Skank", 280, 420, 0.6, 0.4, 0.9, 0.4, 0.35}, {"Vocal Throw Wide", 430, 430, 0.4, 0.55, 1.0, 0.3, 0.3}, {"Lead Vocal Bounce", 330, 330, 0.3, 0.6, 0.8, 0.3, 0.25},
+      {"Whisper Bounce", 260, 390, 0.5, 0.35, 1.0, 0.45, 0.3}, {"Guitar Bounce", 320, 480, 0.45, 0.55, 1.0, 0.2, 0.3}, {"Edge Dotted", 375, 500, 0.4, 0.65, 0.9, 0.2, 0.3}, {"Clean Arpeggio", 250, 375, 0.5, 0.75, 1.0, 0.15, 0.3},
+      {"Keys Sparkle Bounce", 200, 300, 0.5, 0.95, 1.0, 0.3, 0.3}, {"Synth Pluck Bounce", 187, 187, 0.6, 0.85, 1.0, 0.2, 0.35}, {"Trance Gate", 136, 136, 0.65, 0.8, 1.0, 0.25, 0.35}, {"House Stab", 122, 244, 0.5, 0.7, 1.0, 0.3, 0.3},
+      {"Snare Throw", 250, 250, 0.35, 0.5, 1.0, 0.4, 0.3}, {"Rimshot Bounce", 160, 240, 0.45, 0.7, 1.0, 0.45, 0.35}, {"Hi-Hat Scatter", 62, 93, 0.5, 0.95, 1.0, 0.7, 0.3}, {"Percussion Cloud", 83, 125, 0.75, 0.6, 1.0, 0.5, 0.35},
+      {"Ambient Ping", 600, 600, 0.7, 0.35, 1.0, 0.3, 0.4}, {"Slow Canyon", 900, 900, 0.6, 0.3, 1.0, 0.25, 0.4}, {"Grand Canyon", 1200, 1500, 0.55, 0.25, 1.0, 0.25, 0.4}, {"Cave Drip", 700, 1050, 0.65, 0.4, 1.0, 0.5, 0.35},
+      {"Infinite Bounce", 300, 300, 1.0, 0.6, 1.0, 0.3, 0.3}, {"Almost Forever", 450, 450, 0.95, 0.45, 1.0, 0.35, 0.3}, {"Dark Tunnel", 340, 510, 0.7, 0.1, 1.0, 0.2, 0.4}, {"Bright Glass", 210, 210, 0.5, 1.0, 1.0, 0.4, 0.3},
+      {"Lo-Fi Bounce", 290, 290, 0.6, 0.15, 0.8, 0.6, 0.4}, {"Telephone Bounce", 230, 230, 0.5, 0.25, 0.7, 0.9, 0.4}, {"Radio Play", 150, 225, 0.4, 0.3, 0.6, 0.7, 0.35}, {"Narrow Bounce", 250, 250, 0.45, 0.6, 0.3, 0.15, 0.35},
+      {"Centre Echo", 250, 250, 0.45, 0.6, 0.0, 0.15, 0.35}, {"Half Wide", 250, 250, 0.45, 0.6, 0.5, 0.15, 0.35}, {"Speech Safe", 140, 140, 0.2, 0.5, 0.6, 0.5, 0.2}, {"Announcer Hall", 380, 380, 0.3, 0.45, 0.7, 0.4, 0.2},
+      {"Karaoke Bounce", 210, 210, 0.45, 0.55, 0.8, 0.3, 0.35}, {"Wedding Speech", 170, 255, 0.2, 0.5, 0.5, 0.5, 0.15}, {"Stadium Call", 520, 780, 0.5, 0.4, 1.0, 0.35, 0.35}, {"Game Arcade", 95, 95, 0.7, 0.9, 1.0, 0.4, 0.35}};
+    for (const Named& q : named) pp(q.name, q.l, q.r, q.fb, q.tone, q.spread, q.cut, q.mix);                                                                        // 44
+    for (int k = 0; k < 40; ++k) { const int ms = 30 + k * 30; char b[48]; std::snprintf(b, sizeof b, "Bounce %d ms", ms); pp(b, ms, ms, 0.45, 0.6, 1.0, 0.15, 0.35); }   // 40: even bounces, 30 .. 1200 ms
+    for (int k = 0; k < 30; ++k) { const int l = 120 + (k % 6) * 60, r = l + 40 + (k / 6) * 45; char b[64]; std::snprintf(b, sizeof b, "Swing L %d / R %d ms", l, r); pp(b, l, r, 0.45, 0.6, 1.0, 0.15, 0.35); }   // 30: uneven legs
+    for (int k = 0; k < 30; ++k) { const int pct = 4 + k * 3; char b[48]; std::snprintf(b, sizeof b, "Bounces %d %%", pct); pp(b, 250, 250, std::min(1.0, pct / 100.0), 0.6, 1.0, 0.15, 0.35); }                 // 30: how long it goes on
+    for (int k = 0; k < 20; ++k) { const int pct = k * 5 + 5; char b[48]; std::snprintf(b, sizeof b, "Side To Side %d %%", pct); pp(b, 250, 250, 0.45, 0.6, pct / 100.0, 0.15, 0.35); }                          // 20: the spread
+    for (int k = 0; k < 20; ++k) { const double t = (k + 1) / 20.0; char b[48]; std::snprintf(b, sizeof b, "Bounce Tone %.1f kHz", (600.0 + t * t * 11400.0) / 1000.0); pp(b, 250, 250, 0.5, t, 1.0, 0.15, 0.35); }   // 20: dark .. bright
+    for (int k = 0; k < 20; ++k) { const double c = k / 19.0; char b[48]; if (k == 0) std::snprintf(b, sizeof b, "Bounce Full Range"); else std::snprintf(b, sizeof b, "Bounce Low Cut %d Hz", static_cast<int>(20.0 + c * 780.0 + 0.5)); pp(b, 250, 250, 0.5, 0.6, 1.0, c, 0.35); }   // 20: thin .. full
+    (void)first;
+  }
   return out;
 }
 }  // namespace

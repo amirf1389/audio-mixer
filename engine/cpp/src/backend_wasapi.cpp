@@ -265,5 +265,17 @@ class WasapiBackend : public Backend {
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }
+// for APP CAPTURE (src/app_capture.cpp): one program's sound as a float stereo capture stream at `rate`, not started yet
+long wasapiAppCaptureClient(unsigned long pid, double rate, void** audioClient, void** captureClient, std::string& err) {
+  IAudioClient* ac = nullptr; IAudioCaptureClient* cc = nullptr; *audioClient = nullptr; *captureClient = nullptr;
+  HRESULT r = activateProcessLoopback(&ac, err, static_cast<DWORD>(pid)); if (FAILED(r)) return r;
+  WAVEFORMATEXTENSIBLE f; std::memset(&f, 0, sizeof f);
+  f.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE; f.Format.nChannels = 2; f.Format.nSamplesPerSec = static_cast<DWORD>(rate); f.Format.wBitsPerSample = 32; f.Format.nBlockAlign = 8;
+  f.Format.nAvgBytesPerSec = f.Format.nSamplesPerSec * 8; f.Format.cbSize = 22; f.Samples.wValidBitsPerSample = 32; f.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT; f.SubFormat = kFloatSubFormat;
+  r = ac->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 2000000 /* 200 ms */, 0, &f.Format, nullptr);
+  if (FAILED(r)) { err = hr("Initialize (app capture)", r); ac->Release(); return r; }
+  r = ac->GetService(kIidCaptureClient, reinterpret_cast<void**>(&cc)); if (FAILED(r)) { err = hr("GetService (app capture)", r); ac->Release(); return r; }
+  *audioClient = ac; *captureClient = cc; return 0;
+}
 }  // namespace am
 #endif

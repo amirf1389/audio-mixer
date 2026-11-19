@@ -98,6 +98,17 @@ class SyncDelay final : public Simple { public: explicit SyncDelay(double fs); c
   static double bpmOf(double v) { return 60.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 140.0; } static int noteOf(double v) { const int k = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 5.999); return k; } static double beatsOf(int note);
  protected: int count() const override { return 5; } const char* knobId(int i) const override { static const char* k[] = {"tempo", "note", "feedback", "tone", "width"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"TEMPO", "NOTE", "FEEDBACK", "TONE", "WIDTH"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.4286, 0.5, 0.35, 0.6, 0.5}; return d[i]; }
  private: std::vector<float> buf_[2]; std::size_t w_ = 0; float lp_[2] = {0, 0}; };
+// PING-PONG DELAY: the echoes bounce from one side to the other. The input goes into the left line; what comes out of the left line is
+// heard on the left and goes into the right line; what comes out of the right line is heard on the right and (FEEDBACK) starts the
+// next bounce. L TIME and R TIME (20 .. 1500 ms each) set the two legs, so equal times bounce evenly and unequal times swing.
+// TONE darkens every bounce, LOW CUT (OFF .. 800 Hz) thins the repeats so they stay out of the bass, SPREAD 100 % puts the bounces
+// hard left and right (0 % = both in the middle).
+class PingPong final : public Simple { public: explicit PingPong(double fs); const char* kind() const override { return "pingpong"; } const char* name() const override { return "PING-PONG DELAY"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static double msOf(double v) { return 20.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 1480.0; } static double knobOfMs(double ms) { const double v = (ms - 20.0) / 1480.0; return v < 0 ? 0 : v > 1 ? 1 : v; }
+  static double lowCutHz(double v) { return v < 0.02 ? 0.0 : 20.0 + (v > 1 ? 1 : v) * 780.0; }
+ protected: int count() const override { return 6; } const char* knobId(int i) const override { static const char* k[] = {"left", "right", "feedback", "tone", "spread", "lowcut"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"L TIME", "R TIME", "FEEDBACK", "TONE", "SPREAD", "LOW CUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.1554, 0.1554, 0.45, 0.6, 1.0, 0.15}; return d[i]; }   // 250 ms each side
+ private: std::vector<float> buf_[2]; std::size_t w_ = 0; float lp_[2] = {0, 0}, hp_ = 0; };
 // FEEDBACK KILLER: finds the howl of a microphone that hears its own loudspeaker and notches it out. Every 1024 samples the spectrum of
 // the sum is taken; a single narrow peak that stands far above the rest of the spectrum and stays on the same frequency for several
 // frames in a row (a third of a second), with no overtone, is taken for feedback, and one of six notch filters is put on it. A peak that

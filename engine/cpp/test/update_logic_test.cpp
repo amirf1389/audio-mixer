@@ -34,6 +34,16 @@ int main(int argc, char** argv) {
     CHECK(n >= 3);
     std::printf("manifest %s: %d files read\n", ver.c_str(), n);
   }
+  { // THE UPDATE NOTICE: banner / badge / notification, each with its own memory
+    using am::upd::noticeFor; const long long now = 1000000;
+    { const auto n = noticeFor(false, "2.0", "", "", "", 0, now); CHECK(!n.banner && !n.badge && !n.toast); }                 // nothing newer: nothing
+    { const auto n = noticeFor(true, "2.0", "", "", "", 0, now); CHECK(n.banner && n.badge && n.toast); }                     // a new version: all three
+    { const auto n = noticeFor(true, "2.0", "", "2.0", "2.0", 0, now); CHECK(n.banner && !n.badge && !n.toast); }             // page opened, already notified: the banner stays
+    { const auto n = noticeFor(true, "2.0", "", "", "2.0", now + 1, now); CHECK(!n.banner && n.badge && !n.toast); }           // LATER: no banner until then, the badge stays
+    { const auto n = noticeFor(true, "2.0", "", "", "2.0", now, now); CHECK(n.banner); }                                      // and it is back when the time has come
+    { const auto n = noticeFor(true, "2.0", "2.0", "", "", 0, now); CHECK(!n.banner && !n.badge && !n.toast); }               // SKIP THIS VERSION: silence
+    { const auto n = noticeFor(true, "2.1", "2.0", "2.0", "2.0", 0, now); CHECK(n.banner && n.badge && n.toast); }            // the next version is announced again
+    { const auto n = noticeFor(true, "", "", "", "", 0, now); CHECK(!n.banner && !n.badge && !n.toast); } }
   std::printf(fails ? "update_logic_test: %d FAILED\n" : "update_logic_test: ok\n", fails);
   return fails ? 1 : 0;
 }

@@ -44,6 +44,7 @@ Item {
                     Text { Layout.fillWidth: true; text: engine.running ? engine.status : i18n.t("The captured app lands on CH 1-2 (its left / right); route it on ROUTING. To hear it, the output must be a different device than the one captured, or you get a loop.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
             Component.onCompleted: appPanel = this
         }
+        AppCapturePanel { Layout.fillWidth: true }
         // transport
         Rectangle { Layout.fillWidth: true; implicitHeight: 118; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8

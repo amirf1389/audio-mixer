@@ -293,6 +293,8 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap setInputSource(const QString& source);
   // while phones are linked the console's engine is stopped and the remote service plays: the input choice goes there (main.cpp sets it)
   std::function<bool(const QString& in)> remoteInput;
+  std::function<QString(int input)> appInputName;   // APP CAPTURE (Apps): the name of a program input, e.g. "Spotify L"
+  static int cleanRoute(int input) { return (input >= am::Runtime::kNetInBase && input < am::Runtime::kNetInBase + am::Runtime::kNetInputs) || am::Runtime::isAppInput(input) ? input : std::clamp(input, -1, am::Runtime::kNetInBase - 1); }   // a device input 0 .. 255, a network input, a program input, or -1 (none)
   std::function<bool()> remoteInProcess;   // the network service plays the sound inside this program (phones linked): no working-set trim then
   // SYSTEM OPTIMIZATION (engine/cpp/include/audiomixer/sysopt.hpp): the processor, its core types, an NPU, memory; and the three switches
   //   fastCores: the audio thread asks for the performance cores of a hybrid processor; eco: the interface thread is EcoQoS while the window is
@@ -331,7 +333,7 @@ class Engine : public QObject {
   Q_INVOKABLE void setBusFxParam(int bus, const QString& id, double value);
   Q_INVOKABLE void setBusFxBypass(int bus, bool on);
   Q_INVOKABLE void setBusFxMix(int bus, double wet);
-  Q_INVOKABLE QVariantList fxPresets() const;                 // the 300 presets: [{id, name, kind, category, mix}]
+  Q_INVOKABLE QVariantList fxPresets() const;                 // the 600 presets: [{id, name, kind, category, mix}]
   Q_INVOKABLE bool applyFxPreset(int bus, int presetId);      // loads the kind on the bus (if different) and sets every value
   Q_INVOKABLE int busFxPreset(int bus) const { return bus >= 0 && bus < kBuses ? buses_[bus].fxPreset : 0; }
   // WAVEFORM / PHASE: the scope tap

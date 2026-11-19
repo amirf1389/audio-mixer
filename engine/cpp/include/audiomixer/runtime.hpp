@@ -217,6 +217,11 @@ class Runtime {
   static constexpr int kNetInBase = 256, kNetInputs = 16;
   struct NetInput { virtual ~NetInput() = default; virtual void pull(float* const* ch, int channels, std::size_t frames, double sampleRate) = 0; };
   void setNetInput(NetInput* n) { netIn_.store(n); }
+  // APP CAPTURE (audiomixer/app_capture.hpp): up to 8 programs at once, each on its own strips. A second pulled source, filled like the
+  // network inputs: input kAppInBase + 2k / + 2k + 1 = program k left / right, kAppInBase + 16 + k = program k as one mono channel.
+  static constexpr int kAppInBase = 272, kAppSlots = 8, kAppInputs = 3 * kAppSlots;
+  static bool isAppInput(int input) { return input >= kAppInBase && input < kAppInBase + kAppInputs; }
+  void setAppInput(NetInput* n) { appIn_.store(n); }
   void setNetTap(Tap* t) { netTap_.store(t); }
   unsigned blockFrames() const { return static_cast<unsigned>(left_.size()); }
   // MEASUREMENT: the taps see this one strip as it comes from the device (before its trim, EQ, dynamics and inserts) instead of after them,
@@ -236,7 +241,7 @@ class Runtime {
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
   std::atomic<long> toneLeft_{0}, toneTotal_{0}; double tonePhase_ = 0;
-  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}, netTap_{nullptr}; std::atomic<NetInput*> netIn_{nullptr}; std::atomic<int> tapRaw_{-1}; std::vector<std::vector<float>> netBuf_; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; // the insert chain of each strip, swapped from the UI thread and read on the audio thread: a shared_ptr with the free atomic
+  std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}, netTap_{nullptr}; std::atomic<NetInput*> netIn_{nullptr}, appIn_{nullptr}; std::atomic<int> tapRaw_{-1}; std::vector<std::vector<float>> netBuf_, appBuf_; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; // the insert chain of each strip, swapped from the UI thread and read on the audio thread: a shared_ptr with the free atomic
   // functions (std::atomic_load / atomic_store), which every standard library has; std::atomic<std::shared_ptr> is missing from libc++ (Android, macOS)
   std::shared_ptr<const InsertChain> inserts_[kMaxStrips];                            // audio thread only (set in open, then by ops)
   std::vector<dsp::Channel> ch_; std::vector<std::vector<float>> chBuf_;

@@ -6,6 +6,8 @@
 #include <QNetworkAccessManager>
 #include <QJsonArray>
 #include <QObject>
+#include <QTimer>
+#include <functional>
 #include <QSettings>
 #include <QVariant>
 #include <vector>
@@ -26,6 +28,12 @@ class Update : public QObject {
   Q_PROPERTY(QString lastCheck READ lastCheck NOTIFY changed)
   Q_PROPERTY(QString current READ current CONSTANT)
   Q_PROPERTY(int progress READ progress NOTIFY changed)
+  // THE UPDATE NOTICE (am::upd::noticeFor): a banner in the console, a badge on SOFTWARE UPDATE in the menu, one Windows notification
+  Q_PROPERTY(bool found READ found NOTIFY changed)                       // the signed manifest names a newer version than this one
+  Q_PROPERTY(bool noticeBanner READ noticeBanner NOTIFY changed)
+  Q_PROPERTY(bool noticeBadge READ noticeBadge NOTIFY changed)
+  Q_PROPERTY(bool systemNotice READ systemNotice WRITE setSystemNotice NOTIFY changed)   // Windows notification when a new version is found (on by default)
+  Q_PROPERTY(QString skippedVersion READ skippedVersion NOTIFY changed)
   Q_PROPERTY(QVariantList features READ features NOTIFY changed)   // the signed feature feed: [{version, date, title, items[]}], newest first
   Q_PROPERTY(int newFeatures READ newFeatures NOTIFY changed)
   Q_PROPERTY(bool canInstall READ canInstall NOTIFY changed)        // a verified installer is downloaded and this platform can install it and restart (Windows)
@@ -84,7 +92,16 @@ class Update : public QObject {
   Q_INVOKABLE bool removePlugin(const QString& id);                 // deletes the downloaded file (only one this list put there)
   int setPluginList(const QJsonArray& list);                        // from the signed manifest (and the self-test): returns how many entries were accepted
   QString pluginDir;                                                // the console's own plug-in folder (main sets it)
+  bool found() const; bool noticeBanner() const; bool noticeBadge() const;
+  bool systemNotice() const { return s_.value("update/systemNotice", true).toBool(); } void setSystemNotice(bool v) { s_.setValue("update/systemNotice", v); emit changed(); }
+  QString skippedVersion() const { return s_.value("update/skipped").toString(); }
+  Q_INVOKABLE void remindLater(int hours = 24);     // LATER: the banner comes back after that time (the badge stays)
+  Q_INVOKABLE void skipThisVersion();               // SKIP THIS VERSION: nothing more about this one; the next version is announced again
+  Q_INVOKABLE void unskip();                        // SOFTWARE UPDATE: "show me this version after all"
+  Q_INVOKABLE void markUpdateSeen();                // SOFTWARE UPDATE was opened: the badge goes
+  std::function<qint64()> clock;                    // tests: the time (ms); empty = the system's
  signals:
+  void notifySystem(const QString& title, const QString& text);   // main shows it as a Windows notification
   void pluginsChanged();
   void pluginInstalled();
   void changed();
@@ -92,7 +109,9 @@ class Update : public QObject {
   void activated(const QString& activation);
   void revocations(const QString& list);
  private:
-  void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); }
+  void set(const QString& state, const QString& msg) { state_ = state; msg_ = msg; emit changed(); announce(); }
+  void announce();   // a newer version found for the first time: one system notification (when switched on)
+  QTimer laterTimer_, recheck_;
   static QString platformKey();
   QString redeem_;
   QVariantList pluginList_; QString pluginMsg_, pluginBusy_; int pluginProgress_ = 0;
