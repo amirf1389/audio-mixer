@@ -42,7 +42,7 @@ object Prefs {
     fun setLocalInputOn(c: Context, on: Boolean) { local(c).edit().putBoolean("inputOn", on).apply() }
 }
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : FitActivity() {
     private lateinit var box: LinearLayout
     private val accent = Color.parseColor("#FFB590"); private val dim = Color.parseColor("#C2C7CF")
 
@@ -73,6 +73,7 @@ class SettingsActivity : AppCompatActivity() {
 
         section(getString(R.string.set_behaviour))
         toggle(r, "keepScreenOn", true, getString(R.string.set_screen_on), null)
+        choice(r, "textSize", TextFit.AUTO, listOf(TextFit.AUTO, TextFit.SMALL, TextFit.NORMAL, TextFit.LARGE), getString(R.string.set_text_size), { recreate() }) { getString(listOf(R.string.set_text_auto, R.string.set_text_small, R.string.set_text_normal, R.string.set_text_large)[it]) }
         toggle(r, "haptics", true, getString(R.string.set_haptics), null)
         toggle(r, "confirmStop", true, getString(R.string.set_confirm_stop), getString(R.string.set_confirm_stop_note))
 
@@ -99,10 +100,10 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _: CompoundButton, on: Boolean -> p.edit().putBoolean(key, on).apply() } }
         box.addView(sw); if (sub != null) box.addView(note(sub))
     }
-    private fun <T> choice(p: SharedPreferences, key: String, def: Int, values: List<Int>, label: String, show: (Int) -> T) {
+    private fun <T> choice(p: SharedPreferences, key: String, def: Int, values: List<Int>, label: String, after: (() -> Unit)? = null, show: (Int) -> T) {
         val b = Button(this).apply { isAllCaps = false; textAlignment = View.TEXT_ALIGNMENT_VIEW_START }
         fun refresh() { b.text = label + ":  " + show(p.getInt(key, def)) }
-        refresh(); b.setOnClickListener { AlertDialog.Builder(this).setTitle(label).setItems(values.map { show(it).toString() }.toTypedArray()) { _, w -> p.edit().putInt(key, values[w]).apply(); refresh() }.show() }
+        refresh(); b.setOnClickListener { AlertDialog.Builder(this).setTitle(label).setItems(values.map { show(it).toString() }.toTypedArray()) { _, w -> p.edit().putInt(key, values[w]).apply(); refresh(); after?.invoke() }.show() }
         box.addView(b)
     }
     private fun number(p: SharedPreferences, key: String, def: Int, min: Int, max: Int, label: String) {

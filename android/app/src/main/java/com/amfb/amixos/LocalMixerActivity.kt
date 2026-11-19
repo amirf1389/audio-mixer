@@ -27,7 +27,7 @@ import com.amfb.amixos.remote.MiniJson
  *  interface, or a stereo mic). OUTPUT: speaker, headphones, USB, Bluetooth ... Each channel: fader, pan, mute and an INSERT RACK of
  *  AmF X1 effects (the console's rack effects; desktop VST / VST3 plug-ins are Windows / macOS / Linux binaries and cannot load on Android);
  *  MASTER: fader, limiter and its own rack. What is chosen is kept for next time. Rate and buffer come from the phone's audio HAL. */
-class LocalMixerActivity : AppCompatActivity() {
+class LocalMixerActivity : FitActivity() {
     companion object {
         /** A 10-CHANNEL DIGITAL MIXER: the engine's strips are 0-1 the inputs (mic / interface), then DECK A, B, C and D as stereo pairs
          *  (2-3, 4-5, 6-7, 8-9). Every channel has a fader, MUTE and its own FX rack; the master has the limiter and a rack. */

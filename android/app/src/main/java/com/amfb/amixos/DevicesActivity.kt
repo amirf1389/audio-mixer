@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
  *  the role ASIO plays on Windows).
  *  NETWORK: every network interface with its real IPv4 / IPv6 addresses, type, state and MTU, the gateway and DNS of the active network,
  *  and FIND CONSOLES, which asks every local network the phone is on for an AmF X1 console and saves the one tapped for the remote. */
-class DevicesActivity : AppCompatActivity() {
+class DevicesActivity : FitActivity() {
     private lateinit var box: LinearLayout
     private lateinit var found: LinearLayout
     private lateinit var findStatus: TextView

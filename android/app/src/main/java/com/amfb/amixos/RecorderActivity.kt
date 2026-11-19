@@ -27,7 +27,7 @@ import kotlin.concurrent.thread
 /** HI-RES RECORDER on the phone itself: the microphone (or a USB interface, when Android routes one in) recorded unprocessed, in float,
  *  at the rate picked here, and written by the engine (HiRes: libFLAC / dr_wav) as FLAC 24-bit, WAV 24-bit or WAV 32-bit float. The files
  *  stay in the app's own folder (Android/data/…/files/recordings: no storage permission) and play back from the list. */
-class RecorderActivity : AppCompatActivity() {
+class RecorderActivity : FitActivity() {
     data class Take(val file: File, val label: String)
     private val ui = Handler(Looper.getMainLooper())
     private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF"); private val green = Color.parseColor("#34D399")

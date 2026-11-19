@@ -31,7 +31,7 @@ import java.util.concurrent.Executors
 /** The remote: connect to amixos-daemon (host, port, token), then the mixer (32 strips: fader, pan, mute, solo, meter), the master,
  *  the devices (open / stop) and a channel page (EQ band, compressor, gate). Every call runs on a worker thread; the meter stream
  *  arrives over the WebSocket. The token stays in SharedPreferences on this phone; nothing leaves it except to the daemon. */
-class RemoteActivity : AppCompatActivity() {
+class RemoteActivity : FitActivity() {
     private val io = Executors.newSingleThreadExecutor()
     private val scanIo = Executors.newSingleThreadExecutor()   // network searches: never on the fader thread (a search takes up to a second)
     private val live = com.amfb.amixos.remote.LatestSender(Executors.newSingleThreadExecutor())   // REAL-TIME FADERS: only the newest move of each fader is sent, never a queue; its own thread, so a slow status check never holds a fader back

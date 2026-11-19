@@ -18,7 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 /** PLAYERS: the official embedded player of YouTube, Spotify, TIDAL or Deezer, beside the mixer. A pasted link is opened in the
  *  service's own player page; the song goes to the phone's output as the service plays it. It is never routed into the mixer,
  *  processed or recorded, and the page cannot leave the service's own addresses. */
-class StreamPlayerActivity : AppCompatActivity() {
+class StreamPlayerActivity : FitActivity() {
     private var service = StreamLinks.Service.YOUTUBE
     private lateinit var chips: LinearLayout; private lateinit var field: EditText; private lateinit var status: TextView; private var web: WebView? = null
     private lateinit var holder: LinearLayout

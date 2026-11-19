@@ -24,7 +24,7 @@ import java.util.concurrent.Executors
  *  plug-ins its last scan found (search by name or vendor), and the extensions and built-in effects of its LOCAL STORE.
  *  The console saves this when the phone remote starts; while the remote runs the service's own engine plays, so the racks are not
  *  changed from here (that is done on the computer). */
-class PluginsActivity : AppCompatActivity() {
+class PluginsActivity : FitActivity() {
     private val io = Executors.newSingleThreadExecutor(); private val ui = Handler(Looper.getMainLooper())
     private lateinit var body: LinearLayout; private lateinit var head: TextView
     private var info: Map<String, Any?> = emptyMap(); private var tab = 0; private var filter = ""

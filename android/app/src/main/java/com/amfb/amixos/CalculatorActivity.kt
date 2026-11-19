@@ -17,7 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 /** AUDIO CALCULATOR: works offline, nothing is sent. Six tools; results update as you type.
  *  DELAY (tempo to note lengths) · ALIGN (distance to delay, temperature) · dB (ratios, adding sources) · FREQUENCY (wavelength, note)
  *  · LATENCY (buffer to milliseconds, round trip) · STORAGE (recording size). */
-class CalculatorActivity : AppCompatActivity() {
+class CalculatorActivity : FitActivity() {
     private lateinit var body: LinearLayout
     private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF")
     private val tools = listOf("DELAY", "ALIGN", "dB", "FREQUENCY", "LATENCY", "STORAGE")

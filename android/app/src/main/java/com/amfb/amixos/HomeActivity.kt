@@ -14,7 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 
 /** HOME: one place for the whole app. The console card (which computer, which plan, paired or not), then a tile for every part:
  *  the console mixer, this phone's own mixer, EQ, scenes, tools, calculator, plug-ins and settings. */
-class HomeActivity : AppCompatActivity() {
+class HomeActivity : FitActivity() {
     private lateinit var phoneCard: LinearLayout
     private lateinit var card: LinearLayout; private lateinit var quick: LinearLayout; private lateinit var news: LinearLayout; private lateinit var recentRow: LinearLayout; private lateinit var grid: GridLayout
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor(); private val ui = android.os.Handler(android.os.Looper.getMainLooper())

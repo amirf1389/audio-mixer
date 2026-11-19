@@ -118,6 +118,11 @@
     <string name="set_forget_q">Forget the saved console and its pairing on this phone? To sign the phone out on the computer too, revoke it under NETWORK → PHONE REMOTE.</string>
     <string name="set_mixer">MIXER</string>
     <string name="set_strips">Strips shown</string>
+    <string name="set_text_size">Text size</string>
+    <string name="set_text_auto">Auto (fits the screen)</string>
+    <string name="set_text_small">Small</string>
+    <string name="set_text_normal">Normal</string>
+    <string name="set_text_large">Large</string>
     <string name="set_pan">Show pan sliders</string>
     <string name="set_meter_range">Meter range</string>
     <string name="set_sync">Follow the console every</string>
