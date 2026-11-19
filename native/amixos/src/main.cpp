@@ -1430,7 +1430,10 @@ int main(int argc, char* argv[]) {
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
           const QImage img = win->grabWindow(); img.save(shots + "/" + id + ".png"); std::printf("amixos --shots: %s %dx%d\n", id, img.width(), img.height());
           if (QString::fromLatin1(id) == "amp") {   // AMP / SYSTEM: a sub on output 3, tops on 1-2, a delayed fill; the stage of output 1 is checked against the engine
-            const QString setup = engine.setupSystem("2way", "mono", 100);   // LOW L, HIGH L, LOW R, HIGH R, SUB (mono)
+            const QString setup = engine.setupSystem("2way", "mono", 100, true);   // LOW L, HIGH L, LOW R, HIGH R, SUB (mono)
+            { const QVariantList r0 = engine.outputRoutes(); const QString no = engine.setupSystem("3way", "stereo", 100);   // 8 outputs on the 2-output test card: refused, nothing changes
+              if (engine.running() && engine.deviceOutputs() < 8 && (!no.startsWith("Not set up") || engine.outputRoutes() != r0 || engine.ampState(0)["name"] != "LOW L")) { std::fprintf(stderr, "amixos --shots: a system too big for the sound card was not refused (%s)\n", qPrintable(no)); std::exit(166); }
+              if (engine.ampOutputsUsed() != 5) { std::fprintf(stderr, "amixos --shots: outputs used %d (want 5)\n", engine.ampOutputsUsed()); std::exit(166); } }
             const QVariantList routes = engine.outputRoutes(); const int subSrc = routes.size() > 4 ? routes[4].toInt() : -1;
             if (engine.ampState(4)["name"] != "SUB" || engine.ampState(0)["name"] != "LOW L" || subSrc != am::Runtime::kSrcMasterMono) { std::fprintf(stderr, "amixos --shots: SYSTEM SETUP is wrong (%s; sub source %d)\n", qPrintable(setup), subSrc); std::exit(163); }
             { QVariantList eq = engine.ampState(1)["eq"].toList(); QVariantMap b = eq[3].toMap(); b["type"] = 1; b["freq"] = 2500.0; b["gain"] = -4.0; b["q"] = 2.0; eq[3] = b; engine.setAmp(1, {{"eq", eq}}); }   // a horn's presence peak, tamed
@@ -1440,7 +1443,7 @@ int main(int argc, char* argv[]) {
             if (!a0["on"].toBool() || a0["name"] != "LOW L" || at40 < -6 || at2k > -40 || !QSettings().value("console/state").toString().contains("LOW L")) { std::fprintf(stderr, "amixos --shots: the AMP stage is wrong (on %d, sub 40 Hz %.1f dB, 2 kHz %.1f dB)\n", a0["on"].toBool(), at40, at2k); std::exit(165); }
             QObject* ap = win->findChild<QObject*>("ampPage"); if (ap) ap->setProperty("sel", 1); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
             win->grabWindow().save(shots + "/amp.png"); std::printf("amixos --shots: amp (%s; sub 40 Hz %.1f dB, 2 kHz %.1f dB)\n", qPrintable(setup), at40, at2k);
-            for (int o = 0; o < 8; ++o) engine.setAmp(o, {{"on", false}}); engine.resetRouting(); }   // the pages after this one are checked with plain outputs
+            engine.clearSystem(); if (engine.ampOutputsUsed() != 0 || engine.outputRoutes()[1].toInt() != am::Runtime::defaultOutputSource(1)) { std::fprintf(stderr, "amixos --shots: RESET left a stage or a route behind\n"); std::exit(166); } }   // the pages after this one are checked with plain outputs
           if (QString::fromLatin1(id) == "network") {   // DANTE + CLOCK: a simulated Dante Virtual Soundcard and two PTP grandmasters (injected packets, nothing sent)
             const QVariantList real = engine.devices(); QVariantList rig = real; QVariantMap dvs; dvs["backend"] = "asio"; dvs["id"] = "Dante Virtual Soundcard"; dvs["name"] = "Dante Virtual Soundcard"; dvs["inChannels"] = 64; dvs["outChannels"] = 64; dvs["defaultRate"] = 48000.0; rig.prepend(dvs);
             engine.simulateDevices(rig);

@@ -55,22 +55,27 @@ Flickable {
         Rectangle { Layout.fillWidth: true; implicitHeight: sysRow.implicitHeight + 16; radius: Theme.radius; color: Theme.card; border.color: Theme.orange
             property string layout: "2way"; property string sub: "mono"; property real xo: 100; property string note: ""
             ColumnLayout { id: sysRow; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 10; spacing: 6
-                RowLayout { spacing: 6
-                    Text { text: page.t("SYSTEM SETUP"); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2; Layout.preferredWidth: 120 }
+                // a Flow, not a row: on a narrow window the choices go to a second line instead of being squeezed on top of each other
+                Flow { Layout.fillWidth: true; spacing: 6
+                    Text { text: page.t("SYSTEM SETUP"); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2; width: 120; height: 20; verticalAlignment: Text.AlignVCenter }
                     Repeater { model: [["full", "FULL RANGE"], ["2way", "2-WAY"], ["3way", "3-WAY"]]
-                        delegate: Chip { label: modelData[1]; on: sysRow.parent.layout === modelData[0]; onColor: Theme.orange; onClicked: sysRow.parent.layout = modelData[0] } }
-                    Item { width: 10 }
+                        delegate: Chip { width: implicitWidth; height: implicitHeight; label: modelData[1]; on: sysRow.parent.layout === modelData[0]; onColor: Theme.orange; onClicked: sysRow.parent.layout = modelData[0] } }
+                    Item { width: 10; height: 20 }
                     Repeater { model: [["none", "NO SUB"], ["stereo", "STEREO SUB"], ["mono", "MONO SUB"]]
-                        delegate: Chip { label: modelData[1]; on: sysRow.parent.sub === modelData[0]; onColor: Theme.orange; onClicked: sysRow.parent.sub = modelData[0] } }
-                    Item { width: 10 }
-                    Text { text: page.t("SUB CROSSOVER"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        delegate: Chip { width: implicitWidth; height: implicitHeight; label: modelData[1]; on: sysRow.parent.sub === modelData[0]; onColor: Theme.orange; onClicked: sysRow.parent.sub = modelData[0] } }
+                    Item { width: 10; height: 20 }
+                    Text { text: page.t("SUB CROSSOVER"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; height: 20; verticalAlignment: Text.AlignVCenter }
                     Repeater { model: [80, 100, 120]
-                        delegate: Chip { label: modelData + " Hz"; on: sysRow.parent.xo === modelData; onColor: Theme.orange; onClicked: sysRow.parent.xo = modelData } }
-                    Item { Layout.fillWidth: true }
-                    Rectangle { objectName: "ampSetupApply"; implicitWidth: apT.implicitWidth + 20; implicitHeight: 24; radius: 4; color: Theme.orange
+                        delegate: Chip { width: implicitWidth; height: implicitHeight; label: modelData + " Hz"; on: sysRow.parent.xo === modelData; onColor: Theme.orange; onClicked: sysRow.parent.xo = modelData } }
+                    Item { width: 10; height: 20 }
+                    Rectangle { objectName: "ampSetupApply"; width: apT.implicitWidth + 20; height: 22; radius: 4; color: Theme.orange
                         Text { id: apT; anchors.centerIn: parent; text: page.t("SET UP"); color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { sysRow.parent.note = engine.setupSystem(sysRow.parent.layout, sysRow.parent.sub, sysRow.parent.xo); page.sel = 0 } } } }
-                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: sysRow.parent.note ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 8
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { sysRow.parent.note = engine.setupSystem(sysRow.parent.layout, sysRow.parent.sub, sysRow.parent.xo); page.sel = 0 } } }
+                    Chip { objectName: "ampSetupReset"; width: implicitWidth; height: 22; label: "RESET"; onClicked: { sysRow.parent.note = engine.clearSystem(); page.sel = 0 } } }
+                Text { objectName: "ampSetupWarn"; readonly property int used: { page.rev; return engine.ampOutputsUsed() } readonly property int have: engine.running ? engine.deviceOutputs : 0
+                       visible: have > 0 && used > have; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                       text: page.t("This system uses") + " " + used + " " + page.t("outputs and the sound card has") + " " + have + ". " + page.t("Some ways are not heard. Press RESET for normal stereo, or connect a sound card with more outputs.") }
+                Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: sysRow.parent.note ? (sysRow.parent.note.indexOf("Not set up") === 0 ? Theme.amber : Theme.emerald) : Theme.dim; font.family: Theme.mono; font.pixelSize: 8
                        text: sysRow.parent.note ? sysRow.parent.note : page.t("Outputs are used in order from output 1: each side's ways (low, mid, high), then the sub. Linkwitz-Riley 24 dB crossovers, limiters on; then set each output's gain, delay and speaker EQ below.") } } }
 
         // every output: name, status, meter with gain reduction, quick mute

@@ -571,7 +571,10 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantList ampResponse(int out) const;   // [{hz, db}] of the crossover legs, 20 Hz .. 20 kHz
   Q_INVOKABLE QVariantList ampMeters() const;            // [{pk (dBFS), gr (dB)}] per output
   Q_INVOKABLE int ampOutputs() const;
-  Q_INVOKABLE QString setupSystem(const QString& layout, const QString& sub, double xoverHz);   // SYSTEM SETUP wizard: full / 2way / 3way, sub none / stereo / mono                    // outputs shown: the device's, or 8 when nothing runs
+  Q_INVOKABLE QString setupSystem(const QString& layout, const QString& sub, double xoverHz, bool force = false);
+  Q_INVOKABLE QString clearSystem();               // every output stage off, outputs back on master L / R
+  Q_INVOKABLE int ampOutputsUsed() const;          // the highest output with a stage that is ON (0 = none)
+  //   // SYSTEM SETUP wizard: full / 2way / 3way, sub none / stereo / mono                    // outputs shown: the device's, or 8 when nothing runs
   Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
   Q_INVOKABLE void setMonitor(int source, double db, bool dim, bool mono, bool mute);
   Q_INVOKABLE void setMonitorSync(bool on);   // SYNC: master and monitor faders move together by the same dB

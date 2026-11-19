@@ -11,7 +11,10 @@
         "NEW · PLAYERS in AmF X1 Mixer: the official embedded player of YouTube, Spotify, TIDAL or Deezer from a pasted link; the song is not sent through the mixer and is not recorded",
         "NEW · PHONE: NO PEAKS quick chain in the phone mixer",
         "ENHANCEMENT · PHONE: a Material look on every screen (tonal surfaces, pill buttons, a navigation bar with a marker on the open tab)",
-        "FIX · The console could close by itself on NETWORK, DANTE + CLOCK when the list of sound cards or network clocks changed"
+        "FIX · The console could close by itself on NETWORK, DANTE + CLOCK when the list of sound cards or network clocks changed",
+        "FIX · AMP / SYSTEM: a system that needs more outputs than the sound card has is no longer set up (before, headphones could get bass on one ear and treble on the other); a warning shows when a saved system is too big, and RESET puts the outputs back to normal stereo",
+        "FIX · AMP / SYSTEM: the SYSTEM SETUP choices no longer pile on top of each other; they wrap to a second line on a narrow window",
+        "FIX · Not responding: dragging a slider on AMP / SYSTEM no longer writes the whole console to disk on every step, and the window keeps answering while phone tokens are made, listed or revoked"
       ]
     },
     {

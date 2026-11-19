@@ -2005,7 +2005,14 @@ void Engine::setAmp(int out, const QVariantMap& p) {
   if (out < 0 || out >= 64) return; QVariantMap m = ampState(out); for (auto it = p.cbegin(); it != p.cend(); ++it) m[it.key()] = it.value();
   m["name"] = m["name"].toString().left(24); ampUi_[out] = m;
   if (rt_) rt_->setAmp(out, ampFromMap(m));
-  emit ampChanged(); save();
+  emit ampChanged(); if (!restoring_ && !saveTimer_.isActive()) saveTimer_.start();   // saved two seconds after the first change: a slider being dragged does not write the whole console on every step (the window stopped answering)
+}
+int Engine::ampOutputsUsed() const { int n = 0; for (int o = 0; o < kOutputs && o < 64; ++o) if (!ampUi_[o].isEmpty() && ampUi_[o].value("on").toBool()) n = o + 1; return n; }
+// RESET on AMP / SYSTEM: every output stage off and the outputs back on the master left / right, as on a new console
+QString Engine::clearSystem() {
+  for (int o = 0; o < 64 && o < kOutputs; ++o) { if (!ampUi_[o].isEmpty()) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } }
+  resetRouting(); emit ampChanged(); save();
+  return QStringLiteral("Reset: every output stage is off and the outputs are back on the master left and right.");
 }
 QVariantList Engine::ampResponse(int out) const {
   QVariantList l; am::AmpChannel a; a.prepare(48000); a.set(ampFromMap(ampState(out)));
@@ -2023,7 +2030,7 @@ int Engine::ampOutputs() const { const int n = running() ? deviceOutputs() : 0; 
 // SYSTEM SETUP: one click routes the master to the outputs and sets each output's crossover, the way a speaker processor's wizard does.
 // layout: "full" (full-range L/R), "2way" (low + high per side), "3way" (low + mid + high per side); sub: "none", "stereo", "mono".
 // Outputs are taken in order from output 1; the control room keeps nothing here (the PA gets the master). Returns what was set.
-QString Engine::setupSystem(const QString& layout, const QString& sub, double xoverHz) {
+QString Engine::setupSystem(const QString& layout, const QString& sub, double xoverHz, bool force) {
   struct Way { QString name; int src; int hp; double hpHz; int lp; double lpHz; double limit; };
   QList<Way> ways; const int L = am::Runtime::kSrcMasterL, R = am::Runtime::kSrcMasterR, M = am::Runtime::kSrcMasterMono;
   const double x = std::clamp(xoverHz > 0 ? xoverHz : 100.0, 40.0, 200.0); const bool hasSub = sub == "stereo" || sub == "mono";
@@ -2036,6 +2043,10 @@ QString Engine::setupSystem(const QString& layout, const QString& sub, double xo
   if (sub == "stereo") ways << Way{"SUB L", L, 2, 30, 4, x, -3} << Way{"SUB R", R, 2, 30, 4, x, -3};
   else if (sub == "mono") ways << Way{"SUB", M, 2, 30, 4, x, -3};
   const int n = static_cast<int>(ways.size());
+  // a sound card with fewer outputs than the system needs: nothing is changed. (Before, a 2-way system on a stereo card put the lows of the
+  // left side on output 1 and its highs on output 2, so headphones played bass on one ear and treble on the other.)
+  if (const int haveNow = running() ? deviceOutputs() : 0; !force && haveNow > 0 && haveNow < n)
+    return QStringLiteral("Not set up: this system needs %1 outputs and this sound card has %2. Nothing was changed. Connect a sound card with %1 or more outputs, or choose FULL RANGE with NO SUB (2 outputs).").arg(n).arg(haveNow);
   for (int o = 0; o < 64; ++o) {
     if (o < n) { const Way& w = ways[o]; setOutputRoute(o, w.src);
       QVariantMap a{{"on", true}, {"name", w.name}, {"gainDb", 0.0}, {"mute", false}, {"invert", false}, {"delayMs", 0.0}, {"hpOrder", w.hp}, {"hpHz", w.hpHz}, {"lpOrder", w.lp}, {"lpHz", w.lpHz}, {"type", 1}, {"limitOn", true}, {"limitDb", w.limit}};

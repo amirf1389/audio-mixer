@@ -1,3 +1,4 @@
+#include <QElapsedTimer>
 #include "Remote.h"
 #include <cmath>
 #include <QSettings>
@@ -173,7 +174,11 @@ QString Remote::program() const {
 }
 // THE NAMED TOKENS (one per phone or operator): the service program keeps them (hashes only); the console asks it to list, make and revoke.
 QString Remote::runTool(const QStringList& args, bool* ok) const {
-  QProcess p; p.start(program(), args); const bool fin = p.waitForStarted(3000) && p.waitForFinished(8000); if (!fin) p.kill();
+  // the window keeps painting while the service program works (it normally answers in a fraction of a second; a stuck one used to
+  // hold the whole window for up to 11 seconds: "Not Responding"). Clicks and keys wait until it is done, so nothing runs twice.
+  QProcess p; p.start(program(), args); QElapsedTimer t; t.start();
+  while (p.state() != QProcess::NotRunning && t.elapsed() < 8000) { if (p.waitForFinished(15)) break; QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 10); }
+  const bool fin = p.state() == QProcess::NotRunning && p.error() != QProcess::FailedToStart; if (!fin) { p.kill(); p.waitForFinished(200); }
   if (ok) *ok = fin && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
   return QString::fromUtf8(fin ? (p.exitCode() == 0 ? p.readAllStandardOutput() : p.readAllStandardError()) : QByteArray("the service program did not answer"));
 }
