@@ -335,6 +335,33 @@ int main(int argc, char* argv[]) {
         stallMs = 0; QElapsedTimer hb; hb.start(); qint64 last = 0;
         while (hb.elapsed() < 450) { QCoreApplication::processEvents(QEventLoop::AllEvents, 5); const qint64 now = hb.elapsed(); stallMs = std::max(stallMs, double(now - last)); last = now; QThread::msleep(2); }
         stallMs = std::max(stallMs, blockMs); };
+      if (qEnvironmentVariableIsSet("AMIX_BENCH_FIT")) {   // BUTTON AUDIT: every page at several window sizes; a button cut off by the window or its panel, or lying on another button, is listed
+        const QList<QSize> sizes{{1380, 860}, {1920, 1010}, {1600, 812}, {1280, 700}, {1100, 640}}; int found = 0; QStringList seen;
+        auto isButton = [](QQuickItem* it) { const QByteArray c = it->metaObject()->className(); return c.startsWith("Btn_") || c.startsWith("Key_") || c.startsWith("MenuBtn_"); };
+        auto nameOf = [](QQuickItem* it) { QString n = it->objectName(); const QString l = it->property("label").toString(); return (n.isEmpty() ? QStringLiteral("(no name)") : n) + (l.isEmpty() ? QString() : " \"" + l.left(28) + "\""); };
+        for (const QSize& sz : sizes) { win->setWidth(sz.width()); win->setHeight(sz.height());
+          QVariantList pages = engine.pages(); pages.prepend(QVariantMap{{"id", "mixer"}});
+          for (const QVariant& v : pages) { const QString id = v.toMap().value("id").toString(); double b = 0, st = 0; openPage(id, b, st);
+            const QRectF winR(0, 0, win->width(), win->height());
+            std::function<void(QQuickItem*, QRectF, bool)> walk = [&](QQuickItem* it, QRectF clip, bool scrolls) {
+              if (!it->isVisible() || it->opacity() <= 0.01) return;
+              const QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+              if (isButton(it) && r.width() > 1 && r.height() > 1) {
+                QString why;
+                if (!scrolls) { if (r.right() > clip.right() + 1.5) why = QStringLiteral("cut off on the right by %1 px").arg(qRound(r.right() - clip.right()));
+                  else if (r.left() < clip.left() - 1.5) why = QStringLiteral("cut off on the left by %1 px").arg(qRound(clip.left() - r.left()));
+                  else if (r.bottom() > clip.bottom() + 1.5) why = QStringLiteral("cut off at the bottom by %1 px").arg(qRound(r.bottom() - clip.bottom()));
+                  else if (r.top() < clip.top() - 1.5) why = QStringLiteral("cut off at the top by %1 px").arg(qRound(clip.top() - r.top())); }
+                if (why.isEmpty() && it->parentItem()) for (QQuickItem* sib : it->parentItem()->childItems()) { if (sib == it || !sib->isVisible() || !isButton(sib)) continue;
+                  const QRectF o = sib->mapRectToScene(QRectF(0, 0, sib->width(), sib->height())).intersected(r);
+                  if (o.width() * o.height() > 0.2 * std::min(r.width() * r.height(), sib->width() * sib->height())) { why = QStringLiteral("lies on ") + nameOf(sib); break; } }
+                if (!why.isEmpty()) { ++found; const QString key = id + "|" + nameOf(it) + "|" + why.section(' ', 0, 3);
+                  if (!seen.contains(key)) { seen << key; std::printf("amixos --bench: FIT %dx%d [%s] %s: %s\n", sz.width(), sz.height(), qPrintable(id), qPrintable(nameOf(it)), qPrintable(why)); } } }
+              const bool fl = it->inherits("QQuickFlickable"); QRectF c2 = clip; if (it->clip() && !fl) c2 = clip.intersected(r);
+              for (QQuickItem* ch : it->childItems()) walk(ch, c2, scrolls || fl); };
+            walk(win->contentItem(), winR, false); } }
+        std::printf("amixos --bench: FIT %d button problems on %lld pages x %lld window sizes (%lld different)\n", found, static_cast<long long>(engine.pages().size() + 1), static_cast<long long>(sizes.size()), static_cast<long long>(seen.size()));
+        engine.stop(); return found ? 107 : 0; }
       if (qEnvironmentVariableIsSet("AMIX_BENCH_LEAK")) {   // which page keeps memory: each page opened 6 times (and the mixer between), memory after vs before
         // deferred deletes (an old page) are only delivered by a running event loop; this audit runs before app.exec(), so it delivers them
         // itself, as the real event loop does after every page switch (without this the audit itself would keep every old page alive)
