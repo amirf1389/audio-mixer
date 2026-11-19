@@ -99,7 +99,7 @@ class LocalMixerActivity : AppCompatActivity() {
                 addView(TextView(this@LocalMixerActivity).apply { text = "▾"; setTextColor(dim); textSize = 14f }) }
             io[out] = IoViews(lamp, nameV, stateV, meter)
             return LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; isClickable = true; setOnClickListener { click() }
-                background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFF141B26.toInt()); cornerRadius = 16f; setStroke(2, 0xFF263041.toInt()) }; setPadding(22, 14, 22, 14)
+                background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFF1D2024.toInt()); cornerRadius = 16f; setStroke(2, 0xFF42474E.toInt()) }; setPadding(22, 14, 22, 14)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 8) }
                 addView(row); addView(meter); contentDescription = tag }
         }
@@ -182,7 +182,7 @@ class LocalMixerActivity : AppCompatActivity() {
     /** the rack of one strip: four slots, each empty (+ ADD) or an effect with BYPASS, REMOVE, MIX and its knobs. [slotJson] gives what the
      *  engine reports for a slot (a test passes made-up JSON); [changed] redraws. */
     fun rackPanel(s: Int, cat: List<Pair<String, String>>, slotJson: (Int) -> String, changed: () -> Unit): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12); setBackgroundColor(Color.parseColor("#141B26")) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12); setBackgroundColor(Color.parseColor("#1D2024")) }
         val names = rack(s)
         for (slot in 0 until Engine.MAX_INSERTS) {
             val c = card(); box.addView(c)

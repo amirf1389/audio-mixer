@@ -31,9 +31,9 @@ import kotlin.math.pow
 class EqCurveView(ctx: Context) : View(ctx) {
     var bands: MutableList<EqBand> = mutableListOf(); var selected = 0
     var onChange: ((Int) -> Unit)? = null; var onSelect: ((Int) -> Unit)? = null
-    private val colors = intArrayOf(0xFFEA580C.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt(), 0xFFF472B6.toInt(), 0xFFFBBF24.toInt(), 0xFF60A5FA.toInt(), 0xFFF87171.toInt())
+    private val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt(), 0xFFF472B6.toInt(), 0xFFFBBF24.toInt(), 0xFF60A5FA.toInt(), 0xFFF87171.toInt())
     private val grid = Paint().apply { color = 0xFF233040.toInt(); strokeWidth = 2f }
-    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8B98A8.toInt(); textSize = 26f; typeface = Typeface.MONOSPACE }
+    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFC2C7CF.toInt(); textSize = 26f; typeface = Typeface.MONOSPACE }
     private val curve = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; strokeWidth = 5f; style = Paint.Style.STROKE }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33EA580C; style = Paint.Style.FILL }
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -61,7 +61,7 @@ class EqCurveView(ctx: Context) : View(ctx) {
             val x = xOf(b.freq); val y = if (b.usesGain) yOf(b.gainDb) else yOf(0.0)
             dot.color = colors[i % colors.size]; dot.style = Paint.Style.FILL; c.drawCircle(x, y, if (i == selected) 26f else 18f, dot)
             if (i == selected) { dot.style = Paint.Style.STROKE; dot.strokeWidth = 4f; dot.color = Color.WHITE; c.drawCircle(x, y, 32f, dot) }
-            label.color = Color.BLACK; c.drawText("${i + 1}", x - 8, y + 9, label); label.color = 0xFF8B98A8.toInt() }
+            label.color = Color.BLACK; c.drawText("${i + 1}", x - 8, y + 9, label); label.color = 0xFFC2C7CF.toInt() }
     }
     var dragging = -1; private set
     @SuppressLint("ClickableViewAccessibility")
@@ -125,10 +125,10 @@ class EqActivity : AppCompatActivity() {
         strip = intent.getIntExtra("strip", 0)
         val p = Prefs.remote(this); val host = p.getString("host", "").orEmpty(); val token = p.getString("token", "").orEmpty()
         if (host.isNotEmpty()) client = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), token))
-        val accent = Color.parseColor("#EA580C"); val dim = Color.parseColor("#8B98A8")
+        val accent = Color.parseColor("#FFB590"); val dim = Color.parseColor("#C2C7CF")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
         root.addView(TextView(this).apply { text = getString(R.string.eq_title, strip + 1) + "  " + (intent.getStringExtra("name") ?: ""); setTextColor(accent); textSize = 18f; setTypeface(null, Typeface.BOLD) })
-        info = TextView(this).apply { setTextColor(Color.parseColor("#00F2FF")); typeface = Typeface.MONOSPACE; textSize = 13f; setPadding(0, 8, 0, 8) }
+        info = TextView(this).apply { setTextColor(Color.parseColor("#7FD8E8")); typeface = Typeface.MONOSPACE; textSize = 13f; setPadding(0, 8, 0, 8) }
         curve = EqCurveView(this); curve.bands = decode(Prefs.local(this).getString("eq$strip", null)) ?: defaults()
         curve.onChange = { i -> showBand(); send(i) }; curve.onSelect = { showBand() }
         root.addView(curve); root.addView(info)
@@ -153,7 +153,7 @@ class EqActivity : AppCompatActivity() {
             if (rtaOn) { rtaAsked = 0; ui.removeCallbacks(rtaTick); ui.post(rtaTick) } else curve.spectrum = null } })
         root.addView(row)
         root.addView(TextView(this).apply { text = getString(if (client == null) R.string.eq_offline else R.string.eq_help); setTextColor(dim); textSize = 12f; setPadding(0, 12, 0, 0) })
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
         showBand()
     }
     private fun band() = curve.bands[curve.selected]

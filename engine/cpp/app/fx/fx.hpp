@@ -109,6 +109,18 @@ class PingPong final : public Simple { public: explicit PingPong(double fs); con
   static double lowCutHz(double v) { return v < 0.02 ? 0.0 : 20.0 + (v > 1 ? 1 : v) * 780.0; }
  protected: int count() const override { return 6; } const char* knobId(int i) const override { static const char* k[] = {"left", "right", "feedback", "tone", "spread", "lowcut"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"L TIME", "R TIME", "FEEDBACK", "TONE", "SPREAD", "LOW CUT"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.1554, 0.1554, 0.45, 0.6, 1.0, 0.15}; return d[i]; }   // 250 ms each side
  private: std::vector<float> buf_[2]; std::size_t w_ = 0; float lp_[2] = {0, 0}, hp_ = 0; };
+// PEAK REMOVER: takes out the short loud peaks (a click, a plosive, a stick hit, a dropped microphone) and leaves the rest of the sound
+// alone. It compares the sample that is playing with the level of the sound around it (a short average): a sample more than
+// SENSITIVITY above that body is a peak, and only that peak is pulled down to the line, at once, by at most AMOUNT; the gain comes back
+// in RELEASE. Steady sound, however loud, is never touched (it is not a compressor or a limiter). LISTEN plays only what is removed.
+class PeakRemover final : public Simple { public: explicit PeakRemover(double fs); const char* kind() const override { return "peakremover"; } const char* name() const override { return "PEAK REMOVER"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  static double crestDb(double v) { return 14.0 - (v < 0 ? 0 : v > 1 ? 1 : v) * 9.0; }       // SENSITIVITY 0 .. 100 %: a peak is 14 .. 5 dB over the body
+  static double amountDb(double v) { return (v < 0 ? 0 : v > 1 ? 1 : v) * 24.0; }           // the most it takes off
+  static double releaseMs(double v) { return 5.0 + (v < 0 ? 0 : v > 1 ? 1 : v) * 195.0; }
+  double reductionDb() const { return red_.load(); }                                      // the deepest cut of the last block (a meter)
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"sens", "amount", "release", "listen"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"SENSITIVITY", "AMOUNT", "RELEASE", "LISTEN"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.5, 0.5, 0.2, 0.0}; return d[i]; }
+ private: float body_ = 0, g_ = 1; std::atomic<double> red_{0}; };
 // FEEDBACK KILLER: finds the howl of a microphone that hears its own loudspeaker and notches it out. Every 1024 samples the spectrum of
 // the sum is taken; a single narrow peak that stands far above the rest of the spectrum and stays on the same frequency for several
 // frames in a row (a third of a second), with no overtone, is taken for feedback, and one of six notch filters is put on it. A peak that

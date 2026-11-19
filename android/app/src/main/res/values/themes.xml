@@ -1,46 +1,83 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One look for every screen: the console's colours (dark panels, orange accent, cyan values), flat rounded buttons. -->
+<!-- One look for every screen: Material 3 (dark) in the AmF X1 colours. Tonal surfaces instead of outlines, pill buttons,
+     16dp cards, 28dp dialogs. The colour names below are the Material roles; the short names are kept for the code. -->
 <resources>
-    <color name="bg">#0F141C</color>
-    <color name="panel">#161D28</color>
-    <color name="panel_hi">#202938</color>
-    <color name="line">#2A3444</color>
-    <color name="accent">#EA580C</color>
-    <color name="cyan">#00F2FF</color>
-    <color name="dim">#8B98A8</color>
-    <style name="Theme.AmFX1" parent="Theme.AppCompat.NoActionBar">
-        <item name="colorPrimary">@color/accent</item>
-        <item name="colorPrimaryDark">@color/bg</item>
-        <item name="colorAccent">@color/accent</item>
-        <item name="colorControlActivated">@color/accent</item>
-        <item name="colorControlNormal">@color/dim</item>
-        <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
-        <item name="android:navigationBarColor">@color/bg</item>
-        <item name="android:textColorPrimary">#F1F5F9</item>
-        <item name="android:textColorSecondary">@color/dim</item>
-        <item name="android:textColorHint">@color/dim</item>
+    <color name="md_surface">#111418</color>
+    <color name="md_surface_container_low">#191C20</color>
+    <color name="md_surface_container">#1D2024</color>
+    <color name="md_surface_container_high">#272A2F</color>
+    <color name="md_surface_container_highest">#32353A</color>
+    <color name="md_on_surface">#E1E2E8</color>
+    <color name="md_on_surface_variant">#C2C7CF</color>
+    <color name="md_outline">#8C9199</color>
+    <color name="md_outline_variant">#42474E</color>
+    <color name="md_primary">#FFB590</color>
+    <color name="md_on_primary">#552100</color>
+    <color name="md_primary_container">#783100</color>
+    <color name="md_on_primary_container">#FFDBCA</color>
+    <color name="md_secondary_container">#3B4858</color>
+    <color name="md_on_secondary_container">#D7E3F8</color>
+    <color name="md_tertiary">#7FD8E8</color>
+
+    <color name="bg">@color/md_surface</color>
+    <color name="panel">@color/md_surface_container</color>
+    <color name="panel_hi">@color/md_surface_container_high</color>
+    <color name="line">@color/md_outline_variant</color>
+    <color name="accent">@color/md_primary</color>
+    <color name="cyan">@color/md_tertiary</color>
+    <color name="dim">@color/md_on_surface_variant</color>
+
+    <style name="Theme.AmFX1" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/md_primary</item>
+        <item name="colorOnPrimary">@color/md_on_primary</item>
+        <item name="colorPrimaryContainer">@color/md_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/md_on_primary_container</item>
+        <item name="colorSecondaryContainer">@color/md_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/md_on_secondary_container</item>
+        <item name="colorTertiary">@color/md_tertiary</item>
+        <item name="colorSurface">@color/md_surface</item>
+        <item name="colorOnSurface">@color/md_on_surface</item>
+        <item name="colorSurfaceVariant">@color/md_surface_container_highest</item>
+        <item name="colorOnSurfaceVariant">@color/md_on_surface_variant</item>
+        <item name="colorSurfaceContainer">@color/md_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/md_surface_container_high</item>
+        <item name="colorOutline">@color/md_outline</item>
+        <item name="colorOutlineVariant">@color/md_outline_variant</item>
+        <item name="android:colorBackground">@color/md_surface</item>
+        <item name="colorAccent">@color/md_primary</item>
+        <item name="colorControlActivated">@color/md_primary</item>
+        <item name="colorControlNormal">@color/md_on_surface_variant</item>
+        <item name="android:windowBackground">@color/md_surface</item>
+        <item name="android:statusBarColor">@color/md_surface</item>
+        <item name="android:navigationBarColor">@color/md_surface_container</item>
+        <item name="android:textColorPrimary">@color/md_on_surface</item>
+        <item name="android:textColorSecondary">@color/md_on_surface_variant</item>
+        <item name="android:textColorHint">@color/md_on_surface_variant</item>
         <item name="buttonStyle">@style/Widget.AmFX1.Button</item>
         <item name="android:buttonStyle">@style/Widget.AmFX1.Button</item>
         <item name="android:buttonStyleToggle">@style/Widget.AmFX1.Toggle</item>
         <item name="alertDialogTheme">@style/Theme.AmFX1.Dialog</item>
+        <item name="android:alertDialogTheme">@style/Theme.AmFX1.Dialog</item>
     </style>
     <style name="Theme.AmFX1.Dialog" parent="Theme.AppCompat.Dialog.Alert">
-        <item name="colorAccent">@color/accent</item>
+        <item name="colorAccent">@color/md_primary</item>
         <item name="android:windowBackground">@drawable/dialog_bg</item>
-        <item name="android:textColorPrimary">#F1F5F9</item>
+        <item name="android:textColorPrimary">@color/md_on_surface</item>
+        <item name="android:textColorSecondary">@color/md_on_surface_variant</item>
         <item name="buttonStyle">@style/Widget.AmFX1.Button</item>
         <item name="android:buttonStyleToggle">@style/Widget.AmFX1.Toggle</item>
-        <item name="colorControlActivated">@color/accent</item>
+        <item name="colorControlActivated">@color/md_primary</item>
     </style>
+    <!-- a Material "filled tonal" button: a pill, no outline, sentence-weight label -->
     <style name="Widget.AmFX1.Button" parent="Widget.AppCompat.Button">
         <item name="android:background">@drawable/btn_bg</item>
-        <item name="android:textColor">#F1F5F9</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:letterSpacing">0.04</item>
-        <item name="android:minHeight">44dp</item>
-        <item name="android:paddingLeft">14dp</item>
-        <item name="android:paddingRight">14dp</item>
+        <item name="android:textColor">@color/md_on_secondary_container</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingLeft">24dp</item>
+        <item name="android:paddingRight">24dp</item>
         <item name="android:stateListAnimator">@null</item>
     </style>
     <style name="Widget.AmFX1.Toggle" parent="Widget.AmFX1.Button">

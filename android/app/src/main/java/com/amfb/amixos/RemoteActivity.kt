@@ -67,9 +67,9 @@ class RemoteActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = getSharedPreferences("remote", Context.MODE_PRIVATE)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0F141C")); setPadding(24, 24, 24, 24) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#111418")); setPadding(24, 24, 24, 24) }
         root.addView(Nav.modeBar(this, false))   // DUAL MODE: THIS PHONE | CONSOLE
-        val title = TextView(this).apply { text = getString(R.string.home_mixer).uppercase(); setTextColor(Color.parseColor("#EA580C")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
+        val title = TextView(this).apply { text = getString(R.string.home_mixer).uppercase(); setTextColor(Color.parseColor("#FFB590")); textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD) }
         root.addView(title)
         // THE CONSOLE BAR: every paired console (and new ones on this Wi-Fi): tap one to switch to it
         consoleBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -116,16 +116,16 @@ class RemoteActivity : AppCompatActivity() {
         clipBtn.setOnClickListener { val c = client ?: return@setOnClickListener; io.execute { runCatching { c.clearClips() } } }
         status = TextView(this).apply { text = getString(R.string.not_connected); setTextColor(Color.parseColor("#FBBF24")); typeface = android.graphics.Typeface.MONOSPACE }
         root.addView(status)
-        timelineView = TextView(this).apply { setTextColor(Color.parseColor("#8B98A8")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; visibility = View.GONE; setPadding(0, 4, 0, 4) }
+        timelineView = TextView(this).apply { setTextColor(Color.parseColor("#C2C7CF")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; visibility = View.GONE; setPadding(0, 4, 0, 4) }
         root.addView(timelineView)
         status.setOnClickListener { connBox?.let { it.visibility = if (it.visibility == View.VISIBLE) View.GONE else View.VISIBLE } }   // tap the status line: show / hide the connection fields
-        root.addView(TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
+        root.addView(TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f })
         // THE CONSOLE: channel strips side by side (scroll sideways), the master strip fixed on the right
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         strips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         desk.addView(android.widget.HorizontalScrollView(this).apply { addView(strips); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
-        val master = ConsoleUi.strip(this, Color.parseColor("#EA580C"), 200, master = true)
-        masterLabel = TextView(this).apply { setOnClickListener { showMaster() }; text = "MASTER"; setTextColor(Color.parseColor("#EA580C")); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
+        val master = ConsoleUi.strip(this, Color.parseColor("#FFB590"), 200, master = true)
+        masterLabel = TextView(this).apply { setOnClickListener { showMaster() }; text = "MASTER"; setTextColor(Color.parseColor("#FFB590")); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
         planBadge = TextView(this).apply { text = ""; setTextColor(Color.parseColor("#FBBF24")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; gravity = Gravity.CENTER }
         masterFader = FaderView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
@@ -190,7 +190,7 @@ class RemoteActivity : AppCompatActivity() {
      *  pan, MUTE / SOLO, the fader with its meter, and the level. */
     private fun buildStrips(s: ConsoleState) {
         strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear(); toneUi.clear()
-        val colors = intArrayOf(0xFFEA580C.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
+        val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         for (st in s.strips.take(Prefs.stripCount(this))) {
             val tint = colors[(st.id / 8) % colors.size]
             val col = ConsoleUi.strip(this, tint, 176)
@@ -276,12 +276,12 @@ class RemoteActivity : AppCompatActivity() {
         if (!::consoleBar.isInitialized) return; consoleBar.removeAllViews()
         val chips = barChips()
         for (ch in chips) {
-            val (dot, ink) = when (ch.presence) { PairedConsoles.Presence.LINKED -> "#34D399" to "#FFFFFF"; PairedConsoles.Presence.ONLINE -> "#22D3EE" to "#E2E8F0"; PairedConsoles.Presence.AWAY -> "#475569" to "#8B98A8"; PairedConsoles.Presence.NEW -> "#FBBF24" to "#FBBF24" }
+            val (dot, ink) = when (ch.presence) { PairedConsoles.Presence.LINKED -> "#34D399" to "#FFFFFF"; PairedConsoles.Presence.ONLINE -> "#22D3EE" to "#E2E8F0"; PairedConsoles.Presence.AWAY -> "#475569" to "#C2C7CF"; PairedConsoles.Presence.NEW -> "#FBBF24" to "#FBBF24" }
             val tag = when (ch.presence) { PairedConsoles.Presence.LINKED -> getString(R.string.bar_linked); PairedConsoles.Presence.ONLINE -> getString(R.string.bar_online); PairedConsoles.Presence.AWAY -> getString(R.string.bar_away); PairedConsoles.Presence.NEW -> getString(R.string.bar_new) }
             consoleBar.addView(TextView(this).apply {
                 text = android.text.SpannableStringBuilder().apply { append("● ", android.text.style.ForegroundColorSpan(Color.parseColor(dot)), 0); append(ch.label); append("  "); append(tag, android.text.style.RelativeSizeSpan(0.8f), 0) }
                 setTextColor(Color.parseColor(ink)); textSize = 12f; typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(26, 14, 26, 14)
-                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 40f; setColor(Color.parseColor(if (ch.presence == PairedConsoles.Presence.LINKED) "#123B30" else "#1A2230")); setStroke(2, Color.parseColor(dot)) }
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 40f; setColor(Color.parseColor(if (ch.presence == PairedConsoles.Presence.LINKED) "#123B30" else "#272A2F")); setStroke(2, Color.parseColor(dot)) }
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 14, 0) }
                 setOnClickListener { buzz(it); switchTo(ch) } })
         }
@@ -332,15 +332,15 @@ class RemoteActivity : AppCompatActivity() {
         dlg.show()
     }
     internal fun consolesPanel(l: List<PairedConsoles.Console>, now: Long, pick: (PairedConsoles.Console) -> Unit, forget: (PairedConsoles.Console) -> Unit): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
         val current = Prefs.remote(this).getString("host", "")
-        if (l.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.consoles_none); setTextColor(Color.parseColor("#8B98A8")); setPadding(0, 8, 0, 8) })
+        if (l.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.consoles_none); setTextColor(Color.parseColor("#C2C7CF")); setPadding(0, 8, 0, 8) })
         for (c in l) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 10, 0, 10); isClickable = true; setOnClickListener { pick(c) } }
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
             col.addView(TextView(this).apply { text = (if (c.host == current && client != null) "● " else "") + c.name.ifBlank { "AmF X1" }; setTextColor(if (c.host == current && client != null) Color.parseColor("#34D399") else Color.WHITE); textSize = 15f; setTypeface(null, android.graphics.Typeface.BOLD) })
-            col.addView(TextView(this).apply { text = c.host + ":" + c.port; setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f })
-            col.addView(TextView(this).apply { text = getString(R.string.consoles_seen, PairedConsoles.ago(now, c.lastSeen)); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
+            col.addView(TextView(this).apply { text = c.host + ":" + c.port; setTextColor(Color.parseColor("#7FD8E8")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f })
+            col.addView(TextView(this).apply { text = getString(R.string.consoles_seen, PairedConsoles.ago(now, c.lastSeen)); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f })
             row.addView(col)
             row.addView(Button(this).apply { text = getString(R.string.forget); textSize = 11f; setOnClickListener { forget(c) } })
             box.addView(row)
@@ -374,8 +374,8 @@ class RemoteActivity : AppCompatActivity() {
         AlertDialog.Builder(this).setTitle(String.format("CH %02d  %s", strip + 1, name)).setView(ScrollView(this).apply { addView(channelPanel(c, strip)) }).setPositiveButton(android.R.string.ok, null).show()
     }
     internal fun channelPanel(c: DaemonClient, strip: Int): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
-        val accent = Color.parseColor("#EA580C"); val cyan = Color.parseColor("#00F2FF")
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
+        val accent = Color.parseColor("#FFB590"); val cyan = Color.parseColor("#7FD8E8")
         fun head(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); typeface = android.graphics.Typeface.MONOSPACE; setPadding(0, 24, 0, 4) })
         fun row(label: String, max: Int, start: Int, show: (Int) -> String, f: (Int) -> Unit): SeekBar {
             val t = TextView(this).apply { text = label + "   " + show(start); setTextColor(Color.WHITE) }; box.addView(t)
@@ -445,11 +445,11 @@ class RemoteActivity : AppCompatActivity() {
         dlg.setView(ScrollView(this).apply { addView(muteGroupsPanel(c)) }); dlg.show()
     }
     internal fun muteGroupsPanel(c: DaemonClient?): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
         val store = getSharedPreferences("muteGroups", MODE_PRIVATE); val n = (state?.strips?.size ?: Prefs.stripCount(this)).coerceAtLeast(1)
         fun refresh() {
             box.removeAllViews()
-            box.addView(TextView(this).apply { text = getString(R.string.mute_groups_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f; setPadding(0, 0, 0, 12) })
+            box.addView(TextView(this).apply { text = getString(R.string.mute_groups_note); setTextColor(Color.parseColor("#C2C7CF")); textSize = 12f; setPadding(0, 0, 0, 12) })
             for (g in 0 until MuteGroups.COUNT) {
                 val m = MuteGroups.members(store, g); val on = MuteGroups.active(store, g)
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
@@ -457,7 +457,7 @@ class RemoteActivity : AppCompatActivity() {
                     setOnClickListener { val groups = (0 until MuteGroups.COUNT).map { MuteGroups.members(store, it) }; val act = (0 until MuteGroups.COUNT).map { MuteGroups.active(store, it) }
                         val plan = MuteGroups.plan(groups, act, g, !on); MuteGroups.setActive(store, g, !on); refresh()
                         if (c != null) io.execute { runCatching { plan.forEach { (s, mu) -> c.mute(s, mu) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } } })
-                row.addView(TextView(this).apply { text = MuteGroups.label(m); setTextColor(Color.parseColor("#00F2FF")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f; setPadding(16, 0, 16, 0); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
+                row.addView(TextView(this).apply { text = MuteGroups.label(m); setTextColor(Color.parseColor("#7FD8E8")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f; setPadding(16, 0, 16, 0); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
                 row.addView(Button(this).apply { text = getString(R.string.mute_group_edit); textSize = 11f; setOnClickListener {
                     val names = (0 until n).map { i -> String.format("CH %02d  %s", i + 1, state?.strips?.getOrNull(i)?.name.orEmpty()) }.toTypedArray(); val sel = BooleanArray(n) { it in m }
                     AlertDialog.Builder(this@RemoteActivity).setTitle(getString(R.string.mute_group_n, g + 1)).setMultiChoiceItems(names, sel) { _, w, ch -> sel[w] = ch }
@@ -476,7 +476,7 @@ class RemoteActivity : AppCompatActivity() {
         dlg.setView(ScrollView(this).apply { addView(scenesPanel(c) { dlg.dismiss() }) }); dlg.show()
     }
     internal fun scenesPanel(c: DaemonClient?, done: () -> Unit = {}): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
         val store = getSharedPreferences("scenes", MODE_PRIVATE)
         fun refresh() {
             box.removeAllViews()
@@ -497,7 +497,7 @@ class RemoteActivity : AppCompatActivity() {
                         .onSuccess { ui.post { refresh() } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }
                     .setNegativeButton(android.R.string.cancel, null).show() } })
             val names = store.all.keys.sortedBy { n -> (com.amfb.amixos.remote.MiniJson.parse(store.getString(n, "{}")!!) as? Map<*, *>)?.get("t").toString() }
-            if (names.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.scene_none); setTextColor(Color.parseColor("#8B98A8")); setPadding(0, 16, 0, 0) })
+            if (names.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.scene_none); setTextColor(Color.parseColor("#C2C7CF")); setPadding(0, 16, 0, 0) })
             for (n in names) {
                 @Suppress("UNCHECKED_CAST") val o = com.amfb.amixos.remote.MiniJson.parse(store.getString(n, "{}")!!) as Map<String, Any?>
                 val when_ = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date((o["t"] as? Number)?.toLong() ?: 0L))
@@ -505,7 +505,7 @@ class RemoteActivity : AppCompatActivity() {
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 12, 0, 0) }
                 val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
                 t.addView(TextView(this).apply { text = n + (if (o["offline"] == true) "  · " + getString(R.string.scene_offline_tag) else "") + (if (n == pending) "  · " + getString(R.string.scene_pending_tag) else ""); setTextColor(if (n == pending) Color.parseColor("#FBBF24") else Color.WHITE); textSize = 16f })
-                t.addView(TextView(this).apply { text = getString(R.string.scene_info, when_, strips.size, muted); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
+                t.addView(TextView(this).apply { text = getString(R.string.scene_info, when_, strips.size, muted); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f })
                 row.addView(t)
                 if (c != null) row.addView(Button(this).apply { text = getString(R.string.scene_recall); setOnClickListener {
                     AlertDialog.Builder(this@RemoteActivity).setMessage(getString(R.string.scene_recall_q, n)).setPositiveButton(R.string.scene_recall) { _, _ -> recallScene(c, n, o, done) }.setNegativeButton(android.R.string.cancel, null).show() } })
@@ -537,7 +537,7 @@ class RemoteActivity : AppCompatActivity() {
     }
     @Suppress("UNCHECKED_CAST")
     internal fun sceneEditor(name: String, scene: MutableMap<String, Any?>, save: (Map<String, Any?>) -> Unit): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12); setBackgroundColor(Color.parseColor("#141B26")) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12); setBackgroundColor(Color.parseColor("#1D2024")) }
         fun pos(db: Double) = ((db + 60) * 10).toInt().coerceIn(0, 700)
         fun row(label: View, db: Double, mute: Boolean?, onDb: (Double) -> Unit, onMute: ((Boolean) -> Unit)?) {
             val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 4, 0, 4) }
@@ -551,8 +551,8 @@ class RemoteActivity : AppCompatActivity() {
                 setTextColor(if (mute) Color.parseColor("#EF4444") else Color.WHITE); ConsoleUi.styleToggle(this, ConsoleUi.RED); setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); onMute(on) } })
             box.addView(r)
         }
-        box.addView(TextView(this).apply { text = getString(R.string.scene_edit_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f; setPadding(0, 0, 0, 8) })
-        row(TextView(this).apply { text = "MASTER"; setTextColor(Color.parseColor("#EA580C")); typeface = android.graphics.Typeface.DEFAULT_BOLD }, (scene["master"] as? Number)?.toDouble() ?: 0.0, null,
+        box.addView(TextView(this).apply { text = getString(R.string.scene_edit_note); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f; setPadding(0, 0, 0, 8) })
+        row(TextView(this).apply { text = "MASTER"; setTextColor(Color.parseColor("#FFB590")); typeface = android.graphics.Typeface.DEFAULT_BOLD }, (scene["master"] as? Number)?.toDouble() ?: 0.0, null,
             { d -> save(OfflineScenes.setMaster(scene, d, System.currentTimeMillis())) }, null)
         for (st in (scene["strips"] as? List<Map<String, Any?>>).orEmpty().take(Prefs.stripCount(this))) { val id = (st["id"] as Number).toInt()
             val nameBox = EditText(this).apply { setText(st["name"]?.toString().orEmpty()); setSingleLine(); setTextColor(Color.WHITE); textSize = 13f
@@ -577,14 +577,14 @@ class RemoteActivity : AppCompatActivity() {
         AlertDialog.Builder(this).setTitle("MASTER").setView(masterPanel(c)).setPositiveButton(android.R.string.ok, null).show()
     }
     internal fun masterPanel(c: DaemonClient): View {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#141B26")) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
         val st = state; var on = st?.limiter ?: true; var ceil = st?.ceilingDb ?: -0.5
         val t = TextView(this).apply { text = String.format("CEILING  %.1f dBFS", ceil); setTextColor(Color.WHITE) }
         box.addView(ToggleButton(this).apply { textOn = "LIMITER ON"; textOff = "LIMITER OFF"; isChecked = on; setOnCheckedChangeListener { b, v -> buzz(b); on = v; io.execute { runCatching { c.limiter(on, ceil) } } } })
         box.addView(t)
         box.addView(SeekBar(this).apply { max = 200; progress = ((ceil + 20) * 10).toInt().coerceIn(0, 200)
             setOnSeekBarChangeListener(change { p -> ceil = p / 10.0 - 20; ui.post { t.text = String.format("CEILING  %.1f dBFS", ceil) }; c.limiter(on, ceil) }) })
-        box.addView(TextView(this).apply { text = "The limiter keeps the master under the ceiling (no clipping on the output)."; setTextColor(Color.parseColor("#8B98A8")) })
+        box.addView(TextView(this).apply { text = "The limiter keeps the master under the ceiling (no clipping on the output)."; setTextColor(Color.parseColor("#C2C7CF")) })
         // WINDOWS: the computer's own output slider, and GAIN MODE (that slider as a trim after the master)
         val w = st?.windows ?: com.amfb.amixos.remote.WindowsSound()
         box.addView(TextView(this).apply { text = getString(R.string.win_title); setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(0, 28, 0, 6) })
@@ -597,11 +597,11 @@ class RemoteActivity : AppCompatActivity() {
             box.addView(SeekBar(this).apply { max = 100; progress = vol; setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar, p: Int, u: Boolean) { if (!u) return; vol = p; vt.text = getString(R.string.win_volume, p); showTrim(gain, p); live.submit("winVolume") { c.setting("winVolume", p) } }
                 override fun onStartTrackingTouch(s: SeekBar) {}; override fun onStopTrackingTouch(s: SeekBar) {} }) })
-        } else box.addView(TextView(this).apply { text = getString(R.string.win_none); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f })
+        } else box.addView(TextView(this).apply { text = getString(R.string.win_none); setTextColor(Color.parseColor("#C2C7CF")); textSize = 12f })
         box.addView(ToggleButton(this).apply { textOn = getString(R.string.win_gain_on_btn); textOff = getString(R.string.win_gain_off_btn); isChecked = gain
             setOnCheckedChangeListener { b, v -> buzz(b); gain = v; showTrim(v, vol); io.execute { runCatching { c.setting("winGain", v) } } } })
         box.addView(trim); showTrim(gain, vol)
-        box.addView(TextView(this).apply { text = getString(R.string.win_gain_note); setTextColor(Color.parseColor("#8B98A8")); textSize = 11f })
+        box.addView(TextView(this).apply { text = getString(R.string.win_gain_note); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f })
         return box
     }
 
@@ -682,7 +682,7 @@ class RemoteActivity : AppCompatActivity() {
                     box.addView(SeekBar(this).apply { max = 1000; progress = (DaemonClient.dbToPos(b.db) * 1000).toInt()
                         setOnSeekBarChangeListener(change { p -> val v = DaemonClient.posToDb(p / 1000.0); c.busLevel(b.id, v); ui.post { label.text = busName(b.id) + "   " + DaemonClient.fmtDb(v) } }) })
                     // RETURN: how much of the bus comes back into the master (an FX return, or a monitor mix heard in the room)
-                    val ret = TextView(this).apply { text = getString(R.string.bus_return, DaemonClient.fmtDb(b.returnDb)); setTextColor(Color.parseColor("#8B98A8")); textSize = 12f }
+                    val ret = TextView(this).apply { text = getString(R.string.bus_return, DaemonClient.fmtDb(b.returnDb)); setTextColor(Color.parseColor("#C2C7CF")); textSize = 12f }
                     box.addView(ret)
                     box.addView(SeekBar(this).apply { max = 1000; progress = (DaemonClient.dbToPos(b.returnDb) * 1000).toInt()
                         setOnSeekBarChangeListener(change { p -> val v = DaemonClient.posToDb(p / 1000.0); c.busReturn(b.id, v); ui.post { ret.text = getString(R.string.bus_return, DaemonClient.fmtDb(v)) } }) }) }

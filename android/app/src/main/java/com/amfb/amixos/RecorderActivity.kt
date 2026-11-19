@@ -30,7 +30,7 @@ import kotlin.concurrent.thread
 class RecorderActivity : AppCompatActivity() {
     data class Take(val file: File, val label: String)
     private val ui = Handler(Looper.getMainLooper())
-    private val accent = Color.parseColor("#EA580C"); private val cyan = Color.parseColor("#00F2FF"); private val dim = Color.parseColor("#8B98A8"); private val green = Color.parseColor("#34D399")
+    private val accent = Color.parseColor("#FFB590"); private val cyan = Color.parseColor("#7FD8E8"); private val dim = Color.parseColor("#C2C7CF"); private val green = Color.parseColor("#34D399")
     private lateinit var big: TextView; private lateinit var small: TextView; private lateinit var recBtn: Button; private lateinit var list: LinearLayout
     private val fmtBtns = ArrayList<Button>(); private val rateBtns = ArrayList<Button>(); private val chBtns = ArrayList<Button>()
     @Volatile private var recording = false; private var worker: Thread? = null; private var player: MediaPlayer? = null; private var playing: File? = null
@@ -68,7 +68,7 @@ class RecorderActivity : AppCompatActivity() {
         root.addView(TextView(this).apply { text = getString(R.string.rec_takes); setTextColor(accent); textSize = 13f; letterSpacing = 0.15f; setTypeface(null, Typeface.BOLD); setPadding(0, 28, 0, 8) })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; root.addView(list)
         root.addView(TextView(this).apply { text = getString(R.string.rec_note); setTextColor(dim); textSize = 12f; setPadding(0, 16, 0, 0) })
-        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0F141C")); addView(root) }, null))
+        setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
         mark(); refresh()
     }
     private fun format() = prefs().getString("recFormat", "flac24") ?: "flac24"

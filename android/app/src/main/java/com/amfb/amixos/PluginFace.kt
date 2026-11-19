@@ -27,7 +27,7 @@ object PluginFace {
         val k = (kind + " " + name).lowercase()
         fun has(vararg w: String) = w.any { it in k }
         return when {
-            has("reverb", "hall", "plate", "room", "space") -> Style(Color.parseColor("#D7DCE2"), Color.parseColor("#9AA3AE"), Color.parseColor("#1E293B"), Color.parseColor("#0EA5E9"), "aluminium")
+            has("reverb", "hall", "plate", "room", "space") -> Style(Color.parseColor("#D7DCE2"), Color.parseColor("#9AA3AE"), Color.parseColor("#272A2F"), Color.parseColor("#0EA5E9"), "aluminium")
             has("delay", "echo", "tape") -> Style(Color.parseColor("#1F4D3A"), Color.parseColor("#0F2E22"), Color.parseColor("#F5E9C8"), Color.parseColor("#F5E9C8"), "green")
             has("chorus", "flang", "phas", "trem", "vibr", "mod", "pitch") -> Style(Color.parseColor("#1E2A5A"), Color.parseColor("#0E1533"), Color.parseColor("#E0E7FF"), Color.parseColor("#818CF8"), "blue")
             has("drive", "satur", "dist", "amp", "fuzz", "analog", "tube", "barrier") -> Style(Color.parseColor("#1A1A1A"), Color.parseColor("#050505"), Color.parseColor("#E8C66A"), Color.parseColor("#E8C66A"), "gold")

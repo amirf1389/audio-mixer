@@ -266,6 +266,15 @@
     <string name="nav_mixer">MIXER</string>
     <string name="nav_tools">TOOLS</string>
     <string name="nav_settings">SETTINGS</string>
+    <string name="nav_players">PLAYERS</string>
+    <string name="players_title">PLAYERS</string>
+    <string name="players_intro">The official player of each service, inside this app. Paste a link from the service (Share → Copy link) and press OPEN.</string>
+    <string name="players_hint">Paste a %1$s link</string>
+    <string name="players_open">OPEN</string>
+    <string name="players_paste">PASTE</string>
+    <string name="players_bad">This is not a %1$s link. Use Share → Copy link in the service.</string>
+    <string name="players_other">This is a %1$s link: the player was switched to it.</string>
+    <string name="players_note">The song plays through the output of the phone, next to the mixer. The services do not allow their songs to pass through faders or effects or to be recorded, so they do not. Sign-in and full songs are decided by the player of the service.</string>
     <string name="home_by">BY AMFB AUDIO</string>
     <string name="home_console">CONSOLE</string>
     <string name="home_no_console">No console yet</string>
