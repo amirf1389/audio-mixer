@@ -29,9 +29,14 @@ import com.amfb.amixos.remote.MiniJson
  *  MASTER: fader, limiter and its own rack. What is chosen is kept for next time. Rate and buffer come from the phone's audio HAL. */
 class LocalMixerActivity : AppCompatActivity() {
     companion object {
-        /** the engine's strips: 0-1 the inputs (mic / interface), 2-3 DECK A (left, right), 4-5 DECK B */
-        const val STRIPS = 6
+        /** A 10-CHANNEL DIGITAL MIXER: the engine's strips are 0-1 the inputs (mic / interface), then DECK A, B, C and D as stereo pairs
+         *  (2-3, 4-5, 6-7, 8-9). Every channel has a fader, MUTE and its own FX rack; the master has the limiter and a rack. */
+        const val STRIPS = 10
         const val INPUTS = 2
+        const val DECKS = 4
+        fun deckName(d: Int) = ('A' + d).toString()
+        /** the engine strips one rack works on: a deck's rack is put on its left and its right strip alike */
+        fun mates(s: Int): List<Int> = if (s >= INPUTS && s < STRIPS && (s - INPUTS) % 2 == 0) listOf(s, s + 1) else listOf(s)
         fun deckStrip(d: Int) = INPUTS + 2 * d
         /** the rack of a strip (-1 = master) as kept in prefs: one entry per slot, "kind" or "" */
         fun rackKey(strip: Int) = if (strip < 0) "rackMaster" else "rack$strip"
@@ -47,7 +52,7 @@ class LocalMixerActivity : AppCompatActivity() {
     /** the mixer's real rate: the native stream may run at the device's own rate */
     private fun mixRate(): Double { val st = if (loop?.path == "aaudio") runCatching { engine?.nativeState() }.getOrNull() else null; return (st?.getOrNull(8)?.takeIf { it > 0 } ?: rate).toDouble() }
     /** THE TWO DECKS: a song file each, on strips 3-4 and 5-6 */
-    private val decks: List<DeckPlayer> by lazy { engine?.let { e -> (0..1).map { d -> DeckPlayer(this, e, d, deckStrip(d), ::mixRate).also { it.listener = object : DeckPlayer.Listener { override fun changed(deck: DeckPlayer) { ui.post { showDecks() } } } } } } ?: emptyList() }
+    private val decks: List<DeckPlayer> by lazy { engine?.let { e -> (0 until DECKS).map { d -> DeckPlayer(this, e, d, deckStrip(d), ::mixRate).also { it.listener = object : DeckPlayer.Listener { override fun changed(deck: DeckPlayer) { ui.post { showDecks() } } } } } } ?: emptyList() }
     private var pickFor = 0
     private val pickFile = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { u -> if (u != null) loadDeck(pickFor, u, true) }
     private val deckViews = HashMap<Int, DeckViews>()
@@ -124,12 +129,16 @@ class LocalMixerActivity : AppCompatActivity() {
         // ---- THE DESK
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         // ---- DECKS: two song players (a card each: the file, time, seek, LOAD / PLAY / STOP / LOOP); their channels are on the desk
-        val deckRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 8) }
-        for (d in 0..1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d == 0) 0 else 6, 0, if (d == 0) 6 else 0, 0) } })
-        body.addView(deckRow)
-        for (s in 0 until inChannels()) desk.addView(stripView(s))
-        for (d in 0..1) desk.addView(deckStripView(d))
-        desk.addView(stripView(-1)); body.addView(desk); showDecks()
+        for (r in 0 until DECKS / 2) { val deckRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 8) }
+            for (d in 2 * r..2 * r + 1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d % 2 == 0) 0 else 6, 0, if (d % 2 == 0) 6 else 0, 0) } })
+            body.addView(deckRow) }
+        // the channels side by side, five across (swipe for the rest), the master fixed on the right: every fader stays finger-wide
+        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels, 5)
+        fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
+        for (s in 0 until inChannels()) chans.addView(fixed(stripView(s)))
+        for (d in 0 until DECKS) chans.addView(fixed(deckStripView(d)))
+        desk.addView(android.widget.HorizontalScrollView(this).apply { isFillViewport = true; addView(chans, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
+        desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(252, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
     }
     private val faders = HashMap<Int, FaderView>()
 
@@ -174,7 +183,7 @@ class LocalMixerActivity : AppCompatActivity() {
         @Suppress("UNCHECKED_CAST") val l = runCatching { MiniJson.parse(Engine.fxCatalogJson()) as List<Map<String, Any?>> }.getOrDefault(emptyList())
         l.map { it["kind"].toString() to it["name"].toString() } }
     private fun showRack(s: Int) {
-        val dlg = AlertDialog.Builder(this).setTitle(if (s < 0) getString(R.string.lm_rack_master) else getString(R.string.lm_rack_ch, s + 1)).setPositiveButton(android.R.string.ok, null).create()
+        val dlg = AlertDialog.Builder(this).setTitle(if (s < 0) getString(R.string.lm_rack_master) else if (s >= INPUTS) getString(R.string.lm_deck, deckName((s - INPUTS) / 2)) + " · FX" else getString(R.string.lm_rack_ch, s + 1)).setPositiveButton(android.R.string.ok, null).create()
         val holder = ScrollView(this)
         fun refresh() { holder.removeAllViews(); holder.addView(rackPanel(s, catalog, { slot -> engine?.insertJson(s, slot) ?: "null" }, { refresh() })); fxBtns[s]?.apply { text = fxLabel(s); on = rack(s).any { it.isNotEmpty() } } }
         refresh(); dlg.setView(holder); dlg.setOnDismissListener { fxBtns[s]?.apply { text = fxLabel(s); on = rack(s).any { it.isNotEmpty() } } }; dlg.show()
@@ -191,15 +200,15 @@ class LocalMixerActivity : AppCompatActivity() {
                 c.addView(Button(this).apply { text = getString(R.string.lm_slot_add, slot + 1); setOnClickListener {
                     if (cat.isEmpty()) return@setOnClickListener
                     AlertDialog.Builder(this@LocalMixerActivity).setTitle(R.string.lm_pick_fx).setItems(cat.map { it.second }.toTypedArray()) { _, w ->
-                        val k = cat[w].first; if (engine?.insert(s, slot, k) == 0 || engine == null) { val l = rack(s); l[slot] = k; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply() }; changed() }.show() } })
+                        val k = cat[w].first; if (engine == null || mates(s).map { engine?.insert(it, slot, k) }.all { it == 0 }) { val l = rack(s); l[slot] = k; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply() }; changed() }.show() } })
                 continue
             }
             @Suppress("UNCHECKED_CAST") val st = runCatching { MiniJson.parse(slotJson(slot)) as? Map<String, Any?> }.getOrNull()
                 ?: mapOf("kind" to kind, "name" to (cat.firstOrNull { it.first == kind }?.second ?: kind), "bypass" to false, "mix" to 1.0, "params" to emptyList<Any>())
             // the effect as a plug-in face: power (bypass), PRESETS, a knob per parameter
             c.addView(PluginFace.build(this, st, slot, object : PluginFace.Host {
-                override fun set(id: String, value: Double) { engine?.insertSet(s, slot, id, value); setParam(s, slot, id, value) }
-                override fun remove() { engine?.insert(s, slot, ""); val l = rack(s); l[slot] = ""; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply() }
+                override fun set(id: String, value: Double) { for (t in mates(s)) engine?.insertSet(t, slot, id, value); setParam(s, slot, id, value) }
+                override fun remove() { for (t in mates(s)) engine?.insert(t, slot, ""); val l = rack(s); l[slot] = ""; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply() }
                 override fun changed() = changed()
                 override fun text(id: String) = liveText(s, slot, id)
             }))
@@ -223,11 +232,11 @@ class LocalMixerActivity : AppCompatActivity() {
     private fun applyAll(e: Engine) {
         val p = prefs(); val two = inChannels() == 2
         for (s in 0 until INPUTS) { e.setGain(s, p.getFloat("db$s", if (s == 1 && !two) -60f else 0f).toDouble()); e.setPan(s, p.getFloat("pan$s", if (two) (if (s == 0) -1f else 1f) else 0f).toDouble()); e.setMute(s, p.getBoolean("mute$s", false)) }
-        for (d in 0..1) { val l = deckStrip(d); val db = p.getFloat("deckDb$d", 0f).toDouble(); val mu = p.getBoolean("deckMute$d", false)   // a deck: its left and right on their own strips
+        for (d in 0 until DECKS) { val l = deckStrip(d); val db = p.getFloat("deckDb$d", 0f).toDouble(); val mu = p.getBoolean("deckMute$d", false)   // a deck: its left and right on their own strips
             e.setGain(l, db); e.setGain(l + 1, db); e.setPan(l, -1.0); e.setPan(l + 1, 1.0); e.setMute(l, mu); e.setMute(l + 1, mu) }
         e.setMaster(p.getFloat("masterDb", 0f).toDouble()); e.setLimiter(p.getBoolean("limiter", true), -0.5, 100.0)
-        for (s in listOf(-1) + (0 until INPUTS)) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty() && e.insert(s, slot, k) == 0)
-            p.getString(paramKey(s, slot), "").orEmpty().split(';').filter { '=' in it }.forEach { e.insertSet(s, slot, it.substringBefore('='), it.substringAfter('=').toDoubleOrNull() ?: 0.0) } }
+        for (s in listOf(-1) + (0 until INPUTS) + (0 until DECKS).map { deckStrip(it) }) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty()) for (t in mates(s)) if (e.insert(t, slot, k) == 0)
+            p.getString(paramKey(s, slot), "").orEmpty().split(';').filter { '=' in it }.forEach { e.insertSet(t, slot, it.substringBefore('='), it.substringAfter('=').toDoubleOrNull() ?: 0.0) } }
     }
 
     // ---- DEVICES
@@ -307,7 +316,7 @@ class LocalMixerActivity : AppCompatActivity() {
         val p = loop?.lastPeaks ?: return
         fun lvl(v: Float) = (((if (v > 1e-6f) 20 * Math.log10(v.toDouble()) else -120.0) + 60) / 60 * 1000).toInt().coerceIn(0, 1000)
         for (s in 0 until INPUTS) faders[s]?.apply { level = lvl(p.getOrElse(s) { 0f }); clip = p.getOrElse(s) { 0f } >= 1f }
-        for (d in 0..1) faders[100 + d]?.apply { val l = deckStrip(d); val m = maxOf(p.getOrElse(l) { 0f }, p.getOrElse(l + 1) { 0f }); level = lvl(m); clip = m >= 1f }
+        for (d in 0 until DECKS) faders[100 + d]?.apply { val l = deckStrip(d); val m = maxOf(p.getOrElse(l) { 0f }, p.getOrElse(l + 1) { 0f }); level = lvl(m); clip = m >= 1f }
         faders[-1]?.apply { val m = maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }); level = lvl(m); clip = m >= 1f }
     }
     override fun onDestroy() { stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
@@ -320,7 +329,7 @@ class LocalMixerActivity : AppCompatActivity() {
         decks.getOrNull(d)?.load(u, name); showDecks()
     }
     private fun deckCard(d: Int): View {
-        val c = card(); val letter = if (d == 0) "A" else "B"
+        val c = card(); val letter = deckName(d)
         c.addView(TextView(this).apply { text = getString(R.string.lm_deck, letter); setTextColor(cyan); textSize = 11f; letterSpacing = 0.15f; typeface = Typeface.DEFAULT_BOLD })
         val title = TextView(this).apply { setTextColor(Color.WHITE); textSize = 12f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }; c.addView(title)
         val time = TextView(this).apply { setTextColor(dim); textSize = 10f; typeface = Typeface.MONOSPACE }; c.addView(time)
@@ -342,19 +351,21 @@ class LocalMixerActivity : AppCompatActivity() {
         if (saved != null && decks.getOrNull(d)?.loaded == false) { decks[d].loop = prefs().getBoolean("deckLoop$d", false); runCatching { loadDeck(d, android.net.Uri.parse(saved), false) } }
         return c
     }
-    private fun showDecks() { for (d in 0..1) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d)
+    private fun showDecks() { for (d in 0 until DECKS) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d)
         v.title.text = when { k == null -> getString(R.string.lm_no_engine); k.error.isNotEmpty() -> getString(R.string.lm_deck_error, k.error); k.loaded -> k.title; else -> getString(R.string.lm_deck_empty) }
         v.play.text = if (k?.playing == true) "❚❚" else "▶"; v.play.on = k?.playing == true; v.loop.on = k?.loop == true }
         showDeckTimes() }
-    private fun showDeckTimes() { for (d in 0..1) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d) ?: continue
+    private fun showDeckTimes() { for (d in 0 until DECKS) { val v = deckViews[d] ?: continue; val k = decks.getOrNull(d) ?: continue
         val pos = k.positionUs; v.time.text = DeckPlayer.clock(pos) + " / " + DeckPlayer.clock(k.durationUs)
         if (!v.seek.isPressed && k.durationUs > 0) v.seek.progress = (pos * 1000 / k.durationUs).toInt() } }
     /** a deck's channel on the desk: one stereo strip (its left and right strips together): name, MUTE, fader with meter, level */
     private fun deckStripView(d: Int): View {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
         val col = ConsoleUi.strip(this, color, 0, false).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
-        col.addView(TextView(this).apply { text = getString(R.string.lm_deck, if (d == 0) "A" else "B"); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
+        col.addView(TextView(this).apply { text = getString(R.string.lm_deck, deckName(d)); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
         col.addView(TextView(this).apply { text = getString(R.string.lm_sub_deck); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        col.addView(PadButton(this, fxLabel(l), ConsoleUi.VIOLET, 12f).apply { on = rack(l).any { it.isNotEmpty() }; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
+            setOnClickListener { showRack(l) } }.also { fxBtns[l] = it })   // the deck's own rack: the same effects on its left and its right
         col.addView(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("deckMute$d", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
             setOnClickListener { val v = !p.getBoolean("deckMute$d", false); p.edit().putBoolean("deckMute$d", v).apply(); engine?.setMute(l, v); engine?.setMute(l + 1, v); on = v } })
         val readout = ConsoleUi.dbReadout(this); fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }

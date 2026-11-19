@@ -1,3 +1,4 @@
+#include <QElapsedTimer>
 #include "Remote.h"
 #include <cmath>
 #include <QSettings>
@@ -173,7 +174,11 @@ QString Remote::program() const {
 }
 // THE NAMED TOKENS (one per phone or operator): the service program keeps them (hashes only); the console asks it to list, make and revoke.
 QString Remote::runTool(const QStringList& args, bool* ok) const {
-  QProcess p; p.start(program(), args); const bool fin = p.waitForStarted(3000) && p.waitForFinished(8000); if (!fin) p.kill();
+  // the window keeps painting while the service program works (it normally answers in a fraction of a second; a stuck one used to
+  // hold the whole window for up to 11 seconds: "Not Responding"). Clicks and keys wait until it is done, so nothing runs twice.
+  QProcess p; p.start(program(), args); QElapsedTimer t; t.start();
+  while (p.state() != QProcess::NotRunning && t.elapsed() < 8000) { if (p.waitForFinished(15)) break; QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 10); }
+  const bool fin = p.state() == QProcess::NotRunning && p.error() != QProcess::FailedToStart; if (!fin) { p.kill(); p.waitForFinished(200); }
   if (ok) *ok = fin && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
   return QString::fromUtf8(fin ? (p.exitCode() == 0 ? p.readAllStandardOutput() : p.readAllStandardError()) : QByteArray("the service program did not answer"));
 }
@@ -265,10 +270,18 @@ QString Remote::token() const { QFile f(tokenFile()); if (!f.open(QIODevice::Rea
 // The private IPv4 addresses phones can reach: interfaces that are up and running, real ones (Wi-Fi, Ethernet) first. Virtual adapters
 // (VirtualBox, VMware, Hyper-V / WSL vEthernet, Docker, VPN tunnels) come last: a phone on the Wi-Fi cannot reach them, and putting
 // one first sent phones (and the QR code) to an address that never answers.
+// The list of network cards, read at most every 3 seconds. On Windows the system call behind it can take a good part of a second
+// (many adapters, a VPN), and the pages read it from several bindings at once: uncached, opening NETWORK or a burst of status lines
+// from the remote service held the window ("Not Responding").
+static QList<QNetworkInterface> netCards() {
+  static QList<QNetworkInterface> list; static QElapsedTimer age;
+  if (!age.isValid() || age.elapsed() > 3000) { list = QNetworkInterface::allInterfaces(); age.restart(); }
+  return list;
+}
 QStringList Remote::addresses() const {
   QStringList real, virt;
   static const QStringList virtualNames{"virtualbox", "vmware", "vethernet", "hyper-v", "wsl", "docker", "vbox", "tap", "tun", "vpn", "zerotier", "tailscale", "hamachi", "loopback", "bluetooth"};
-  for (const QNetworkInterface& ni : QNetworkInterface::allInterfaces()) {
+  for (const QNetworkInterface& ni : netCards()) {
     const auto f = ni.flags(); if (!(f & QNetworkInterface::IsUp) || !(f & QNetworkInterface::IsRunning) || (f & QNetworkInterface::IsLoopBack)) continue;
     const QString nm = (ni.humanReadableName() + " " + ni.name()).toLower(); bool isVirt = ni.type() == QNetworkInterface::Virtual;
     for (const QString& v : virtualNames) if (nm.contains(v)) isVirt = true;

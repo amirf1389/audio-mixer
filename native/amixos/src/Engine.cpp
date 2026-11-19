@@ -1,4 +1,6 @@
 #include "fx/fx_plugin.hpp"
+#include <QHash>
+#include <QCryptographicHash>
 #include <QSettings>
 #include <QFile>
 #ifdef _WIN32
@@ -1883,13 +1885,19 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   emit stripsChanged(); emit busesChanged(); emit groupsChanged();
 }
 void Engine::save() {
-  settings_.setValue("console/state", QString::fromUtf8(QJsonDocument(consoleJson()).toJson(QJsonDocument::Compact)));
+  // only what changed is written: the scenes and the user presets are large and rarely change, and on Windows every value written goes
+  // to the registry. Writing all of it again for one moved fader made the window stop for a moment on every save.
+  static QHash<QString, QByteArray> written;
+  auto put = [this](const char* key, const QString& v) { const QString k = QString::fromLatin1(key); const QByteArray h = QCryptographicHash::hash(v.toUtf8(), QCryptographicHash::Sha1);
+    if (written.value(k) == h && settings_.contains(k)) return; settings_.setValue(k, v); written[k] = h; };
+  put("console/state", QString::fromUtf8(QJsonDocument(consoleJson()).toJson(QJsonDocument::Compact)));
   QJsonArray sc; for (const SceneUi& x : scenes_) { QJsonObject o; o["name"] = x.name; o["at"] = x.at; o["data"] = x.data; sc << o; }
-  settings_.setValue("console/scenes", QString::fromUtf8(QJsonDocument(sc).toJson(QJsonDocument::Compact)));
+  put("console/scenes", QString::fromUtf8(QJsonDocument(sc).toJson(QJsonDocument::Compact)));
   { qulonglong low = 0; QStringList high; for (int i = 0; i < kStrips; ++i) if (recallSafe_.test(static_cast<std::size_t>(i))) { if (i < 32) low |= 1ull << i; else high << QString::number(i); }
-    settings_.setValue("console/recallSafe", low); settings_.setValue("console/recallSafeHigh", high.join(QLatin1Char(','))); }   // strips 1-32 as the number older versions read, the rest as a list
+    if (settings_.value("console/recallSafe").toULongLong() != low || !settings_.contains("console/recallSafe")) settings_.setValue("console/recallSafe", low);
+    put("console/recallSafeHigh", high.join(QLatin1Char(','))); }   // strips 1-32 as the number older versions read, the rest as a list
   QJsonArray pr; for (const PresetUi& x : userPresets_) { QJsonObject o; o["name"] = x.name; o["category"] = x.category; o["dsp"] = x.dsp; pr << o; }
-  settings_.setValue("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
+  put("console/presets", QString::fromUtf8(QJsonDocument(pr).toJson(QJsonDocument::Compact)));
 }
 // A NEW INSTALL STARTS FROM THE FACTORY CONSOLE: the setup writes install.id next to the program once per fresh install (an update keeps it).
 // When it differs from the id last seen, the console state of an earlier install (left by an uninstall run as another account, or written
@@ -2005,7 +2013,14 @@ void Engine::setAmp(int out, const QVariantMap& p) {
   if (out < 0 || out >= 64) return; QVariantMap m = ampState(out); for (auto it = p.cbegin(); it != p.cend(); ++it) m[it.key()] = it.value();
   m["name"] = m["name"].toString().left(24); ampUi_[out] = m;
   if (rt_) rt_->setAmp(out, ampFromMap(m));
-  emit ampChanged(); save();
+  emit ampChanged(); if (!restoring_ && !saveTimer_.isActive()) saveTimer_.start();   // saved two seconds after the first change: a slider being dragged does not write the whole console on every step (the window stopped answering)
+}
+int Engine::ampOutputsUsed() const { int n = 0; for (int o = 0; o < kOutputs && o < 64; ++o) if (!ampUi_[o].isEmpty() && ampUi_[o].value("on").toBool()) n = o + 1; return n; }
+// RESET on AMP / SYSTEM: every output stage off and the outputs back on the master left / right, as on a new console
+QString Engine::clearSystem() {
+  for (int o = 0; o < 64 && o < kOutputs; ++o) { if (!ampUi_[o].isEmpty()) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } }
+  resetRouting(); emit ampChanged(); save();
+  return QStringLiteral("Reset: every output stage is off and the outputs are back on the master left and right.");
 }
 QVariantList Engine::ampResponse(int out) const {
   QVariantList l; am::AmpChannel a; a.prepare(48000); a.set(ampFromMap(ampState(out)));
@@ -2023,7 +2038,7 @@ int Engine::ampOutputs() const { const int n = running() ? deviceOutputs() : 0; 
 // SYSTEM SETUP: one click routes the master to the outputs and sets each output's crossover, the way a speaker processor's wizard does.
 // layout: "full" (full-range L/R), "2way" (low + high per side), "3way" (low + mid + high per side); sub: "none", "stereo", "mono".
 // Outputs are taken in order from output 1; the control room keeps nothing here (the PA gets the master). Returns what was set.
-QString Engine::setupSystem(const QString& layout, const QString& sub, double xoverHz) {
+QString Engine::setupSystem(const QString& layout, const QString& sub, double xoverHz, bool force) {
   struct Way { QString name; int src; int hp; double hpHz; int lp; double lpHz; double limit; };
   QList<Way> ways; const int L = am::Runtime::kSrcMasterL, R = am::Runtime::kSrcMasterR, M = am::Runtime::kSrcMasterMono;
   const double x = std::clamp(xoverHz > 0 ? xoverHz : 100.0, 40.0, 200.0); const bool hasSub = sub == "stereo" || sub == "mono";
@@ -2036,6 +2051,10 @@ QString Engine::setupSystem(const QString& layout, const QString& sub, double xo
   if (sub == "stereo") ways << Way{"SUB L", L, 2, 30, 4, x, -3} << Way{"SUB R", R, 2, 30, 4, x, -3};
   else if (sub == "mono") ways << Way{"SUB", M, 2, 30, 4, x, -3};
   const int n = static_cast<int>(ways.size());
+  // a sound card with fewer outputs than the system needs: nothing is changed. (Before, a 2-way system on a stereo card put the lows of the
+  // left side on output 1 and its highs on output 2, so headphones played bass on one ear and treble on the other.)
+  if (const int haveNow = running() ? deviceOutputs() : 0; !force && haveNow > 0 && haveNow < n)
+    return QStringLiteral("Not set up: this system needs %1 outputs and this sound card has %2. Nothing was changed. Connect a sound card with %1 or more outputs, or choose FULL RANGE with NO SUB (2 outputs).").arg(n).arg(haveNow);
   for (int o = 0; o < 64; ++o) {
     if (o < n) { const Way& w = ways[o]; setOutputRoute(o, w.src);
       QVariantMap a{{"on", true}, {"name", w.name}, {"gainDb", 0.0}, {"mute", false}, {"invert", false}, {"delayMs", 0.0}, {"hpOrder", w.hp}, {"hpHz", w.hpHz}, {"lpOrder", w.lp}, {"lpHz", w.lpHz}, {"type", 1}, {"limitOn", true}, {"limitDb", w.limit}};

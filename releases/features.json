@@ -2,6 +2,27 @@
   "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
   "features": [
     {
+      "version": "1.24.0.4",
+      "date": "2026-11-19",
+      "title": "1.24.0.4: PEAK REMOVER, AmF X1 Mixer app with players, new Android look",
+      "items": [
+        "NEW · PEAK REMOVER: an insert effect that pulls down only short peaks (clicks, pops, hits) with SENSITIVITY, AMOUNT, RELEASE and LISTEN; steady sound passes unchanged (50 effects in all)",
+        "NEW · AmF X1 MIXER: the phone mixer as its own Android app, installed beside AmF X1, with MIXER, PLAYERS, TOOLS and SETTINGS",
+        "NEW · PLAYERS in AmF X1 Mixer: the official embedded player of YouTube, Spotify, TIDAL or Deezer from a pasted link; the song is not sent through the mixer and is not recorded",
+        "NEW · PHONE: NO PEAKS quick chain in the phone mixer",
+        "NEW · PHONE MIXER with 10 channels: 2 inputs and DECK A, B, C and D (stereo song players), each channel with its own fader, MUTE and FX rack; five channels across, swipe for the rest, the master stays on the right",
+        "NEW · PHONE REMOTE: FADERS view (the default): five channels beside the master with the fader over the whole height, so ten channels are two pages; KNOBS brings pan, gain and the 3-band EQ back onto the strips",
+        "ENHANCEMENT · PHONE: bigger fader caps, thicker tracks and larger scale numbers on every fader",
+        "ENHANCEMENT · PHONE: a Material look on every screen (tonal surfaces, pill buttons, a navigation bar with a marker on the open tab)",
+        "FIX · The console could close by itself on NETWORK, DANTE + CLOCK when the list of sound cards or network clocks changed",
+        "FIX · AMP / SYSTEM: a system that needs more outputs than the sound card has is no longer set up (before, headphones could get bass on one ear and treble on the other); a warning shows when a saved system is too big, and RESET puts the outputs back to normal stereo",
+        "FIX · AMP / SYSTEM: the SYSTEM SETUP choices no longer pile on top of each other; they wrap to a second line on a narrow window",
+        "FIX · Not responding: a save now writes only what changed (not every scene and preset each time); dragging a slider on AMP / SYSTEM no longer saves on every step; the list of network cards is read at most every 3 seconds; the window keeps answering while phone tokens are made, listed or revoked",
+        "FIX · NETWORK, pairing QR code: the code could stay blank for up to a minute when the page was opened with the phone remote already on; it now draws at once and follows the network. A message says so when the computer has no address a phone can reach, and a note lists what to check when a phone cannot connect",
+        "ENHANCEMENT · If the window ever stops answering for more than 0.4 s, console.log gets a STALL line with the page and the time, so the cause can be found"
+      ]
+    },
+    {
       "version": "1.24.0.3",
       "date": "2026-11-19",
       "title": "1.24.0.3: ULTIMATE (300 channels), app capture, ping-pong delay, headroom mode",

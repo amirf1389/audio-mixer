@@ -85,9 +85,15 @@ Item {
                         property int pick: 0; property string url: ""; property var mods: []
                         function redraw() { const a = remote.addresses; if (qrRow.pick >= a.length) qrRow.pick = 0; qrRow.url = a.length ? remote.pairUrl(a[qrRow.pick]) : ""; qrRow.mods = qrRow.url ? remote.qr(qrRow.url) : []; qrCanvas.requestPaint() }
                         Connections { target: pinRow; function onPinChanged() { qrRow.redraw() } }
+                        Connections { target: remote; function onChanged() { if (qrRow.visible) qrRow.redraw() } }   // the service started, a network came or went: the code follows
                         onVisibleChanged: if (visible) redraw()
+                        Component.onCompleted: if (visible) redraw()
                         Rectangle { implicitWidth: 168; implicitHeight: 168; radius: 8; color: "#ffffff"   // dark on light with a quiet zone: what every camera reads
                             Canvas { id: qrCanvas; objectName: "pairQr"; anchors.fill: parent; anchors.margins: 10
+                                // a Canvas drops a paint request made before it is ready (the page opened with the service already on):
+                                // the code then stayed blank until the next PIN, up to a minute. It paints as soon as it can, and on a resize.
+                                onAvailableChanged: if (available) requestPaint()
+                                onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
                                 onPaint: { const ctx = getContext("2d"); ctx.reset(); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, width, height)
                                     const m = qrRow.mods; if (!m || m.length < 2) return; const n = m[0]; const s = Math.floor(Math.min(width, height) / n); const o = Math.floor((Math.min(width, height) - s * n) / 2)
                                     ctx.fillStyle = "#000000"; for (let y = 0; y < n; ++y) for (let x = 0; x < n; ++x) if (m[1 + y * n + x]) ctx.fillRect(o + x * s, o + y * s, s, s) } } }
@@ -98,6 +104,10 @@ Item {
                             Flow { Layout.fillWidth: true; spacing: 4; visible: remote.addresses.length > 1
                                 Repeater { model: remote.addresses; delegate: Btn { label: modelData.replace("http://", "").replace(/:\d+$/, ""); on: qrRow.pick === index; onColor: Theme.cyan; onClicked: { qrRow.pick = index; qrRow.redraw() } } } }
                             Note { visible: remote.addresses.length > 1; text: i18n.t("More than one network: pick the address of the Wi-Fi the phone is on.", i18n.lang) } } }
+                    Text { objectName: "pairNoAddress"; visible: remote.running && remote.addresses.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                           text: i18n.t("No QR code: this computer has no Wi-Fi or network address that a phone can reach. Connect it to the same Wi-Fi as the phone; the code appears by itself.", i18n.lang) }
+                    Note { objectName: "pairHelp"; visible: remote.running && remote.addresses.length > 0
+                           text: i18n.t("If the phone cannot connect after scanning: the phone and this computer must be on the same Wi-Fi (not mobile data, not a guest network); pick the right address above when there is more than one; and Windows Firewall must allow AmF X1 on private networks (the setup program adds this rule, the zip version does not).", i18n.lang) }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     // CONNECTED PHONES: who is linked right now (live streams), with DISCONNECT (now, 2 minutes' hold) and FORGET (the PIN again)
                     RowLayout { spacing: 8

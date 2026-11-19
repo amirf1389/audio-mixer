@@ -1,3 +1,4 @@
+#include <QElapsedTimer>
 #include "Osc.h"
 #include "Frame.h"
 
@@ -23,9 +24,17 @@ QStringList Osc::addresses() const {
   return {"/ch/{1..32}/fader f  (dB, -60..10)", "/ch/{n}/mute i", "/ch/{n}/solo i", "/ch/{n}/pan f  (-1..1)", "/master/fader f  (dB)", "/bus/{1..16}/level f  (dB; 1-8 AUX, 9-16 FX)", "/ping  -> /pong", "meters out: /meter/ch/{n} f, /meter/master f  (dBFS peak, 10 Hz, to the last sender on the TX port)"};
 }
 #include <QNetworkInterface>
+// The list of network cards, read at most every 3 seconds. On Windows the system call behind it can take a good part of a second
+// (many adapters, a VPN), and the pages read it from several bindings at once: uncached, opening NETWORK or a burst of status lines
+// from the remote service held the window ("Not Responding").
+static QList<QNetworkInterface> netCards() {
+  static QList<QNetworkInterface> list; static QElapsedTimer age;
+  if (!age.isValid() || age.elapsed() > 3000) { list = QNetworkInterface::allInterfaces(); age.restart(); }
+  return list;
+}
 QVariantList Osc::interfaces() const {
   QVariantList l;
-  for (const QNetworkInterface& ni : QNetworkInterface::allInterfaces()) {
+  for (const QNetworkInterface& ni : netCards()) {
     if (!(ni.flags() & QNetworkInterface::IsUp)) continue;
     for (const QNetworkAddressEntry& e : ni.addressEntries()) { if (e.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
       QVariantMap m; m["name"] = ni.humanReadableName(); m["ip"] = e.ip().toString(); m["mask"] = e.netmask().toString(); m["up"] = bool(ni.flags() & QNetworkInterface::IsRunning);

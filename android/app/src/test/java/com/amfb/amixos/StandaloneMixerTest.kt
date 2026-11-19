@@ -26,8 +26,12 @@ class StandaloneMixerTest {
     @Test fun oneScreenHasInputsDecksMasterAndRec() {
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
         val t = texts(a.window.decorView)
-        assertEquals("two deck cards and two deck channels", 4, t.count { it == "DECK A" || it == "DECK B" })
-        assertTrue(t.contains("MASTER")); assertTrue(t.contains("● REC")); assertTrue(t.count { it == "LOAD" } == 2); assertTrue(t.count { it == "LOOP" } == 2)
+        // A 10-CHANNEL MIXER: 2 inputs + DECK A .. D (stereo pairs); every deck has its card and its channel with a rack of its own
+        assertEquals(10, LocalMixerActivity.STRIPS); assertEquals(10, LocalMixerActivity.INPUTS + 2 * LocalMixerActivity.DECKS)
+        for (d in listOf("DECK A", "DECK B", "DECK C", "DECK D")) assertEquals("$d: a card and a channel", 2, t.count { it == d })
+        assertTrue(t.contains("MASTER")); assertTrue(t.contains("● REC")); assertTrue(t.count { it == "LOAD" } == 4); assertTrue(t.count { it == "LOOP" } == 4)
+        assertEquals(listOf(2, 3), LocalMixerActivity.mates(2)); assertEquals(listOf(8, 9), LocalMixerActivity.mates(8)); assertEquals(listOf(0), LocalMixerActivity.mates(0)); assertEquals(listOf(-1), LocalMixerActivity.mates(-1)); assertEquals(listOf(3), LocalMixerActivity.mates(3))
+        assertTrue("a rack button on the master, the input and each of the four decks", t.count { it.contains("FX") } >= 6)
         assertTrue("the deck tells why it cannot play here", t.any { it.contains("engine") || it.contains("No song") })
     }
 

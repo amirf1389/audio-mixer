@@ -267,6 +267,8 @@
     <string name="nav_tools">TOOLS</string>
     <string name="nav_settings">SETTINGS</string>
     <string name="nav_players">PLAYERS</string>
+    <string name="remote_view_faders">FADERS</string>
+    <string name="remote_view_knobs">KNOBS</string>
     <string name="players_title">PLAYERS</string>
     <string name="players_intro">The official player of each service, inside this app. Paste a link from the service (Share → Copy link) and press OPEN.</string>
     <string name="players_hint">Paste a %1$s link</string>

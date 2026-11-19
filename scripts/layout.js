@@ -34,7 +34,7 @@ function repoPath(rel) {
 // the operating system a manifest key (win-x64-exe, linux-deb, macos-dmg, android-apk, ios-project ...) belongs to
 function osOfKey(key) {
   if (/-native$/.test(key)) return 'native';                 // the native programs (releases/native): the self-update of audiomixer-native.exe
-  return /^win/.test(key) ? 'windows' : /^linux/.test(key) ? 'linux' : /^macos/.test(key) ? 'macos' : key === 'android-apk' ? 'android' : key === 'ios-project' ? 'ios' : null;
+  return /^win/.test(key) ? 'windows' : /^linux/.test(key) ? 'linux' : /^macos/.test(key) ? 'macos' : /^android-/.test(key) ? 'android' : key === 'ios-project' ? 'ios' : null;
 }
 const osDir = os => path.join(ROOT, PLATFORMS, os);
 const releasesDir = os => path.join(ROOT, 'releases', os);
