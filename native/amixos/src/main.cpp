@@ -196,6 +196,9 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("osc", &osc);
   qml.rootContext()->setContextProperty("media", &media);
   const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) engine.setWatchdog(false);   // test runs: no automatic restarts under the other checks
+  // ... and the SAVED choice stays what it was: a test run must not leave the watchdog switched off for the next start. LIVE MODE switches
+  // the watchdog on and back (to "off", as it finds it here), which wrote "off" to the settings; it is put back now and again at the end.
+  if (smoke || bench || !shots.isEmpty()) { QSettings().setValue("audio/watchdog", watchdogWas); QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [watchdogWas] { QSettings().setValue("audio/watchdog", watchdogWas); QSettings().sync(); }); }
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("appWindows", &appWindows); qml.addImageProvider(QStringLiteral("appwin"), new AppWindowImages(&appWindows));   // the engine owns the provider
