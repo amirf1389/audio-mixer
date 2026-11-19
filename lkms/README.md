@@ -4,7 +4,7 @@ One private database and one REST API that all your apps ask about licences: cre
 an app, limit the number of devices, expire keys, and see which devices are activated.
 
 - **Stack:** Python 3.11+, FastAPI, PostgreSQL 14+.
-- **Status:** built and tested here (16 tests against a real PostgreSQL). Not yet deployed anywhere, and AmF X1
+- **Status:** built and tested here (22 tests against a real PostgreSQL; the admin console was driven in a real browser). Not yet deployed anywhere, and AmF X1
   does not use it yet (see "AmF X1" at the end).
 
 ## Layout
@@ -17,6 +17,7 @@ an app, limit the number of devices, expire keys, and see which devices are acti
 | `lkms/service.py` | The licence rules (activate, validate, deactivate, revoke) |
 | `lkms/main.py` | The HTTP API, authentication, rate limits |
 | `lkms/keygen.py` | Makes the secrets on your own machine |
+| `lkms/ui/` | The admin console (one page, no outside files) |
 | `sdk/lkms_client.py` | One-file helper for your apps, with offline grace period |
 | `tests/` | End-to-end tests; they start their own throw-away PostgreSQL |
 
@@ -52,6 +53,27 @@ Or with Docker: write `.env` and `db_password.txt`, then `docker compose up -d`.
 | `POST /v1/deactivate` | Hands the device's seat back. |
 
 Activate and validate answer with a **signed lease** the app keeps for the offline grace period.
+
+**Management** (admin key; this is what the admin console uses)
+
+| Call | Does |
+|---|---|
+| `GET /admin/overview` | Counts by status, devices, licences expiring in 30 days, 7 days of activity. |
+| `GET /admin/apps`, `PATCH /admin/apps/{app_id}`, `POST /admin/apps/{app_id}/rotate-secret` | List apps, rename, disable or enable, make a new secret. |
+| `GET /admin/search/licenses?app_id=&status=&q=` | Find licences by app, status, a whole key, the start of a key, e-mail or plan. |
+| `GET /admin/license/{id}`, `PATCH /admin/license/{id}` | One licence with its devices and history; change plan, seats, expiry, e-mail or status. |
+| `DELETE /admin/activations/{id}` | Remove one device and free its seat. |
+| `GET /admin/audit` | What happened, newest first. |
+
+## Admin console
+
+A web page for the daily work: an overview, creating keys (copy or CSV), finding and editing licences, removing
+devices, suspending and revoking, registering apps, and the activity log.
+
+- It is **off by default**. Set `LKMS_ADMIN_UI=1` and open `https://your-server/manage`.
+- Sign in with the admin key. The key stays in that browser tab and is forgotten when the tab closes; no cookie is set.
+- The page loads no outside files and its security policy forbids inline code and framing.
+- **Do not expose it to the public.** Limit `/manage` and `/admin/*` in your reverse proxy to your own addresses or a VPN.
 
 ## How it is protected
 

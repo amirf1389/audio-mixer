@@ -29,6 +29,7 @@ class Settings:
     signing_key: bytes       # 32 bytes, Ed25519 private key
     lease_hours: int
     trust_proxy: bool
+    admin_ui: bool = False           # serve the admin console at /manage
     timestamp_skew_s: int = 300      # how far a request's clock may be from the server's
     max_bulk: int = 1000             # licences per admin request
 
@@ -50,4 +51,5 @@ class Settings:
             signing_key=_b64("LKMS_SIGNING_KEY", 32),
             lease_hours=hours,
             trust_proxy=os.environ.get("LKMS_TRUST_PROXY", "0") == "1",
+            admin_ui=os.environ.get("LKMS_ADMIN_UI", "0") == "1",
         )

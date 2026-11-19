@@ -5,10 +5,11 @@ import ipaddress
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, Field, field_validator
 
@@ -49,6 +50,22 @@ class LicensesIn(BaseModel):
 
 class StatusIn(BaseModel):
     action: Literal["revoke", "suspend", "reinstate"] = "revoke"
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class AppPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    status: Literal["active", "disabled"] | None = None
+
+
+class LicensePatch(BaseModel):
+    plan: str | None = Field(default=None, min_length=1, max_length=60)
+    max_activations: int | None = Field(default=None, ge=1, le=100000)
+    expires_at: datetime | None = None
+    never_expires: bool = False                      # true clears the date (expires_at: null cannot be told from "not sent")
+    customer_email: str | None = Field(default=None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    metadata: dict[str, Any] | None = None
+    action: Literal["revoke", "suspend", "reinstate"] | None = None
     reason: str | None = Field(default=None, max_length=300)
 
 
@@ -147,6 +164,83 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def admin_list(app_id: str | None = None, limit: int = 100, offset: int = 0):
         with pool.connection() as conn:
             return {"licenses": service.list_licenses(conn, app_id, max(1, min(limit, 500)), max(0, offset))}
+
+    # ---- management (what the admin console uses)
+
+    @app.get("/admin/overview", dependencies=[Depends(admin)])
+    def admin_overview():
+        with pool.connection() as conn:
+            return service.overview(conn)
+
+    @app.get("/admin/apps", dependencies=[Depends(admin)])
+    def admin_apps():
+        with pool.connection() as conn:
+            return {"apps": service.list_apps(conn)}
+
+    @app.patch("/admin/apps/{app_id}", dependencies=[Depends(admin)])
+    def admin_update_app(app_id: str, body: AppPatch):
+        with pool.connection() as conn:
+            return service.update_app(conn, app_id, name=body.name, status=body.status)
+
+    @app.post("/admin/apps/{app_id}/rotate-secret", dependencies=[Depends(admin)])
+    def admin_rotate(app_id: str):
+        with pool.connection() as conn:
+            return service.rotate_app_secret(conn, app_id)
+
+    @app.get("/admin/search/licenses", dependencies=[Depends(admin)])
+    def admin_search(app_id: str | None = None, status: Literal["active", "suspended", "revoked", "expired"] | None = None,
+                     q: str | None = None, limit: int = 50, offset: int = 0):
+        with pool.connection() as conn:
+            return service.search_licenses(conn, settings, app_id=app_id, status=status, q=q, limit=max(1, min(limit, 200)), offset=max(0, offset))
+
+    @app.get("/admin/license/{license_id}", dependencies=[Depends(admin)])
+    def admin_license(license_id: str):
+        with pool.connection() as conn:
+            return service.license_detail(conn, license_id)
+
+    @app.patch("/admin/license/{license_id}", dependencies=[Depends(admin)])
+    def admin_update_license(license_id: str, body: LicensePatch):
+        fields = body.model_dump(exclude_unset=True)
+        if fields.pop("never_expires", False):
+            fields["expires_at"] = None
+        elif "expires_at" in fields:
+            when = fields["expires_at"]
+            if when is None:
+                fields.pop("expires_at")
+            else:
+                fields["expires_at"] = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+        for k in ("plan", "max_activations", "customer_email", "metadata"):
+            if k in fields and fields[k] is None:
+                fields.pop(k)
+        with pool.connection() as conn:
+            return service.update_license(conn, license_id, fields)
+
+    @app.delete("/admin/activations/{activation_id}", dependencies=[Depends(admin)])
+    def admin_remove_activation(activation_id: str):
+        with pool.connection() as conn:
+            return service.remove_activation(conn, activation_id)
+
+    @app.get("/admin/audit", dependencies=[Depends(admin)])
+    def admin_audit(limit: int = 100, offset: int = 0):
+        with pool.connection() as conn:
+            return {"events": service.audit_log(conn, max(1, min(limit, 500)), max(0, offset))}
+
+    # ---- the admin console's own files (only when switched on; see README)
+
+    if settings.admin_ui:
+        ui = Path(__file__).parent / "ui"
+        types = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8", "style.css": "text/css; charset=utf-8"}
+
+        @app.get("/manage")
+        @app.get("/manage/{name}")
+        def manage(name: str = "index.html"):
+            if name not in types:
+                raise LicenseError("not_found", 404)
+            return Response((ui / name).read_bytes(), media_type=types[name], headers={
+                # the page may load only its own script and style and talk only to this server; it cannot be framed
+                "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; "
+                                           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"})
 
     # ---- clients
 

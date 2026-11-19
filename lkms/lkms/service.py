@@ -217,3 +217,164 @@ def deactivate(conn: psycopg.Connection, settings: Settings, app: App, *, key: s
     if gone:
         audit(conn, "app:" + app.app_id, "deactivate", license_id=row[0], app_id=app.app_id, ip=ip)
     return {"deactivated": bool(gone)}     # a seat of a suspended or expired licence can still be handed back
+
+
+# ---------------------------------------------------------------- management (admin console)
+
+def _rows(conn: psycopg.Connection, sql: str, params: tuple = ()) -> list[dict]:
+    """Rows as plain dicts that turn into JSON as they are (ids and times as text)."""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    for r in rows:
+        for k, v in r.items():
+            if isinstance(v, datetime):
+                r[k] = v.isoformat()
+            elif v is not None and not isinstance(v, (str, int, float, bool, dict, list)):
+                r[k] = str(v)
+    return rows
+
+
+_EFFECTIVE = "CASE WHEN l.status = 'active' AND l.expires_at IS NOT NULL AND l.expires_at <= now() THEN 'expired' ELSE l.status END"
+
+
+def overview(conn: psycopg.Connection) -> dict:
+    by_status = {r["status"]: r["n"] for r in _rows(conn, f"SELECT {_EFFECTIVE} AS status, count(*) AS n FROM licenses l GROUP BY 1")}
+    one = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
+    return {
+        "apps": one("SELECT count(*) FROM apps"),
+        "apps_disabled": one("SELECT count(*) FROM apps WHERE status = 'disabled'"),
+        "licenses": sum(by_status.values()),
+        "licenses_by_status": {k: by_status.get(k, 0) for k in ("active", "suspended", "revoked", "expired")},
+        "activations": one("SELECT count(*) FROM activations"),
+        "devices_seen_24h": one("SELECT count(*) FROM activations WHERE last_seen_at > now() - interval '24 hours'"),
+        "expiring_30_days": one("SELECT count(*) FROM licenses WHERE status = 'active' AND expires_at > now() AND expires_at <= now() + interval '30 days'"),
+        "activity_7_days": _rows(conn, "SELECT to_char(date_trunc('day', at), 'YYYY-MM-DD') AS day, count(*) FILTER (WHERE action = 'activate') AS activations, "
+                                       "count(*) FILTER (WHERE action = 'license.create') AS issued FROM audit_events WHERE at > now() - interval '7 days' GROUP BY 1 ORDER BY 1"),
+    }
+
+
+def list_apps(conn: psycopg.Connection) -> list[dict]:
+    return _rows(conn, """SELECT a.app_id, a.name, a.status, a.created_at,
+                                 (SELECT count(*) FROM licenses l WHERE l.app_id = a.app_id) AS licenses,
+                                 (SELECT count(*) FROM activations x JOIN licenses l ON l.license_id = x.license_id WHERE l.app_id = a.app_id) AS activations
+                          FROM apps a ORDER BY a.created_at""")
+
+
+def _uuid(value: str, code: str) -> str:
+    import uuid
+    try:
+        return str(uuid.UUID(value))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise LicenseError(code, 404) from exc
+
+
+def update_app(conn: psycopg.Connection, app_id: str, *, name: str | None, status: str | None) -> dict:
+    app_id = _uuid(app_id, "app_not_found")
+    try:
+        row = conn.execute("UPDATE apps SET name = COALESCE(%s, name), status = COALESCE(%s, status) WHERE app_id = %s RETURNING app_id, name, status",
+                           (name.strip() if name else None, status, app_id)).fetchone()
+    except psycopg.errors.UniqueViolation as exc:
+        raise LicenseError("app_name_taken", 409) from exc
+    if not row:
+        raise LicenseError("app_not_found", 404)
+    audit(conn, "admin", "app.update", app_id=row[0], name=row[1], status=row[2])
+    return {"app_id": str(row[0]), "name": row[1], "status": row[2]}
+
+
+def rotate_app_secret(conn: psycopg.Connection, app_id: str) -> dict:
+    """A new secret for an app; the old one stops working at once. Shown once."""
+    app_id = _uuid(app_id, "app_not_found")
+    secret = security.new_secret()
+    row = conn.execute("UPDATE apps SET api_secret_hash = %s WHERE app_id = %s RETURNING app_id, name", (security.sha256_hex(secret), app_id)).fetchone()
+    if not row:
+        raise LicenseError("app_not_found", 404)
+    audit(conn, "admin", "app.rotate_secret", app_id=row[0])
+    return {"app_id": str(row[0]), "name": row[1], "api_secret": secret}
+
+
+def search_licenses(conn: psycopg.Connection, settings: Settings, *, app_id: str | None, status: str | None, q: str | None, limit: int, offset: int) -> dict:
+    """Licences by app, status and a search text: a whole key (looked up by its hash), the start of a key, or part of an e-mail."""
+    where, params = ["TRUE"], []
+    if app_id:
+        where.append("l.app_id = %s"); params.append(_uuid(app_id, "app_not_found"))
+    if status:
+        where.append(f"({_EFFECTIVE}) = %s"); params.append(status)
+    if q and q.strip():
+        norm = security.normalize_key(q)
+        if norm:
+            where.append("l.key_hash = %s"); params.append(security.key_hash(settings.key_pepper, norm))
+        else:
+            like = "%" + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            where.append("(l.customer_email ILIKE %s OR l.key_hint ILIKE %s OR l.plan ILIKE %s)"); params += [like, q.strip().upper()[:5] + "%", like]
+    cond = " AND ".join(where)
+    total = conn.execute(f"SELECT count(*) FROM licenses l WHERE {cond}", tuple(params)).fetchone()[0]
+    rows = _rows(conn, f"""SELECT l.license_id, l.key_hint || '-…' AS key_hint, l.app_id, a.name AS app_name, l.customer_email, l.plan, l.max_activations,
+                                  l.expires_at, {_EFFECTIVE} AS status, l.created_at,
+                                  (SELECT count(*) FROM activations x WHERE x.license_id = l.license_id) AS activations
+                           FROM licenses l JOIN apps a ON a.app_id = l.app_id WHERE {cond} ORDER BY l.created_at DESC, l.license_id LIMIT %s OFFSET %s""",
+                 tuple(params) + (limit, offset))
+    return {"total": total, "licenses": rows}
+
+
+def license_detail(conn: psycopg.Connection, license_id: str) -> dict:
+    license_id = _uuid(license_id, "license_not_found")
+    lic = _rows(conn, f"""SELECT l.license_id, l.key_hint || '-…' AS key_hint, l.app_id, a.name AS app_name, l.customer_email, l.plan, l.max_activations, l.expires_at,
+                                 {_EFFECTIVE} AS status, l.status_reason, l.metadata, l.created_at, l.updated_at
+                          FROM licenses l JOIN apps a ON a.app_id = l.app_id WHERE l.license_id = %s""", (license_id,))
+    if not lic:
+        raise LicenseError("license_not_found", 404)
+    return {**lic[0],
+            "activations": _rows(conn, "SELECT activation_id, left(device_hash, 12) AS device, device_name, host(ip_address) AS ip_address, activated_at, last_seen_at "
+                                       "FROM activations WHERE license_id = %s ORDER BY activated_at", (license_id,)),
+            "history": _rows(conn, "SELECT at, actor, action, host(ip_address) AS ip_address, detail FROM audit_events WHERE license_id = %s ORDER BY event_id DESC LIMIT 50", (license_id,))}
+
+
+def update_license(conn: psycopg.Connection, license_id: str, fields: dict) -> dict:
+    """Change a licence's plan, seats, expiry, e-mail or metadata, and/or its status (revoke, suspend, reinstate)."""
+    license_id = _uuid(license_id, "license_not_found")
+    row = conn.execute("SELECT status FROM licenses WHERE license_id = %s FOR UPDATE", (license_id,)).fetchone()
+    if not row:
+        raise LicenseError("license_not_found", 404)
+    action = fields.pop("action", None)
+    reason = fields.pop("reason", None)
+    if row[0] == "revoked" and (action not in (None, "revoke") or fields):
+        raise LicenseError("license_revoked_for_good", 409)
+    sets, params, changed = [], [], {}
+    for col in ("plan", "max_activations", "expires_at", "customer_email", "metadata"):
+        if col in fields:
+            v = fields[col]
+            sets.append(f"{col} = %s"); params.append(json.dumps(v) if col == "metadata" else v)
+            changed[col] = v.isoformat() if isinstance(v, datetime) else v
+    if "max_activations" in fields:
+        used = conn.execute("SELECT count(*) FROM activations WHERE license_id = %s", (license_id,)).fetchone()[0]
+        if fields["max_activations"] < used:
+            raise LicenseError("seats_in_use", 409, used=used)       # free seats first; a limit is never set below what is taken
+    freed = 0
+    if action:
+        new = _TRANSITIONS[action]
+        sets += ["status = %s", "status_reason = %s"]; params += [new, reason]
+        if new == "revoked":
+            freed = conn.execute("DELETE FROM activations WHERE license_id = %s", (license_id,)).rowcount
+    elif "expires_at" in fields and row[0] == "expired":
+        sets.append("status = 'active'")                             # a new date brings an expired licence back
+    if sets:
+        conn.execute(f"UPDATE licenses SET {', '.join(sets)}, updated_at = now() WHERE license_id = %s", tuple(params) + (license_id,))
+        audit(conn, "admin", "license." + (action or "update"), license_id=license_id, reason=reason, seats_freed=freed, changed=changed)
+    return license_detail(conn, license_id)
+
+
+def remove_activation(conn: psycopg.Connection, activation_id: str) -> dict:
+    activation_id = _uuid(activation_id, "activation_not_found")
+    row = conn.execute("DELETE FROM activations WHERE activation_id = %s RETURNING license_id", (activation_id,)).fetchone()
+    if not row:
+        raise LicenseError("activation_not_found", 404)
+    audit(conn, "admin", "activation.remove", license_id=row[0])
+    return {"removed": True, "license_id": str(row[0])}
+
+
+def audit_log(conn: psycopg.Connection, limit: int, offset: int) -> list[dict]:
+    return _rows(conn, """SELECT e.event_id, e.at, e.actor, e.action, e.license_id, l.key_hint || '-…' AS key_hint, e.app_id, a.name AS app_name,
+                                 host(e.ip_address) AS ip_address, e.detail
+                          FROM audit_events e LEFT JOIN licenses l ON l.license_id = e.license_id LEFT JOIN apps a ON a.app_id = e.app_id
+                          ORDER BY e.event_id DESC LIMIT %s OFFSET %s""", (limit, offset))
