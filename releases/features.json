@@ -4,8 +4,10 @@
     {
       "version": "1.24.0.5",
       "date": "2026-11-19",
-      "title": "1.24.0.5: the console fits the screen (14 inches and under), RESPONSIVE zoom",
+      "title": "1.24.0.5: AUTO MIC EQ, the console fits the screen (14 inches and under), RESPONSIVE zoom",
       "items": [
+        "NEW · AUTO MIC EQ: an insert effect that shapes a voice towards a TARGET (NATURAL, CLARITY, BROADCAST, WARM, BRIGHT) while it sounds, with AMOUNT, RANGE and SPEED; eight bands follow the singer in real time and hold between phrases (51 effects in all)",
+        "NEW · PHONE: AUTO EQ quick chain in the phone mixer",
         "NEW · RESPONSIVE zoom (SETTINGS, Interface zoom): the console is drawn as large as the screen allows, on any screen",
         "ENHANCEMENT · AUTO zoom now also enlarges the console on a screen of 14 inches or less (a 14-inch laptop at 1920 x 1080 and 100 % is drawn 25 % larger); larger monitors stay as Windows draws them",
         "ENHANCEMENT · Interface zoom can be fixed at 110, 125 or 150 % as well",

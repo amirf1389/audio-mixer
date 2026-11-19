@@ -322,6 +322,23 @@ struct Biquad { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
   enum Kind { Peak, LowShelf, HighShelf, HighPass, LowPass, BandPass };
   void design(Kind k, double fs, double f, double q, double db); };
 
+// AUTO MIC EQ: shapes a voice towards a TARGET while it sounds. Eight bands (100 Hz shelf, 200, 400, 800, 1.6 k, 3.2 k, 6.4 k, 10 kHz
+// shelf): the effect listens to how loud each band of the incoming voice is against the voice's own average, compares that with the
+// target's shape, and moves that band's gain to close the difference. A boomy voice is thinned, a dull one is opened, a harsh one is
+// calmed, and it keeps following as the singer moves on the microphone. Between phrases (under about -50 dBFS) it holds what it had.
+//   TARGET   NATURAL / CLARITY / BROADCAST / WARM / BRIGHT        AMOUNT  how much of the difference is corrected (0 .. 100 %)
+//   RANGE    how far a band may move (0 .. 12 dB either way)       SPEED   how fast it follows (4 s .. 0.3 s)
+// It measures the sound BEFORE its own bands (it cannot chase itself). Signal processing, not machine learning: it corrects tone, it
+// does not change who is singing, tune the pitch or remove other sounds.
+class AutoMicEq final : public Simple { public: explicit AutoMicEq(double fs); const char* kind() const override { return "automiceq"; } const char* name() const override { return "AUTO MIC EQ"; }
+  std::string text(const std::string& id, double v) const override; void reset() override; void setSampleRate(double fs) override; void process(float* L, float* R, std::size_t n) override;
+  static constexpr int kBands = 8, kTargets = 5;
+  static int targetOf(double v) { const int t = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * (kTargets - 1) + 0.5); return t; }
+  static const char* targetName(int t); static double bandHz(int b); static double targetDb(int t, int b);
+  double gainDb(int b) const { return b >= 0 && b < kBands ? g_[b].load() : 0.0; }   // what each band is doing now
+ protected: int count() const override { return 4; } const char* knobId(int i) const override { static const char* k[] = {"target", "amount", "range", "speed"}; return k[i]; } const char* knobTitle(int i) const override { static const char* k[] = {"TARGET", "AMOUNT", "RANGE", "SPEED"}; return k[i]; } double knobDef(int i) const override { static const double d[] = {0.25, 0.7, 0.5, 0.5}; return d[i]; }   // CLARITY, 70 %, 6 dB, about 1 s
+ private: void design(); Biquad an_[kBands], an2_[kBands], eq_[2][kBands]; double e_[kBands] = {0}, now_[kBands] = {0}; std::atomic<double> g_[kBands]; };
+
 // MS COLOUR EQ: a parallel saturating mid-side equalizer in the manner of a mastering rack. The signal is split into MID (what both
 // sides share) and SIDE (what differs); four bands (LOW shelf, CONTOUR and MID bells with BANDWIDTH, HIGH shelf) each have a
 // M/S OFFSET that sends the band to the side only (-), both (centre) or the mid only (+). HPF / LPF trim the ends. SATURATION runs in

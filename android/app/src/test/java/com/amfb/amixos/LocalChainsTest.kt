@@ -13,7 +13,7 @@ class LocalChainsTest {
         Regex("\\{\"([a-z0-9]+)\", \"").findAll(line).map { it.groupValues[1] }.toSet()
     }
     @Test fun everyChainNamesRealEffectsAndFitsTheRack() {
-        assertTrue(catalog.size >= 50 && "pingpong" in catalog && "peakremover" in catalog)
+        assertTrue(catalog.size >= 51 && "automiceq" in catalog && "pingpong" in catalog && "peakremover" in catalog)
         assertEquals(LocalChains.chains.size, LocalChains.chains.map { it.id }.toSet().size)
         for (c in LocalChains.chains) { assertTrue(c.id, c.slots.size <= Engine.MAX_INSERTS); assertTrue(c.title.isNotBlank() && c.sub.isNotBlank())
             for (f in c.slots) { assertTrue("${c.id}: ${f.kind} is not a rack effect", f.kind in catalog); for (v in f.params.values) assertTrue(v in 0.0..1.0) } }

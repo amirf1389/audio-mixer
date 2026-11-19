@@ -19,7 +19,7 @@ Flickable {
     property string query: ""
     property int rev: 0
     property string note: ""
-    readonly property var groups: ({ "EQ / TONE": ["dualeq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "peakremover", "barrier", "rider", "clean", "antifeedback"],
+    readonly property var groups: ({ "EQ / TONE": ["dualeq", "automiceq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "peakremover", "barrier", "rider", "clean", "antifeedback"],
         "SATURATION": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
         "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay", "pingpong"], "SPATIAL": ["iamfelement", "iamfrender", "imager", "sampler"], "SYSTEM": ["aec", "hybrid", "logic"] })
     readonly property var groupIcon: ({ "EQ / TONE": "tone", "DYNAMICS": "comp", "SATURATION": "drive", "MODULATION": "sine", "SPACE / DELAY": "reverb", "SPATIAL": "orbit", "SYSTEM": "rack", "EXTENSIONS": "extension", "VST PLUG-INS": "vst", "OTHER": "fx" })

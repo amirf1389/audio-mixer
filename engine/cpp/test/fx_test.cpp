@@ -17,7 +17,7 @@ using namespace am;
 static float peak(const std::vector<float>& v, std::size_t a, std::size_t b) { float p = 0; for (std::size_t i = a; i < b && i < v.size(); ++i) p = std::max(p, std::fabs(v[i])); return p; }
 
 int main() {
-  CHECK(fx::catalog().size() == 50 && fx::make("nope", 48000) == nullptr);
+  CHECK(fx::catalog().size() == 51 && fx::make("nope", 48000) == nullptr);
   { auto r = fx::make("reverb", 48000); CHECK(r && std::string(r->kind()) == "reverb" && r->params().size() == 4 && r->text("decay", 0) == "0.3 s");
     std::vector<float> L(48000, 0.f), R(48000, 0.f); L[0] = R[0] = 1.f; r->set("decay", 0.2); r->process(L.data(), R.data(), L.size());
     CHECK(peak(L, 1000, 6000) > 0.02f && peak(L, 30000, 48000) < peak(L, 2000, 6000) * 0.5f);   // rings, then decays
@@ -80,7 +80,7 @@ int main() {
     { am::fx::VoiceClean off(fs); off.set("denoise", 0.0); off.set("dereverb", 0.0); off.set("out", 0.5); tone(0.3, 500, L, R); const std::vector<float> ref = L; off.process(L.data(), R.data(), n); float d = 0; for (std::size_t i = 0; i < n; ++i) d = std::max(d, std::fabs(L[i] - ref[i])); CHECK(d < 1e-5f); }   // both off: the four bands add back to the input
     std::printf("fx_test: VOICE RIDER rides a quiet and a loud voice to -18 dBFS, holds when nobody speaks, respects RANGE; VOICE CLEAN has no delay, takes %.1f dB off steady hiss, leaves a voice-level sound and shortens a room's tail\n", inDb - outDb); }
   { // the ten effects as rack plug-ins: each changes a tone, stays finite and below +12 dB, passes it untouched when bypassed, and keeps its state through a save / load
-    CHECK(am::fx::catalog().size() == 50); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
+    CHECK(am::fx::catalog().size() == 51); const std::size_t n = 4800; std::vector<float> src(n), l(n), r(n); for (std::size_t i = 0; i < n; ++i) src[i] = 0.4f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * static_cast<double>(i) / 48000) + 0.5 * std::sin(2 * 3.14159265 * 5000 * static_cast<double>(i) / 48000));
     for (const auto& [kind, name] : am::fx::catalog()) { auto p = am::fx::FxPlugin::make(kind, 48000); CHECK(p && p->info().format == "FX" && p->params().size() >= 3);
       if (kind == "postamp") p->setParam(0, 0.9); if (kind == "preamp") p->setParam(0, 0.4);   // these two are neutral (unity) until a knob is turned
       const float* in[2] = {src.data(), src.data()}; float* out[2] = {l.data(), r.data()}; for (int k = 0; k < 3; ++k) p->process(in, out, static_cast<int>(n));
@@ -161,6 +161,27 @@ int main() {
     CHECK(names.size() == 600 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && perKind[4] == 300 && am::fx::preset(1) && am::fx::preset(301) && am::fx::preset(600) && !am::fx::preset(601));
     CHECK(am::fx::preset(120)->kind == "delay");   // the first 300 keep their numbers: a saved console still loads the same preset
     std::printf("fx_test: 600 presets (300 + 300 ping-pong), unique names, every parameter known to its effect\n"); }
+  {   // AUTO MIC EQ: a dull voice is opened and a boomy one is thinned towards the TARGET, within RANGE; AMOUNT 0 leaves the sound alone; silence holds
+    using am::fx::AutoMicEq; const std::size_t n = 48000 * 6, blk = 256;
+    auto voice = [&](double lowDb, double highDb, std::vector<float>& l, std::vector<float>& r) {   // a tone in every band, as loud as a natural voice has it there; lowDb / highDb move the two bottom / two top bands
+      l.assign(n, 0.f); r.assign(n, 0.f);
+      for (int b = 0; b < 8; ++b) { const double db = -30.0 + AutoMicEq::targetDb(0, b) + (b < 2 ? lowDb : b >= 6 ? highDb : 0.0), a = std::pow(10.0, db / 20.0), w = 2 * 3.14159265358979 * AutoMicEq::bandHz(b) * 1.03 / 48000.0;
+        for (std::size_t i = 0; i < n; ++i) { const float v = static_cast<float>(a * std::sin(w * static_cast<double>(i) + b)); l[i] += v; r[i] += v; } } };
+    auto run = [&](AutoMicEq& fx, std::vector<float>& l, std::vector<float>& r) { for (std::size_t i = 0; i + blk <= n; i += blk) fx.process(l.data() + i, r.data() + i, blk); };
+    auto mk = [](double target, double amount, double range, double speed) { auto e = am::fx::make("automiceq", 48000); e->set("target", target); e->set("amount", amount); e->set("range", range); e->set("speed", speed); return e; };
+    std::vector<float> l, r;
+    { auto e = mk(1.0, 1.0, 1.0, 1.0); auto* fx = static_cast<AutoMicEq*>(e.get()); CHECK(std::string(e->name()) == "AUTO MIC EQ" && e->params().size() == 4 && e->text("target", 0.0) == "NATURAL" && e->text("target", 0.25) == "CLARITY" && e->text("target", 1.0) == "BRIGHT" && e->text("range", 0.5) == "6 dB");
+      voice(0.0, -12.0, l, r); run(*fx, l, r);                                                       // a dull voice (the top 12 dB down), BRIGHT target
+      std::printf("fx_test: AUTO MIC EQ dull voice, BRIGHT: %+.1f %+.1f %+.1f %+.1f %+.1f %+.1f %+.1f %+.1f dB\n", fx->gainDb(0), fx->gainDb(1), fx->gainDb(2), fx->gainDb(3), fx->gainDb(4), fx->gainDb(5), fx->gainDb(6), fx->gainDb(7));
+      CHECK(fx->gainDb(6) > 3.0 && fx->gainDb(7) > 3.0 && fx->gainDb(6) <= 12.0001); CHECK(fx->gainDb(1) < fx->gainDb(6));   // the top is lifted, more than the body
+      double held[8]; for (int b = 0; b < 8; ++b) held[b] = fx->gainDb(b); std::vector<float> zl(48000, 0.f), zr(48000, 0.f); for (std::size_t i = 0; i + blk <= zl.size(); i += blk) fx->process(zl.data() + i, zr.data() + i, blk);
+      bool same = true; for (int b = 0; b < 8; ++b) if (std::fabs(fx->gainDb(b) - held[b]) > 0.3) same = false; CHECK(same); }                                    // a second of silence: it holds
+    { auto e = mk(0.25, 1.0, 1.0, 1.0); auto* fx = static_cast<AutoMicEq*>(e.get()); voice(10.0, 0.0, l, r); run(*fx, l, r); CHECK(fx->gainDb(0) < -3.0 && fx->gainDb(0) >= -12.0001); }   // a boomy voice, CLARITY: the bottom comes down
+    { auto e = mk(0.0, 1.0, 1.0, 1.0); auto* fx = static_cast<AutoMicEq*>(e.get()); voice(0.0, 0.0, l, r); run(*fx, l, r); bool flat = true; for (int b = 0; b < 8; ++b) if (std::fabs(fx->gainDb(b)) > 2.5) flat = false; CHECK(flat); }   // a natural voice, NATURAL target: left (nearly) as it is
+    { auto e = mk(0.25, 1.0, 0.25, 1.0); auto* fx = static_cast<AutoMicEq*>(e.get()); voice(10.0, 0.0, l, r); run(*fx, l, r); bool in = true; for (int b = 0; b < 8; ++b) if (std::fabs(fx->gainDb(b)) > 3.0001) in = false; CHECK(in); }   // RANGE 3 dB is kept
+    { auto e = mk(0.25, 0.0, 1.0, 1.0); voice(10.0, 0.0, l, r); const std::vector<float> was = l; run(*static_cast<AutoMicEq*>(e.get()), l, r); double d = 0; for (std::size_t i = 0; i < n; ++i) d = std::max(d, static_cast<double>(std::fabs(l[i] - was[i]))); CHECK(d < 1e-4); }   // AMOUNT 0: the sound passes
+    { auto e = mk(1.0, 1.0, 1.0, 1.0); voice(0.0, -12.0, l, r); run(*static_cast<AutoMicEq*>(e.get()), l, r); bool ok = true; for (std::size_t i = 0; i < n; ++i) if (!std::isfinite(l[i]) || std::fabs(l[i]) > 4.f) ok = false; CHECK(ok); }   // stable while the bands move
+  }
   {   // PEAK REMOVER: a click on a steady tone comes down by AMOUNT at most, the tone itself is not touched, LISTEN plays only the click
     const std::size_t n = 48000; auto tone = [&](std::vector<float>& l, std::vector<float>& r) { l.assign(n, 0.f); r.assign(n, 0.f); for (std::size_t i = 0; i < n; ++i) l[i] = r[i] = static_cast<float>(0.1 * std::sin(2 * 3.14159265358979 * 220.0 * i / 48000.0)); };
     std::vector<float> l, r; tone(l, r); const std::vector<float> clean = l; l[30000] = r[30000] = 0.9f;

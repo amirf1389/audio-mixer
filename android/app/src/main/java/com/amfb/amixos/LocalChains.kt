@@ -17,6 +17,7 @@ object LocalChains {
         Chain("karaoke", "🎶", "KARAOKE", "A singing voice with a bounce and a hall around it",
             listOf(Fx("rider"), Fx("doubler"), Fx("pingpong", mapOf("left" to 0.1351, "right" to 0.2095, "feedback" to 0.35, "tone" to 0.5, "spread" to 1.0, "lowcut" to 0.3)), Fx("hall"))),   // 220 ms left, 330 ms right
         Chain("singer", "🎙", "SINGER", "A lead vocal: S softened, levelled, a room, a little air", listOf(Fx("deesser"), Fx("opto"), Fx("room"), Fx("exciter"))),
+        Chain("autoeq", "🎚", "AUTO EQ", "The voice is shaped towards a clear target while you speak or sing; then the level held", listOf(Fx("automiceq", mapOf("target" to 0.25, "amount" to 0.7, "range" to 0.5, "speed" to 0.5)), Fx("rider"))),
         Chain("nopeaks", "⚡", "NO PEAKS", "Clicks, pops and hits taken out, the rest of the sound untouched; then the level held", listOf(Fx("peakremover", mapOf("sens" to 0.5, "amount" to 0.5, "release" to 0.2, "listen" to 0.0)), Fx("rider"))),
         Chain("clear", "∅", "EMPTY RACK", "Takes every effect off the channel", emptyList()))
 
