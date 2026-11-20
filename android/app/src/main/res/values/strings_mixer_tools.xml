@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- GROUP FADERS (DCA) of the phone mixer -->
+    <string name="lm_dca">DCA %1$d</string>
+    <string name="lm_dca_sub">GROUP · %1$d CH</string>
+    <string name="lm_dca_title">GROUP FADERS (DCA)</string>
+    <string name="lm_dca_help">Tap a channel to put it in group 1 to 4 (or none). A group fader adds its level to its channels without moving their faders; its MUTE mutes them all.</string>
+    <string name="lm_dca_none">—</string>
+    <!-- TOOLS section -->
+    <string name="lm_sec_tools">TOOLS</string>
+    <string name="lm_tone_title">TONE GENERATOR</string>
+    <string name="lm_tone_help">Plays on DECK %1$s\'s channel (its fader, mute and the master apply) while that deck is not playing. Press START first.</string>
+    <string name="lm_tone_sine">SINE 1 kHz</string>
+    <string name="lm_tone_pink">PINK NOISE</string>
+    <string name="lm_tone_on">TONE ON</string>
+    <string name="lm_tone_off">TONE OFF</string>
+    <string name="lm_tone_level">Level: %1$d dBFS</string>
+    <string name="lm_tone_need_start">Press START: the tone plays through the running mixer.</string>
+    <string name="lm_tone_deck_busy">DECK %1$s is playing: stop it to use the tone.</string>
+    <string name="lm_level_title">LEVEL METER</string>
+    <string name="lm_level_help">From the mixer\'s own meters. SPL is an estimate from the input level and the SOUND LEVEL calibration (0 dBFS = %1$d dB SPL).</string>
+    <string name="lm_level_master">MASTER  %1$s</string>
+    <string name="lm_level_input">INPUT  %1$s</string>
+    <string name="lm_level_spl">SPL ≈ %1$s</string>
+    <!-- CHROMEBOOK MODE -->
+    <string name="cb_mixer">MIXER</string>
+    <string name="cb_sound_card">SOUND CARD</string>
+    <string name="cb_network">NETWORK CONNECTION</string>
+    <string name="cb_settings">SETTINGS</string>
+    <string name="cb_licence">LICENCE</string>
+    <string name="cb_licence_none">No licence information from the engine on this device.</string>
+    <string name="cb_mode_title">CHROMEBOOK MODE</string>
+    <string name="cb_mode_auto">AUTO</string>
+    <string name="cb_mode_on">ON</string>
+    <string name="cb_mode_off">OFF</string>
+</resources>
