@@ -2209,5 +2209,7 @@
 "The Windows volume is not available on this computer.",
 "GAIN MODE off: the Windows volume does not change the console's level.",
 "This output plays through Windows' own mixer, which already sets its level with this slider: no extra trim (no double cut).",
-"HI-RES ENGINEER"
+"HI-RES ENGINEER",
+"METAL",
+"HARD ROCK"
 ]
