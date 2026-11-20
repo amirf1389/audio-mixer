@@ -11,11 +11,15 @@ constexpr double kPi = 3.14159265358979323846;   // M_PI is not standard C++
 Level levelOf(double totalMs) { return totalMs < 10.0 ? Level::Low : totalMs <= 20.0 ? Level::Ok : Level::High; }
 const char* levelName(Level l) { return l == Level::Low ? "LOW LATENCY" : l == Level::Ok ? "OK" : "HIGH"; }
 
+std::string driverLabel(const std::string& b, bool exclusive) {
+  if (b == "asio") return "ASIO"; if (b == "wasapi") return exclusive ? "WASAPI exclusive" : "WASAPI shared"; if (b == "dsound") return "DirectSound";
+  if (b == "alsa") return "ALSA"; if (b == "coreaudio") return "Core Audio"; return b.empty() ? "none" : b; }
+
 static std::string ms(double v) { char b[32]; std::snprintf(b, sizeof b, "%.1f ms", v); return b; }
 
 Report assess(const Input& in) {
   Report r; const double rate = in.rate > 0 ? in.rate : 48000; const double blockMs = 1000.0 * std::max(1, in.blockFrames) / rate; r.blockMs = blockMs;
-  r.reported = in.inFrames > 0 || in.outFrames > 0;
+  r.reported = in.inFrames > 0 || in.outFrames > 0; r.driver = driverLabel(in.backend, in.exclusive);
   if (r.reported) { r.inMs = 1000.0 * in.inFrames / rate; r.outMs = 1000.0 * in.outFrames / rate; }
   else {   // what a driver that says nothing typically adds around one block each way
     double extra = 0;
@@ -29,9 +33,10 @@ Report assess(const Input& in) {
   r.verdict = std::string(r.levelName) + ": " + ms(r.totalMs) + (in.hasInput ? " from input to output" : " to the output") + (r.reported ? " (the driver's figure)" : " (estimated: the driver does not report it)")
               + (r.level == Level::Low ? ", fine for live monitoring." : r.level == Level::Ok ? ", fine for playback; a performer may hear a slight delay." : ", fine for listening, too slow to monitor yourself live.");
   // ADVICE: the biggest gain first
-  if (in.bluetoothOut) r.advice.push_back("The output is Bluetooth: it always adds about 150 ms. Use wired headphones or speakers for live monitoring.");
+  if (in.bluetoothOut) r.advice.push_back("Bluetooth output adds 100-200 ms (about 150 ms counted here) that no driver reports. Use wired headphones or speakers for live monitoring.");
   if (in.backend == "dsound") r.advice.push_back("DirectSound is the slowest Windows path: switch to Windows audio (WASAPI) or, with an audio interface, its ASIO driver.");
-  if (in.backend == "wasapi" && !in.exclusive) r.advice.push_back("WASAPI shared mode goes through Windows' mixer (about 10 ms each way): EXCLUSIVE mode, or the interface's ASIO driver, removes it.");
+  if (in.backend == "wasapi" && !in.exclusive) r.advice.push_back("WASAPI shared adds a Windows mixer buffer (about 10 ms each way): try WASAPI EXCLUSIVE or the interface's ASIO driver.");
+  if (blockMs > 10.0 && in.xruns == 0) r.advice.push_back("Buffer above 10 ms (" + ms(blockMs) + " per block): lower it in AUDIO / MIDI SETTINGS.");
   if (r.level != Level::Low && in.blockFrames > 128 && in.xruns == 0) r.advice.push_back("A smaller buffer lowers it: try " + std::to_string(std::max(64, in.blockFrames / 2)) + " frames (" + ms(1000.0 * std::max(64, in.blockFrames / 2) / rate) + " per block).");
   if (in.xruns > 0) r.advice.push_back(std::to_string(in.xruns) + " dropout(s) so far: the buffer is too small for this computer now. Raise it one step, or close heavy programs and plug-ins.");
   if (in.maxBlockUs > 0 && in.maxBlockUs > 0.8 * blockMs * 1000.0) r.advice.push_back("The slowest block took " + ms(in.maxBlockUs / 1000.0) + " of its " + ms(blockMs) + ": very little headroom; a larger buffer or fewer plug-ins keeps it steady.");
@@ -64,6 +69,15 @@ long findDelay(const float* sent, std::size_t nSent, const float* rec, std::size
   }
   if (confidence) *confidence = std::fabs(bestScore);
   return best;
+}
+
+double roundTripMs(const float* rec, std::size_t nRec, std::size_t clickAt, double rate, double* confidence) {
+  if (confidence) *confidence = 0;
+  if (rate <= 0) return -1;
+  const std::vector<float> click = testClick(rate); double conf = 0;
+  const long at = findDelay(click.data(), click.size(), rec, nRec, &conf); if (confidence) *confidence = conf;
+  if (at < 0 || conf < 0.3 || at < static_cast<long>(clickAt)) return -1;
+  return (at - static_cast<long>(clickAt)) * 1000.0 / rate;
 }
 
 }  // namespace am::latency

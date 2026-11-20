@@ -817,7 +817,7 @@ QVariantMap Engine::latencyReport() const {
   in.hybrid = cpuOnce().topo.classes > 1; in.fastCores = sysFast_;
   const am::Snapshot sn = rt_->snapshot(); in.xruns = sn.xruns; in.maxBlockUs = sn.maxBlockUs;
   const am::latency::Report r = am::latency::assess(in);
-  m["running"] = true; m["inMs"] = r.inMs; m["outMs"] = r.outMs; m["blockMs"] = r.blockMs; m["totalMs"] = r.totalMs; m["reported"] = r.reported;
+  m["running"] = true; m["driver"] = QString::fromStdString(r.driver); m["rate"] = in.rate; m["frames"] = in.blockFrames; m["inMs"] = r.inMs; m["outMs"] = r.outMs; m["blockMs"] = r.blockMs; m["totalMs"] = r.totalMs; m["reported"] = r.reported;
   m["level"] = QString::fromStdString(r.levelName); m["verdict"] = QString::fromStdString(r.verdict);
   QStringList adv; for (const auto& a : r.advice) adv << QString::fromStdString(a); m["advice"] = adv; m["roundTrip"] = lastRoundTrip_;
   return m;
@@ -849,15 +849,15 @@ QVariantMap Engine::startRoundTrip() {
 }
 void Engine::finishRoundTrip(int tries) {
   auto p = rtProbe_; if (!p) return;
-  if (p->inPos.load() < p->rec.size() && tries < 20 && rt_) { QTimer::singleShot(100, this, [this, tries] { finishRoundTrip(tries + 1); }); return; }   // not all recorded yet
+  if (p->inPos.load() < p->rec.size() && tries < 11 && rt_) { QTimer::singleShot(100, this, [this, tries] { finishRoundTrip(tries + 1); }); return; }   // not all recorded yet; 0.9 s + 11 x 0.1 s = a clean stop at 2 s
   if (rt_) { rt_->setExtraSource(p->prevExtra); rt_->setTap(p->prevTap); rt_->setTapRawStrip(p->prevRaw); }
   QTimer::singleShot(200, this, [p] {});   // keeps the probe alive a moment longer, past any block that still holds the old pointers
   rtProbe_.reset();
   const double rate = sampleRate() > 0 ? sampleRate() : 48000; double conf = 0;
-  const long at = am::latency::findDelay(p->click.data(), p->click.size(), p->rec.data(), std::min(p->rec.size(), p->inPos.load()), &conf);
+  const double ms = am::latency::roundTripMs(p->rec.data(), std::min(p->rec.size(), p->inPos.load()), p->clickAt, rate, &conf);
   QVariantMap r;
-  if (at < 0 || conf < 0.3) { r["state"] = "none"; r["note"] = QStringLiteral("The click did not come back: connect output 1 to input 1 with a cable (or hold the microphone near the speaker, volume up) and try again."); r["confidence"] = conf; }
-  else { const double ms = (at - static_cast<long>(p->clickAt)) * 1000.0 / rate; r["state"] = "done"; r["ms"] = ms; r["confidence"] = conf;
+  if (ms < 0) { r["state"] = "none"; r["note"] = QStringLiteral("No click heard within 2 s: the test needs a loop cable from output 1 to input 1 (or the microphone near the speaker, volume up). Connect one and try again."); r["confidence"] = conf; }
+  else { r["state"] = "done"; r["ms"] = ms; r["confidence"] = conf;
     r["note"] = QStringLiteral("Round trip measured: %1 ms (%2), from the output through the converters and back in.").arg(ms, 0, 'f', 1).arg(QString::fromLatin1(am::latency::levelName(am::latency::levelOf(ms)))); }
   lastRoundTrip_ = r; emit stateChanged();
 }
@@ -2039,6 +2039,26 @@ QVariantList Engine::presets() const {
   for (const Factory& f : kFactory) { QVariantMap m; m["name"] = f.name; m["category"] = f.category; m["factory"] = true; l << m; }
   for (const PresetUi& u : userPresets_) { QVariantMap m; m["name"] = u.name; m["category"] = u.category; m["factory"] = false; l << m; }
   return l;
+}
+QJsonObject Engine::presetPack() {
+  QJsonObject pack; QJsonArray mast, fx, tone;
+  // MASTERING: a preset's own settings are the ones that come out the same from two different starting points (what it leaves alone differs)
+  const QVariantMap saved = mastering();
+  auto base = [this](bool b, double k) { QVariantMap m; for (const char* x : {"eqOn", "analog", "on", "bassMonoOn", "toneOn", "compOn", "satOn", "deessOn", "exciterOn"}) m[x] = b;
+    m["low"] = -11.5 * k; m["air"] = 11.5 * k; m["mid"] = -11.5 * k; m["compMix"] = k > 0 ? 0.123 : 0.877; m["bassMonoHz"] = k > 0 ? 333 : 41; m["thr"] = k > 0 ? -39.5 : -0.5; m["ratio"] = k > 0 ? 9.7 : 1.1;
+    m["attack"] = k > 0 ? 197 : 0.6; m["release"] = k > 0 ? 1999 : 21; m["makeup"] = k > 0 ? 17.3 : 0.1; m["drive"] = k > 0 ? 0.987 : 0.013; m["gain"] = -11.3 * k; m["deessThr"] = k > 0 ? -49.1 : -0.9; m["deessMax"] = k > 0 ? 17.1 : 0.2; m["exciter"] = k > 0 ? 0.991 : 0.009; m["preset"] = QString(); setMastering(m); };
+  for (const QString& n : masteringPresets()) {
+    base(true, 1); applyMasteringPreset(n); const QVariantMap a = mastering(); base(false, -1); applyMasteringPreset(n); const QVariantMap b = mastering();
+    QJsonObject params; for (auto it = a.cbegin(); it != a.cend(); ++it) if (it.key() != QLatin1String("preset") && b.value(it.key()) == it.value()) params[it.key()] = QJsonValue::fromVariant(it.value());
+    mast << QJsonObject{{"name", n}, {"params", params}}; }
+  setMastering(saved);
+  for (const auto& p : am::fx::presets()) { QJsonObject v; for (const auto& [k, x] : p.values) v[QString::fromStdString(k)] = x; v["mix"] = p.mix;
+    fx << QJsonObject{{"kind", QString::fromStdString(p.kind)}, {"id", p.id}, {"name", QString::fromStdString(p.name)}, {"category", QString::fromStdString(p.category)}, {"values", v}}; }
+  for (const Factory& f : kFactory) tone << QJsonObject{{"kind", "chain"}, {"name", f.name}, {"category", f.category}, {"dsp", QJsonDocument::fromJson(QByteArray(f.json)).object()}};
+  for (int slot = 1; slot <= 10; ++slot) { const EqPresetUi* e = factoryEqPreset(slot); QJsonArray bands;
+    for (const auto& b : e->bands) if (b.type != FilterType::Off) bands << QJsonObject{{"type", static_cast<int>(b.type)}, {"freq", b.freq}, {"q", b.q}, {"gainDb", b.gainDb}};
+    tone << QJsonObject{{"kind", "eq"}, {"slot", slot}, {"name", e->name}, {"category", "EQ"}, {"bands", bands}, {"hpOrder", e->hpOrder}, {"hpFreq", e->hpFreq}, {"lpOrder", e->lpOrder}, {"lpFreq", e->lpFreq}}; }
+  pack["mastering"] = mast; pack["effects"] = fx; pack["tone"] = tone; return pack;
 }
 bool Engine::applyPreset(const QString& name, int strip) {
   if (strip < 0 || strip >= kStrips) return false;

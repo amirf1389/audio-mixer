@@ -354,6 +354,8 @@
     <string name="dev_saved">Saved: the remote connects to %1$s.</string>
     <string name="dev_hal">AUDIO HAL</string>
     <string name="dev_hal_sub">What this phone\'s audio hardware layer offers, read through Android\'s public APIs and a short AAudio probe (nothing is played).</string>
+    <string name="dev_latency">LOW LATENCY</string>
+    <string name="dev_latency_sub">How fast sound goes through this phone: its low-latency features, native buffer, the AAudio stream the mixer gets, and what would lower it.</string>
     <string name="dev_brand">BRAND PROFILE</string>
     <string name="dev_brand_sub">Tuning for this maker: the buffer the mixer asks for, and what stops audio in the background.</string>
     <string name="dev_brand_buffer">Mixer buffer: %1$d HAL bursts</string>

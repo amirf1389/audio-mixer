@@ -21,7 +21,8 @@ Item {
         const ok = engine.openSmart(d.backend, inId, d.out, rate, frames, inCh, d.outChannels || 2)
         if (ok) settings.rememberDevice(d.backend, inId, d.out, rate, frames, inCh, d.outChannels || 2)
     }
-    Component.onCompleted: if (page.last && page.last.backend) page.plan = engine.driverPlan(page.last.backend, page.last.in || "", page.last.out || "")
+    function pageShown() { if (page.last && page.last.backend) page.plan = engine.driverPlan(page.last.backend, page.last.in || "", page.last.out || "") }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(50, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
@@ -55,11 +56,13 @@ Item {
                     Btn { objectName: "roundTripBtn"; label: latencyCard.rep.roundTrip && latencyCard.rep.roundTrip.state === "running" ? i18n.t("MEASURING…", i18n.lang) : i18n.t("ROUND TRIP TEST", i18n.lang); enabled: engine.running
                         onClicked: { const r = engine.startRoundTrip(); if (r && !r.ok && r.note) rtNote.text = i18n.t(r.note, i18n.lang); latencyCard.rep = engine.latencyReport() } } }
                 Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; text: latencyCard.rep.verdict ? latencyCard.rep.verdict : "" }
+                Text { Layout.fillWidth: true; visible: latencyCard.rep.running === true; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; objectName: "latencyDriverLine"
+                    text: latencyCard.rep.running ? i18n.t("DRIVER", i18n.lang) + " " + latencyCard.rep.driver + "  ·  " + (Number(latencyCard.rep.rate) / 1000) + " kHz  ·  " + i18n.t("BUFFER", i18n.lang) + " " + latencyCard.rep.frames + i18n.t(" frames", i18n.lang) + " = " + Number(latencyCard.rep.blockMs).toFixed(2) + " ms" : "" }
                 Text { Layout.fillWidth: true; visible: latencyCard.rep.running === true; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8
-                    text: latencyCard.rep.running ? i18n.t("IN", i18n.lang) + " " + Number(latencyCard.rep.inMs).toFixed(1) + " ms  ·  " + i18n.t("OUT", i18n.lang) + " " + Number(latencyCard.rep.outMs).toFixed(1) + " ms  ·  " + i18n.t("BLOCK", i18n.lang) + " " + Number(latencyCard.rep.blockMs).toFixed(2) + " ms" : "" }
+                    text: latencyCard.rep.running ? i18n.t("IN", i18n.lang) + " " + Number(latencyCard.rep.inMs).toFixed(1) + " ms  ·  " + i18n.t("OUT", i18n.lang) + " " + Number(latencyCard.rep.outMs).toFixed(1) + " ms  ·  " + i18n.t("TOTAL", i18n.lang) + " " + Number(latencyCard.rep.totalMs).toFixed(1) + " ms  ·  " + (latencyCard.rep.reported ? i18n.t("REPORTED BY THE DRIVER", i18n.lang) : i18n.t("ESTIMATED (THE DRIVER REPORTS NOTHING)", i18n.lang)) : "" }
                 Repeater { model: latencyCard.rep.advice ? latencyCard.rep.advice : []; delegate: Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; text: "• " + modelData } }
                 Text { id: rtNote; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8
-                    text: latencyCard.rep.roundTrip && latencyCard.rep.roundTrip.note ? latencyCard.rep.roundTrip.note : i18n.t("ROUND TRIP: connect output 1 to input 1 with a cable (or hold the microphone near the speaker) and press the button: a short sweep plays and its return is timed.", i18n.lang) }
+                    text: latencyCard.rep.roundTrip && latencyCard.rep.roundTrip.note ? (latencyCard.rep.roundTrip.state === "none" ? i18n.t(latencyCard.rep.roundTrip.note, i18n.lang) : latencyCard.rep.roundTrip.note) : i18n.t("ROUND TRIP: needs a loop cable from output 1 to input 1 (or the microphone near the speaker). Press the button: a short click plays and its return is timed; it stops after 2 s if no click is heard.", i18n.lang) }
             }
             // AUDIO ACCESS: what the console may open, each switch ON / OFF. Moved here from SETTINGS (next to the devices it acts on) and
             // applied at once: a running sound card restarts with the new rule; a stopped one only refreshes the device list (nothing starts).
