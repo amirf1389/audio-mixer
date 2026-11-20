@@ -169,6 +169,7 @@ class LocalMixerActivity : FitActivity() {
         val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels - (if (land) 88 else 0), RemoteActivity.acrossFor(land))   // on its side the master is 88 px wider (its two keys stand side by side)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until inChannels()) chans.addView(fixed(stripView(s)))
+        if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) chans.addView(fixed(playersStripView()))   // beside the inputs: on screen without a swipe
         for (d in 0 until DECKS) chans.addView(fixed(deckStripView(d)))
         desk.addView(android.widget.HorizontalScrollView(this).apply { isFillViewport = true; addView(chans, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
         desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(if (land) 340 else 252, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
@@ -406,6 +407,30 @@ class LocalMixerActivity : FitActivity() {
         val pos = k.positionUs; v.time.text = DeckPlayer.clock(pos) + " / " + DeckPlayer.clock(k.durationUs)
         if (!v.seek.isPressed && k.durationUs > 0) v.seek.progress = (pos * 1000 / k.durationUs).toInt() } }
     /** a deck's channel on the desk: one stereo strip (its left and right strips together): name, MUTE, fader with meter, level */
+    /** THE PLAYERS CHANNEL: the level and the mute of the official player on the PLAYERS tab. A link, not an audio path: the streamed
+     *  song is not passed through this mixer (no effects, no recording); the strip tells the player how loud to play. */
+    private fun playersStripView(): View {
+        val p = prefs(); val color = accent
+        val col = ConsoleUi.strip(this, color, 0, false).apply { tag = "playersStrip"; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
+        col.addView(TextView(this).apply { text = getString(R.string.lm_players); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
+        if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_sub_players); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        col.addView(PadButton(this, getString(R.string.lm_players_open), cyan, 12f).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
+            setOnClickListener { Nav.go(this@LocalMixerActivity, StreamPlayerActivity::class.java) } })
+        col.addView(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { contentDescription = "playersMute"; on = p.getBoolean("playersMute", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
+            setOnClickListener { val v = !p.getBoolean("playersMute", false); p.edit().putBoolean("playersMute", v).apply(); on = v; PlayersBus.apply(this@LocalMixerActivity) } })
+        pairKeys(col)
+        val note = TextView(this).apply { contentDescription = "playersNote"; setTextColor(dim); textSize = 9f; gravity = Gravity.CENTER; setPadding(4, 2, 4, 2)
+            text = getString(when { !PlayersBus.loaded -> R.string.lm_players_none; PlayersBus.volumeWorks() -> R.string.lm_players_volume; else -> R.string.lm_players_mute_only }) }
+        if (!land) col.addView(note)
+        val readout = ConsoleUi.dbReadout(this); fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
+        val db0 = p.getFloat("playersDb", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
+        col.addView(FaderView(this, color).apply { contentDescription = "playersFader"; progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else minOf(0.0, db0)) * 1000).toInt()
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            onMove = { pos -> val db = minOf(0.0, com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0)); val set = if (db <= -60) -60.0 else db   // a player has no gain above its own full level
+                p.edit().putFloat("playersDb", set.toFloat()).apply(); show(if (set <= -60) -120.0 else set); PlayersBus.apply(this@LocalMixerActivity) } })
+        col.addView(readout)
+        return col
+    }
     private fun deckStripView(d: Int): View {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
         val col = ConsoleUi.strip(this, color, 0, false).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }

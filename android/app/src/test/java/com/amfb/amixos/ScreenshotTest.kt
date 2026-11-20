@@ -236,6 +236,12 @@ class ScreenshotTest {
         v.measure(View.MeasureSpec.makeMeasureSpec(2673, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1233, View.MeasureSpec.EXACTLY)); v.layout(0, 0, 2673, 1233)
         val b = Bitmap.createBitmap(2673, 1233, Bitmap.Config.ARGB_8888); v.draw(Canvas(b)); FileOutputStream(File(out, "phone-mixer-landscape.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+    @Test fun mixerAppWithPlayersStrip() {   // the AmF X1 Mixer app: the PLAYERS channel beside the inputs
+        Nav.standaloneForTests = true
+        try { val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+            Prefs.local(ctx).edit().putInt("inChannels", 2).putString("section", "faders").putFloat("playersDb", -9f).commit()
+            shot(Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get().window.decorView.rootView, "mixer-app-players") } finally { Nav.standaloneForTests = null }
+    }
     @Test fun phoneMixer() {   // no native engine on the JVM: the screen and a rack are drawn from saved choices and made-up engine JSON
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
         Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString(LocalMixerActivity.rackKey(0), "comp|plate|delay|drive").putString(LocalMixerActivity.rackKey(-1), "maximizer|||").commit()

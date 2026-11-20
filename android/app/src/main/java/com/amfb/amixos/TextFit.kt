@@ -40,4 +40,6 @@ object TextFit {
 /** Every screen of the app starts from this: it applies the responsive text size before anything is drawn. */
 open class FitActivity : AppCompatActivity() {
     override fun attachBaseContext(newBase: Context) { super.attachBaseContext(newBase); TextFit.override(newBase)?.let { applyOverrideConfiguration(it) } }
+    override fun onStart() { super.onStart(); PlayersBus.screenStarted() }     // the players pause only when no screen of the app is shown
+    override fun onStop() { PlayersBus.screenStopped(); super.onStop() }
 }

@@ -23,7 +23,8 @@ object Nav {
     }
     // AmF X1 MIXER (the separate app, package ...mixer): the phone's own mixer without the console remote. Its bar is MIXER · PLAYERS ·
     // TOOLS · SETTINGS, the MIXER tab is always THIS PHONE, and there is no THIS PHONE / CONSOLE switch.
-    fun standalone(c: android.content.Context) = isStandalonePackage(c.packageName)
+    @Volatile var standaloneForTests: Boolean? = null   // how a test becomes the AmF X1 Mixer app (tests run under the main app name)
+    fun standalone(c: android.content.Context) = standaloneForTests ?: isStandalonePackage(c.packageName)
     fun isStandalonePackage(pkg: String) = pkg.endsWith(".mixer")
     fun tabs(standalone: Boolean): List<Tab> = if (standalone) listOf(Tab.MIXER, Tab.PLAYERS, Tab.TOOLS, Tab.SETTINGS) else listOf(Tab.HOME, Tab.MIXER, Tab.TOOLS, Tab.SETTINGS)
     // DUAL MODE MIXER: one MIXER with two modes, THIS PHONE (the standalone mixer: the phone's own sound) and CONSOLE (the remote of the
