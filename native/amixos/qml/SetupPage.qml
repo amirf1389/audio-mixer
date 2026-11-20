@@ -9,6 +9,11 @@ import QtQuick.Layouts
 Rectangle {
     id: wiz
     objectName: "setupPage"
+    // LOCKED: this takes every click, wheel turn and key that does not belong to the setup, so the console behind cannot be reached
+    MouseArea { objectName: "setupBlocker"; anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true; preventStealing: true; onWheel: (w) => { w.accepted = true } }
+    focus: visible
+    Keys.onPressed: (e) => { e.accepted = true }
+    Keys.onReleased: (e) => { e.accepted = true }
     property int step: 0
     property bool accepted: false
     property bool signature: !settings.setupDone || engine.mastering().preset === "AMFB SIGNATURE"   // the house sound: on for a new console
