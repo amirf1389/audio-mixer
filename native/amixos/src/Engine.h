@@ -543,6 +543,9 @@ class Engine : public QObject {
   void setSystemMuteBackend(std::function<bool(bool&)> get, std::function<bool(bool)> set) { sysGet_ = std::move(get); sysSet_ = std::move(set); sysAsync_ = false; }   // tests: synchronous   // tests
   void syncSystemSound();                 // applies the rule and reads the state (called on fader moves and twice a second)
   void restoreSystemSound();              // on exit: a mute the console set is taken back
+  // Is this input a microphone (or another capture device)? Computer sound and one program's sound ("loopback:...") and "no input" are not:
+  // the microphone rules (ONE VOICE, MIC ACCESS, Windows microphone privacy) never touch them.
+  static bool isMicrophoneInput(const QString& inDevice) { return inDevice != QLatin1String("-") && !inDevice.startsWith(QLatin1String("loopback:")); }
   Q_INVOKABLE bool inputMutedBySystem() const;   // over 2 s of exact silence from the system on the input (WASAPI): muted or blocked by privacy
   Q_SIGNAL void systemSoundChanged();
   // WINDOWS VOLUME: the Windows output slider (and the keyboard's volume keys) as a level on the console, both ways.

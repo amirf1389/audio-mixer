@@ -235,8 +235,8 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
     if (ik == "headset" || ik == "bluetooth" || (inDevice.isEmpty() && (ok == "headphones" || ok == "headset" || ok == "bluetooth"))) {
       inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("WASAPI: the headset's microphone is kept off. Outputs only."); }
   }
-  if (privacyOff_ && inCh > 0 && backend != "asio" && !inDev.startsWith("loopback:")) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("The microphone is switched off in Windows privacy, so the console opens none (outputs only). It comes back by itself when Windows allows it again."); }
-  if (micAccessOff() && inCh > 0 && backend != "asio" && !inDev.startsWith("loopback:")) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
+  if (privacyOff_ && inCh > 0 && backend != "asio" && isMicrophoneInput(inDev)) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("The microphone is switched off in Windows privacy, so the console opens none (outputs only). It comes back by itself when Windows allows it again."); }
+  if (micAccessOff() && inCh > 0 && backend != "asio" && isMicrophoneInput(inDev)) { inCh = 0; inDev.clear(); micOffNote_ = QStringLiteral("MIC ACCESS OFF: no microphone is opened on Windows audio. Outputs only."); }
   rt_ = std::make_unique<am::Runtime>(kStrips);
   am::DeviceConfig cfg; cfg.backend = backend.isEmpty() ? "auto" : backend.toStdString(); cfg.bits = openBits_; if (openExclusive_) cfg.exclusive = true; cfg.inDevice = inDev.toStdString(); cfg.outDevice = outDevice.toStdString();
   cfg.sampleRate = sampleRate > 0 ? sampleRate : 48000; cfg.frames = static_cast<unsigned>(frames > 0 ? frames : 256); blockFrames_ = static_cast<int>(cfg.frames); cfg.inChannels = inCh; cfg.outChannels = outChannels;
@@ -1828,7 +1828,9 @@ void Engine::tick() {
       if (act == am::Watchdog::Action::Restart) { QMetaObject::invokeMethod(this, [this] { failover(QStringLiteral("the sound stopped arriving")); }, Qt::QueuedConnection); }
       else if (act == am::Watchdog::Action::GiveUp) { watchdogNote_ = QStringLiteral("WATCHDOG: three restarts in a minute did not bring the sound back. Check the sound card, then press START."); emit watchdogChanged(); } }
     // ONE VOICE: the same mono microphone on inputs 1 and 2 (not on the null test device): CH 1 off, the voice heard once on CH 2
-    if (oneVoice_ && !oneVoiceActed_ && rt_->backendName() != "null" && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {
+    // A MICROPHONE ONLY: computer sound or one program's sound that is the same on both sides (a mono podcast, a call) is music, not one
+    // voice on two inputs; it keeps both channels.
+    if (oneVoice_ && !oneVoiceActed_ && rt_->backendName() != "null" && isMicrophoneInput(QString::fromStdString(curIn_)) && inRoute_[0] == 0 && inRoute_[1] == 1 && ov_.update(s)) {
       oneVoiceActed_ = true; setInputRoute(0, -1);
       oneVoiceNote_ = QStringLiteral("Inputs 1 and 2 carry the same microphone (one voice on both sides): CH 1 is set to no input so the voice is heard once, on CH 2. UNDO puts it back.");
       emit oneVoiceChanged(); }
