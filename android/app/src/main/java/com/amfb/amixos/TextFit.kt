@@ -28,16 +28,16 @@ object TextFit {
 
     fun mode(c: Context): Int = c.getSharedPreferences("remote", Context.MODE_PRIVATE).getInt("textSize", AUTO)
 
-    fun wrap(base: Context): Context {
+    /** The font scale to lay over the phone's own configuration, or null when nothing needs changing. */
+    fun override(base: Context): Configuration? {
         val cur = base.resources.configuration
         val scale = fontScale(cur.smallestScreenWidthDp, cur.fontScale, mode(base))
-        if (kotlin.math.abs(scale - cur.fontScale) < 0.005f) return base
-        val cfg = Configuration(cur); cfg.fontScale = scale
-        return base.createConfigurationContext(cfg)
+        if (kotlin.math.abs(scale - cur.fontScale) < 0.005f) return null
+        return Configuration().apply { fontScale = scale }     // only the font scale: rotation and screen size keep following the phone
     }
 }
 
 /** Every screen of the app starts from this: it applies the responsive text size before anything is drawn. */
 open class FitActivity : AppCompatActivity() {
-    override fun attachBaseContext(newBase: Context) { super.attachBaseContext(TextFit.wrap(newBase)) }
+    override fun attachBaseContext(newBase: Context) { super.attachBaseContext(newBase); TextFit.override(newBase)?.let { applyOverrideConfiguration(it) } }
 }

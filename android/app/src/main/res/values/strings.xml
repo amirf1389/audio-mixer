@@ -480,8 +480,9 @@
     <string name="lm_deck_load">LOAD</string>
     <string name="lm_deck_loop">LOOP</string>
     <string name="lm_deck_video">VIDEO</string>
-    <string name="lm_decks_show">DECKS A–D: songs and video ▾</string>
-    <string name="lm_decks_hide">DECKS A–D: hide ▴</string>
+    <string name="lm_sec_faders">FADERS</string>
+    <string name="lm_sec_media">MEDIA</string>
+    <string name="lm_sec_setup">SETUP</string>
     <string name="lm_deck_empty">No song: tap LOAD and pick a file on this phone</string>
     <string name="lm_deck_error">Cannot play this file: %1$s</string>
     <string name="lm_rec">● REC</string>

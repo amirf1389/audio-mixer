@@ -57,7 +57,7 @@ object Nav {
         content.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f); root.addView(content)
         // a Material navigation bar: a tonal surface (no divider line), the open tab's icon on a pill, labels under the icons
         val d = a.resources.displayMetrics.density
-        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(a.getColor(R.color.md_surface_container)); setPadding(0, (12 * d).toInt(), 0, (12 * d).toInt()) }
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; tag = "navBar"; setBackgroundColor(a.getColor(R.color.md_surface_container)); setPadding(0, (12 * d).toInt(), 0, (12 * d).toInt()) }
         for (t in tabs(standalone(a))) {
             val on = t == current
             bar.addView(LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; contentDescription = a.getString(t.label)
@@ -68,8 +68,16 @@ object Nav {
                 addView(TextView(a).apply { text = a.getString(t.label); textSize = 12f; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
                     typeface = Typeface.create(if (on) "sans-serif-medium" else "sans-serif", Typeface.NORMAL); letterSpacing = 0.03f }) })
         }
-        root.addView(bar); fitSystemBars(root); return root
+        root.addView(bar); fitSystemBars(root); fitBar(a, bar); return root
     }
+    /** ON ITS SIDE the screen is short: the bar becomes a thin row of icons (no labels); upright it is the usual bar. */
+    private fun fitBar(a: Activity, bar: LinearLayout) {
+        val land = a.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE; val d = a.resources.displayMetrics.density
+        val pad = ((if (land) 3 else 12) * d).toInt(); bar.setPadding(0, pad, 0, pad)
+        for (i in 0 until bar.childCount) (bar.getChildAt(i) as? LinearLayout)?.let { tab -> if (tab.childCount > 1) tab.getChildAt(1).visibility = if (land) View.GONE else View.VISIBLE }
+    }
+    /** after the phone was turned (for the screens that stay open through a turn) */
+    fun fit(a: Activity) { (a.window.decorView.findViewWithTag<View>("navBar") as? LinearLayout)?.let { fitBar(a, it) } }
     /** EDGE TO EDGE (Android 15 draws every app under the status bar and the gesture bar): the page keeps clear of the clock, the notch and
      *  the gesture handle, so no title sits under the time and the bottom tabs stay tappable */
     fun fitSystemBars(v: View) {

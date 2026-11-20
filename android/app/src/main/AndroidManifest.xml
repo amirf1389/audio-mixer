@@ -9,7 +9,7 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-        <activity android:name=".LocalMixerActivity" android:exported="true" />   <!-- exported: the launcher's PHONE MIXER shortcut opens it -->
+        <activity android:name=".LocalMixerActivity" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" android:exported="true" />   <!-- exported: the launcher's PHONE MIXER shortcut opens it -->
         <activity android:name=".ToolsActivity" android:exported="false" />
         <activity android:name=".RecorderActivity" android:exported="false" />
         <activity android:name=".MixdownActivity" android:exported="false" />
@@ -26,6 +26,6 @@
         <activity android:name=".CalculatorActivity" android:exported="false" />
         <activity android:name=".StreamPlayerActivity" android:exported="false" android:hardwareAccelerated="true" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="@string/settings" />
-        <activity android:name=".RemoteActivity" android:exported="false" android:label="@string/remote_title" />
+        <activity android:name=".RemoteActivity" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" android:exported="false" android:label="@string/remote_title" />
     </application>
 </manifest>

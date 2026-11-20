@@ -124,7 +124,8 @@ class RemoteActivity : FitActivity() {
         timelineView = TextView(this).apply { setTextColor(Color.parseColor("#C2C7CF")); textSize = 10f; typeface = android.graphics.Typeface.MONOSPACE; visibility = View.GONE; setPadding(0, 4, 0, 4) }
         root.addView(timelineView)
         status.setOnClickListener { connBox?.let { it.visibility = if (it.visibility == View.VISIBLE) View.GONE else View.VISIBLE } }   // tap the status line: show / hide the connection fields
-        root.addView(TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f })
+        hintView = TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f; contentDescription = "remoteHint" }
+        root.addView(hintView); fitOrientation()
         // THE CONSOLE: channel strips side by side (scroll sideways), the master strip fixed on the right
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         strips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -193,9 +194,16 @@ class RemoteActivity : FitActivity() {
 
     /** One column per channel the console's plan allows (the service opens only those): name (tap: channel page, long press: rename),
      *  pan, MUTE / SOLO, the fader with its meter, and the level. */
+    // LANDSCAPE: the height is short, so the hint under the status line goes and the faders take that room; six channels stand across
+    private var hintView: TextView? = null
+    private fun fitOrientation() { hintView?.visibility = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) View.GONE else View.VISIBLE }
+    /** the phone was turned: the strips are laid out again for the new shape; the link to the console stays up */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) { super.onConfigurationChanged(newConfig); Nav.fit(this); fitOrientation(); state?.let { buildStrips(it) } }
     companion object {
         /** the width of one channel strip so that [across] of them stand beside the master strip on a screen [screenPx] wide (never under 176 px) */
         const val ACROSS = 4   // channels beside the master in the FADERS view: four, so each fader is wide enough for a thumb
+        /** channels across beside the master: four upright, six when the phone lies on its side (each still wider than a thumb) */
+        fun acrossFor(landscape: Boolean) = if (landscape) 6 else ACROSS
         fun stripWidthFor(screenPx: Int, across: Int): Int = maxOf(176, (screenPx - 40 - (252 + 8)) / maxOf(1, across) - 8)
     }
     private fun buildStrips(s: ConsoleState) {
@@ -203,7 +211,7 @@ class RemoteActivity : FitActivity() {
         val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         // FADERS view: exactly five channels beside the master, so the ten channels of a console are two pages and each fader is as wide
         // as a finger and as tall as the screen allows. KNOBS view: narrower strips with pan, gain and the 3-band EQ above a shorter fader.
-        val big = Prefs.bigFaders(this); val stripW = if (big) stripWidthFor(resources.displayMetrics.widthPixels, ACROSS) else 200
+        val big = Prefs.bigFaders(this); val stripW = if (big) stripWidthFor(resources.displayMetrics.widthPixels, acrossFor(resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)) else 200
         for (st in s.strips.take(Prefs.stripCount(this))) {
             val tint = colors[(st.id / 8) % colors.size]
             val col = ConsoleUi.strip(this, tint, stripW)
