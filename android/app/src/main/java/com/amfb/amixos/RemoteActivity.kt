@@ -218,10 +218,15 @@ class RemoteActivity : FitActivity() {
             val name = TextView(this).apply { text = ConsoleUi.title(st.id, st.name); setTextColor(Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD
                 setOnClickListener { showChannel(st.id, st.name) }; setOnLongClickListener { rename(st.id, this); true } }
             col.addView(name)
-            if (!big && Prefs.showPan(this)) col.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
+            // KNOBS view: pan, gain and EQ sit in their own scrolling box that takes at most 45 % of the strip, so the fader under it always
+            // keeps more than half the height (before, the knobs took it all and the fader shrank to a sliver)
+            val knobBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+            if (!big && Prefs.showPan(this)) knobBox.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } })
-            if (!big && Prefs.showTone(this)) col.addView(toneBlock(st, tint))
+            if (!big && Prefs.showTone(this)) knobBox.addView(toneBlock(st, tint))
+            if (knobBox.childCount > 0) col.addView(android.widget.ScrollView(this).apply { tag = "knobScroll"; isVerticalScrollBarEnabled = false; addView(knobBox)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.8f) })
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
             val mute = small(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } })
@@ -230,7 +235,7 @@ class RemoteActivity : FitActivity() {
             ConsoleUi.styleToggle(mute, ConsoleUi.RED); ConsoleUi.styleToggle(solo, ConsoleUi.AMBER)
             ms.addView(mute); ms.addView(solo); col.addView(ms)
             val db = ConsoleUi.dbReadout(this).apply { text = DaemonClient.fmtDb(st.db) }
-            val fader = FaderView(this, colors[(st.id / 8) % colors.size]).apply { progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            val fader = FaderView(this, colors[(st.id / 8) % colors.size]).apply { progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f); contentDescription = "stripFader"
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); db.text = DaemonClient.fmtDb(v); live.submit("gain${st.id}") { client?.gain(st.id, v) } } }
             col.addView(fader); col.addView(db)

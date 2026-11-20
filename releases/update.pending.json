@@ -249,16 +249,16 @@
       "sha256": "eb769f063d35440e7510d5ec189af7b03196ddb4b7a840327422978d50f3b1b7"
     },
     "android-apk": {
-      "name": "AmF-X1-1.24.0.5-b3-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.5-b3-android.apk",
-      "size": 14647262,
-      "sha256": "917f6509cd12994b9ecd3bb1eb971cc5d4c138e28daf9ef2de2bb1d5ed625880"
+      "name": "AmF-X1-1.24.0.5-b4-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.5-b4-android.apk",
+      "size": 14647258,
+      "sha256": "0be6ccbb5d98dca2dd14c978b5a822892a5f5e06452fe8a502dc279d596f4fd5"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.24.0.5-b3-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.5-b3-android.apk",
+      "name": "AmF-X1-Mixer-1.24.0.5-b4-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.5-b4-android.apk",
       "size": 14646962,
-      "sha256": "24feff4d0d900864f243ad77259b4868aa02a86eb4c88fdec9771c09e487db2b"
+      "sha256": "411578407ad05c33bcf808529ed954fe0a566b4f2f194209e601030037c705c1"
     }
   },
   "plugins": []
