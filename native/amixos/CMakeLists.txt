@@ -58,6 +58,7 @@ qt_add_qml_module(amixos
         qml/AppCapturePanel.qml
         qml/AppPicker.qml
         qml/WindowsSoundPanel.qml
+        qml/SoundCardWindows.qml
         qml/Combo.qml
         qml/ScrollRow.qml
         qml/Knob.qml

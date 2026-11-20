@@ -625,6 +625,27 @@ int main(int argc, char* argv[]) {
         apps.testDevices.clear();
         std::printf("amixos --smoke: WINDOWS SOUND recording devices listed %d, properties %d, bad picks refused %d, panels %d\n", devList, devProps, devRefused, panels);
         if (!(devList && devProps && devRefused && panels)) { std::fprintf(stderr, "amixos --smoke: WINDOWS SOUND failed\n"); return 99; }
+        { // ONE INTERFACE FOR INPUT AND OUTPUT: endpoints of one box (Windows container id / ALSA card) pair up; built-in devices (null container), one-way boxes and loopbacks do not
+          auto d = [](const char* be, const char* id, const char* name, int in, int out) { return QVariant(QVariantMap{{"backend", be}, {"id", id}, {"name", name}, {"inChannels", in}, {"outChannels", out}, {"defaultRate", 48000.0}}); };
+          const QVariantList fake{d("wasapi", "{0.0.0.0}.{usbout}", "Speakers (USB Audio CODEC)", 0, 2), d("wasapi", "{0.0.1.0}.{usbin}", "Microphone (USB Audio CODEC)", 2, 0),
+            d("wasapi", "{0.0.0.0}.{spk}", "Speakers (Realtek(R) Audio)", 0, 2), d("wasapi", "{0.0.1.0}.{mic}", "Microphone (Realtek(R) Audio)", 2, 0), d("wasapi", "{0.0.0.0}.{hdmi}", "Monitor (HDMI)", 0, 2),
+            d("wasapi", "loopback:{0.0.0.0}.{usbout}", "App audio", 2, 0), d("alsa", "hw:CARD=Box,DEV=0", "Box USB, USB Audio", 4, 4), d("alsa", "front:CARD=Box,DEV=0", "Box USB, USB Audio Front", 0, 2),
+            d("alsa", "plughw:CARD=Box,DEV=0", "Box USB, USB Audio", 4, 4), d("alsa", "hw:CARD=PCH,DEV=0", "HDA Intel PCH, ALC", 0, 2), d("alsa", "default", "Default", 2, 2), d("asio", "X", "ASIO box", 8, 8)};
+          const QVariantMap cont{{"{0.0.0.0}.{usbout}", "{AAAA0000-1111-2222-3333-444455556666}"}, {"{0.0.1.0}.{usbin}", "{aaaa0000-1111-2222-3333-444455556666}"},
+            {"{0.0.0.0}.{spk}", "{00000000-0000-0000-FFFF-FFFFFFFFFFFF}"}, {"{0.0.1.0}.{mic}", "{00000000-0000-0000-ffff-ffffffffffff}"}, {"{0.0.0.0}.{hdmi}", "{BBBB0000-1111-2222-3333-444455556666}"}};
+          const QVariantList pairs = Apps::pairInterfaces(fake, cont);
+          const QVariantMap p0 = pairs.value(0).toMap(), p1 = pairs.value(1).toMap();
+          const bool paired = pairs.size() == 2 && p0["backend"] == "wasapi" && p0["in"] == "{0.0.1.0}.{usbin}" && p0["out"] == "{0.0.0.0}.{usbout}" && p0["name"] == "USB Audio CODEC" && p0["usb"].toBool()
+            && p1["backend"] == "alsa" && p1["in"] == "plughw:CARD=Box,DEV=0" && p1["out"] == "plughw:CARD=Box,DEV=0" && p1["inChannels"].toInt() == 4 && p1["name"] == "Box USB";
+          const bool cards = Apps::alsaCard("hw:CARD=Box,DEV=0") == "Box" && Apps::alsaCard("plughw:2,0") == "2" && Apps::alsaCard("default").isEmpty() && Apps::pairInterfaces(fake, {}).size() == 1;
+          const QVariantMap wd = apps.windowsDefaults();   // on Linux an honest "Windows only"; on Windows the defaults (no test data set)
+#ifdef _WIN32
+          const bool winOk = wd.contains("playback") && wd.contains("endpoints");
+#else
+          const bool winOk = !wd["available"].toBool() && wd["note"].toString().startsWith("Windows only") && wd["endpoints"].toList().isEmpty();
+#endif
+          std::printf("amixos --smoke: ONE INTERFACE pairs %d (paired %d, ALSA cards %d), Windows defaults %d\n", int(pairs.size()), int(paired), int(cards), int(winOk));
+          if (!(paired && cards && winOk)) { std::fprintf(stderr, "amixos --smoke: ONE INTERFACE / WINDOWS DEFAULTS failed\n"); return 99; } }
         { // PROGRAM PICTURES: the picker's icons and window pictures, a live picture that follows the program, and nothing left when it is forgotten
           int made = 0; appWindows.testSource = [&made](quint32 pid, bool icon) { ++made; QImage i(icon ? 32 : 320, icon ? 32 : 180, QImage::Format_RGB32); i.fill(QColor(int(pid % 200), 60, made % 255)); return i; };
           appWindows.testTitle = [](quint32 pid) { return QStringLiteral("Window of %1").arg(pid); };

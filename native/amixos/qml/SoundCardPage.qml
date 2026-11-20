@@ -216,5 +216,6 @@ Item {
                     Repeater { model: [{ t: "AUTO", v: -1 }, { t: "32-BIT / FLOAT", v: 0 }, { t: "16-BIT", v: 16 }, { t: "24-BIT", v: 24 }]; delegate: Btn { label: i18n.t(modelData.t ?? "", i18n.lang); on: engine.outputBits === modelData.v; onColor: Theme.cyan; onClicked: engine.outputBits = modelData.v } }
                     Text { objectName: "ditherAuto"; visible: engine.outputBits === -1; text: "→ " + (engine.effectiveOutputBits === 0 ? i18n.t("32-bit: no dither", i18n.lang) : engine.effectiveOutputBits + i18n.t("-bit dither", i18n.lang)); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 } }
                 Note { text: i18n.t("DC removal is a 5 Hz high-pass on the master before the auto level and the limiter: an offset from a player or a plug-in never eats headroom. Dither (TPDF) is the last thing before the converter: AUTO (the default) follows the word length the driver reports: ASIO 32-bit integer or float and WASAPI shared run with no dither, a 24-bit or 16-bit driver (DirectSound) gets TPDF dither at its depth. Denormals are flushed in the DSP already.", i18n.lang) } }
+            Card { Layout.columnSpan: 2; SoundCardWindows { Layout.fillWidth: true } }   // Windows' default devices and formats; one interface for input and output
         } }
 }
