@@ -13,7 +13,8 @@ Flickable {
     clip: true
     function reload() { ch = engine.channelParams(strip); curve = engine.gateCurve(strip, 120) }
     function apply(k, v) { var p = Object.assign({}, ch); p[k] = v; engine.setGate(strip, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs) }
-    Component.onCompleted: reload()
+    function pageShown() { reload() }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     onStripChanged: reload()
     Connections { target: engine; function onStripsChanged() { page.reload() } }
     readonly property var mt: (engine.meterTick, engine.meterAt(strip))

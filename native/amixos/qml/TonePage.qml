@@ -36,7 +36,8 @@ Flickable {
     property string presetName: ""
     Connections { target: engine; function onStripsChanged() { page.presetTick++ } }
     function reload() { curve = engine.responseCurve(strip, 160); bandNow = engine.eqBand(strip, band); ch = engine.channelParams(strip); canvas.requestPaint() }
-    Component.onCompleted: reload()
+    function pageShown() { reload() }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     onStripChanged: reload()
     onBandChanged: reload()
     Connections { target: engine; function onStripsChanged() { page.reload() } }

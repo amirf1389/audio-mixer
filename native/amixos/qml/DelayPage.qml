@@ -22,7 +22,8 @@ Flickable {
         reload()
     }
     function put(i, ms) { engine.setDelay(i, Math.max(0, Math.min(limit, Math.round(ms * 100) / 100))); reload() }
-    Component.onCompleted: { reload(); let mx = 0; for (let i = 0; i < delays.length; ++i) mx = Math.max(mx, delays[i]); limit = mx > 20 ? 50 : mx > 10 ? 20 : mx > 5 ? 10 : 20 }
+    function pageShown() { reload(); let mx = 0; for (let i = 0; i < delays.length; ++i) mx = Math.max(mx, delays[i]); limit = mx > 20 ? 50 : mx > 10 ? 20 : mx > 5 ? 10 : 20 }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     Connections { target: engine; function onStripsChanged() { page.reload() } }
 
     component Btn: Rectangle { id: bt; property string label; property bool on: false; signal clicked(); implicitWidth: btT.implicitWidth + 20; implicitHeight: 24; radius: 8

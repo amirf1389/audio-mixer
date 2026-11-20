@@ -21,7 +21,8 @@ Item {
         : st === "downloaded" ? i18n.t("The update is downloaded and verified", i18n.lang) : st === "upToDate" ? i18n.t("You are up to date", i18n.lang) : st === "error" ? i18n.t("The update could not be checked", i18n.lang) : i18n.t("Press CHECK FOR UPDATES", i18n.lang) }
     function go(id) { Window.window.current = id }
     // this page was opened: the dot on SOFTWARE UPDATE in the menu goes (also for a version found while the page is open)
-    Component.onCompleted: updater.markUpdateSeen()
+    function pageShown() { updater.markUpdateSeen() }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     Connections { target: updater; function onChanged() { if (page.visible) updater.markUpdateSeen() } }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(72, bl.implicitWidth + 22); implicitHeight: 30; radius: 10
         color: on ? onColor : (bh.hovered ? Theme.ov(0.16) : Theme.ov(0.09)); border.width: 1; border.color: on || bh.hovered ? onColor : Theme.line

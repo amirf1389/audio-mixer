@@ -31,7 +31,8 @@ Item {
     function apply(g, on) { gains = g; engine.setGraphicEq(strip, g, on); bypassed = !on; curve = engine.responseCurve(strip, 120); canvas.requestPaint() }
     function setHp(f) { const c = page.ch; engine.setCrossover(strip, c.xoverType || 0, f > 0 ? 2 : 0, f > 0 ? f : (c.hpFreq || 80), c.lpOrder || 0, c.lpFreq || 20000); reload() }
     onStripChanged: { engine.setScopeStrip(strip); reload() }
-    Component.onCompleted: { engine.setScopeStrip(strip); reload() }
+    function pageShown() { engine.setScopeStrip(strip); reload() }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     Timer { interval: engine.uiAwake ? 60 : 500; running: page.visible; repeat: true; onTriggered: { page.spec = engine.spectrum(2); canvas.requestPaint() } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8
