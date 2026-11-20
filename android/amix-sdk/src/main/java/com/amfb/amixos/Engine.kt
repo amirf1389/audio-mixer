@@ -29,12 +29,6 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     fun startUsb(rate: Int, outDevice: Int, inDevice: Int, inChannels: Int, outChannels: Int = 2, bursts: Int = 2): Int =
         aaudioStartMulti(handle, rate, outDevice, inDevice, bursts, inChannels.coerceIn(0, strips), outChannels.coerceAtLeast(2))
     fun nativeInChannels(): Int = aaudioInChannels()
-    /** OPENSL ES: the second native loop (amix_jni.cpp), for phones without a working AAudio. Runs at the phone's native [rate] and
-     *  [framesPerBuffer] (AudioManager's PROPERTY_OUTPUT_SAMPLE_RATE / PROPERTY_OUTPUT_FRAMES_PER_BUFFER), [mic] = open the microphone too,
-     *  [inChannels] 1 or 2 (strips 1 / 2). Same mixing step as AAudio: decks, inputs, multitrack and meters behave alike. The rate in use, 0 = not available. */
-    fun startOpenSl(rate: Int, framesPerBuffer: Int, mic: Boolean, inChannels: Int = 1): Int = slesStart(handle, rate, framesPerBuffer, mic, inChannels.coerceIn(1, 2))
-    /** [running, floatOutput, sampleRate, framesPerBuffer, inputOpen, inChannels, blocksMixed, inputShortBlocks] of the OpenSL ES loop */
-    fun openSlState(): IntArray = IntArray(8).also { slesState(it) }
     fun nativeOutChannels(): Int = aaudioOutChannels()
     /** INSERTS: [Engine.MAX_INSERTS] AmF X1 rack effects per strip and on the master (strip = -1); kind "" empties the slot. 0 = ok. */
     fun insert(strip: Int, slot: Int, kind: String): Int = insert(handle, strip, slot, kind)
@@ -100,10 +94,6 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         @JvmStatic external fun aaudioOutChannels(): Int
         @JvmStatic external fun aaudioProbe(out: IntArray)
         @JvmStatic external fun aaudioStop()
-        // OPENSL ES: the buffer-queue loop (amix_jni.cpp). slesStart returns the rate in use, 0 = not available
-        @JvmStatic private external fun slesStart(handle: Long, rate: Int, framesPerBuffer: Int, mic: Boolean, inChannels: Int): Int
-        @JvmStatic external fun slesStop()
-        @JvmStatic private external fun slesState(out: IntArray)
         @JvmStatic private external fun aaudioState(out: IntArray)
         @JvmStatic private external fun inputPeaks(handle: Long, out: FloatArray)
         @JvmStatic private external fun deckRoute(handle: Long, deck: Int, stripL: Int)

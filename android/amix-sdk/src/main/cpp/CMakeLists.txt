@@ -26,4 +26,4 @@ file(READ ${ROOT}/native/amixos/version.txt AMIX_SDK_VERSION)
 string(STRIP "${AMIX_SDK_VERSION}" AMIX_SDK_VERSION)
 target_compile_definitions(amix PRIVATE AMIX_VERSION_STRING="${AMIX_SDK_VERSION}" AMIX_BUILD_DLL)
 find_library(log-lib log)
-target_link_libraries(amix ${log-lib} aaudio OpenSLES)   # AAudio: the native low-latency audio path (Android 8+); OpenSL ES: the second native path
+target_link_libraries(amix ${log-lib} aaudio)   # AAudio: the native low-latency audio path (Android 8+)
