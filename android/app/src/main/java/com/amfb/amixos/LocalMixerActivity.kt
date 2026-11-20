@@ -51,6 +51,10 @@ class LocalMixerActivity : FitActivity() {
             e.putInt("layout", LAYOUT).commit()
         }
         /** the engine strips of a channel (input s = s, deck d = 100 + d) */
+        /** what the engine gets for a channel (input s = s, deck d = 100 + d): its fader with its group's offset (dB) and MUTE (own or group) */
+        fun channelLevel(p: android.content.SharedPreferences, ch: Int): Pair<Double, Boolean> =
+            if (ch >= 100) Dca.effectiveDb(p, ch, p.getFloat("deckDb${ch - 100}", 0f).toDouble()) to Dca.effectiveMute(p, ch, p.getBoolean("deckMute${ch - 100}", false))
+            else Dca.effectiveDb(p, ch, p.getFloat("db$ch", 0f).toDouble()) to Dca.effectiveMute(p, ch, p.getBoolean("mute$ch", false))
         fun chStrips(ch: Int): List<Int> = if (ch >= 100) deckStrip(ch - 100).let { listOf(it, it + 1) } else listOf(ch)
         fun deckName(d: Int) = ('A' + d).toString()
         /** the engine strips one rack works on: a deck's rack is put on its left and its right strip alike */
@@ -566,9 +570,7 @@ class LocalMixerActivity : FitActivity() {
     private fun chName(ch: Int) = if (ch >= 100) getString(R.string.lm_deck, deckName(ch - 100)) else getString(R.string.lm_channel, ch + 1, "").trim()
     /** puts one channel's level and mute into the engine: its own fader and MUTE with its group's offset and MUTE */
     internal fun applyLevel(e: Engine?, ch: Int) { e ?: return; val p = prefs()
-        if (ch >= 100) { val d = ch - 100; val l = deckStrip(d); val db = Dca.effectiveDb(p, ch, p.getFloat("deckDb$d", 0f).toDouble()); val mu = Dca.effectiveMute(p, ch, p.getBoolean("deckMute$d", false))
-            for (t in listOf(l, l + 1)) { e.setGain(t, db); e.setMute(t, mu) } }
-        else { val db = Dca.effectiveDb(p, ch, p.getFloat("db$ch", 0f).toDouble()); e.setGain(ch, db); e.setMute(ch, Dca.effectiveMute(p, ch, p.getBoolean("mute$ch", false))) }
+        val (db, mu) = channelLevel(p, ch); for (t in chStrips(ch)) { e.setGain(t, db); e.setMute(t, mu) }
     }
     private fun applyGroup(g: Int) { for (ch in dcaChannels()) if (Dca.groupOf(prefs(), ch) == g) applyLevel(engine, ch) }
     private fun dcaStripView(g: Int, n: Int): View {
