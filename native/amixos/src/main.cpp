@@ -1740,6 +1740,14 @@ int main(int argc, char* argv[]) {
                   if (engine.dspMode() != "engineer" || engine.outputBits() != 24 || !engine.dcBlock() || engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE HI-RES ENGINEER did not set 24-bit / DC block / digital\n"); std::exit(255); }
                   engine.setDspMode("analog"); if (engine.dspMode() != "analog" || engine.outputBits() != bits0) { std::fprintf(stderr, "amixos --shots: leaving HI-RES ENGINEER did not restore the word length\n"); std::exit(255); }
                   engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255); }
+                { const QVariantMap lim0 = engine.masterLimiter(); engine.setMasterLimiter(false, -0.3); const int bits0 = engine.outputBits(); const bool dc0 = engine.dcBlock();   // FAST · TRUE BUFFER: limiter at -1.0 dBTP; leaving it restores everything
+                  engine.setDspMode("fast"); const QVariantMap l = engine.masterLimiter(), rep = engine.latencyReport();
+                  if (engine.dspMode() != "fast" || !l["on"].toBool() || std::fabs(l["ceiling"].toDouble() + 1.0) > 1e-9 || engine.outputBits() != bits0 || engine.mastering()["analog"].toBool() || (rep["running"].toBool() && rep["fastBlock"].toInt() < 16)) { std::fprintf(stderr, "amixos --shots: DSP MODE FAST did not set the -1.0 dBTP limiter / the block suggestion\n"); std::exit(255); }
+                  engine.setDspMode("digital"); const QVariantMap b = engine.masterLimiter();
+                  if (engine.dspMode() != "digital" || b["on"].toBool() || std::fabs(b["ceiling"].toDouble() + 0.3) > 1e-9 || engine.outputBits() != bits0 || engine.dcBlock() != dc0) { std::fprintf(stderr, "amixos --shots: leaving FAST did not restore the limiter\n"); std::exit(255); }
+                  engine.setDspMode("fast"); engine.setDspMode("engineer"); if (engine.dspMode() != "engineer" || std::fabs(engine.masterLimiter()["ceiling"].toDouble() + 1.0) > 1e-9) { std::fprintf(stderr, "amixos --shots: FAST -> HI-RES ENGINEER\n"); std::exit(255); }
+                  engine.setDspMode("digital"); if (engine.dspMode() != "digital" || engine.outputBits() != bits0) std::exit(255);
+                  engine.setMasterLimiter(lim0["on"].toBool(), lim0["ceiling"].toDouble()); engine.setDcBlock(dc0); }
                 const QVariantList real = engine.devices(); QVariantList rig;
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["sampleRates"] = QVariantList{44100.0, 48000.0, 96000.0, 192000.0}; return m; };
                 rig << dev("wasapi", "{d1}", "FiiO K7 USB DAC", 0, 2) << dev("wasapi", "{s1}", "Speakers (Realtek(R) Audio)", 0, 2) << dev("wasapi", "{m1}", "Microphone (USB DAC mic)", 1, 0);

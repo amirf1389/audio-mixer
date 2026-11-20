@@ -276,7 +276,7 @@ void Engine::pushAll() {
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].autoPol) rt_->setAutoPolarity(i, true);
-  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setOutputBits(effectiveOutputBits());
+  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setFast(fastMode()); rt_->setOutputBits(effectiveOutputBits());
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -483,6 +483,17 @@ QVariantMap Engine::mastering() const {
   QVariantMap m; m["eqOn"] = mp_.eqOn; m["analog"] = mp_.analog; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
 }
 void Engine::setDspMode(const QString& m) {
+  const bool fast = m == QLatin1String("fast"), wasFast = fastMode();   // FAST first: leaving it gives the limiter back before ENGINEER sets its own
+  if (fast && !wasFast) {
+    settings_.setValue("audio/fastPrevLim", masterLim_); settings_.setValue("audio/fastPrevCeil", masterCeil_); settings_.setValue("audio/fast", true);
+    setMasterLimiter(true, -1.0); if (rt_) rt_->setFast(true); applyUiRate();
+    am::sysopt::trimMemory(false);   // the heap's free blocks back to the system (never the working set while sound runs)
+  }
+  if (!fast && wasFast) {
+    settings_.setValue("audio/fast", false); if (rt_) rt_->setFast(false);
+    setMasterLimiter(settings_.value("audio/fastPrevLim", masterLim_).toBool(), settings_.value("audio/fastPrevCeil", masterCeil_).toDouble());
+    settings_.remove("audio/fastPrevLim"); settings_.remove("audio/fastPrevCeil"); applyUiRate();
+  }
   const bool eng = m == QLatin1String("engineer"), was = settings_.value("audio/engineer", false).toBool();
   if (eng && !was) { settings_.setValue("audio/engineerPrevBits", outputBits()); settings_.setValue("audio/engineer", true); setDcBlock(true); setOutputBits(24); setMasterLimiter(true, -1.0); }
   if (!eng && was) { settings_.setValue("audio/engineer", false); setOutputBits(settings_.value("audio/engineerPrevBits", -1).toInt()); settings_.remove("audio/engineerPrevBits"); }
@@ -819,6 +830,7 @@ QVariantMap Engine::latencyReport() const {
   const am::latency::Report r = am::latency::assess(in);
   m["running"] = true; m["driver"] = QString::fromStdString(r.driver); m["rate"] = in.rate; m["frames"] = in.blockFrames; m["inMs"] = r.inMs; m["outMs"] = r.outMs; m["blockMs"] = r.blockMs; m["totalMs"] = r.totalMs; m["reported"] = r.reported;
   m["level"] = QString::fromStdString(r.levelName); m["verdict"] = QString::fromStdString(r.verdict);
+  const int fb = am::latency::suggestFastBlock(in); m["fastBlock"] = fb; m["fastBlockMs"] = 1000.0 * fb / in.rate;   // TRUE BUFFER: shown, never applied by itself
   QStringList adv; for (const auto& a : r.advice) adv << QString::fromStdString(a); m["advice"] = adv; m["roundTrip"] = lastRoundTrip_;
   return m;
 }
@@ -1756,7 +1768,7 @@ QVariantList Engine::pages() const {
   return l;
 }
 
-void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : 33) : uiLevel_ == 1 ? 250 : 1000); }
+void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : fastMode() ? 50 : 33) : uiLevel_ == 1 ? 250 : 1000); }
 void Engine::setUiActivity(int level) {
   level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged();
   if (sysEco_) am::sysopt::setThreadEco(level < 2);   // ECO IN THE BACKGROUND: the interface thread only; the sound has its own (HighQoS) thread

@@ -68,7 +68,8 @@ Flickable {
                 Text { text: i18n.t("DSP MODE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 Btn { label: i18n.t("DIGITAL", i18n.lang); on: engine.dspMode === "digital"; onClicked: engine.dspMode = "digital" }
                 Btn { label: i18n.t("ANALOG", i18n.lang); on: engine.dspMode === "analog"; tone: Theme.amber; onClicked: engine.dspMode = "analog" }
-                Btn { label: i18n.t("HI-RES ENGINEER", i18n.lang); on: engine.dspMode === "engineer"; tone: Theme.emerald; onClicked: engine.dspMode = "engineer" } } }
+                Btn { label: i18n.t("HI-RES ENGINEER", i18n.lang); on: engine.dspMode === "engineer"; tone: Theme.emerald; onClicked: engine.dspMode = "engineer" }
+                Btn { label: i18n.t("FAST · TRUE BUFFER", i18n.lang); on: engine.dspMode === "fast"; tone: Theme.violet; onClicked: engine.dspMode = "fast" } } }
 
         Card { title: i18n.t("UPDATES", i18n.lang); tone: updater.state === "available" || updater.state === "downloaded" ? Theme.amber : Theme.cyan
             Big { text: updater.current }

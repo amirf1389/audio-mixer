@@ -19,6 +19,7 @@
 #include "audiomixer/amp.hpp"
 #include "audiomixer/dsp.hpp"
 #include "audiomixer/engine.hpp"
+#include "audiomixer/worker_pool.hpp"
 
 namespace am {
 // the null device's FILM CLOCK (product films): on, it processes only the samples handed to it, whatever the wall clock says
@@ -192,7 +193,8 @@ class Runtime {
   void setTrimDb(int strip, double db);
   // INSERTS: external processors (VST3 plug-ins) on a strip, after the built-in channel DSP and before the fader. The chain is swapped
   // whole from the UI thread; the audio thread keeps its own reference for the block, so a removed plug-in stays alive until the block ends.
-  struct Insert { virtual ~Insert() = default; virtual void process(float* mono, std::size_t frames) = 0; };
+  // bypassed(): the insert is switched off; in DSP MODE FAST it is then not called at all (TRUE BYPASS: bit-exact, no delay)
+  struct Insert { virtual ~Insert() = default; virtual void process(float* mono, std::size_t frames) = 0; virtual bool bypassed() const { return false; } };
   using InsertChain = std::vector<std::shared_ptr<Insert>>;
   void setInserts(int strip, std::shared_ptr<const InsertChain> chain);                     // input trim, before the channel DSP and the input meter (-24 .. +24 dB)
   static int defaultOutputSource(int out) { return out < 2 ? kSrcMonL + out : (out - 2 < 2 * kMaxBuses ? kSrcBus0L + (out - 2) : kSrcOff); }
@@ -228,12 +230,26 @@ class Runtime {
   // so a measuring microphone is not coloured by the channel's own processing. -1 = off (the default). What the mix hears does not change.
   void setTapRawStrip(int strip) { tapRaw_.store(strip); }
   int tapRawStrip() const { return tapRaw_.load(); }
+  // DSP MODE FAST: TRUE BYPASS (switched-off inserts are not called), SILENT STRIPS skipped (under -120 dBFS for a second, no insert:
+  // nothing left ringing), the strips' DSP shared over a worker pool (WorkerPool: bit-identical to one thread), the master limiter's
+  // detector at 4x true peak (Mixer::setTruePeakLimiter) and the meters published at about 100 Hz instead of every block.
+  // The block is the device's block as before: the mix path has no FIFO of its own. Off (the default) = exactly as before.
+  void setFast(bool on);
+  bool fast() const { return fastWanted_.load(); }
+  int fastHelpers() const { return pool_.helpers(); }
+  std::uint64_t fastSharedRuns() const { return pool_.runsShared(); }   // blocks whose strips went out to the helpers
+  void setFastHelpers(int n) { fastHelpersWanted_ = n; }   // before setFast(true): -1 = WorkerPool::defaultThreads() (tests and the bench pick)
   Snapshot snapshot() const;
   void onBlock(const float* const* in, float* const* out, std::size_t frames);   // the audio callback; public so a test can clock the runtime itself
  private:
   struct Cmd { int op; int a; double x, y, z; int b = 0; double w = 0, v = 0, u = 0; void* p = nullptr; };
   void post(const Cmd& c);
   void publish();
+  static void stripJob(void* self, int k);
+  void runStrip(int s, std::size_t frames);
+  bool fast_ = false; std::atomic<bool> fastWanted_{false}, fastOnAudio_{false}; int fastHelpersWanted_ = -1; WorkerPool pool_;   // FAST (fast_: audio thread)
+  int jobs_[kMaxStrips] = {}; const float* jobSrc_[kMaxStrips] = {}; bool jobFx_[kMaxStrips] = {}; std::size_t jobFrames_ = 0; std::size_t quiet_[kMaxStrips] = {}; unsigned pubSkip_ = 0;
+  std::shared_ptr<const InsertChain> held_[kMaxStrips];   // the chains a parallel block runs (kept until the strip's next block)
 
   Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_, outDevice_; bool exclusive_ = false;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;

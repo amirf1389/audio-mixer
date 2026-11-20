@@ -2234,5 +2234,9 @@
 "No interface with both an input and an output is plugged in.",
 "IN USE",
 "USE FOR INPUT AND OUTPUT",
-"An interface shows up in Windows as two devices, one for recording and one for playback. One click opens both together at the console's rate: its inputs on the strips, the mix on its outputs."
+"An interface shows up in Windows as two devices, one for recording and one for playback. One click opens both together at the console's rate: its inputs on the strips, the mix on its outputs.",
+"FAST · TRUE BUFFER",
+"TRUE BUFFER: smallest stable block for this driver",
+"now",
+"FAST runs the driver's block as it comes (no extra buffering), limits the master at -1.0 dBTP with a 4x true-peak detector, skips inserts that are off, flat EQ and silent channels, shares the channels over several processor cores and refreshes the meters less often. The block shown is only a suggestion: pick it under BLOCK. Leaving FAST restores the limiter."
 ]

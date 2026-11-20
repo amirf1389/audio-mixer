@@ -8,7 +8,7 @@ set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../..)   # android/amix-sdk/src/ma
 file(GLOB HIRES_FLAC_SRC ${ROOT}/engine/cpp/app/hires/flac/src/*.c)
 list(REMOVE_ITEM HIRES_FLAC_SRC ${ROOT}/engine/cpp/app/hires/flac/src/win_utf8_io.c)
 add_library(amix SHARED
-  ${ROOT}/engine/cpp/src/engine.cpp ${ROOT}/engine/cpp/src/runtime.cpp ${ROOT}/engine/cpp/src/backend_null.cpp ${ROOT}/engine/cpp/src/devices.cpp ${ROOT}/engine/cpp/src/driver_intel.cpp ${ROOT}/engine/cpp/src/latency.cpp
+  ${ROOT}/engine/cpp/src/engine.cpp ${ROOT}/engine/cpp/src/runtime.cpp ${ROOT}/engine/cpp/src/worker_pool.cpp ${ROOT}/engine/cpp/src/backend_null.cpp ${ROOT}/engine/cpp/src/devices.cpp ${ROOT}/engine/cpp/src/driver_intel.cpp ${ROOT}/engine/cpp/src/latency.cpp
   ${ROOT}/engine/cpp/app/license/license.cpp ${ROOT}/engine/cpp/app/license/crypto.cpp ${ROOT}/engine/cpp/app/paths/paths.cpp
   ${ROOT}/engine/cpp/app/net/rtp.cpp ${ROOT}/engine/cpp/app/net/sock.cpp ${ROOT}/engine/cpp/app/net/aoip.cpp ${ROOT}/engine/cpp/app/net/midi.cpp   # network audio (AES67) and MIDI: the C SDK links them
   ${ROOT}/engine/cpp/app/sdk/amix_c.cpp

@@ -418,7 +418,12 @@ class Engine : public QObject {
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
   // "engineer" = HI-RES ENGINEER: the clean digital path set up the way a mastering engineer works: 64-bit mix (as always), DC block on,
   // the master limiter on at -1.0 dB (true-peak headroom for codecs), 24-bit output with TPDF dither. Leaving it gives the earlier word length back.
-  QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : settings_.value("audio/engineer", false).toBool() ? QStringLiteral("engineer") : QStringLiteral("digital"); }
+  // "fast" = FAST · TRUE BUFFER: the device's block with nothing re-blocked, a suggested smallest stable block (latencyReport fastBlock,
+  // never applied by itself), the master limiter at -1.0 dBTP with a 4x true-peak detector, TRUE BYPASS of switched-off inserts and flat
+  // EQ, silent strips skipped, the strips' DSP on a worker pool (bit-identical to one thread), meters at a lower rate (am::Runtime::setFast).
+  // Leaving it gives the earlier master limiter back. Off by default.
+  bool fastMode() const { return settings_.value("audio/fast", false).toBool(); }
+  QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : settings_.value("audio/engineer", false).toBool() ? QStringLiteral("engineer") : fastMode() ? QStringLiteral("fast") : QStringLiteral("digital"); }
   void setDspMode(const QString& m);
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current, maker, model, asioType, note, known, own, status, statusText, lastSeen, seenWhen}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);

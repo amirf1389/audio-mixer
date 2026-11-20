@@ -260,6 +260,13 @@ void Mixer::applyOutputTrim(float* const* ch, int nch, std::size_t n) {
 void Mixer::setMute(int s, bool on) { if (s >= 0 && s < n_) strips_[s].mute = on; }
 void Mixer::setSolo(int s, bool on) { if (s >= 0 && s < n_) strips_[s].solo = on; }
 void Mixer::setMasterDb(double db) { db = std::min(db, 10.0); masterDb_ = db; masterLin_ = db <= -60.0 ? 0.0 : linOf(db); }
+const double (&TruePeak4x::coeffs())[3][TruePeak4x::kTaps] {
+  struct C { double c[3][kTaps]; C() { for (int p = 0; p < 3; ++p) { const double f = (p + 1) / 4.0; double sum = 0;   // phases 1/4, 2/4, 3/4
+      for (int k = -5; k <= 6; ++k) { const double t = f - k, sn = t == 0 ? 1.0 : std::sin(kPi * t) / (kPi * t), w = 0.5 + 0.5 * std::cos(kPi * t / 6.0); c[p][k + 5] = sn * w; sum += sn * w; }
+      for (int k = 0; k < kTaps; ++k) c[p][k] /= sum; } } };
+  static const C c; return c.c;
+}
+void Mixer::setTruePeakLimiter(bool on) { if (on == tpOn_) return; tpOn_ = on; tpL_.reset(); tpR_.reset(); tpPrevNeed_ = 1; }
 void Mixer::setLimiter(bool on, double ceilingDb, double releaseMs) { limOn_ = on; limCeil_ = linOf(clampd(ceilingDb, -24.0, 0.0)); limReleaseMs_ = std::max(1.0, releaseMs); }
 void Mixer::setClipDb(double db) { const double hold = clip_.holdMs; clip_ = ClipConfig::fromDb(db); clip_.holdMs = hold; for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); for (auto& b : buses_) b.meter.setClip(clip_); }
 void Mixer::setPeakHoldMs(double ms) { clip_.holdMs = ms < 0 ? 0 : ms; for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); for (auto& b : buses_) b.meter.setClip(clip_); }
@@ -351,7 +358,13 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     const double autoLin = autoOn_ ? linOf(autoDb_) : 1.0;
     for (std::size_t i = 0; i < n; ++i) {
       double l = static_cast<double>(outL[done + i]) * masterLin_ * autoLin, r = static_cast<double>(outR[done + i]) * masterLin_ * autoLin;
-      if (limOn_) {
+      if (limOn_ && tpOn_) {   // TRUE PEAK: the gain for the sample 6 behind, from its own peak and the inter-sample peaks on both sides of it
+        const double pk = std::max(tpL_.push(l), tpR_.push(r)), now = pk > limCeil_ ? limCeil_ / pk : 1.0, need = std::min(now, tpPrevNeed_); tpPrevNeed_ = now;
+        l = tpL_.delayed(); r = tpR_.delayed();
+        if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel;
+        if (limGain_ > need) limGain_ = need;
+        l *= limGain_; r *= limGain_; if (limGain_ < limMin) limMin = limGain_;
+      } else if (limOn_) {
         const double pk = std::max(std::fabs(l), std::fabs(r)), need = pk > limCeil_ ? limCeil_ / pk : 1.0;
         if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel;
         if (limGain_ > need) limGain_ = need;                           // instant attack: never above what this sample needs

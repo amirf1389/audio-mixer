@@ -37,6 +37,11 @@ struct Report {
 
 /** the plain-words report and the advice for one open device (pure: no device is touched) */
 Report assess(const Input& in);
+/** DSP MODE FAST, TRUE BUFFER: the smallest block (a power of two, 16 .. 8192 frames) this driver takes and this computer keeps up with:
+ *  the driver's floor (ASIO 32, WASAPI exclusive / ALSA / Core Audio 64, WASAPI shared its 10 ms period, DirectSound 512), and a block
+ *  whose worst DSP time, scaled from the current one, stays under half the block. Never below the current block after a dropout (xruns > 0).
+ *  Only a suggestion: the block the user chose is not changed. */
+int suggestFastBlock(const Input& in);
 Level levelOf(double totalMs);
 const char* levelName(Level l);
 /** the driver type in the words the panel shows: "ASIO", "WASAPI exclusive", "WASAPI shared", "DirectSound", "ALSA", "Core Audio", "none" */

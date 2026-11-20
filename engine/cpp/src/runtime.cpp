@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
@@ -124,6 +124,23 @@ double Runtime::ampResponseDb(int out, double hz) const { if (out < 0 || out >= 
 void Runtime::setOutputBits(int bits) { post({kOutBits, bits, 0, 0, 0}); }
 void Runtime::setDcBlock(bool on) { post({kDcBlock, on ? 1 : 0, 0, 0, 0}); }
 void Runtime::setAnalogChannels(bool on) { post({kAnalogCh, on ? 1 : 0, 0, 0, 0}); }
+void Runtime::setFast(bool on) {
+  if (on == fastWanted_.load()) return;
+  fastWanted_.store(on);
+  if (on && pool_.helpers() == 0) pool_.start(fastHelpersWanted_ < 0 ? WorkerPool::defaultThreads() : fastHelpersWanted_);   // the audio thread does not use the pool before kFast lands
+  post({kFast, on ? 1 : 0, 0, 0, 0});
+  if (on) return;
+  // the helpers end once the audio thread has left FAST (it no longer calls the pool); nothing runs the blocks: at once
+  for (int k = 0; k < 400 && running_ && fastOnAudio_.load(); ++k) std::this_thread::sleep_for(std::chrono::microseconds(500));
+  if (!running_ || !fastOnAudio_.load()) { if (!running_) { fast_ = false; fastOnAudio_.store(false); mixer_.setTruePeakLimiter(false); } if (!fastWanted_.load()) pool_.stop(); }
+}
+void Runtime::stripJob(void* self, int k) { auto* r = static_cast<Runtime*>(self); r->runStrip(r->jobs_[k], r->jobFrames_); }
+void Runtime::runStrip(int s, std::size_t frames) {   // one strip's trim, channel DSP and inserts (TRUE BYPASS: switched-off inserts are not called); its own data only
+  const std::size_t k = static_cast<std::size_t>(s); float* b = chBuf_[k].data(); const float* src = jobSrc_[s]; const double tr = trim_[s];
+  if (tr != 1.0) { const float g = static_cast<float>(tr); for (std::size_t i = 0; i < frames; ++i) b[i] = src[i] * g; } else std::memcpy(b, src, frames * sizeof(float));
+  if (ch_[k].active()) ch_[k].process(b, frames);
+  if (jobFx_[s] && held_[s]) for (const auto& x : *held_[s]) if (x && !x->bypassed()) x->process(b, frames);
+}
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
 std::string Runtime::sampleFormat() const { return backend_ ? backend_->sampleFormat() : std::string(); }
@@ -198,6 +215,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kDcBlock: mixer_.setDcBlock(c.a != 0); break;
       case kAnalogCh: mixer_.setAnalogChannels(c.a != 0); break;
       case kProfReset: maxBlockUs_ = 0; jitterUs_ = 0; break;
+      case kFast: fast_ = c.a != 0; fastOnAudio_.store(fast_); mixer_.setTruePeakLimiter(fast_); pubSkip_ = 0; for (auto& q : quiet_) q = 0; break;
       default: break;
     }
     tail_.store(t + 1, std::memory_order_release);
@@ -219,7 +237,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       ++in12Windows_; dAB_ = dAA_ = dBB_ = 0; dN_ = 0;
     }
   }
-  const int tapRaw = tapRaw_.load(std::memory_order_relaxed); const float* rawIn = nullptr;
+  const int tapRaw = tapRaw_.load(std::memory_order_relaxed); const float* rawIn = nullptr; int nJobs = 0;
   for (int s = 0; s < mixer_.strips(); ++s) {
     const int src = inRoute_[s];
     ins[s] = isAppInput(src) ? (appIn ? appBuf_[static_cast<std::size_t>(src - kAppInBase)].data() : silence_.data())
@@ -229,13 +247,20 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     dsp::Channel& ch = ch_[static_cast<std::size_t>(s)];
     const double tr = trim_[s];
     const std::shared_ptr<const InsertChain> chain = std::atomic_load(&inserts_[s]);
-    const bool anyInsert = chain && !chain->empty();
+    bool anyInsert = chain && !chain->empty();
+    if (fast_ && anyInsert) { anyInsert = false; for (const auto& x : *chain) if (x && !x->bypassed()) { anyInsert = true; break; } }   // TRUE BYPASS: only inserts that are on count
     // NO INPUT, NO INSERT: the strip carries digital silence. Its EQ and dynamics are not run and the mixer leaves it out (idle), so
     // the strips of a large console that nothing is plugged into take no processor time. A strip with an insert always runs: a
     // plug-in may make sound of its own.
     idle[s] = ins[s] == silence_.data() && !anyInsert;
+    if (fast_ && !idle[s] && !anyInsert) {   // FAST, SILENT STRIP: under -120 dBFS for a second (the channel's delay, gate and compressor have died away)
+      float pk = 0; const float* x = ins[s]; for (std::size_t i = 0; i < frames; ++i) { const float a = std::fabs(x[i]); pk = a > pk ? a : pk; }
+      if (pk >= 1e-6f) quiet_[s] = 0; else if ((quiet_[s] += frames) >= static_cast<std::size_t>(mixer_.sampleRate())) idle[s] = 1;
+    }
     if (idle[s]) continue;
-    if (ch.active() || tr != 1.0 || anyInsert) {   // the strip's input trim, channel DSP and inserts, in a scratch block
+    if (fast_ && (ch.active() || tr != 1.0 || anyInsert)) {   // FAST: listed here, run below on the worker pool
+      jobSrc_[s] = ins[s]; jobFx_[s] = anyInsert; held_[s] = anyInsert ? chain : nullptr; jobs_[nJobs++] = s; ins[s] = chBuf_[static_cast<std::size_t>(s)].data();
+    } else if (ch.active() || tr != 1.0 || anyInsert) {   // the strip's input trim, channel DSP and inserts, in a scratch block
       float* b = chBuf_[static_cast<std::size_t>(s)].data();
       if (tr != 1.0) { const float g = static_cast<float>(tr); for (std::size_t i = 0; i < frames; ++i) b[i] = ins[s][i] * g; } else std::memcpy(b, ins[s], frames * sizeof(float));
       if (ch.active()) ch.process(b, frames);
@@ -243,6 +268,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       ins[s] = b;
     }
   }
+  if (nJobs > 0) { jobFrames_ = frames; pool_.run(&Runtime::stripJob, this, nJobs); }   // every strip writes only its own block: the same result as one thread
   {   // AUTO PHASE: each strip that asks for it against the rest of the mix
     bool any = false; for (int s = 0; s < mixer_.strips(); ++s) any = any || autoPol_[s];
     if (any && frames <= sumBuf_.size()) {
@@ -302,6 +328,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   }
   ++blocks_; frames_ += frames;
   { const std::int64_t t1 = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); blockUs_ = static_cast<double>(t1 - t0) / 1000.0; if (blockUs_ > maxBlockUs_) maxBlockUs_ = blockUs_; loadPct_ = 100.0 * blockUs_ / (static_cast<double>(frames) * 1e6 / mixer_.sampleRate()); }
+  if (fast_) { pubSkip_ += static_cast<unsigned>(frames); if (pubSkip_ < static_cast<unsigned>(mixer_.sampleRate() / 100)) return; pubSkip_ = 0; }   // FAST: meters at about 100 Hz
   publish();
 }
 
