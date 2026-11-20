@@ -15,6 +15,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab on" data-tab="activate" role="tab">Activate</button>
     <button class="tab" data-tab="check" role="tab">Check a key</button>
+    <button class="tab" data-tab="downloads" role="tab">Downloads</button>
     <button class="tab" data-tab="updates" role="tab">Updates</button>
   </nav>
 
@@ -47,6 +48,19 @@
     <table id="ckOut" hidden><tbody></tbody></table>
   </section>
 
+  <section class="card" id="tab-downloads" hidden>
+    <h2 id="dlHead">Downloads</h2>
+    <div id="dlMsg" class="msg">Reading the download list…</div>
+    <div id="dlOut" hidden>
+      <div class="ver"><span id="dlVer"></span><span class="muted" id="dlDate"></span></div>
+      <p id="dlNote" hidden></p>
+      <div class="scroll"><table><thead><tr><th>System</th><th>File</th><th>Size</th><th>SHA-256</th></tr></thead><tbody id="dlFiles"></tbody></table></div>
+      <details class="box"><summary>Windows shows a blue "Windows protected your PC" screen</summary>
+        <p class="muted">The Windows build is not code-signed yet, so SmartScreen does not know the publisher. Check the SHA-256 of the file first (see the Updates tab). If it matches, press <i>More info</i>, then <i>Run anyway</i>. If the checksum does not match, do not run the file.</p>
+      </details>
+    </div>
+  </section>
+
   <section class="card" id="tab-updates" hidden>
     <h2>Updates</h2>
     <p class="muted">The newest release. AmF X1 installs an update only when its list carries the vendor's signature and the file matches the checksum shown here.</p>
@@ -55,7 +69,7 @@
       <div class="ver"><span id="upVer"></span><span class="muted" id="upDate"></span></div>
       <div class="box">
         <label for="myVer">Is my copy up to date? Type the version from HELP → ABOUT in AmF X1</label>
-        <div class="row"><input id="myVer" class="short" autocomplete="off" spellcheck="false" placeholder="1.24.0.5"><button id="myVerGo">Compare</button><span id="myVerMsg" class="msg"></span></div>
+        <div class="row"><input id="myVer" class="short" autocomplete="off" spellcheck="false" placeholder="1.25.0.0"><button id="myVerGo">Compare</button><span id="myVerMsg" class="msg"></span></div>
       </div>
       <h3>In this release</h3>
       <ul id="upNotes"></ul>

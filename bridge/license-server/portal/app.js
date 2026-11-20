@@ -1,6 +1,7 @@
 // AmF X1 licence portal: three things a customer needs, with no account and no admin data.
 //   Activate   product key -> POST /redeem -> the signed licence key (copy, or save as a .amixkey file the console picks up)
 //   Check      a full key  -> POST /status -> edition, end date, state
+//   Downloads  GET /portal/downloads -> the release the vendor published, its files with size and checksum
 //   Updates    GET /portal/updates (the server reads the signed update list) -> version, notes, files with their checksums
 'use strict';
 const $ = id => document.getElementById(id);
@@ -11,8 +12,9 @@ const day = ms => ms ? new Date(ms).toISOString().slice(0, 10) : 'no end';
 // tabs
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
-  for (const t of ['activate', 'check', 'updates']) $('tab-' + t).hidden = t !== b.dataset.tab;
+  for (const t of ['activate', 'check', 'downloads', 'updates']) $('tab-' + t).hidden = t !== b.dataset.tab;
   if (b.dataset.tab === 'updates') loadUpdates();
+  if (b.dataset.tab === 'downloads') loadDownloads();
 }));
 
 // the product key groups itself in fives while it is typed
@@ -74,7 +76,7 @@ function paintFiles() {
 }
 $('upSys').addEventListener('change', paintFiles);
 $('myVerGo').addEventListener('click', () => {
-  const v = $('myVer').value.trim(); if (!/^\d+(\.\d+){1,3}$/.test(v)) { say($('myVerMsg'), 'Type a version like 1.24.0.5.', 'err'); return; }
+  const v = $('myVer').value.trim(); if (!/^\d+(\.\d+){1,3}$/.test(v)) { say($('myVerMsg'), 'Type a version like 1.25.0.0.', 'err'); return; }
   const c = cmpVersion(v, latest.version);
   say($('myVerMsg'), c < 0 ? 'An update is waiting: ' + latest.version + ' is newer than ' + v + '. In AmF X1: ENGINE CONTROL → CHECK NOW.' : c === 0 ? 'You have the newest version.' : 'Your copy (' + v + ') is newer than the published one (' + latest.version + ').', c < 0 ? 'err' : 'ok');
 });
@@ -109,3 +111,26 @@ fetch('/portal/notice').then(r => r.json()).then(j => {
   if (j.supportEmail) parts.push('Help: ' + j.supportEmail);
   if (parts.length) { box.textContent = parts.join('  ·  '); box.hidden = false; }
 }).catch(() => {});
+
+// downloads: the release staff published on the WEBSITE page, only the files they chose to show
+let downloadsLoaded = false;
+async function loadDownloads() {
+  if (downloadsLoaded) return; downloadsLoaded = true;
+  try {
+    const j = await (await fetch('/portal/downloads')).json();
+    if (!j.ok || !j.version) { say($('dlMsg'), 'No download is published yet.', 'err'); downloadsLoaded = false; return; }
+    if (j.headline) $('dlHead').textContent = j.headline;
+    $('dlVer').textContent = 'AmF X1 ' + j.version; $('dlDate').textContent = j.date || '';
+    $('dlNote').textContent = j.note || ''; $('dlNote').hidden = !j.note;
+    const tb = $('dlFiles'); tb.textContent = '';
+    for (const f of j.files || []) {
+      const tr = document.createElement('tr'), cells = [0, 1, 2, 3].map(() => document.createElement('td')), a = document.createElement('a');
+      cells[0].textContent = f.platform === 'windows' ? 'Windows' : f.platform === 'android' ? 'Android' : f.platform;
+      a.href = f.path; a.textContent = f.name; a.setAttribute('download', ''); cells[1].appendChild(a);
+      cells[2].textContent = sizeOf(f.size); cells[3].className = 'mono'; cells[3].textContent = f.sha256 || '';
+      tr.append(...cells); tb.appendChild(tr);
+    }
+    if (!tb.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 4; td.className = 'muted'; td.textContent = 'No file is offered right now.'; tr.appendChild(td); tb.appendChild(tr); }
+    $('dlMsg').hidden = true; $('dlOut').hidden = false;
+  } catch (_) { say($('dlMsg'), 'The download list could not be read.', 'err'); downloadsLoaded = false; }
+}

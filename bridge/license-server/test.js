@@ -476,3 +476,54 @@ test('CRM and portal extras: a key from a customer record, follow-ups, ending-so
     assert.ok(js.includes("localStorage.setItem(KEY, $('email').value.trim())") && !/localStorage\.setItem\([^)]*(pw|token)/.test(js));
   } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('WEBSITE page: staff choose the release, hide files and publish; the portal offers only visible files; no path from outside the listing', async () => {
+  const os = require('node:os'), fsx = require('node:fs'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'website-')), rel = pathx.join(dir, 'releases');
+  for (const d of ['windows', 'android']) fsx.mkdirSync(pathx.join(rel, d), { recursive: true });
+  fsx.writeFileSync(pathx.join(rel, 'features.json'), JSON.stringify({ features: [{ version: '1.25.0.0', date: '2026-11-20', title: 'new', items: ['a'] }, { version: '1.24.0.0', date: '2026-11-01', title: 'old', items: [] }] }));
+  fsx.writeFileSync(pathx.join(rel, 'windows', 'AmF-X1-1.25.0.0-setup.exe'), 'setup');
+  fsx.writeFileSync(pathx.join(rel, 'windows', 'AmF-X1-1.25.0.0-windows-x64.zip'), 'zip');
+  fsx.writeFileSync(pathx.join(rel, 'windows', 'AmF X1.exe'), 'unversioned');
+  fsx.writeFileSync(pathx.join(rel, 'windows', 'SHA256SUMS.txt'), 'f'.repeat(64) + '  AmF-X1-1.25.0.0-setup.exe\n');
+  fsx.writeFileSync(pathx.join(rel, 'android', 'AmF-X1-1.25.0.0-b2-android.apk'), 'apk');
+  fsx.writeFileSync(pathx.join(dir, 'secret.txt'), 'do not serve');
+  const srv = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), portalDb: pathx.join(dir, 'portal.db'), portalSecret: 'w'.repeat(48), releasesDir: rel, quiet: true });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const call = async (p, { method, body, tok } = {}) => { const r = await fetch(base + p, { method: method || (body ? 'POST' : 'GET'), headers: { ...(tok ? { authorization: 'Bearer ' + tok } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (_) {} return { status: r.status, json: j, text: t, headers: r.headers }; };
+  try {
+    // the page itself is a fixed file; every call behind it needs a staff sign-in or the admin token
+    const page = await call('/admin/website'); assert.strictEqual(page.status, 200); assert.ok(page.text.includes('website.js') && !page.text.includes(TOKEN));
+    assert.strictEqual((await call('/admin/website/state')).status, 401);
+    assert.strictEqual((await call('/admin/website/state', { method: 'PUT', body: { version: '1.25.0.0' } })).status, 401);
+    assert.strictEqual((await call('/admin/website/publish', { method: 'POST' })).status, 401);
+    await call('/admin/staff', { body: { email: 'web@amfb.my', name: 'Web', password: 'web long password' }, tok: TOKEN });
+    const jwt = (await call('/admin/auth/login', { body: { email: 'web@amfb.my', password: 'web long password' } })).json.token;
+    // nothing published yet: the newest version with every file of that version, never the unversioned one
+    let pub = (await call('/portal/downloads')).json;
+    assert.strictEqual(pub.version, '1.25.0.0'); assert.deepStrictEqual(pub.files.map(f => f.name).sort(), ['AmF-X1-1.25.0.0-b2-android.apk', 'AmF-X1-1.25.0.0-setup.exe', 'AmF-X1-1.25.0.0-windows-x64.zip']);
+    const st = (await call('/admin/website/state', { tok: jwt })).json;
+    assert.strictEqual(st.files.find(f => f.name === 'AmF-X1-1.25.0.0-setup.exe').sha256, 'f'.repeat(64));   // from SHA256SUMS.txt
+    assert.strictEqual(st.files.find(f => f.name.endsWith('.apk')).sha256, crypto.createHash('sha256').update('apk').digest('hex'));   // computed
+    // bad input is refused
+    for (const body of [{ version: '9.9.9.9' }, { version: '1.25.0.0', hidden: ['../secret.txt'] }, { version: '1.25.0.0', hidden: ['../../licenses.json'] }, { version: '1.25.0.0', hidden: 'x' }, { version: '1.25.0.0', headline: 'h'.repeat(121) }, { version: '1.25.0.0', note: 'n'.repeat(601) }])
+      assert.strictEqual((await call('/admin/website/state', { method: 'PUT', body, tok: jwt })).status, 400, JSON.stringify(body).slice(0, 60));
+    // hide the zip, save (not public yet), then publish
+    assert.strictEqual((await call('/admin/website/state', { method: 'PUT', body: { version: '1.25.0.0', hidden: ['AmF-X1-1.25.0.0-windows-x64.zip'], headline: 'Get AmF X1', note: 'Plain note.' }, tok: jwt })).status, 200);
+    assert.strictEqual((await call('/portal/downloads')).json.files.length, 3);
+    const p = await call('/admin/website/publish', { method: 'POST', tok: jwt }); assert.strictEqual(p.status, 200);
+    pub = (await call('/portal/downloads')).json;
+    assert.strictEqual(pub.headline, 'Get AmF X1'); assert.strictEqual(pub.note, 'Plain note.');
+    assert.ok(!pub.files.some(f => f.name.endsWith('.zip')) && pub.files.length === 2);
+    const setup = pub.files.find(f => f.name.endsWith('setup.exe')); assert.strictEqual(setup.size, 5); assert.strictEqual(setup.platform, 'windows');
+    const got = await call(setup.path); assert.strictEqual(got.status, 200); assert.strictEqual(got.text, 'setup'); assert.match(got.headers.get('content-disposition'), /attachment/);
+    // a hidden file, an unversioned one and anything outside the listing are not given out
+    for (const u of ['/portal/download/windows/AmF-X1-1.25.0.0-windows-x64.zip', '/portal/download/windows/' + encodeURIComponent('AmF X1.exe'), '/portal/download/windows/..%2F..%2Fsecret.txt', '/portal/download/windows/%2E%2E%2Fsecret.txt', '/portal/download/../secret.txt', '/portal/download/linux/x.tar.gz'])
+      assert.ok([404, 405].includes((await call(u)).status), u);
+    const log = (await call('/admin/audit?limit=50', { tok: TOKEN })).json.entries;
+    assert.ok(log.some(e => e.action === 'website.save' && /web@amfb\.my/.test(e.detail || '')) && log.some(e => e.action === 'website.publish' && /web@amfb\.my/.test(e.detail || '')));
+    const js = (await call('/portal/app.js')).text; assert.ok(js.includes('/portal/downloads') && !js.includes('/admin') && js.includes('1.25.0.0'));
+    assert.ok((await call('/portal/')).text.includes('placeholder="1.25.0.0"'));
+  } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

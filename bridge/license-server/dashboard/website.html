@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AmF X1 · Website</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha384-PPIZEGYM1v8zp5Py7UjFb79S58UeqCL9pYVnVPURKEqvioPROaVAJKKLzvH2rDnI" crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body class="bg-body-tertiary">
+<nav class="navbar navbar-expand bg-body border-bottom px-3">
+  <span class="navbar-brand fw-bold"><span class="text-warning">AmF</span> X1 · Website</span>
+  <div class="navbar-nav me-auto">
+    <a class="nav-link" href="./"><i class="fa-solid fa-key me-1" aria-hidden="true"></i>Licence keys</a>
+    <a class="nav-link" href="./crm"><i class="fa-solid fa-address-book me-1" aria-hidden="true"></i>Customers</a>
+    <a class="nav-link" href="./system"><i class="fa-solid fa-gears me-1" aria-hidden="true"></i>System</a>
+    <a class="nav-link active" aria-current="page" href="./website"><i class="fa-solid fa-globe me-1" aria-hidden="true"></i>Website</a>
+  </div>
+  <span id="who" class="text-secondary small me-3"></span>
+  <button id="out" class="btn btn-outline-secondary btn-sm" type="button"><i class="fa-solid fa-right-from-bracket me-1" aria-hidden="true"></i>Sign out</button>
+</nav>
+
+<main class="container-fluid py-3">
+  <div id="alert" class="alert d-none" role="alert"></div>
+  <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+    <h1 class="h5 mb-0 me-auto">Downloads on the customer portal</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="/portal/" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square me-1" aria-hidden="true"></i>Open the portal</a>
+    <button id="reload" class="btn btn-outline-warning btn-sm" type="button"><i class="fa-solid fa-rotate me-1" aria-hidden="true"></i>Read the folder again</button>
+  </div>
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <form id="form" class="bg-body border rounded p-3 mb-3" novalidate>
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label small" for="ver">Version to offer</label><select id="ver" class="form-select form-select-sm"></select></div>
+          <div class="col-md-8"><label class="form-label small" for="headline">Headline (up to 120 characters)</label><input id="headline" class="form-control form-control-sm" maxlength="120"></div>
+          <div class="col-12"><label class="form-label small" for="note">Short note for the download page (up to 600 characters)</label><textarea id="note" class="form-control form-control-sm" rows="3" maxlength="600"></textarea></div>
+        </div>
+        <h2 class="h6 mt-3">Files of this version <span class="text-secondary fw-normal small">(untick to hide a file)</span></h2>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0 small">
+          <thead><tr><th>Show</th><th>System</th><th>File</th><th>Size</th><th>SHA-256</th></tr></thead><tbody id="rows"></tbody></table></div>
+        <div class="d-flex gap-2 mt-3 align-items-center">
+          <button class="btn btn-outline-warning btn-sm" type="submit"><i class="fa-solid fa-floppy-disk me-1" aria-hidden="true"></i>Save draft</button>
+          <button id="publish" class="btn btn-warning btn-sm" type="button"><i class="fa-solid fa-upload me-1" aria-hidden="true"></i>PUBLISH</button>
+          <span id="state" class="small text-secondary"></span>
+        </div>
+      </form>
+    </div>
+    <div class="col-lg-4">
+      <div class="bg-body border rounded p-3 mb-3"><h2 class="h6">Live on the portal now</h2><dl class="row small mb-0" id="live"></dl></div>
+      <div class="bg-body border rounded p-3"><h2 class="h6">Release folder</h2><p class="small text-secondary mb-0" id="dir"></p>
+        <p class="small text-secondary mt-2 mb-0">Files whose name has no version number (like "AmF X1.exe") are never offered.</p></div>
+    </div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<script src="website.js"></script>
+</body>
+</html>

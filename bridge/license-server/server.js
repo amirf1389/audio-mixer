@@ -17,6 +17,8 @@
 //                                            POST /admin/licenses/:id/revoke | /restore { reason }
 //                                            DELETE /admin/licenses/:id/devices/:machine   free one computer's seat
 //                                            GET  /admin/stats   GET /admin/audit?limit=   GET /admin/audit/verify
+//                                            GET|PUT /admin/website/state   POST /admin/website/publish   (the portal downloads)
+//   public                                   GET /portal/downloads   GET /portal/download/:platform/:name   (LICENSE_RELEASES_DIR, default ../../releases)
 //
 // The private key is read from a file, not from the repository and not from an environment variable. It is never returned, logged or stored.
 // Keys use the same format and signature as scripts/license.js, so every installed copy that trusts the vendor public key accepts them.
@@ -26,7 +28,7 @@ const { createPortalAuth } = require('../portal-auth/auth');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { PLANS, signKey, verifyKey, unb64u } = require('../license');
-const { createApp, rateLimiter, bearerOk, HttpError } = require('./framework');
+const { createApp, rateLimiter, bearerOk, HttpError, SECURITY_HEADERS } = require('./framework');
 
 const HOST = process.env.LICENSE_HOST || '127.0.0.1';
 const PORT = Number(process.env.LICENSE_PORT || 8787);
@@ -35,6 +37,8 @@ const MAX_BODY = 4096;
 const MAX_DEVICES = 4;
 // The device list of every key lives here, on the server's persistent volume (deploy/license/docker-compose.yml).
 const DATA_FILE = process.env.LICENSE_DATA_FILE || '/data/licenses.json';
+// The release files the customer portal offers for download (WEBSITE page): features.json, windows/*.exe|*.zip, android/*.apk.
+const RELEASES_DIR = process.env.LICENSE_RELEASES_DIR || path.join(__dirname, '..', '..', 'releases');
 
 function loadPrivateKey() {
   const file = process.env.LICENSE_PRIVATE_KEY_FILE;
@@ -282,7 +286,57 @@ function auditLog(file) {
   };
 }
 
-function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, portalDb = process.env.PORTAL_DB, portalSecret = process.env.PORTAL_JWT_SECRET, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false, updateUrl = process.env.LICENSE_UPDATE_URL || 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json' }) {
+// ── WEBSITE: the downloads the customer portal shows. The release folder is only ever listed; a request names a file by its listed name. ──
+const RELEASE_DIRS = { windows: /\.(exe|zip)$/i, android: /\.apk$/i };
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ()._+-]{0,159}$/;
+const shaCache = new Map();   // name -> { size, mtime, sha256 }: an APK is hashed once, not on every request
+function scanReleases(dir) {
+  let versions = [];
+  try { const j = JSON.parse(fs.readFileSync(path.join(dir, 'features.json'), 'utf8')); versions = (Array.isArray(j.features) ? j.features : []).filter(f => f && /^\d+(\.\d+){1,3}$/.test(String(f.version)))
+    .map(f => ({ version: String(f.version), date: clean(f.date, 24), title: clean(f.title, 200), items: (Array.isArray(f.items) ? f.items : []).slice(0, 60).map(i => clean(i, 400)) })); } catch (_) { /* no feed: no versions */ }
+  const files = [];
+  for (const [platform, re] of Object.entries(RELEASE_DIRS)) {
+    const sub = path.join(dir, platform), sums = {};
+    try { for (const line of fs.readFileSync(path.join(sub, 'SHA256SUMS.txt'), 'utf8').split(/\r?\n/)) { const m = /^([0-9a-f]{64})\s+\*?(.+)$/i.exec(line.trim()); if (m) sums[m[2]] = m[1].toLowerCase(); } } catch (_) { /* no list: hashed below */ }
+    let names = []; try { names = fs.readdirSync(sub); } catch (_) { continue; }
+    for (const name of names.sort()) {
+      if (!re.test(name) || !SAFE_NAME.test(name)) continue;
+      let st; try { st = fs.statSync(path.join(sub, name)); } catch (_) { continue; } if (!st.isFile()) continue;
+      const key = platform + '/' + name, hit = shaCache.get(key);
+      let sha256 = hit && hit.size === st.size && hit.mtime === st.mtimeMs ? hit.sha256 : null;
+      if (!sha256 && platform === 'windows' && sums[name]) sha256 = sums[name];   // the published list; the APK list is older than the APKs, so those are hashed
+      if (!sha256) { const h = crypto.createHash('sha256'); const fd = fs.openSync(path.join(sub, name), 'r'), buf = Buffer.alloc(1 << 20); try { let n; while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) h.update(buf.subarray(0, n)); } finally { fs.closeSync(fd); } sha256 = h.digest('hex'); }
+      shaCache.set(key, { size: st.size, mtime: st.mtimeMs, sha256 });
+      const v = /(\d+\.\d+\.\d+\.\d+)/.exec(name);
+      files.push({ name, platform, size: st.size, sha256, version: v ? v[1] : null });
+    }
+  }
+  return { versions, files };
+}
+function loadWebsite(file) { try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); return j && typeof j === 'object' ? j : {}; } catch (_) { return {}; } }
+// Checks a website change against the listing. Returns { error } or { value }.
+function checkWebsite(b, rel) {
+  const version = String(b.version || '');
+  if (!rel.versions.some(v => v.version === version)) return { error: 'that version is not in features.json' };
+  if (b.hidden !== undefined && !Array.isArray(b.hidden)) return { error: 'hidden must be a list of file names' };
+  const hidden = [...new Set((b.hidden || []).map(String))];
+  if (hidden.length > 200) return { error: 'too many file names' };
+  for (const n of hidden) if (!rel.files.some(f => f.name === n)) return { error: 'unknown file: ' + clean(n, 80) };
+  const headline = String(b.headline == null ? '' : b.headline), note = String(b.note == null ? '' : b.note);
+  if (headline.length > 120) return { error: 'the headline can have at most 120 characters' };
+  if (note.length > 600) return { error: 'the note can have at most 600 characters' };
+  return { value: { version, hidden, headline: clean(headline, 120), note: note.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 600) } };
+}
+// What the portal shows: the published choice, or with nothing published yet the newest version with every file.
+function publicDownloads(site, rel) {
+  const pub = site.published || { version: rel.versions[0] ? rel.versions[0].version : null, hidden: [], headline: '', note: '' };
+  const ver = rel.versions.find(v => v.version === pub.version) || null;
+  const files = ver ? rel.files.filter(f => f.version === ver.version && !pub.hidden.includes(f.name))
+    .map(f => ({ name: f.name, platform: f.platform, size: f.size, sha256: f.sha256, path: '/portal/download/' + f.platform + '/' + encodeURIComponent(f.name) })) : [];
+  return { version: ver ? ver.version : null, date: ver ? ver.date : '', title: ver ? ver.title : '', headline: pub.headline || '', note: pub.note || '', files, publishedAt: site.publishedAt || null };
+}
+
+function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, portalDb = process.env.PORTAL_DB, portalSecret = process.env.PORTAL_JWT_SECRET, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false, releasesDir = RELEASES_DIR, updateUrl = process.env.LICENSE_UPDATE_URL || 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json' }) {
   const jwk = crypto.createPublicKey(privateKey).export({ format: 'jwk' });   // checks the keys this server issued, for the device lock
   const secret = dataSecret || token, audit = auditLog(dataFile), limiter = rateLimiter(), started = Date.now();
   const app = createApp({ maxBody: MAX_BODY, trustProxy });
@@ -448,6 +502,31 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
       last24h: { redeemed: log.filter(e => what(e) === 'license.redeem' && when(e) >= since).length, refused: log.filter(e => what(e) === 'license.redeem.refused' && when(e) >= since).length } });
   });
   app.post('/admin/portal/refresh', admin, limit('refresh', 30), async c => { upd.at = 0; upd.body = null; audit.add('portal.refresh', '', c.ip); return c.json(200, { ok: true }); });
+  // WEBSITE page (staff): which release the portal offers, which files, a headline and a note. Saved as a draft; PUBLISH makes it public.
+  const siteFile = dataFile + '.website.json';
+  const saveSite = s => { const tmp = siteFile + '.tmp'; fs.mkdirSync(path.dirname(siteFile), { recursive: true }); fs.writeFileSync(tmp, JSON.stringify(s, null, 1) + '\n', { mode: 0o600 }); fs.renameSync(tmp, siteFile); };
+  app.get('/admin/website/state', admin, limit('adm', 120), c => { const rel = scanReleases(releasesDir), site = loadWebsite(siteFile);
+    return c.json(200, { ok: true, releasesDir: path.resolve(releasesDir), versions: rel.versions.map(v => ({ version: v.version, date: v.date, title: v.title })), files: rel.files,
+      draft: site.draft || site.published || { version: rel.versions[0] ? rel.versions[0].version : '', hidden: [], headline: '', note: '' }, published: site.published || null, publishedAt: site.publishedAt || null, publishedBy: site.publishedBy || null,
+      updatedAt: site.updatedAt || null, updatedBy: site.updatedBy || null, live: publicDownloads(site, rel) }); });
+  app.put('/admin/website/state', admin, limit('adm', 120), async c => { const r = checkWebsite(await c.body(), scanReleases(releasesDir)); if (r.error) return c.json(400, { ok: false, error: r.error });
+    const site = loadWebsite(siteFile); site.draft = r.value; site.updatedAt = Date.now(); site.updatedBy = who(c); saveSite(site);
+    audit.add('website.save', r.value.version, c.ip, 'hidden=' + r.value.hidden.length + ' by ' + who(c)); return c.json(200, { ok: true, draft: site.draft }); });
+  app.post('/admin/website/publish', admin, limit('adm', 120), c => { const rel = scanReleases(releasesDir), site = loadWebsite(siteFile);
+    if (!site.draft) return c.json(400, { ok: false, error: 'save the changes first' });
+    const r = checkWebsite(site.draft, rel); if (r.error) return c.json(400, { ok: false, error: r.error });   // the folder may have changed since the save
+    site.published = r.value; site.publishedAt = Date.now(); site.publishedBy = who(c); saveSite(site);
+    audit.add('website.publish', r.value.version, c.ip, 'hidden=' + r.value.hidden.length + ' by ' + who(c)); return c.json(200, { ok: true, live: publicDownloads(site, rel) }); });
+  // PUBLIC: the published release and its visible files; a file is given out only when it is on that list
+  app.get('/portal/downloads', limit('pub', 60), c => c.json(200, { ok: true, ...publicDownloads(loadWebsite(siteFile), scanReleases(releasesDir)) }));
+  app.get('/portal/download/:platform/:name', limit('pub', 30), c => {
+    const f = publicDownloads(loadWebsite(siteFile), scanReleases(releasesDir)).files.find(x => x.platform === c.params.platform && x.name === c.params.name);
+    if (!f) return c.json(404, { ok: false, error: 'not found' });
+    const file = path.join(path.resolve(releasesDir), f.platform, f.name);
+    c.res.writeHead(200, { ...SECURITY_HEADERS, 'cache-control': 'public, max-age=300', 'content-type': 'application/octet-stream', 'content-length': String(f.size), 'content-disposition': 'attachment; filename="' + f.name.replace(/"/g, '') + '"' });
+    if (c.req.method === 'HEAD') { c.res.end(); return true; }
+    fs.createReadStream(file).on('error', () => c.res.destroy()).pipe(c.res); return true;
+  });
   app.post('/admin/licenses/:id/product-key', admin, limit('issue', 60), async c => { const r = renewProductKey({ id: c.params.id, file: dataFile });
     if (!r.ok) return c.json(r.status, { ok: false, error: r.error }); audit.add('license.productkey.new', r.id, c.ip); return c.json(200, { ok: true, id: r.id, productKey: r.productKey }); });
   const portal = path.join(__dirname, 'portal');
@@ -471,7 +550,8 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   app.get('/admin/login', page('login.html', CDN_CSP.login));
   app.get('/admin/crm', page('crm.html', CDN_CSP.crm));
   app.get('/admin/system', page('system.html', CDN_CSP.crm));
-  app.static({ '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'], '/admin/system.js': [path.join(dash, 'system.js'), 'text/javascript; charset=utf-8'] });
+  app.get('/admin/website', page('website.html', CDN_CSP.crm));
+  app.static({ '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'], '/admin/system.js': [path.join(dash, 'system.js'), 'text/javascript; charset=utf-8'], '/admin/website.js': [path.join(dash, 'website.js'), 'text/javascript; charset=utf-8'] });
   app.get('/admin', c => c.send(301, '', { location: '/admin/' }));
   app.static({ '/admin/': [path.join(dash, 'index.html'), 'text/html; charset=utf-8'], '/admin/app.js': [path.join(dash, 'app.js'), 'text/javascript; charset=utf-8'], '/admin/style.css': [path.join(dash, 'style.css'), 'text/css; charset=utf-8'] });
   return http.createServer(app.handler);

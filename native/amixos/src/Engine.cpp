@@ -499,7 +499,7 @@ void Engine::setMastering(const QVariantMap& m) {
   mp_.deessThrDb = d("deessThr", mp_.deessThrDb, -50, 0); mp_.deessMaxDb = d("deessMax", mp_.deessMaxDb, 0, 18); mp_.exciterAmt = d("exciter", mp_.exciterAmt, 0, 1); mp_.bassMonoHz = d("bassMonoHz", mp_.bassMonoHz, 40, 400);
   masterPreset_ = m.value("preset").toString(); pushMaster(); emit masterChainChanged();
 }
-QStringList Engine::masteringPresets() const { return {"AMFB SIGNATURE", "TRANSPARENT", "STREAMING", "WARM", "PUNCH", "LOUD", "BROADCAST VOICE", "SHORT VIDEO / LIVE"}; }
+QStringList Engine::masteringPresets() const { return {"AMFB SIGNATURE", "TRANSPARENT", "STREAMING", "WARM", "PUNCH", "LOUD", "BROADCAST VOICE", "SHORT VIDEO / LIVE", "METAL", "HARD ROCK"}; }
 void Engine::applyMasteringPreset(const QString& name) {
   struct P { const char* n; double low, air, thr, ratio, att, rel, mk, drive, gain; };
   static const P k[] = {{"TRANSPARENT", 0, 0, -8, 1.5, 30, 250, 0, 0, 0}, {"STREAMING", 1, 1.5, -14, 2, 30, 200, 2, 0.1, 1}, {"WARM", 2.5, -1, -16, 2, 40, 300, 2, 0.35, 0},
@@ -508,6 +508,11 @@ void Engine::applyMasteringPreset(const QString& name) {
   if (name == QLatin1String("AMFB SIGNATURE")) {   // the house sound: a firm low end kept mono, open air with a little harmonic sparkle, gentle glue; meant to be heard at once against a plain sound card
     mp_.on = true; mp_.toneOn = mp_.compOn = mp_.satOn = true; mp_.lowDb = 3; mp_.airDb = 2.5; mp_.thrDb = -16; mp_.ratio = 2; mp_.attackMs = 30; mp_.releaseMs = 220; mp_.makeupDb = 2; mp_.drive = 0.15; mp_.gainDb = 1;
     mp_.exciterOn = true; mp_.exciterAmt = 0.25; mp_.bassMonoOn = true; mp_.bassMonoHz = 90; mp_.deessOn = false; masterPreset_ = name; pushMaster(); emit masterChainChanged(); return; }
+  struct G { const char* n; double low, mid, air, thr, ratio, att, rel, mk, drive, gain, exc, monoHz; };   // guitar music: a tight mono low end (kick and bass stay centred), mids shaped, fast glue, more drive
+  static const G g[] = {{"METAL", 2.5, -2.5, 3, -20, 4, 8, 90, 4, 0.45, 1.5, 0.3, 110},       // scooped mids, hard bright top, fast attack for double kicks, dense and loud
+                        {"HARD ROCK", 2, 1, 2, -18, 3, 20, 140, 3, 0.35, 1, 0.2, 90}};       // forward guitar mids, slower attack so the drums still hit
+  for (const G& p : g) if (name == QLatin1String(p.n)) { mp_.on = true; mp_.toneOn = mp_.compOn = mp_.satOn = true; mp_.lowDb = p.low; mp_.midDb = p.mid; mp_.airDb = p.air; mp_.thrDb = p.thr; mp_.ratio = p.ratio; mp_.attackMs = p.att; mp_.releaseMs = p.rel; mp_.makeupDb = p.mk; mp_.drive = p.drive; mp_.gainDb = p.gain;
+    mp_.exciterOn = true; mp_.exciterAmt = p.exc; mp_.bassMonoOn = true; mp_.bassMonoHz = p.monoHz; mp_.deessOn = false; masterPreset_ = name; pushMaster(); emit masterChainChanged(); return; }
   for (const P& p : k) if (name == QLatin1String(p.n)) { mp_.on = true; mp_.toneOn = mp_.compOn = mp_.satOn = true; mp_.lowDb = p.low; mp_.airDb = p.air; mp_.thrDb = p.thr; mp_.ratio = p.ratio; mp_.attackMs = p.att; mp_.releaseMs = p.rel; mp_.makeupDb = p.mk; mp_.drive = p.drive; mp_.gainDb = p.gain; masterPreset_ = name; pushMaster(); emit masterChainChanged(); return; }
 }
 void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].pan = -strips_[static_cast<std::size_t>(i)].pan; if (rt_) rt_->setPan(j, strips_[static_cast<std::size_t>(j)].pan); } emit stripsChanged(); }
