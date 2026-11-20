@@ -60,6 +60,8 @@ class LocalMixerActivity : FitActivity() {
         /** the engine strips one rack works on: a deck's rack is put on its left and its right strip alike */
         fun mates(s: Int): List<Int> = if (s >= INPUTS && s < STRIPS && (s - INPUTS) % 2 == 0) listOf(s, s + 1) else listOf(s)
         fun deckStrip(d: Int) = INPUTS + 2 * d
+        /** starting the sound: (ask for the microphone, open the microphone). The output always starts, so the decks play without a microphone */
+        fun audioPlan(inputWanted: Boolean, micGranted: Boolean): Pair<Boolean, Boolean> = Pair(inputWanted && !micGranted, inputWanted && micGranted)
         /** the tracks of a multitrack recording: (the strip numbers in it, the file name part); inputs mono, decks stereo */
         fun trackPlan(inChannels: Int): List<Pair<IntArray, String>> =
             (0 until inChannels).map { intArrayOf(it) to "ch${it + 1}" } + (0 until DECKS).map { d -> intArrayOf(deckStrip(d), deckStrip(d) + 1) to "deck${deckName(d)}" }
@@ -426,8 +428,10 @@ class LocalMixerActivity : FitActivity() {
 
     // ---- AUDIO
     private fun startAudio() {
-        val inOn = Prefs.localInputOn(this)   // INPUT OFF: no microphone is opened and none is asked for
-        if (inOn && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1); return }
+        // INPUT OFF: no microphone is opened and none is asked for. Input ON but no permission yet: the output still starts (the decks,
+        // pads and tone play) and the permission is asked for; once granted the loop restarts with the microphone
+        val (ask, inOn) = audioPlan(Prefs.localInputOn(this), checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+        if (ask) requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         val e = engine ?: run { status.text = getString(R.string.lm_no_engine); return }
         loop = AudioLoop(e, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts, inChannels(), inOn).also { it.start() }
         if (::startBtn.isInitialized) { startBtn.text = getString(R.string.stop); startBtn.on = true }
@@ -441,7 +445,7 @@ class LocalMixerActivity : FitActivity() {
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startAudio()
+        if (requestCode == 1 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) { if (loop != null) restartIfRunning() else startAudio() }
     }
     /** THE INPUT / OUTPUT INDICATOR: is each side open, which device it really is, and the level going in and out. A side that did not
      *  open (no microphone permission, a refused device) shows red; open but silent shows amber; sound shows green with its level. */
