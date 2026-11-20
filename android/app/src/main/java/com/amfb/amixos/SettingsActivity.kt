@@ -40,6 +40,9 @@ object Prefs {
     /** the phone mixer's INPUT ON / OFF: OFF opens no microphone at all */
     fun localInputOn(c: Context) = local(c).getBoolean("inputOn", true)
     fun setLocalInputOn(c: Context, on: Boolean) { local(c).edit().putBoolean("inputOn", on).apply() }
+    /** the phone mixer's AUDIO PATH: AUTO (AAudio, else OpenSL ES, else Java), or one forced (AudioPaths) */
+    fun localAudioPath(c: Context): AudioPathChoice = AudioPathChoice.parse(local(c).getString("audioPath", null))
+    fun setLocalAudioPath(c: Context, p: AudioPathChoice) { local(c).edit().putString("audioPath", p.name).apply() }
 }
 
 class SettingsActivity : FitActivity() {

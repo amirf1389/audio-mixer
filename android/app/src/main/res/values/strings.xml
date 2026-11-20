@@ -485,6 +485,7 @@
     <string name="rta_silent">No spectrum yet: nothing is playing on this source. Play music or pick another source (MASTER / a channel).</string>
     <string name="lm_input_on">INPUT ON</string>
     <string name="lm_input_off">INPUT OFF</string>
+    <string name="lm_audio_path">AUDIO PATH</string>
     <string name="io_in_off">OFF · no microphone is open, nothing is recorded</string>
     <string name="remote_auto_input_on">AUTO INPUT ON: the console\'s input is open (its microphone, or its computer\'s sound).</string>
     <string name="remote_auto_input_off">AUTO INPUT OFF: the console has no input open; nothing is captured.</string>

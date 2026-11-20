@@ -16,6 +16,7 @@
 #include "amix.h"
 #include "amix_hires.h"
 #include "sdk/amix_decks.hpp"
+#include "sdk/amix_mixstep.hpp"
 
 namespace {
 amix_mixer* mixerOf(jlong h) { return reinterpret_cast<amix_mixer*>(h); }
@@ -75,7 +76,7 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_inputPeaks(JNIEnv* env, jclas
 }
 }
 
-// ---- AAUDIO: the native low-latency path (Android 8+, the NDK's recommended API; OpenSL ES is not used). One OUTPUT stream with a data
+// ---- AAUDIO: the native low-latency path (Android 8+, the NDK's recommended API; OpenSL ES below, for older or difficult devices). One OUTPUT stream with a data
 // callback (low-latency performance mode, float, stereo) drives everything: inside it the INPUT stream (mono microphone) is read
 // without blocking, the AmF X1 mixer runs, and the stereo result goes straight to the speaker / headphones. No audio crosses into Java.
 // If the device changes (headphones plugged in or out) the stream is disconnected: the error callback marks it so Java restarts it.
@@ -85,26 +86,18 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_inputPeaks(JNIEnv* env, jclas
 namespace {
 struct NativeLoop {
   amix_mixer* m = nullptr; AAudioStream* in = nullptr; AAudioStream* out = nullptr;
-  // mic: what AAudio delivers, inCh channels interleaved; inBuf: one block per input channel (input k feeds strip k); outCh: the output's
-  // channels (master L / R on the first two, the rest silent: a multi-channel USB interface's outputs 3.. stay quiet)
-  std::vector<float> mic, inBuf, L, R; std::vector<const float*> ptrs; int inCh = 1, outCh = 2; std::size_t cap = 0; std::atomic<bool> disconnected{false}; std::atomic<int> underruns{0};
-  Side* side = nullptr; std::vector<float> dk;   // the decks and the recorder of this mixer; 4 deck blocks (A L, B L, A R, B R)
+  // mic: what AAudio delivers, inCh channels interleaved; outCh: the output's channels (master L / R on the first two, the rest silent: a
+  // multi-channel USB interface's outputs 3.. stay quiet). step: the shared mixing step (inputs, decks, multitrack, mixer, interleave).
+  std::vector<float> mic; int inCh = 1, outCh = 2; std::atomic<bool> disconnected{false};
+  MixStep step;
 };
 NativeLoop* g_loop = nullptr;
 aaudio_data_callback_result_t onOut(AAudioStream*, void* user, void* audio, int32_t frames) {
   NativeLoop* l = static_cast<NativeLoop*>(user); float* o = static_cast<float*>(audio);
-  const int oc = l->outCh; const std::size_t cap = l->cap;
-  if (frames > static_cast<int32_t>(l->L.size())) { std::fill(o, o + static_cast<std::size_t>(oc) * static_cast<std::size_t>(frames), 0.f); return AAUDIO_CALLBACK_RESULT_CONTINUE; }   // never allocate here
+  if (static_cast<std::size_t>(frames) > l->step.cap) { std::fill(o, o + static_cast<std::size_t>(l->outCh) * static_cast<std::size_t>(frames), 0.f); return AAUDIO_CALLBACK_RESULT_CONTINUE; }   // never allocate here
   int32_t got = 0;
   if (l->in) { got = AAudioStream_read(l->in, l->mic.data(), frames, 0); if (got < 0) got = 0; }   // non-blocking: what has arrived (interleaved when stereo)
-  const int ic = l->inCh;
-  for (int c = 0; c < ic; ++c) { float* d = l->inBuf.data() + static_cast<std::size_t>(c) * cap; for (int i = 0; i < frames; ++i) d[i] = i < got ? l->mic[static_cast<std::size_t>(i) * static_cast<std::size_t>(ic) + static_cast<std::size_t>(c)] : 0.f; }
-  const int n = static_cast<int>(l->ptrs.size()); for (int s = 0; s < n; ++s) l->ptrs[static_cast<std::size_t>(s)] = s < ic ? l->inBuf.data() + static_cast<std::size_t>(s) * cap : nullptr;   // input k on strip k
-  if (l->side) { const std::size_t c = l->L.size(); float* bl[kDecks]; float* br[kDecks]; for (int d = 0; d < kDecks; ++d) { bl[d] = l->dk.data() + static_cast<std::size_t>(d) * c; br[d] = l->dk.data() + static_cast<std::size_t>(kDecks + d) * c; } readDecks(l->side, l->ptrs.data(), n, frames, bl, br); }   // the decks on their strips
-  if (l->side) recordStrips(l->side, l->ptrs.data(), n, frames);
-  const int done = amix_mixer_process(l->m, l->ptrs.data(), frames, l->L.data(), l->R.data());
-  if (l->side) recordMaster(l->side, l->L.data(), l->R.data(), done);
-  for (int i = 0; i < frames; ++i) { float* f = o + static_cast<std::size_t>(i) * static_cast<std::size_t>(oc); f[0] = i < done ? l->L[static_cast<std::size_t>(i)] : 0.f; if (oc > 1) f[1] = i < done ? l->R[static_cast<std::size_t>(i)] : 0.f; for (int c = 2; c < oc; ++c) f[c] = 0.f; }
+  l->step.run(l->in ? l->mic.data() : nullptr, l->inCh, got, frames, o, l->outCh);
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 void onErr(AAudioStream*, void* user, aaudio_result_t e) { if (e == AAUDIO_ERROR_DISCONNECTED) static_cast<NativeLoop*>(user)->disconnected = true; }
@@ -131,9 +124,9 @@ void closeLoop() {
 constexpr int kMaxIn = AMIX_MAX_STRIPS, kMaxOut = 32;
 int startLoop(amix_mixer* m, int rate, bool mic, int outDev, int inDev, int bursts, int inCh, int outCh) {
   closeLoop();
-  NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->cap = cap; l->inCh = inCh; l->outCh = outCh;
-  l->mic.assign(static_cast<std::size_t>(kMaxIn) * cap, 0.f); l->inBuf.assign(static_cast<std::size_t>(kMaxIn) * cap, 0.f); l->L.assign(cap, 0.f); l->R.assign(cap, 0.f); l->ptrs.assign(static_cast<std::size_t>(amix_mixer_strips(m)), nullptr);
-  l->side = sideOf(m); l->dk.assign(2 * kDecks * cap, 0.f);   // made here, never in the callback
+  NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->inCh = inCh; l->outCh = outCh;
+  l->mic.assign(static_cast<std::size_t>(kMaxIn) * cap, 0.f);
+  l->step.prepare(m, sideOf(m), cap, kMaxIn);   // every block buffer made here (and the mixer warmed up), never in the callback
   l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, outCh, l, true, outDev);
   if (!l->out && outCh > 2) { l->outCh = 2; l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, outDev); }   // the device will not take that many: stereo
   if (!l->out && outDev > 0) { l->outCh = 2; l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, 0); }   // the chosen output is gone: the system route
@@ -145,7 +138,6 @@ int startLoop(amix_mixer* m, int rate, bool mic, int outDev, int inDev, int burs
     if (!l->in && l->inCh == 2) { l->inCh = 1; l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false, inDev); } }   // no stereo input there: mono on strip 1
   if (l->in) l->inCh = AAudioStream_getChannelCount(l->in);
   if (l->inCh > kMaxIn) l->inCh = kMaxIn;
-  { std::vector<float> warm(cap, 0.f); const float* none[AMIX_MAX_STRIPS] = {}; amix_mixer_process(m, none, static_cast<int>(cap), warm.data(), warm.data()); }   // the mixer's buffers sized once, here, never in the callback   // the same rate as the output: no resampling in the callback
   AAudioStream_setBufferSizeInFrames(l->out, AAudioStream_getFramesPerBurst(l->out) * (bursts >= 1 && bursts <= 8 ? bursts : 2));   // bursts of headroom (2 = the guide's low-latency start; the brand profile may ask for more)
   g_loop = l;
   if (l->in) AAudioStream_requestStart(l->in);
@@ -262,4 +254,149 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_multiPop(JNIEnv* env, jclass,
 }
 JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_multiDropped(JNIEnv*, jclass, jlong h) { return h ? static_cast<jlong>(sideOf(mixerOf(h))->multiDropped.load()) : 0; }
 JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_recDropped(JNIEnv*, jclass, jlong h) { return h ? static_cast<jlong>(sideOf(mixerOf(h))->recDropped.load()) : 0; }
+}
+
+// ---- OPENSL ES: the second native path, for phones where AAudio is missing (below Android 8) or will not open. Written against the
+// NDK's <SLES/OpenSLES.h> / <SLES/OpenSLES_Android.h>: one engine, one output mix, an Android simple buffer queue PLAYER (float PCM
+// through SL_ANDROID_DATAFORMAT_PCM_EX, or 16-bit if the device refuses float) and an optional RECORDER (16-bit, mono or stereo). Two
+// buffers of the phone's native size (AudioManager's PROPERTY_OUTPUT_FRAMES_PER_BUFFER at PROPERTY_OUTPUT_SAMPLE_RATE) take turns: each
+// time the player finishes one, its callback runs the SAME mixing step as the AAudio callback (MixStep: inputs, decks, multitrack,
+// mixer, meters) into it and enqueues it again. The recorder's callback only copies into a lock-free ring the player's callback reads.
+// Nothing is allocated or locked in either callback.
+#include <SLES/OpenSLES.h>
+#include <SLES/OpenSLES_Android.h>
+namespace {
+// the microphone's samples between the recorder's callback (writer) and the player's callback (reader), interleaved, inCh a frame
+struct MicRing {
+  std::vector<float> buf; std::size_t cap = 0; std::atomic<std::size_t> w{0}, r{0};
+  void init(std::size_t samples) { buf.assign(samples, 0.f); cap = samples; w = 0; r = 0; }
+  std::size_t readable() const { return w.load(std::memory_order_acquire) - r.load(std::memory_order_relaxed); }
+  void push(const int16_t* s, std::size_t n) {
+    std::size_t at = w.load(std::memory_order_relaxed); const std::size_t room = cap - (at - r.load(std::memory_order_acquire)); if (n > room) n = room;
+    for (std::size_t i = 0; i < n; ++i, ++at) buf[at % cap] = static_cast<float>(s[i]) * (1.f / 32768.f);
+    w.store(at, std::memory_order_release); }
+  std::size_t pop(float* d, std::size_t n) {
+    std::size_t at = r.load(std::memory_order_relaxed); const std::size_t have = w.load(std::memory_order_acquire) - at; if (n > have) n = have;
+    for (std::size_t i = 0; i < n; ++i, ++at) d[i] = buf[at % cap];
+    r.store(at, std::memory_order_release); return n; }
+  void skip(std::size_t n) { r.store(r.load(std::memory_order_relaxed) + n, std::memory_order_release); }
+};
+struct SlesLoop {
+  SLObjectItf engineObj = nullptr, mixObj = nullptr, playerObj = nullptr, recObj = nullptr;
+  SLEngineItf engine = nullptr; SLPlayItf play = nullptr; SLAndroidSimpleBufferQueueItf outQ = nullptr; SLRecordItf rec = nullptr; SLAndroidSimpleBufferQueueItf inQ = nullptr;
+  int rate = 48000, frames = 256, inCh = 0; bool floatOut = true;
+  std::vector<float> outF[2], mixed, mic; std::vector<int16_t> outS[2], inS[2]; int nextOut = 0, nextIn = 0;
+  MicRing ring; MixStep step;
+  std::atomic<int> blocks{0}, micShort{0};
+};
+SlesLoop* g_sles = nullptr;
+void renderSles(SlesLoop* l, int idx) {   // one block into buffer idx (the player's callback, and the two first buffers)
+  const std::size_t f = static_cast<std::size_t>(l->frames); int got = 0;
+  if (l->inCh > 0) { const std::size_t ic = static_cast<std::size_t>(l->inCh); std::size_t have = l->ring.readable() / ic;
+    if (have > 4 * f) { l->ring.skip((have - 2 * f) * ic); have = 2 * f; }   // the input ran ahead (clock drift): keep the latency bounded
+    got = static_cast<int>(l->ring.pop(l->mic.data(), std::min(have, f) * ic) / ic); if (static_cast<std::size_t>(got) < f) l->micShort.fetch_add(1, std::memory_order_relaxed); }
+  if (l->floatOut) l->step.run(l->inCh > 0 ? l->mic.data() : nullptr, l->inCh, got, l->frames, l->outF[idx].data(), 2);
+  else { l->step.run(l->inCh > 0 ? l->mic.data() : nullptr, l->inCh, got, l->frames, l->mixed.data(), 2);
+    int16_t* d = l->outS[idx].data(); for (std::size_t i = 0; i < 2 * f; ++i) { const float v = std::clamp(l->mixed[i], -1.f, 1.f); d[i] = static_cast<int16_t>(std::lrint(v * 32767.f)); } }
+  l->blocks.fetch_add(1, std::memory_order_relaxed);
+}
+void enqueueOut(SlesLoop* l, int idx) {
+  if (l->floatOut) (*l->outQ)->Enqueue(l->outQ, l->outF[idx].data(), static_cast<SLuint32>(l->outF[idx].size() * sizeof(float)));
+  else (*l->outQ)->Enqueue(l->outQ, l->outS[idx].data(), static_cast<SLuint32>(l->outS[idx].size() * sizeof(int16_t)));
+}
+void onSlesOut(SLAndroidSimpleBufferQueueItf, void* ctx) {   // a buffer finished playing: mix the next block into it, queue it again
+  SlesLoop* l = static_cast<SlesLoop*>(ctx); const int idx = l->nextOut; l->nextOut ^= 1;
+  renderSles(l, idx); enqueueOut(l, idx);
+}
+void onSlesIn(SLAndroidSimpleBufferQueueItf, void* ctx) {   // a microphone buffer is full: into the ring, then back into the queue
+  SlesLoop* l = static_cast<SlesLoop*>(ctx); const int idx = l->nextIn; l->nextIn ^= 1;
+  l->ring.push(l->inS[idx].data(), l->inS[idx].size());
+  (*l->inQ)->Enqueue(l->inQ, l->inS[idx].data(), static_cast<SLuint32>(l->inS[idx].size() * sizeof(int16_t)));
+}
+void closeSles() {
+  SlesLoop* l = g_sles; if (!l) return; g_sles = nullptr;
+  if (l->rec) (*l->rec)->SetRecordState(l->rec, SL_RECORDSTATE_STOPPED);
+  if (l->play) (*l->play)->SetPlayState(l->play, SL_PLAYSTATE_STOPPED);
+  if (l->recObj) (*l->recObj)->Destroy(l->recObj);   // Destroy waits for a running callback
+  if (l->playerObj) (*l->playerObj)->Destroy(l->playerObj);
+  if (l->mixObj) (*l->mixObj)->Destroy(l->mixObj);
+  if (l->engineObj) (*l->engineObj)->Destroy(l->engineObj);
+  delete l;
+}
+bool makePlayer(SlesLoop* l, bool useFloat) {
+  SLDataLocator_AndroidSimpleBufferQueue q = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
+  SLAndroidDataFormat_PCM_EX fx = {}; SLDataFormat_PCM f16 = {};
+  const SLuint32 mask = SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT, milliHz = static_cast<SLuint32>(l->rate) * 1000u;
+  if (useFloat) { fx.formatType = SL_ANDROID_DATAFORMAT_PCM_EX; fx.numChannels = 2; fx.sampleRate = milliHz; fx.bitsPerSample = SL_PCMSAMPLEFORMAT_FIXED_32; fx.containerSize = SL_PCMSAMPLEFORMAT_FIXED_32;
+    fx.channelMask = mask; fx.endianness = SL_BYTEORDER_LITTLEENDIAN; fx.representation = SL_ANDROID_PCM_REPRESENTATION_FLOAT; }
+  else { f16.formatType = SL_DATAFORMAT_PCM; f16.numChannels = 2; f16.samplesPerSec = milliHz; f16.bitsPerSample = SL_PCMSAMPLEFORMAT_FIXED_16; f16.containerSize = SL_PCMSAMPLEFORMAT_FIXED_16;
+    f16.channelMask = mask; f16.endianness = SL_BYTEORDER_LITTLEENDIAN; }
+  SLDataSource src = {&q, useFloat ? static_cast<void*>(&fx) : static_cast<void*>(&f16)};
+  SLDataLocator_OutputMix om = {SL_DATALOCATOR_OUTPUTMIX, l->mixObj}; SLDataSink snk = {&om, nullptr};
+  const SLInterfaceID ids[2] = {SL_IID_ANDROIDSIMPLEBUFFERQUEUE, SL_IID_ANDROIDCONFIGURATION}; const SLboolean req[2] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_FALSE};
+  if ((*l->engine)->CreateAudioPlayer(l->engine, &l->playerObj, &src, &snk, 2, ids, req) != SL_RESULT_SUCCESS) { l->playerObj = nullptr; return false; }
+  SLAndroidConfigurationItf cfg = nullptr;   // ask for the fast mixer path (Android 7.1+; ignored where unknown)
+  if ((*l->playerObj)->GetInterface(l->playerObj, SL_IID_ANDROIDCONFIGURATION, &cfg) == SL_RESULT_SUCCESS && cfg) {
+    SLuint32 mode = SL_ANDROID_PERFORMANCE_LATENCY; (*cfg)->SetConfiguration(cfg, SL_ANDROID_KEY_PERFORMANCE_MODE, &mode, sizeof mode); }
+  if ((*l->playerObj)->Realize(l->playerObj, SL_BOOLEAN_FALSE) != SL_RESULT_SUCCESS) { (*l->playerObj)->Destroy(l->playerObj); l->playerObj = nullptr; return false; }
+  l->floatOut = useFloat; return true;
+}
+bool makeRecorder(SlesLoop* l, int ch) {
+  SLDataLocator_IODevice dev = {SL_DATALOCATOR_IODEVICE, SL_IODEVICE_AUDIOINPUT, SL_DEFAULTDEVICEID_AUDIOINPUT, nullptr}; SLDataSource src = {&dev, nullptr};
+  SLDataLocator_AndroidSimpleBufferQueue q = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
+  SLDataFormat_PCM f = {SL_DATAFORMAT_PCM, static_cast<SLuint32>(ch), static_cast<SLuint32>(l->rate) * 1000u, SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
+                        ch == 2 ? (SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT) : SL_SPEAKER_FRONT_CENTER, SL_BYTEORDER_LITTLEENDIAN};
+  SLDataSink snk = {&q, &f};
+  const SLInterfaceID ids[2] = {SL_IID_ANDROIDSIMPLEBUFFERQUEUE, SL_IID_ANDROIDCONFIGURATION}; const SLboolean req[2] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_FALSE};
+  if ((*l->engine)->CreateAudioRecorder(l->engine, &l->recObj, &src, &snk, 2, ids, req) != SL_RESULT_SUCCESS) { l->recObj = nullptr; return false; }   // also: no RECORD_AUDIO permission
+  SLAndroidConfigurationItf cfg = nullptr;   // no voice processing on the microphone; the voice-recognition preset where UNPROCESSED is refused
+  if ((*l->recObj)->GetInterface(l->recObj, SL_IID_ANDROIDCONFIGURATION, &cfg) == SL_RESULT_SUCCESS && cfg) {
+    SLuint32 p = SL_ANDROID_RECORDING_PRESET_UNPROCESSED;
+    if ((*cfg)->SetConfiguration(cfg, SL_ANDROID_KEY_RECORDING_PRESET, &p, sizeof p) != SL_RESULT_SUCCESS) { p = SL_ANDROID_RECORDING_PRESET_VOICE_RECOGNITION; (*cfg)->SetConfiguration(cfg, SL_ANDROID_KEY_RECORDING_PRESET, &p, sizeof p); } }
+  if ((*l->recObj)->Realize(l->recObj, SL_BOOLEAN_FALSE) != SL_RESULT_SUCCESS) { (*l->recObj)->Destroy(l->recObj); l->recObj = nullptr; return false; }
+  l->inCh = ch; return true;
+}
+int startSles(amix_mixer* m, int rate, int frames, bool mic, int inCh) {
+  closeSles();
+  SlesLoop* l = new SlesLoop(); g_sles = l;
+  l->rate = rate > 0 ? rate : 48000; l->frames = frames >= 32 && frames <= 4096 ? frames : 256;
+  const std::size_t f = static_cast<std::size_t>(l->frames);
+  l->step.prepare(m, sideOf(m), f, 2);   // everything the callbacks touch is made here
+  for (int i = 0; i < 2; ++i) { l->outF[i].assign(2 * f, 0.f); l->outS[i].assign(2 * f, 0); }
+  l->mixed.assign(2 * f, 0.f); l->mic.assign(2 * f, 0.f);
+  if (slCreateEngine(&l->engineObj, 0, nullptr, 0, nullptr, nullptr) != SL_RESULT_SUCCESS) { l->engineObj = nullptr; closeSles(); return 0; }
+  if ((*l->engineObj)->Realize(l->engineObj, SL_BOOLEAN_FALSE) != SL_RESULT_SUCCESS || (*l->engineObj)->GetInterface(l->engineObj, SL_IID_ENGINE, &l->engine) != SL_RESULT_SUCCESS) { closeSles(); return 0; }
+  if ((*l->engine)->CreateOutputMix(l->engine, &l->mixObj, 0, nullptr, nullptr) != SL_RESULT_SUCCESS) { l->mixObj = nullptr; closeSles(); return 0; }
+  if ((*l->mixObj)->Realize(l->mixObj, SL_BOOLEAN_FALSE) != SL_RESULT_SUCCESS) { closeSles(); return 0; }
+  if (!makePlayer(l, true) && !makePlayer(l, false)) { closeSles(); return 0; }   // float (Android 5+), else 16-bit
+  if ((*l->playerObj)->GetInterface(l->playerObj, SL_IID_PLAY, &l->play) != SL_RESULT_SUCCESS || (*l->playerObj)->GetInterface(l->playerObj, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &l->outQ) != SL_RESULT_SUCCESS ||
+      (*l->outQ)->RegisterCallback(l->outQ, onSlesOut, l) != SL_RESULT_SUCCESS) { closeSles(); return 0; }
+  const int want = std::min(std::max(inCh, 1), std::min(2, amix_mixer_strips(m)));
+  if (mic && (makeRecorder(l, want) || (want == 2 && makeRecorder(l, 1)))) {   // no stereo microphone there: mono on strip 1
+    const std::size_t ic = static_cast<std::size_t>(l->inCh); l->ring.init(8 * f * ic); for (int i = 0; i < 2; ++i) l->inS[i].assign(f * ic, 0);
+    if ((*l->recObj)->GetInterface(l->recObj, SL_IID_RECORD, &l->rec) != SL_RESULT_SUCCESS || (*l->recObj)->GetInterface(l->recObj, SL_IID_ANDROIDSIMPLEBUFFERQUEUE, &l->inQ) != SL_RESULT_SUCCESS ||
+        (*l->inQ)->RegisterCallback(l->inQ, onSlesIn, l) != SL_RESULT_SUCCESS) { (*l->recObj)->Destroy(l->recObj); l->recObj = nullptr; l->rec = nullptr; l->inQ = nullptr; l->inCh = 0; }
+  }
+  if (l->inQ) { for (int i = 0; i < 2; ++i) (*l->inQ)->Enqueue(l->inQ, l->inS[i].data(), static_cast<SLuint32>(l->inS[i].size() * sizeof(int16_t))); (*l->rec)->SetRecordState(l->rec, SL_RECORDSTATE_RECORDING); }
+  for (int i = 0; i < 2; ++i) { renderSles(l, i); enqueueOut(l, i); }   // double-buffered: both buffers queued, the callback refills the one that finished
+  l->nextOut = 0;
+  if ((*l->play)->SetPlayState(l->play, SL_PLAYSTATE_PLAYING) != SL_RESULT_SUCCESS) { closeSles(); return 0; }
+  return l->rate;
+}
+}  // namespace
+extern "C" {
+// OPENSL ES: starts the buffer-queue loop on mixer h at the phone's native rate and buffer size (AudioManager's values); mic = open the
+// microphone too, inChannels 1 or 2 (strips 1 / 2). Returns the rate in use, 0 = OpenSL ES could not open (use the Java path).
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_slesStart(JNIEnv*, jclass, jlong h, jint rate, jint framesPerBuffer, jboolean mic, jint inChannels) {
+  amix_mixer* m = mixerOf(h); if (!m) { closeSles(); return 0; }
+  return startSles(m, rate, framesPerBuffer, mic != JNI_FALSE, inChannels);
+}
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_slesStop(JNIEnv*, jclass) { closeSles(); }
+// [running, floatOutput, sampleRate, framesPerBuffer, inputOpen, inChannels, blocksMixed, inputShortBlocks]
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_slesState(JNIEnv* env, jclass, jintArray out) {
+  jint v[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  if (SlesLoop* l = g_sles) { SLuint32 st = 0; if (l->play) (*l->play)->GetPlayState(l->play, &st);
+    v[0] = st == SL_PLAYSTATE_PLAYING; v[1] = l->floatOut; v[2] = l->rate; v[3] = l->frames; v[4] = l->rec != nullptr; v[5] = l->inCh; v[6] = l->blocks.load(); v[7] = l->micShort.load(); }
+  if (out && env->GetArrayLength(out) >= 8) env->SetIntArrayRegion(out, 0, 8, v);
+}
 }

@@ -195,6 +195,15 @@ class LocalMixerActivity : FitActivity() {
             inRow.addView(PadButton(this, t, if (v) cyan else ConsoleUi.RED, 11f).apply { on = Prefs.localInputOn(this@LocalMixerActivity) == v; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (v) 8 else 0, 0) }
                 setOnClickListener { if (Prefs.localInputOn(this@LocalMixerActivity) != v) { Prefs.setLocalInputOn(this@LocalMixerActivity, v); restartIfRunning(); render() } } }) }
         setupBox.addView(chRow); setupBox.addView(inRow)
+        // AUDIO PATH: which audio API runs the mixer (AUTO = AAudio on Android 8+, OpenSL ES below or when AAudio will not open, Java last)
+        setupBox.addView(TextView(this).apply { text = getString(R.string.lm_audio_path); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 0, 0, 6) })
+        val pathRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 10) }
+        val pathKeys = AudioPathChoice.entries.map { c -> c to PadButton(this, c.label, cyan, 11f).apply { contentDescription = "audioPath_" + c.name } }
+        pathKeys.forEachIndexed { i, (c, k) -> k.on = Prefs.localAudioPath(this) == c
+            k.layoutParams = LinearLayout.LayoutParams(0, keyH(80), 1f).apply { setMargins(0, 0, if (i < pathKeys.size - 1) 8 else 0, 0) }
+            k.setOnClickListener { if (Prefs.localAudioPath(this) != c) { Prefs.setLocalAudioPath(this, c); for ((cc, kk) in pathKeys) kk.on = cc == c; restartIfRunning(); render() } }
+            pathRow.addView(key(k)) }
+        setupBox.addView(pathRow)
         val mt = PadButton(this, "", ConsoleUi.RED, 12f).apply { contentDescription = "multitrack"; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 80).apply { setMargins(0, 0, 0, 10) } }
         fun mtLabel() { val on = prefs().getBoolean("multitrack", false); mt.on = on; mt.text = getString(if (on) R.string.lm_multi_on else R.string.lm_multi_off) }
         mt.setOnClickListener { if (recWriter != null) return@setOnClickListener; prefs().edit().putBoolean("multitrack", !prefs().getBoolean("multitrack", false)).apply(); mtLabel() }   // not while recording
@@ -433,7 +442,7 @@ class LocalMixerActivity : FitActivity() {
         val (ask, inOn) = audioPlan(Prefs.localInputOn(this), checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         if (ask) requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         val e = engine ?: run { status.text = getString(R.string.lm_no_engine); return }
-        loop = AudioLoop(e, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts, inChannels(), inOn).also { it.start() }
+        loop = AudioLoop(e, rate, frames, Prefs.localOutDevice(this), Prefs.localInDevice(this), bursts, inChannels(), inOn, Prefs.localAudioPath(this), frames).also { it.start() }
         if (::startBtn.isInitialized) { startBtn.text = getString(R.string.stop); startBtn.on = true }
         ui.postDelayed({ showStatus() }, 400)
     }
@@ -441,7 +450,7 @@ class LocalMixerActivity : FitActivity() {
     private fun showStatus() {
         if (!::status.isInitialized) return
         val l = loop; val ch = runCatching { Engine.aaudioInChannels() }.getOrDefault(0)
-        status.text = if (l == null) getString(R.string.lm_stopped, rate, frames) else getString(R.string.lm_running, l.path.uppercase(), rate, frames, if (l.path == "aaudio") (if (ch == 2) "STEREO" else if (ch == 1) "MONO" else "—") else "MONO")
+        status.text = if (l == null) getString(R.string.lm_stopped, rate, frames) else getString(R.string.lm_running, l.path.uppercase(), rate, frames, when (l.path) { "aaudio" -> if (ch == 2) "STEREO" else if (ch == 1) "MONO" else "—"; "opensl" -> runCatching { engine?.openSlState() }.getOrNull()?.let { if (it[5] == 2) "STEREO" else if (it[5] == 1) "MONO" else "—" } ?: "—"; else -> "MONO" })
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -452,8 +461,9 @@ class LocalMixerActivity : FitActivity() {
     private fun showIo() {
         val l = loop; val running = l != null && l.path.isNotEmpty()
         val st = if (l?.path == "aaudio") runCatching { engine?.nativeState() }.getOrNull() else null
-        val inOpen = Prefs.localInputOn(this) && when (l?.path) { "aaudio" -> st?.get(5) == 1; "java" -> true; else -> false }   // INPUT OFF never reads as open
-        val outOpen = when (l?.path) { "aaudio" -> st?.get(0) == 1 && st[1] == 0; "java" -> true; else -> false }
+        val sl = if (l?.path == "opensl") runCatching { engine?.openSlState() }.getOrNull() else null
+        val inOpen = Prefs.localInputOn(this) && when (l?.path) { "aaudio" -> st?.get(5) == 1; "opensl" -> sl?.get(4) == 1; "java" -> true; else -> false }   // INPUT OFF never reads as open
+        val outOpen = when (l?.path) { "aaudio" -> st?.get(0) == 1 && st[1] == 0; "opensl" -> sl?.get(0) == 1; "java" -> true; else -> false }
         val inPk = l?.lastInPeaks?.let { a -> (0 until minOf(inChannels(), a.size)).maxOfOrNull { a[it] } } ?: 0f
         val outPk = l?.lastPeaks?.let { p -> maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }) } ?: 0f
         paintIo(running, inOpen, outOpen, inPk, outPk, st?.get(7) ?: 0, st?.get(6) ?: 0)

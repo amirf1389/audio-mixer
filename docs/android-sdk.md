@@ -18,11 +18,37 @@ startActivity(BrandProfile.batterySettings(context))
 
 val engine = Engine()                        // the AmF X1 mixer engine (C SDK over JNI)
 val loop = AudioLoop(engine, hal.nativeRate, hal.nativeFrames, outDevice = 0, inDevice = 0, bursts = profile.bursts)
-loop.start()                                 // native AAudio first (reopens on unplug), Java AudioRecord/AudioTrack as fallback
-println(loop.path)                           // "aaudio" or "java"
+loop.start()                                 // AUTO: native AAudio (reopens on unplug), else OpenSL ES, else Java AudioRecord/AudioTrack
+println(loop.path)                           // "aaudio", "opensl" or "java"
 loop.stop()
 ```
 Device ids are `AudioDeviceInfo.id` values from `AudioManager.getDevices(...)`; 0 is the system route.
+
+## Audio paths
+
+The mixer can run on three audio APIs. All three feed the same engine. The two native paths also run the same mixing step
+(`engine/cpp/app/sdk/amix_mixstep.hpp`: input k to strip k, the four decks, the multitrack copy, `amix_mixer_process`, the master
+recorder, interleaving). So decks, inputs, multitrack and meters behave the same on both native paths.
+
+| Path | `loop.path` | What it is |
+|---|---|---|
+| AAudio | `"aaudio"` | Native, Android 8+ (API 26). A low-latency output stream whose data callback mixes. The input is read without blocking. It supports device selection, multi-channel USB, and reopening after a disconnect. |
+| OpenSL ES | `"opensl"` | Native. One engine, one output mix and an Android simple buffer queue player: float PCM through `SL_ANDROID_DATAFORMAT_PCM_EX`, or 16-bit if the device refuses float. It also has an optional 16-bit mono or stereo recorder with the UNPROCESSED preset (VOICE_RECOGNITION if that is refused). Two buffers of the phone's native size (AudioManager's `PROPERTY_OUTPUT_FRAMES_PER_BUFFER` at `PROPERTY_OUTPUT_SAMPLE_RATE`) take turns. The buffer-queue callback mixes into the one that finished and enqueues it again. Nothing is allocated or locked in the callbacks. It plays to the system route only: no device selection, at most 2 inputs. |
+| Java | `"java"` | `AudioRecord` / `AudioTrack` on a worker thread calling `Engine.process`. This is the last resort. |
+
+`AudioLoop(..., choice = AudioPathChoice.AUTO, nativeFrames = framesPerBuffer)` picks the path with `AudioPaths.choose(api, choice,
+aaudioFailed, openSlFailed)`:
+
+- **AUTO**: AAudio on API 26 and above, then OpenSL ES if AAudio does not open, then Java. Below API 26: OpenSL ES, then Java.
+- **AAUDIO**: AAudio, then Java. Below API 26 it goes straight to Java.
+- **OPENSL**: OpenSL ES, then Java.
+- **JAVA**: Java only.
+
+The SDK's minSdk is 26, so AUTO picks AAudio unless AAudio fails to open. The rule for older phones is there for builds with a lower
+minSdk. OpenSL ES directly: `engine.startOpenSl(rate, framesPerBuffer, mic, inChannels)` returns the rate in use (0 = not available).
+`engine.openSlState()` returns `[running, floatOutput, sampleRate, framesPerBuffer, inputOpen, inChannels, blocksMixed,
+inputShortBlocks]`, and `Engine.slesStop()` stops it. In the app, choose the path under SETUP > AUDIO PATH in the phone mixer. The
+Devices screen's LOW LATENCY report shows the path in use ("Mixer path: ...").
 
 ## Multi-channel USB interfaces
 Class-compliant USB audio interfaces work without drivers. `UsbAudio` lists them (`AudioManager.getDevices`, `TYPE_USB_DEVICE` and

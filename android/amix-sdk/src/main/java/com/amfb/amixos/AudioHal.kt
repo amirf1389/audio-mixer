@@ -31,17 +31,18 @@ data class AudioHal(
     val nativeBufferMs: Double get() = if (nativeRate > 0 && nativeFrames > 0) nativeFrames * 1000.0 / nativeRate else 0.0
     /** LOW LATENCY: what this phone offers and what the mixer got. The MMAP / exclusive and performance-mode figures come from the short
      *  AAudio probe (a stream opened the same way as the mixer's own); the live mixer itself only reports which path it runs on
-     *  ("aaudio" or "java"; "" = stopped). */
+     *  ("aaudio", "opensl" or "java"; "" = stopped). */
     fun latencyLines(loopPath: String): List<String> = listOf(
         "FEATURE_AUDIO_LOW_LATENCY: " + yes(lowLatency) + " · FEATURE_AUDIO_PRO: " + yes(proAudio),
         "Native sample rate $nativeRate Hz · $nativeFrames frames per buffer (" + String.format("%.1f", nativeBufferMs) + " ms)",
-        "Mixer path: " + when (loopPath) { "aaudio" -> "AAudio (native)"; "java" -> "AudioTrack / AudioRecord (Java fallback)"; else -> "stopped" },
+        "Mixer path: " + AudioPaths.describe(loopPath),
         "AAudio performance mode: " + (if (!outOpened) "probe could not open" else if (outLowLatency) "LOW_LATENCY" else "NONE (the system refused low latency)") +
             " · " + (if (outExclusive) "MMAP exclusive" else "shared (legacy path)") + " (from the probe stream)",
         "Burst: $outBurst frames (" + String.format("%.1f", burstMs) + " ms)")
     /** plain advice, the biggest gain first */
     fun latencyAdvice(loopPath: String): List<String> {
         val a = mutableListOf<String>()
+        if (loopPath == "opensl") a += "The mixer runs on OpenSL ES at the phone's native buffer size: fine for most phones; AAudio (AUDIO PATH: AUTO or AAUDIO) can go lower on Android 8+."
         if (loopPath == "java") a += "The mixer fell back to the Java path (AudioTrack / AudioRecord): it adds latency. Restart the mixer; if it stays, this phone's AAudio is unavailable."
         if (!lowLatency) a += "This phone does not declare FEATURE_AUDIO_LOW_LATENCY: expect 40 ms or more. Wired headphones still help; a USB audio interface may go lower."
         else if (!proAudio) a += "Low latency is declared but not FEATURE_AUDIO_PRO: fine for playback and light monitoring, not guaranteed under 20 ms round trip."
