@@ -507,4 +507,13 @@
     <string name="shortcut_phone_mixer_long">Phone mixer (standalone)</string>
     <string name="mode_phone">THIS PHONE</string>
     <string name="mode_console">CONSOLE (PC)</string>
+    <!-- PRESET PACK: the owner's factory presets, built in and updatable online (signed) -->
+    <string name="mast_presets">MASTERING PRESETS</string>
+    <string name="presets_all">ALL PRESETS</string>
+    <string name="presets_title">Presets %1$s</string>
+    <string name="presets_mastering">Mastering (%1$d)</string>
+    <string name="presets_effects">Effects (%1$d)</string>
+    <string name="presets_tone">Tone (%1$d)</string>
+    <string name="presets_sent">%1$s sent to the console</string>
+    <string name="presets_none">No preset pack in this app.</string>
 </resources>

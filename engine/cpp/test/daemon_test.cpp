@@ -69,6 +69,11 @@ int main() {
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/bluetooth", "", auth, status, body) && status == 200 && body.find("\"devices\"") != std::string::npos && body.find("\"radio\"") != std::string::npos);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"rate\":48000,\"frames\":128}", auth, status, body) && status == 200);
   Value r = Value::parse(body, ok); CHECK(ok && r["ok"].asBool() && r["backend"].asString() == "null");
+  // the PRESET PACK built in (releases/presets/presets-pack.json) and a MASTERING PRESET picked by name: the console applies its values
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/presets", "", {}, status, body) && status == 200);
+  { const Value pk = Value::parse(body, ok); CHECK(ok && pk["mastering"].size() >= 10 && pk["effects"].size() == 600 && pk["tone"].size() >= 1 && !pk["version"].asString().empty()); }
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mastering\",\"preset\":\"WARM\"}", auth, status, body) && status == 200);
+  CHECK(d.state()["mastering"]["preset"].asString() == "WARM");
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":2,\"db\":-6.5}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"name\",\"strip\":2,\"name\":\"Vox\"}", auth, status, body) && status == 200);
   { // RECORD from the remote: the master to FLAC in the data folder, shown in the status, stopped again; a file is left behind

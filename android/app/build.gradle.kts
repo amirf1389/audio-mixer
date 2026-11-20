@@ -61,5 +61,5 @@ dependencies {
 }
 
 // the release feed into the APK's assets (WHAT'S NEW on HOME)
-val copyReleaseFeed = tasks.register<Copy>("copyReleaseFeed") { from(rootProject.file("../releases/features.json")); into(layout.buildDirectory.dir("generated/feed")) }
+val copyReleaseFeed = tasks.register<Copy>("copyReleaseFeed") { from(rootProject.file("../releases/features.json")); from(rootProject.file("../releases/presets/presets-pack.json")); into(layout.buildDirectory.dir("generated/feed")) }
 tasks.named("preBuild") { dependsOn(copyReleaseFeed) }

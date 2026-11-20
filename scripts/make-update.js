@@ -54,7 +54,16 @@ function build({ releases, flatUrls = false, version, base, notes = [], features
       pf[key] = { name, url: `${base}/releases/plugins/${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) }; }
     if (Object.keys(pf).length) plugins.push({ id: p.id, name: p.name, version: p.version, note: p.note || '', files: pf });
   }
-  return { product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, features, files, plugins };
+  // THE PRESET PACK (releases/presets/presets-pack.json, scripts/make-presets.js): its version and sha256. An app takes a downloaded pack (from the
+  // licence portal's /portal/presets or this URL) only when its sha256 is the one in a manifest the owner signed; otherwise it keeps its built-in pack.
+  const presets = releases ? null : presetsEntry(base);   // a flat release folder (the OTA server's) has no pack
+  return Object.assign({ product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, features, files, plugins }, presets ? { presets } : {});
+}
+function presetsEntry(base, file = path.join(ROOT, 'releases', 'presets', 'presets-pack.json')) {
+  let text; try { text = fs.readFileSync(file); } catch (_) { return null; }
+  let p; try { p = JSON.parse(text); } catch (_) { throw new Error('releases/presets/presets-pack.json is not JSON'); }
+  if (typeof p.version !== 'string') return null;
+  return { version: p.version, url: `${base}/releases/presets/presets-pack.json`, size: text.length, sha256: crypto.createHash('sha256').update(text).digest('hex') };
 }
 
 if (require.main === module) (async () => {
@@ -78,4 +87,4 @@ if (require.main === module) (async () => {
     console.log(`releases/update.json signed: version ${version}, ${Object.keys(manifest.files).length} files`);
   } catch (e) { console.error('Error: ' + e.message); process.exit(1); }
 })();
-module.exports = { build };
+module.exports = { build, presetsEntry };

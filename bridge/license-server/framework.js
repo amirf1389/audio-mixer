@@ -76,13 +76,13 @@ function createApp({ maxBody = 4096, trustProxy = false, onRequest = null } = {}
       req, res, path: url.pathname, query: url.searchParams, params: {}, ip: fwd || (req.socket && req.socket.remoteAddress) || '', state: {},
       send(status, data, headers = {}) { if (res.headersSent) return true; res.writeHead(status, { ...SECURITY_HEADERS, ...headers }); res.end(req.method === 'HEAD' ? undefined : data); return true; },
       json(status, obj, headers = {}) { return c.send(status, JSON.stringify(obj), { 'content-type': 'application/json', ...headers }); },
-      body() {   // the JSON body, read once; too large or not JSON is the caller's error, never a crash
+      body(limit = maxBody) {   // the JSON body, read once; too large or not JSON is the caller's error, never a crash (a route may allow more, e.g. a preset pack)
         if (c._body) return c._body;
         c._body = new Promise((resolve, reject) => {
           let size = 0; const chunks = [];
-          req.on('data', d => { size += d.length; if (size <= maxBody) chunks.push(d); });
+          req.on('data', d => { size += d.length; if (size <= limit) chunks.push(d); });
           req.on('end', () => {
-            if (size > maxBody) return reject(new HttpError(413, 'request too large'));
+            if (size > limit) return reject(new HttpError(413, 'request too large'));
             try { const v = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('not an object'); resolve(v); }
             catch (_) { reject(new HttpError(400, 'body must be JSON')); }
           });

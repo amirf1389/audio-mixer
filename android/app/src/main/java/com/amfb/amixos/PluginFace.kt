@@ -99,9 +99,12 @@ object PluginFace {
 
     private fun presetMenu(c: Context, kind: String, params: List<Map<String, Any?>>, values: Map<String, Double>, host: Host) {
         val mine = presets(store(c).getString("all", null), kind)
-        val items = listOf(c.getString(R.string.fx_preset_init)) + mine.keys.map { "▸ $it" } + listOf(c.getString(R.string.fx_preset_save)) + (if (mine.isNotEmpty()) listOf(c.getString(R.string.fx_preset_delete)) else emptyList())
+        val factory = PresetPack.current(c)?.effectsOf(kind).orEmpty()   // the owner's factory presets of this effect (the preset pack): applied here on the phone
+        val items = listOf(c.getString(R.string.fx_preset_init)) + mine.keys.map { "▸ $it" } + listOf(c.getString(R.string.fx_preset_save)) + (if (mine.isNotEmpty()) listOf(c.getString(R.string.fx_preset_delete)) else emptyList()) + factory.map { "★ ${it.name}" }
+        val firstFactory = items.size - factory.size
         android.app.AlertDialog.Builder(c).setTitle(R.string.fx_presets).setItems(items.toTypedArray()) { _, w ->
             when {
+                w >= firstFactory -> { factory[w - firstFactory].values.forEach { (id, v) -> if (id != "mix" || values.containsKey("mix")) host.set(id, v) }; host.changed() }
                 w == 0 -> { params.forEach { p -> host.set(p["id"].toString(), (p["default"] as? Number)?.toDouble() ?: 0.5) }; if (values.containsKey("mix")) host.set("mix", 1.0); host.changed() }   // INIT: every knob to its default
                 w <= mine.size -> { mine.values.elementAt(w - 1).forEach { (id, v) -> host.set(id, v) }; host.changed() }
                 items[w] == c.getString(R.string.fx_preset_save) -> { val e = android.widget.EditText(c).apply { setText(c.getString(R.string.fx_preset_n, mine.size + 1)); setSingleLine() }

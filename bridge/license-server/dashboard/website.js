@@ -57,5 +57,24 @@
   });
   $('reload').addEventListener('click', () => load().catch(e => say(e.message)));
   $('out').addEventListener('click', async () => { try { await fetch('auth/logout', { method: 'POST', headers: { authorization: 'Bearer ' + token }, credentials: 'omit' }); } catch (_) {} signOut(); });
+  // PRESETS: publish a preset pack; the page says whether the apps trust it yet (its sha256 in the signed manifest)
+  let chosen = null;
+  async function loadPresets() {
+    const p = await api('website/presets'), box = $('packLive'); box.replaceChildren();
+    const l = p.live, m = p.manifest || {};
+    for (const [k, v] of [['Live pack', l ? l.version + (l.builtIn ? ' (the release folder\'s, nothing published)' : '') : 'none'], ['Presets', l ? l.mastering + ' mastering · ' + l.effects + ' effect · ' + l.tone + ' tone' : '—'],
+      ['SHA-256', l ? l.sha256 : '—'], ['Published', l && l.publishedAt ? when(l.publishedAt) + ' · ' + l.publishedBy : '—'], ['Signed manifest', m.signed ? m.signed.version + ' · ' + m.signed.sha256 : 'no preset pack signed yet'],
+      ['Pending manifest', m.pending ? m.pending.version + ' · ' + m.pending.sha256 : '—'], ['Apps', p.trusted ? 'take this pack (signed)' : 'keep their built-in presets until the owner signs this pack']])
+      box.append(el('dt', 'col-3 text-secondary fw-normal', k), el('dd', 'col-9 mb-1 text-break' + (k === 'Apps' ? (p.trusted ? ' text-success' : ' text-warning') : ''), String(v)));
+  }
+  $('packFile').addEventListener('change', async () => { const f = $('packFile').files[0]; chosen = null; $('packPublish').disabled = true; if (!f) return;
+    try { const j = JSON.parse(await f.text()); if (!Array.isArray(j.mastering) || !Array.isArray(j.effects) || !Array.isArray(j.tone)) throw new Error('not a preset pack');
+      chosen = j; $('packChosen').textContent = f.name + ': version ' + j.version + ', ' + j.mastering.length + ' mastering, ' + j.effects.length + ' effect, ' + j.tone.length + ' tone presets'; $('packPublish').disabled = false; }
+    catch (e) { $('packChosen').textContent = ''; say(f.name + ': ' + e.message); } });
+  async function publishPack(body, what) { if (!confirm('Publish ' + what + ' on /portal/presets?')) return;
+    try { const r = await api('website/presets', 'POST', body); await loadPresets(); say('Presets published (' + r.live.version + ').' + (r.trusted ? '' : ' Apps take it once the owner signs its SHA-256.'), 'success'); } catch (e) { say(e.message); } }
+  $('packPublish').addEventListener('click', () => chosen && publishPack({ pack: chosen }, 'preset pack ' + chosen.version));
+  $('packBuiltIn').addEventListener('click', () => publishPack({ fromBuiltIn: true }, 'the release folder\'s preset pack'));
+  loadPresets().catch(e => { if (e.message !== 'signed out') say(e.message); });
   load().catch(e => { if (e.message !== 'signed out') say(e.message); });
 })();

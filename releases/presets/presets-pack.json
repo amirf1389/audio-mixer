@@ -1,0 +1,9351 @@
+{
+ "version": "2026.11.20",
+ "generated": "2026-11-20",
+ "mastering": [
+  {
+   "name": "AMFB SIGNATURE",
+   "params": {
+    "air": 2.5,
+    "attack": 30,
+    "bassMonoHz": 90,
+    "bassMonoOn": true,
+    "compOn": true,
+    "deessOn": false,
+    "drive": 0.15,
+    "exciter": 0.25,
+    "exciterOn": true,
+    "gain": 1,
+    "low": 3,
+    "makeup": 2,
+    "on": true,
+    "ratio": 2,
+    "release": 220,
+    "satOn": true,
+    "thr": -16,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "TRANSPARENT",
+   "params": {
+    "air": 0,
+    "attack": 30,
+    "compOn": true,
+    "drive": 0,
+    "gain": 0,
+    "low": 0,
+    "makeup": 0,
+    "on": true,
+    "ratio": 1.5,
+    "release": 250,
+    "satOn": true,
+    "thr": -8,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "STREAMING",
+   "params": {
+    "air": 1.5,
+    "attack": 30,
+    "compOn": true,
+    "drive": 0.1,
+    "gain": 1,
+    "low": 1,
+    "makeup": 2,
+    "on": true,
+    "ratio": 2,
+    "release": 200,
+    "satOn": true,
+    "thr": -14,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "WARM",
+   "params": {
+    "air": -1,
+    "attack": 40,
+    "compOn": true,
+    "drive": 0.35,
+    "gain": 0,
+    "low": 2.5,
+    "makeup": 2,
+    "on": true,
+    "ratio": 2,
+    "release": 300,
+    "satOn": true,
+    "thr": -16,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "PUNCH",
+   "params": {
+    "air": 2,
+    "attack": 60,
+    "compOn": true,
+    "drive": 0.2,
+    "gain": 1,
+    "low": 2,
+    "makeup": 3,
+    "on": true,
+    "ratio": 3,
+    "release": 120,
+    "satOn": true,
+    "thr": -18,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "LOUD",
+   "params": {
+    "air": 2,
+    "attack": 10,
+    "compOn": true,
+    "drive": 0.4,
+    "gain": 3,
+    "low": 1.5,
+    "makeup": 5,
+    "on": true,
+    "ratio": 4,
+    "release": 100,
+    "satOn": true,
+    "thr": -20,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "BROADCAST VOICE",
+   "params": {
+    "air": 2,
+    "attack": 5,
+    "compOn": true,
+    "drive": 0.1,
+    "gain": 0,
+    "low": -2,
+    "makeup": 5,
+    "on": true,
+    "ratio": 3,
+    "release": 150,
+    "satOn": true,
+    "thr": -22,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "SHORT VIDEO / LIVE",
+   "params": {
+    "air": 2.5,
+    "attack": 12,
+    "compOn": true,
+    "drive": 0.15,
+    "gain": 1,
+    "low": 1,
+    "makeup": 5,
+    "on": true,
+    "ratio": 3,
+    "release": 140,
+    "satOn": true,
+    "thr": -20,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "METAL",
+   "params": {
+    "air": 3,
+    "attack": 8,
+    "bassMonoHz": 110,
+    "bassMonoOn": true,
+    "compOn": true,
+    "deessOn": false,
+    "drive": 0.45,
+    "exciter": 0.3,
+    "exciterOn": true,
+    "gain": 1.5,
+    "low": 2.5,
+    "makeup": 4,
+    "mid": -2.5,
+    "on": true,
+    "ratio": 4,
+    "release": 90,
+    "satOn": true,
+    "thr": -20,
+    "toneOn": true
+   }
+  },
+  {
+   "name": "HARD ROCK",
+   "params": {
+    "air": 2,
+    "attack": 20,
+    "bassMonoHz": 90,
+    "bassMonoOn": true,
+    "compOn": true,
+    "deessOn": false,
+    "drive": 0.35,
+    "exciter": 0.2,
+    "exciterOn": true,
+    "gain": 1,
+    "low": 2,
+    "makeup": 3,
+    "mid": 1,
+    "on": true,
+    "ratio": 3,
+    "release": 140,
+    "satOn": true,
+    "thr": -18,
+    "toneOn": true
+   }
+  }
+ ],
+ "effects": [
+  {
+   "category": "Reverb",
+   "id": 1,
+   "kind": "reverb",
+   "name": "Small Booth",
+   "values": {
+    "damp": 0.7,
+    "decay": 0.06,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.4
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 2,
+   "kind": "reverb",
+   "name": "Medium Booth",
+   "values": {
+    "damp": 0.7,
+    "decay": 0.08,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.4
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 3,
+   "kind": "reverb",
+   "name": "Large Booth",
+   "values": {
+    "damp": 0.7,
+    "decay": 0.10400000000000001,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.4
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 4,
+   "kind": "reverb",
+   "name": "Small Vocal Room",
+   "values": {
+    "damp": 0.55,
+    "decay": 0.135,
+    "mix": 1,
+    "pre": 0.05,
+    "width": 0.7
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 5,
+   "kind": "reverb",
+   "name": "Medium Vocal Room",
+   "values": {
+    "damp": 0.55,
+    "decay": 0.18,
+    "mix": 1,
+    "pre": 0.05,
+    "width": 0.7
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 6,
+   "kind": "reverb",
+   "name": "Large Vocal Room",
+   "values": {
+    "damp": 0.55,
+    "decay": 0.23399999999999999,
+    "mix": 1,
+    "pre": 0.05,
+    "width": 0.7
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 7,
+   "kind": "reverb",
+   "name": "Small Studio",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.18,
+    "mix": 1,
+    "pre": 0.08,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 8,
+   "kind": "reverb",
+   "name": "Medium Studio",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.24,
+    "mix": 1,
+    "pre": 0.08,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 9,
+   "kind": "reverb",
+   "name": "Large Studio",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.312,
+    "mix": 1,
+    "pre": 0.08,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 10,
+   "kind": "reverb",
+   "name": "Small Drum Room",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.165,
+    "mix": 1,
+    "pre": 0.03,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 11,
+   "kind": "reverb",
+   "name": "Medium Drum Room",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.22,
+    "mix": 1,
+    "pre": 0.03,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 12,
+   "kind": "reverb",
+   "name": "Large Drum Room",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.28600000000000003,
+    "mix": 1,
+    "pre": 0.03,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 13,
+   "kind": "reverb",
+   "name": "Small Chamber",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.24,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 14,
+   "kind": "reverb",
+   "name": "Medium Chamber",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.32,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 15,
+   "kind": "reverb",
+   "name": "Large Chamber",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.41600000000000004,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 16,
+   "kind": "reverb",
+   "name": "Small Plate",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.27,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 17,
+   "kind": "reverb",
+   "name": "Medium Plate",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 18,
+   "kind": "reverb",
+   "name": "Large Plate",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.46799999999999997,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 19,
+   "kind": "reverb",
+   "name": "Small Bright Plate",
+   "values": {
+    "damp": 0.15,
+    "decay": 0.255,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 20,
+   "kind": "reverb",
+   "name": "Medium Bright Plate",
+   "values": {
+    "damp": 0.15,
+    "decay": 0.34,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 21,
+   "kind": "reverb",
+   "name": "Large Bright Plate",
+   "values": {
+    "damp": 0.15,
+    "decay": 0.44200000000000006,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 22,
+   "kind": "reverb",
+   "name": "Small Dark Plate",
+   "values": {
+    "damp": 0.75,
+    "decay": 0.28500000000000003,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 23,
+   "kind": "reverb",
+   "name": "Medium Dark Plate",
+   "values": {
+    "damp": 0.75,
+    "decay": 0.38,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 24,
+   "kind": "reverb",
+   "name": "Large Dark Plate",
+   "values": {
+    "damp": 0.75,
+    "decay": 0.49400000000000005,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 25,
+   "kind": "reverb",
+   "name": "Small Hall",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.375,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 26,
+   "kind": "reverb",
+   "name": "Medium Hall",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 27,
+   "kind": "reverb",
+   "name": "Large Hall",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.65,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 28,
+   "kind": "reverb",
+   "name": "Small Concert Hall",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.43499999999999994,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 29,
+   "kind": "reverb",
+   "name": "Medium Concert Hall",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.58,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 30,
+   "kind": "reverb",
+   "name": "Large Concert Hall",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.754,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 31,
+   "kind": "reverb",
+   "name": "Small Cathedral",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.585,
+    "mix": 1,
+    "pre": 0.25,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 32,
+   "kind": "reverb",
+   "name": "Medium Cathedral",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.78,
+    "mix": 1,
+    "pre": 0.25,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 33,
+   "kind": "reverb",
+   "name": "Large Cathedral",
+   "values": {
+    "damp": 0.5,
+    "decay": 1,
+    "mix": 1,
+    "pre": 0.25,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 34,
+   "kind": "reverb",
+   "name": "Small Arena",
+   "values": {
+    "damp": 0.35,
+    "decay": 0.5249999999999999,
+    "mix": 1,
+    "pre": 0.3,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 35,
+   "kind": "reverb",
+   "name": "Medium Arena",
+   "values": {
+    "damp": 0.35,
+    "decay": 0.7,
+    "mix": 1,
+    "pre": 0.3,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 36,
+   "kind": "reverb",
+   "name": "Large Arena",
+   "values": {
+    "damp": 0.35,
+    "decay": 0.9099999999999999,
+    "mix": 1,
+    "pre": 0.3,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 37,
+   "kind": "reverb",
+   "name": "Small Spring",
+   "values": {
+    "damp": 0.2,
+    "decay": 0.195,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.6
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 38,
+   "kind": "reverb",
+   "name": "Medium Spring",
+   "values": {
+    "damp": 0.2,
+    "decay": 0.26,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.6
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 39,
+   "kind": "reverb",
+   "name": "Large Spring",
+   "values": {
+    "damp": 0.2,
+    "decay": 0.338,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.6
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 40,
+   "kind": "reverb",
+   "name": "Small Ambience",
+   "values": {
+    "damp": 0.6,
+    "decay": 0.09,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 41,
+   "kind": "reverb",
+   "name": "Medium Ambience",
+   "values": {
+    "damp": 0.6,
+    "decay": 0.12,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 42,
+   "kind": "reverb",
+   "name": "Large Ambience",
+   "values": {
+    "damp": 0.6,
+    "decay": 0.156,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 43,
+   "kind": "reverb",
+   "name": "Vocal Air",
+   "values": {
+    "damp": 0.25,
+    "decay": 0.22,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 44,
+   "kind": "reverb",
+   "name": "Lead Vocal",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.3,
+    "mix": 1,
+    "pre": 0.12,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 45,
+   "kind": "reverb",
+   "name": "Backing Vocals",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.4,
+    "mix": 1,
+    "pre": 0.08,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 46,
+   "kind": "reverb",
+   "name": "Speech Warmth",
+   "values": {
+    "damp": 0.7,
+    "decay": 0.14,
+    "mix": 1,
+    "pre": 0.04,
+    "width": 0.6
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 47,
+   "kind": "reverb",
+   "name": "Podcast Space",
+   "values": {
+    "damp": 0.65,
+    "decay": 0.1,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.5
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 48,
+   "kind": "reverb",
+   "name": "Snare Plate",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.33,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 49,
+   "kind": "reverb",
+   "name": "Kick Room",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.16,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 50,
+   "kind": "reverb",
+   "name": "Overhead Hall",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.45,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 51,
+   "kind": "reverb",
+   "name": "Piano Hall",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 52,
+   "kind": "reverb",
+   "name": "Acoustic Guitar",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.28,
+    "mix": 1,
+    "pre": 0.06,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 53,
+   "kind": "reverb",
+   "name": "Strings Wash",
+   "values": {
+    "damp": 0.55,
+    "decay": 0.7,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 54,
+   "kind": "reverb",
+   "name": "Synth Pad Space",
+   "values": {
+    "damp": 0.6,
+    "decay": 0.85,
+    "mix": 1,
+    "pre": 0.25,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 55,
+   "kind": "reverb",
+   "name": "Brass Room",
+   "values": {
+    "damp": 0.4,
+    "decay": 0.3,
+    "mix": 1,
+    "pre": 0.05,
+    "width": 0.9
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 56,
+   "kind": "reverb",
+   "name": "Choir Cathedral",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.8,
+    "mix": 1,
+    "pre": 0.3,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 57,
+   "kind": "reverb",
+   "name": "Film Trailer",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.9,
+    "mix": 1,
+    "pre": 0.35,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 58,
+   "kind": "reverb",
+   "name": "Gated 80s",
+   "values": {
+    "damp": 0.2,
+    "decay": 0.2,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 59,
+   "kind": "reverb",
+   "name": "Reverse Feel",
+   "values": {
+    "damp": 0.8,
+    "decay": 0.6,
+    "mix": 1,
+    "pre": 0.5,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 60,
+   "kind": "reverb",
+   "name": "Lo-Fi Tape Room",
+   "values": {
+    "damp": 0.85,
+    "decay": 0.25,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.6
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 61,
+   "kind": "reverb",
+   "name": "Tight Ambience",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.08,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 62,
+   "kind": "reverb",
+   "name": "Infinite Wash",
+   "values": {
+    "damp": 0.3,
+    "decay": 1,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 63,
+   "kind": "reverb",
+   "name": "Hall Dry Touch",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 0.15,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 64,
+   "kind": "reverb",
+   "name": "Plate Dry Touch",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 0.15,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 65,
+   "kind": "reverb",
+   "name": "Room Dry Touch",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.2,
+    "mix": 0.15,
+    "pre": 0.05,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 66,
+   "kind": "reverb",
+   "name": "Hall Subtle",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 0.3,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 67,
+   "kind": "reverb",
+   "name": "Plate Subtle",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 0.3,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 68,
+   "kind": "reverb",
+   "name": "Room Subtle",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.2,
+    "mix": 0.3,
+    "pre": 0.05,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 69,
+   "kind": "reverb",
+   "name": "Hall Present",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 0.5,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 70,
+   "kind": "reverb",
+   "name": "Plate Present",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 0.5,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 71,
+   "kind": "reverb",
+   "name": "Room Present",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.2,
+    "mix": 0.5,
+    "pre": 0.05,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 72,
+   "kind": "reverb",
+   "name": "Hall Wet",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 0.75,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 73,
+   "kind": "reverb",
+   "name": "Plate Wet",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 0.75,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 74,
+   "kind": "reverb",
+   "name": "Room Wet",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.2,
+    "mix": 0.75,
+    "pre": 0.05,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 75,
+   "kind": "reverb",
+   "name": "Hall Drenched",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 76,
+   "kind": "reverb",
+   "name": "Plate Drenched",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 77,
+   "kind": "reverb",
+   "name": "Room Drenched",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.2,
+    "mix": 1,
+    "pre": 0.05,
+    "width": 0.8
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 78,
+   "kind": "reverb",
+   "name": "Decay 0.4 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.07692307692307693,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 79,
+   "kind": "reverb",
+   "name": "Decay 0.6 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.15384615384615385,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 80,
+   "kind": "reverb",
+   "name": "Decay 0.9 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.23076923076923078,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 81,
+   "kind": "reverb",
+   "name": "Decay 1.4 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.3076923076923077,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 82,
+   "kind": "reverb",
+   "name": "Decay 2.0 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.38461538461538464,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 83,
+   "kind": "reverb",
+   "name": "Decay 2.8 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.46153846153846156,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 84,
+   "kind": "reverb",
+   "name": "Decay 3.7 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.5384615384615384,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 85,
+   "kind": "reverb",
+   "name": "Decay 4.7 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.6153846153846154,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 86,
+   "kind": "reverb",
+   "name": "Decay 5.9 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.6923076923076923,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 87,
+   "kind": "reverb",
+   "name": "Decay 7.2 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.7692307692307693,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 88,
+   "kind": "reverb",
+   "name": "Decay 8.7 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.8461538461538461,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 89,
+   "kind": "reverb",
+   "name": "Decay 10.3 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.9230769230769231,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 90,
+   "kind": "reverb",
+   "name": "Decay 12.0 s",
+   "values": {
+    "damp": 0.5,
+    "decay": 1,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 91,
+   "kind": "reverb",
+   "name": "Hall Bright",
+   "values": {
+    "damp": 0.1,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 92,
+   "kind": "reverb",
+   "name": "Plate Bright",
+   "values": {
+    "damp": 0.1,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 93,
+   "kind": "reverb",
+   "name": "Hall Open",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 94,
+   "kind": "reverb",
+   "name": "Plate Open",
+   "values": {
+    "damp": 0.3,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 95,
+   "kind": "reverb",
+   "name": "Hall Natural",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 96,
+   "kind": "reverb",
+   "name": "Plate Natural",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 97,
+   "kind": "reverb",
+   "name": "Hall Warm",
+   "values": {
+    "damp": 0.7,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 98,
+   "kind": "reverb",
+   "name": "Plate Warm",
+   "values": {
+    "damp": 0.7,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 99,
+   "kind": "reverb",
+   "name": "Hall Dark",
+   "values": {
+    "damp": 0.9,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.15,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 100,
+   "kind": "reverb",
+   "name": "Plate Dark",
+   "values": {
+    "damp": 0.9,
+    "decay": 0.36,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 101,
+   "kind": "reverb",
+   "name": "Hall Pre 0 ms",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 102,
+   "kind": "reverb",
+   "name": "Chamber Pre 0 ms",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.32,
+    "mix": 1,
+    "pre": 0,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 103,
+   "kind": "reverb",
+   "name": "Hall Pre 20 ms",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 104,
+   "kind": "reverb",
+   "name": "Chamber Pre 20 ms",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.32,
+    "mix": 1,
+    "pre": 0.1,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 105,
+   "kind": "reverb",
+   "name": "Hall Pre 40 ms",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 106,
+   "kind": "reverb",
+   "name": "Chamber Pre 40 ms",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.32,
+    "mix": 1,
+    "pre": 0.2,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 107,
+   "kind": "reverb",
+   "name": "Hall Pre 70 ms",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.35,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 108,
+   "kind": "reverb",
+   "name": "Chamber Pre 70 ms",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.32,
+    "mix": 1,
+    "pre": 0.35,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 109,
+   "kind": "reverb",
+   "name": "Hall Pre 100 ms",
+   "values": {
+    "damp": 0.45,
+    "decay": 0.5,
+    "mix": 1,
+    "pre": 0.5,
+    "width": 1
+   }
+  },
+  {
+   "category": "Reverb",
+   "id": 110,
+   "kind": "reverb",
+   "name": "Chamber Pre 100 ms",
+   "values": {
+    "damp": 0.5,
+    "decay": 0.32,
+    "mix": 1,
+    "pre": 0.5,
+    "width": 0.85
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 111,
+   "kind": "delay",
+   "name": "60 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.494949494949495,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 112,
+   "kind": "delay",
+   "name": "60 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.24242424242424243,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 113,
+   "kind": "delay",
+   "name": "60 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.3686868686868687,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 114,
+   "kind": "delay",
+   "name": "60 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.11616161616161616,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 115,
+   "kind": "delay",
+   "name": "70 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.4227994227994228,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 116,
+   "kind": "delay",
+   "name": "70 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.20634920634920634,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 117,
+   "kind": "delay",
+   "name": "70 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.3145743145743146,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 118,
+   "kind": "delay",
+   "name": "70 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.09812409812409811,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 119,
+   "kind": "delay",
+   "name": "80 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.3686868686868687,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 120,
+   "kind": "delay",
+   "name": "80 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.17929292929292928,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 121,
+   "kind": "delay",
+   "name": "80 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.273989898989899,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 122,
+   "kind": "delay",
+   "name": "80 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.0845959595959596,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 123,
+   "kind": "delay",
+   "name": "90 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.32659932659932656,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 124,
+   "kind": "delay",
+   "name": "90 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.15824915824915825,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 125,
+   "kind": "delay",
+   "name": "90 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.24242424242424243,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 126,
+   "kind": "delay",
+   "name": "90 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.07407407407407407,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 127,
+   "kind": "delay",
+   "name": "100 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.29292929292929293,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 128,
+   "kind": "delay",
+   "name": "100 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.1414141414141414,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 129,
+   "kind": "delay",
+   "name": "100 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.21717171717171718,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 130,
+   "kind": "delay",
+   "name": "100 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.06565656565656566,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 131,
+   "kind": "delay",
+   "name": "110 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.26538108356290174,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 132,
+   "kind": "delay",
+   "name": "110 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.12764003673094584,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 133,
+   "kind": "delay",
+   "name": "110 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.1965105601469238,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 134,
+   "kind": "delay",
+   "name": "110 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.05876951331496787,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 135,
+   "kind": "delay",
+   "name": "120 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.24242424242424243,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 136,
+   "kind": "delay",
+   "name": "120 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.11616161616161616,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 137,
+   "kind": "delay",
+   "name": "120 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.17929292929292928,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 138,
+   "kind": "delay",
+   "name": "120 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.05303030303030303,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 139,
+   "kind": "delay",
+   "name": "128 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.22664141414141414,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 140,
+   "kind": "delay",
+   "name": "128 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.10827020202020202,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 141,
+   "kind": "delay",
+   "name": "128 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.1674558080808081,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 142,
+   "kind": "delay",
+   "name": "128 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.04908459595959596,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 143,
+   "kind": "delay",
+   "name": "140 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.20634920634920634,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 144,
+   "kind": "delay",
+   "name": "140 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.09812409812409811,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 145,
+   "kind": "delay",
+   "name": "140 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.15223665223665225,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 146,
+   "kind": "delay",
+   "name": "140 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.04401154401154401,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 147,
+   "kind": "delay",
+   "name": "150 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.1919191919191919,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 148,
+   "kind": "delay",
+   "name": "150 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.09090909090909091,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 149,
+   "kind": "delay",
+   "name": "150 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.1414141414141414,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 150,
+   "kind": "delay",
+   "name": "150 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.04040404040404041,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 151,
+   "kind": "delay",
+   "name": "160 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.17929292929292928,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 152,
+   "kind": "delay",
+   "name": "160 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.0845959595959596,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 153,
+   "kind": "delay",
+   "name": "160 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.13194444444444445,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 154,
+   "kind": "delay",
+   "name": "160 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.037247474747474744,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 155,
+   "kind": "delay",
+   "name": "174 BPM 1/4",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.16405433646812959,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 156,
+   "kind": "delay",
+   "name": "174 BPM 1/8",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.07697666318355974,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 157,
+   "kind": "delay",
+   "name": "174 BPM 1/8 dotted",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.12051549982584467,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 158,
+   "kind": "delay",
+   "name": "174 BPM 1/16",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 1,
+    "time": 0.03343782654127482,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 159,
+   "kind": "delay",
+   "name": "Slap 60 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.020202020202020204,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 160,
+   "kind": "delay",
+   "name": "Slap 80 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.030303030303030304,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 161,
+   "kind": "delay",
+   "name": "Slap 100 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.04040404040404041,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 162,
+   "kind": "delay",
+   "name": "Slap 120 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.050505050505050504,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 163,
+   "kind": "delay",
+   "name": "Doubler 25 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.0025252525252525255,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 164,
+   "kind": "delay",
+   "name": "Thicken 40 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.010101010101010102,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 165,
+   "kind": "delay",
+   "name": "Haas Wide 15 ms",
+   "values": {
+    "fb": 0.05,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 166,
+   "kind": "delay",
+   "name": "Rockabilly Slap",
+   "values": {
+    "fb": 0.25,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.045454545454545456,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 167,
+   "kind": "delay",
+   "name": "Dub Echo",
+   "values": {
+    "fb": 0.75,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.19,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 168,
+   "kind": "delay",
+   "name": "Tape Echo Warm",
+   "values": {
+    "fb": 0.55,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.17,
+    "tone": 0.35
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 169,
+   "kind": "delay",
+   "name": "Space Echo",
+   "values": {
+    "fb": 0.6,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.21,
+    "tone": 0.4
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 170,
+   "kind": "delay",
+   "name": "Long Echo Dark",
+   "values": {
+    "fb": 0.65,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.35,
+    "tone": 0.2
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 171,
+   "kind": "delay",
+   "name": "Bright Echo",
+   "values": {
+    "fb": 0.5,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.15,
+    "tone": 0.9
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 172,
+   "kind": "delay",
+   "name": "Analog Chain",
+   "values": {
+    "fb": 0.5,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.2,
+    "tone": 0.45
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 173,
+   "kind": "delay",
+   "name": "Vocal Throw",
+   "values": {
+    "fb": 0.3,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.24,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 174,
+   "kind": "delay",
+   "name": "Guitar Lead Echo",
+   "values": {
+    "fb": 0.45,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.55
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 175,
+   "kind": "delay",
+   "name": "Dotted Dream",
+   "values": {
+    "fb": 0.5,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.26,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 176,
+   "kind": "delay",
+   "name": "Ping-Pong Wide",
+   "values": {
+    "fb": 0.5,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.22,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 177,
+   "kind": "delay",
+   "name": "Triplet Bounce",
+   "values": {
+    "fb": 0.45,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.14,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 178,
+   "kind": "delay",
+   "name": "Infinite Loop",
+   "values": {
+    "fb": 0.95,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.3,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 179,
+   "kind": "delay",
+   "name": "Clean Digital",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.2,
+    "tone": 1
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 180,
+   "kind": "delay",
+   "name": "Lo-Fi Radio",
+   "values": {
+    "fb": 0.6,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.16,
+    "tone": 0.15
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 181,
+   "kind": "delay",
+   "name": "Ambient Trail",
+   "values": {
+    "fb": 0.7,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.4,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 182,
+   "kind": "delay",
+   "name": "Drum Slap Back",
+   "values": {
+    "fb": 0.1,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.05,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 183,
+   "kind": "delay",
+   "name": "Snare Tail",
+   "values": {
+    "fb": 0.3,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.08,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 184,
+   "kind": "delay",
+   "name": "Keys Shimmer",
+   "values": {
+    "fb": 0.5,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.25,
+    "tone": 0.8
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 185,
+   "kind": "delay",
+   "name": "Pad Smear",
+   "values": {
+    "fb": 0.6,
+    "mix": 0.4,
+    "pingpong": 1,
+    "time": 0.45,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 186,
+   "kind": "delay",
+   "name": "Dialog Spacer",
+   "values": {
+    "fb": 0.2,
+    "mix": 0.4,
+    "pingpong": 0,
+    "time": 0.1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 187,
+   "kind": "delay",
+   "name": "Feedback 4 %",
+   "values": {
+    "fb": 0.04,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 188,
+   "kind": "delay",
+   "name": "Feedback 6 %",
+   "values": {
+    "fb": 0.06,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 189,
+   "kind": "delay",
+   "name": "Feedback 8 %",
+   "values": {
+    "fb": 0.08,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 190,
+   "kind": "delay",
+   "name": "Feedback 10 %",
+   "values": {
+    "fb": 0.1,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 191,
+   "kind": "delay",
+   "name": "Feedback 12 %",
+   "values": {
+    "fb": 0.12,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 192,
+   "kind": "delay",
+   "name": "Feedback 14 %",
+   "values": {
+    "fb": 0.14,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 193,
+   "kind": "delay",
+   "name": "Feedback 16 %",
+   "values": {
+    "fb": 0.16,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 194,
+   "kind": "delay",
+   "name": "Feedback 18 %",
+   "values": {
+    "fb": 0.18,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 195,
+   "kind": "delay",
+   "name": "Feedback 20 %",
+   "values": {
+    "fb": 0.2,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 196,
+   "kind": "delay",
+   "name": "Feedback 22 %",
+   "values": {
+    "fb": 0.22,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 197,
+   "kind": "delay",
+   "name": "Feedback 24 %",
+   "values": {
+    "fb": 0.24,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 198,
+   "kind": "delay",
+   "name": "Feedback 26 %",
+   "values": {
+    "fb": 0.26,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 199,
+   "kind": "delay",
+   "name": "Feedback 28 %",
+   "values": {
+    "fb": 0.28,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 200,
+   "kind": "delay",
+   "name": "Feedback 30 %",
+   "values": {
+    "fb": 0.3,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 201,
+   "kind": "delay",
+   "name": "Feedback 32 %",
+   "values": {
+    "fb": 0.32,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 202,
+   "kind": "delay",
+   "name": "Feedback 34 %",
+   "values": {
+    "fb": 0.34,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 203,
+   "kind": "delay",
+   "name": "Feedback 36 %",
+   "values": {
+    "fb": 0.36,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 204,
+   "kind": "delay",
+   "name": "Feedback 38 %",
+   "values": {
+    "fb": 0.38,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 205,
+   "kind": "delay",
+   "name": "Feedback 40 %",
+   "values": {
+    "fb": 0.4,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 206,
+   "kind": "delay",
+   "name": "Feedback 42 %",
+   "values": {
+    "fb": 0.42,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 207,
+   "kind": "delay",
+   "name": "Feedback 44 %",
+   "values": {
+    "fb": 0.44,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 208,
+   "kind": "delay",
+   "name": "Feedback 46 %",
+   "values": {
+    "fb": 0.46,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 209,
+   "kind": "delay",
+   "name": "Feedback 48 %",
+   "values": {
+    "fb": 0.48,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Delay",
+   "id": 210,
+   "kind": "delay",
+   "name": "Feedback 50 %",
+   "values": {
+    "fb": 0.5,
+    "mix": 0.35,
+    "pingpong": 0,
+    "time": 0.18,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 211,
+   "kind": "chorus",
+   "name": "Classic Ensemble",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 212,
+   "kind": "chorus",
+   "name": "Slow Swirl",
+   "values": {
+    "depth": 0.6,
+    "mix": 0.5,
+    "rate": 0.05,
+    "spread": 0.6
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 213,
+   "kind": "chorus",
+   "name": "Fast Shimmer",
+   "values": {
+    "depth": 0.35,
+    "mix": 0.5,
+    "rate": 0.6,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 214,
+   "kind": "chorus",
+   "name": "Subtle Width",
+   "values": {
+    "depth": 0.2,
+    "mix": 0.5,
+    "rate": 0.15,
+    "spread": 0.7
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 215,
+   "kind": "chorus",
+   "name": "Deep Detune",
+   "values": {
+    "depth": 0.9,
+    "mix": 0.5,
+    "rate": 0.1,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 216,
+   "kind": "chorus",
+   "name": "Juno Style",
+   "values": {
+    "depth": 0.55,
+    "mix": 0.5,
+    "rate": 0.18,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 217,
+   "kind": "chorus",
+   "name": "Vocal Double",
+   "values": {
+    "depth": 0.3,
+    "mix": 0.5,
+    "rate": 0.12,
+    "spread": 0.3
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 218,
+   "kind": "chorus",
+   "name": "Guitar Clean",
+   "values": {
+    "depth": 0.4,
+    "mix": 0.5,
+    "rate": 0.25,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 219,
+   "kind": "chorus",
+   "name": "Bass Chorus",
+   "values": {
+    "depth": 0.3,
+    "mix": 0.5,
+    "rate": 0.08,
+    "spread": 0.2
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 220,
+   "kind": "chorus",
+   "name": "Keys Sparkle",
+   "values": {
+    "depth": 0.45,
+    "mix": 0.5,
+    "rate": 0.3,
+    "spread": 0.8
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 221,
+   "kind": "chorus",
+   "name": "Rotary Feel",
+   "values": {
+    "depth": 0.7,
+    "mix": 0.5,
+    "rate": 0.5,
+    "spread": 1
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 222,
+   "kind": "chorus",
+   "name": "Vibrato Light",
+   "values": {
+    "depth": 0.3,
+    "mix": 0.5,
+    "rate": 0.4,
+    "spread": 0
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 223,
+   "kind": "chorus",
+   "name": "Vibrato Deep",
+   "values": {
+    "depth": 0.8,
+    "mix": 0.5,
+    "rate": 0.45,
+    "spread": 0
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 224,
+   "kind": "chorus",
+   "name": "Strings Ensemble",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.1,
+    "spread": 0.9
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 225,
+   "kind": "chorus",
+   "name": "80s Pop",
+   "values": {
+    "depth": 0.6,
+    "mix": 0.5,
+    "rate": 0.22,
+    "spread": 0.6
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 226,
+   "kind": "chorus",
+   "name": "Dreamy Pad",
+   "values": {
+    "depth": 0.7,
+    "mix": 0.5,
+    "rate": 0.04,
+    "spread": 1
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 227,
+   "kind": "chorus",
+   "name": "Mono-Safe Thin",
+   "values": {
+    "depth": 0.3,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 228,
+   "kind": "chorus",
+   "name": "Ultra Wide",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.15,
+    "spread": 1
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 229,
+   "kind": "chorus",
+   "name": "Gentle Motion",
+   "values": {
+    "depth": 0.25,
+    "mix": 0.5,
+    "rate": 0.07,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 230,
+   "kind": "chorus",
+   "name": "Seasick",
+   "values": {
+    "depth": 1,
+    "mix": 0.5,
+    "rate": 0.9,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 231,
+   "kind": "chorus",
+   "name": "Rate 0.10 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 232,
+   "kind": "chorus",
+   "name": "Rate 0.64 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.1111111111111111,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 233,
+   "kind": "chorus",
+   "name": "Rate 1.19 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2222222222222222,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 234,
+   "kind": "chorus",
+   "name": "Rate 1.73 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.3333333333333333,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 235,
+   "kind": "chorus",
+   "name": "Rate 2.28 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.4444444444444444,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 236,
+   "kind": "chorus",
+   "name": "Rate 2.82 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.5555555555555556,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 237,
+   "kind": "chorus",
+   "name": "Rate 3.37 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.6666666666666666,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 238,
+   "kind": "chorus",
+   "name": "Rate 3.91 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.7777777777777778,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 239,
+   "kind": "chorus",
+   "name": "Rate 4.46 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.8888888888888888,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 240,
+   "kind": "chorus",
+   "name": "Rate 5.00 Hz",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 1,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 241,
+   "kind": "chorus",
+   "name": "Depth 10 %",
+   "values": {
+    "depth": 0.1,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 242,
+   "kind": "chorus",
+   "name": "Depth 20 %",
+   "values": {
+    "depth": 0.2,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 243,
+   "kind": "chorus",
+   "name": "Depth 30 %",
+   "values": {
+    "depth": 0.3,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 244,
+   "kind": "chorus",
+   "name": "Depth 40 %",
+   "values": {
+    "depth": 0.4,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 245,
+   "kind": "chorus",
+   "name": "Depth 50 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 246,
+   "kind": "chorus",
+   "name": "Depth 60 %",
+   "values": {
+    "depth": 0.6,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 247,
+   "kind": "chorus",
+   "name": "Depth 70 %",
+   "values": {
+    "depth": 0.7,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 248,
+   "kind": "chorus",
+   "name": "Depth 80 %",
+   "values": {
+    "depth": 0.8,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 249,
+   "kind": "chorus",
+   "name": "Depth 90 %",
+   "values": {
+    "depth": 0.9,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 250,
+   "kind": "chorus",
+   "name": "Depth 100 %",
+   "values": {
+    "depth": 1,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 251,
+   "kind": "chorus",
+   "name": "Spread 10 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.1
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 252,
+   "kind": "chorus",
+   "name": "Spread 20 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.2
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 253,
+   "kind": "chorus",
+   "name": "Spread 30 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.3
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 254,
+   "kind": "chorus",
+   "name": "Spread 40 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.4
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 255,
+   "kind": "chorus",
+   "name": "Spread 50 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.5
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 256,
+   "kind": "chorus",
+   "name": "Spread 60 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.6
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 257,
+   "kind": "chorus",
+   "name": "Spread 70 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.7
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 258,
+   "kind": "chorus",
+   "name": "Spread 80 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.8
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 259,
+   "kind": "chorus",
+   "name": "Spread 90 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 0.9
+   }
+  },
+  {
+   "category": "Chorus",
+   "id": 260,
+   "kind": "chorus",
+   "name": "Spread 100 %",
+   "values": {
+    "depth": 0.5,
+    "mix": 0.5,
+    "rate": 0.2,
+    "spread": 1
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 261,
+   "kind": "drive",
+   "name": "Warm Tube",
+   "values": {
+    "drive": 0.2,
+    "mix": 1,
+    "out": 0.7,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 262,
+   "kind": "drive",
+   "name": "Tape Saturation",
+   "values": {
+    "drive": 0.3,
+    "mix": 1,
+    "out": 0.65,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 263,
+   "kind": "drive",
+   "name": "Console Glue",
+   "values": {
+    "drive": 0.12,
+    "mix": 1,
+    "out": 0.75,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 264,
+   "kind": "drive",
+   "name": "Bass Growl",
+   "values": {
+    "drive": 0.4,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 265,
+   "kind": "drive",
+   "name": "Vocal Grit",
+   "values": {
+    "drive": 0.45,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.55
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 266,
+   "kind": "drive",
+   "name": "Drum Crunch",
+   "values": {
+    "drive": 0.5,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 267,
+   "kind": "drive",
+   "name": "Guitar Crunch",
+   "values": {
+    "drive": 0.6,
+    "mix": 1,
+    "out": 0.55,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 268,
+   "kind": "drive",
+   "name": "Fuzz",
+   "values": {
+    "drive": 0.9,
+    "mix": 1,
+    "out": 0.45,
+    "tone": 0.4
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 269,
+   "kind": "drive",
+   "name": "Broken Speaker",
+   "values": {
+    "drive": 0.85,
+    "mix": 1,
+    "out": 0.5,
+    "tone": 0.2
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 270,
+   "kind": "drive",
+   "name": "Radio Voice",
+   "values": {
+    "drive": 0.5,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.25
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 271,
+   "kind": "drive",
+   "name": "Lo-Fi Crush",
+   "values": {
+    "drive": 0.8,
+    "mix": 1,
+    "out": 0.5,
+    "tone": 0.15
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 272,
+   "kind": "drive",
+   "name": "Subtle Harmonics",
+   "values": {
+    "drive": 0.08,
+    "mix": 1,
+    "out": 0.8,
+    "tone": 0.8
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 273,
+   "kind": "drive",
+   "name": "Mastering Colour",
+   "values": {
+    "drive": 0.1,
+    "mix": 1,
+    "out": 0.78,
+    "tone": 0.9
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 274,
+   "kind": "drive",
+   "name": "Snare Bite",
+   "values": {
+    "drive": 0.55,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.65
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 275,
+   "kind": "drive",
+   "name": "Kick Punch",
+   "values": {
+    "drive": 0.35,
+    "mix": 1,
+    "out": 0.65,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 276,
+   "kind": "drive",
+   "name": "Synth Edge",
+   "values": {
+    "drive": 0.65,
+    "mix": 1,
+    "out": 0.55,
+    "tone": 0.8
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 277,
+   "kind": "drive",
+   "name": "Overdriven Preamp",
+   "values": {
+    "drive": 0.7,
+    "mix": 1,
+    "out": 0.5,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 278,
+   "kind": "drive",
+   "name": "Hot Mic",
+   "values": {
+    "drive": 0.4,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 279,
+   "kind": "drive",
+   "name": "Dark Drive",
+   "values": {
+    "drive": 0.5,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 0.1
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 280,
+   "kind": "drive",
+   "name": "Bright Drive",
+   "values": {
+    "drive": 0.5,
+    "mix": 1,
+    "out": 0.6,
+    "tone": 1
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 281,
+   "kind": "drive",
+   "name": "Drive 1.8 dB",
+   "values": {
+    "drive": 0.05,
+    "mix": 1,
+    "out": 0.7,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 282,
+   "kind": "drive",
+   "name": "Drive 3.6 dB",
+   "values": {
+    "drive": 0.1,
+    "mix": 1,
+    "out": 0.6894736842105262,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 283,
+   "kind": "drive",
+   "name": "Drive 5.4 dB",
+   "values": {
+    "drive": 0.15,
+    "mix": 1,
+    "out": 0.6789473684210526,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 284,
+   "kind": "drive",
+   "name": "Drive 7.2 dB",
+   "values": {
+    "drive": 0.2,
+    "mix": 1,
+    "out": 0.6684210526315789,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 285,
+   "kind": "drive",
+   "name": "Drive 9.0 dB",
+   "values": {
+    "drive": 0.25,
+    "mix": 1,
+    "out": 0.6578947368421052,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 286,
+   "kind": "drive",
+   "name": "Drive 10.8 dB",
+   "values": {
+    "drive": 0.3,
+    "mix": 1,
+    "out": 0.6473684210526316,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 287,
+   "kind": "drive",
+   "name": "Drive 12.6 dB",
+   "values": {
+    "drive": 0.35,
+    "mix": 1,
+    "out": 0.6368421052631579,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 288,
+   "kind": "drive",
+   "name": "Drive 14.4 dB",
+   "values": {
+    "drive": 0.4,
+    "mix": 1,
+    "out": 0.6263157894736842,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 289,
+   "kind": "drive",
+   "name": "Drive 16.2 dB",
+   "values": {
+    "drive": 0.45,
+    "mix": 1,
+    "out": 0.6157894736842104,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 290,
+   "kind": "drive",
+   "name": "Drive 18.0 dB",
+   "values": {
+    "drive": 0.5,
+    "mix": 1,
+    "out": 0.6052631578947368,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 291,
+   "kind": "drive",
+   "name": "Drive 19.8 dB",
+   "values": {
+    "drive": 0.55,
+    "mix": 1,
+    "out": 0.5947368421052631,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 292,
+   "kind": "drive",
+   "name": "Drive 21.6 dB",
+   "values": {
+    "drive": 0.6,
+    "mix": 1,
+    "out": 0.5842105263157894,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 293,
+   "kind": "drive",
+   "name": "Drive 23.4 dB",
+   "values": {
+    "drive": 0.65,
+    "mix": 1,
+    "out": 0.5736842105263158,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 294,
+   "kind": "drive",
+   "name": "Drive 25.2 dB",
+   "values": {
+    "drive": 0.7,
+    "mix": 1,
+    "out": 0.5631578947368421,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 295,
+   "kind": "drive",
+   "name": "Drive 27.0 dB",
+   "values": {
+    "drive": 0.75,
+    "mix": 1,
+    "out": 0.5526315789473684,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 296,
+   "kind": "drive",
+   "name": "Drive 28.8 dB",
+   "values": {
+    "drive": 0.8,
+    "mix": 1,
+    "out": 0.5421052631578946,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 297,
+   "kind": "drive",
+   "name": "Drive 30.6 dB",
+   "values": {
+    "drive": 0.85,
+    "mix": 1,
+    "out": 0.531578947368421,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 298,
+   "kind": "drive",
+   "name": "Drive 32.4 dB",
+   "values": {
+    "drive": 0.9,
+    "mix": 1,
+    "out": 0.5210526315789473,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 299,
+   "kind": "drive",
+   "name": "Drive 34.2 dB",
+   "values": {
+    "drive": 0.95,
+    "mix": 1,
+    "out": 0.5105263157894736,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Drive",
+   "id": 300,
+   "kind": "drive",
+   "name": "Drive 36.0 dB",
+   "values": {
+    "drive": 1,
+    "mix": 1,
+    "out": 0.49999999999999994,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 301,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.32432432432432434,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.32432432432432434,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 302,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.32432432432432434,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.49324324324324326,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 303,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.49324324324324326,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.32432432432432434,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 304,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6621621621621622,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.6621621621621622,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 305,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6621621621621622,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.32432432432432434,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 306,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 307,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2117117117117117,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2117117117117117,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 308,
+   "kind": "pingpong",
+   "name": "Ping-Pong 60 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6621621621621622,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.49324324324324326,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 309,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.27606177606177607,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.27606177606177607,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 310,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.27606177606177607,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.4208494208494209,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 311,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.4208494208494209,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.27606177606177607,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 312,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5656370656370656,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.5656370656370656,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 313,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5656370656370656,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.27606177606177607,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 314,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.13127413127413126,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.13127413127413126,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 315,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1795366795366795,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1795366795366795,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 316,
+   "kind": "pingpong",
+   "name": "Ping-Pong 70 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5656370656370656,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.4208494208494209,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 317,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.23986486486486486,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 318,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.23986486486486486,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.36655405405405406,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 319,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.36655405405405406,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 320,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.49324324324324326,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.49324324324324326,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 321,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.49324324324324326,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 322,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.11317567567567567,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.11317567567567567,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 323,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 324,
+   "kind": "pingpong",
+   "name": "Ping-Pong 80 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.49324324324324326,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.36655405405405406,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 325,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2117117117117117,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2117117117117117,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 326,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2117117117117117,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.32432432432432434,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 327,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.32432432432432434,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2117117117117117,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 328,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.4369369369369369,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.4369369369369369,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 329,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.4369369369369369,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2117117117117117,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 330,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.09909909909909909,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.09909909909909909,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 331,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1366366366366366,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1366366366366366,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 332,
+   "kind": "pingpong",
+   "name": "Ping-Pong 90 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.4369369369369369,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.32432432432432434,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 333,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 334,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2905405405405405,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 335,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2905405405405405,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 336,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3918918918918919,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3918918918918919,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 337,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3918918918918919,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 338,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.08783783783783784,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.08783783783783784,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 339,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.12162162162162163,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.12162162162162163,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 340,
+   "kind": "pingpong",
+   "name": "Ping-Pong 100 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3918918918918919,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2905405405405405,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 341,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1707616707616708,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1707616707616708,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 342,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1707616707616708,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2628992628992629,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 343,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2628992628992629,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1707616707616708,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 344,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.35503685503685506,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.35503685503685506,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 345,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.35503685503685506,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1707616707616708,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 346,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.07862407862407864,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.07862407862407864,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 347,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10933660933660934,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.10933660933660934,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 348,
+   "kind": "pingpong",
+   "name": "Ping-Pong 110 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.35503685503685506,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2628992628992629,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 349,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 350,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 351,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.23986486486486486,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 352,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.32432432432432434,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.32432432432432434,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 353,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.32432432432432434,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 354,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.07094594594594594,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.07094594594594594,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 355,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.09909909909909909,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.09909909909909909,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 356,
+   "kind": "pingpong",
+   "name": "Ping-Pong 120 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.32432432432432434,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 357,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14484797297297297,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.14484797297297297,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 358,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14484797297297297,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.22402871621621623,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 359,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22402871621621623,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.14484797297297297,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 360,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3032094594594595,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3032094594594595,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 361,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3032094594594595,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.14484797297297297,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 362,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06566722972972973,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.06566722972972973,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 363,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.09206081081081081,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.09206081081081081,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 364,
+   "kind": "pingpong",
+   "name": "Ping-Pong 128 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3032094594594595,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.22402871621621623,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 365,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.13127413127413126,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.13127413127413126,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 366,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.13127413127413126,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.20366795366795368,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 367,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.20366795366795368,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.13127413127413126,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 368,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.27606177606177607,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.27606177606177607,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 369,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.27606177606177607,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.13127413127413126,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 370,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.05888030888030888,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.05888030888030888,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 371,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.083011583011583,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.083011583011583,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 372,
+   "kind": "pingpong",
+   "name": "Ping-Pong 140 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.27606177606177607,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.20366795366795368,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 373,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.12162162162162163,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.12162162162162163,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 374,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.12162162162162163,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 375,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.12162162162162163,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 376,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.25675675675675674,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.25675675675675674,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 377,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.25675675675675674,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.12162162162162163,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 378,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.05405405405405406,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.05405405405405406,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 379,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.07657657657657656,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.07657657657657656,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 380,
+   "kind": "pingpong",
+   "name": "Ping-Pong 150 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.25675675675675674,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 381,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.11317567567567567,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.11317567567567567,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 382,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.11317567567567567,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.17652027027027026,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 383,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.17652027027027026,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.11317567567567567,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 384,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.23986486486486486,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 385,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.23986486486486486,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.11317567567567567,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 386,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.04983108108108108,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.04983108108108108,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 387,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.07094594594594594,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.07094594594594594,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 388,
+   "kind": "pingpong",
+   "name": "Ping-Pong 160 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.23986486486486486,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.17652027027027026,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 389,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/8 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10298229263746506,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.10298229263746506,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 390,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/8 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10298229263746506,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.16123019571295436,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 391,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/8 dotted + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.16123019571295436,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.10298229263746506,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 392,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/4 + 1/4",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.21947809878844363,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.21947809878844363,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 393,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/4 + 1/8",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.21947809878844363,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.10298229263746506,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 394,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/16 + 1/16",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.04473438956197577,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.04473438956197577,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 395,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/8 triplet",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06415035725380552,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.06415035725380552,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 396,
+   "kind": "pingpong",
+   "name": "Ping-Pong 174 BPM 1/4 + 1/8 dotted",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.21947809878844363,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.16123019571295436,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 397,
+   "kind": "pingpong",
+   "name": "Table Tennis",
+   "values": {
+    "feedback": 0.55,
+    "left": 0.10810810810810811,
+    "lowcut": 0.2,
+    "mix": 0.4,
+    "right": 0.10810810810810811,
+    "spread": 1,
+    "tone": 0.8
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 398,
+   "kind": "pingpong",
+   "name": "Long Rally",
+   "values": {
+    "feedback": 0.8,
+    "left": 0.14864864864864866,
+    "lowcut": 0.2,
+    "mix": 0.35,
+    "right": 0.14864864864864866,
+    "spread": 1,
+    "tone": 0.65
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 399,
+   "kind": "pingpong",
+   "name": "Short Rally",
+   "values": {
+    "feedback": 0.6,
+    "left": 0.060810810810810814,
+    "lowcut": 0.25,
+    "mix": 0.35,
+    "right": 0.060810810810810814,
+    "spread": 1,
+    "tone": 0.75
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 400,
+   "kind": "pingpong",
+   "name": "Smash",
+   "values": {
+    "feedback": 0.35,
+    "left": 0.033783783783783786,
+    "lowcut": 0.3,
+    "mix": 0.4,
+    "right": 0.05067567567567568,
+    "spread": 1,
+    "tone": 0.9
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 401,
+   "kind": "pingpong",
+   "name": "Serve And Return",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1891891891891892,
+    "lowcut": 0.2,
+    "mix": 0.35,
+    "right": 0.08783783783783784,
+    "spread": 1,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 402,
+   "kind": "pingpong",
+   "name": "Wide Slap",
+   "values": {
+    "feedback": 0.15,
+    "left": 0.0472972972972973,
+    "lowcut": 0.1,
+    "mix": 0.4,
+    "right": 0.06756756756756757,
+    "spread": 1,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 403,
+   "kind": "pingpong",
+   "name": "Stereo Slapback",
+   "values": {
+    "feedback": 0.1,
+    "left": 0.06418918918918919,
+    "lowcut": 0.1,
+    "mix": 0.45,
+    "right": 0.08108108108108109,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 404,
+   "kind": "pingpong",
+   "name": "Dub Bounce",
+   "values": {
+    "feedback": 0.75,
+    "left": 0.23986486486486486,
+    "lowcut": 0.35,
+    "mix": 0.4,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 405,
+   "kind": "pingpong",
+   "name": "Dub Swing",
+   "values": {
+    "feedback": 0.7,
+    "left": 0.23986486486486486,
+    "lowcut": 0.35,
+    "mix": 0.4,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 406,
+   "kind": "pingpong",
+   "name": "Reggae Skank",
+   "values": {
+    "feedback": 0.6,
+    "left": 0.17567567567567569,
+    "lowcut": 0.4,
+    "mix": 0.35,
+    "right": 0.2702702702702703,
+    "spread": 0.9,
+    "tone": 0.4
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 407,
+   "kind": "pingpong",
+   "name": "Vocal Throw Wide",
+   "values": {
+    "feedback": 0.4,
+    "left": 0.27702702702702703,
+    "lowcut": 0.3,
+    "mix": 0.3,
+    "right": 0.27702702702702703,
+    "spread": 1,
+    "tone": 0.55
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 408,
+   "kind": "pingpong",
+   "name": "Lead Vocal Bounce",
+   "values": {
+    "feedback": 0.3,
+    "left": 0.20945945945945946,
+    "lowcut": 0.3,
+    "mix": 0.25,
+    "right": 0.20945945945945946,
+    "spread": 0.8,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 409,
+   "kind": "pingpong",
+   "name": "Whisper Bounce",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.16216216216216217,
+    "lowcut": 0.45,
+    "mix": 0.3,
+    "right": 0.25,
+    "spread": 1,
+    "tone": 0.35
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 410,
+   "kind": "pingpong",
+   "name": "Guitar Bounce",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.20270270270270271,
+    "lowcut": 0.2,
+    "mix": 0.3,
+    "right": 0.3108108108108108,
+    "spread": 1,
+    "tone": 0.55
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 411,
+   "kind": "pingpong",
+   "name": "Edge Dotted",
+   "values": {
+    "feedback": 0.4,
+    "left": 0.23986486486486486,
+    "lowcut": 0.2,
+    "mix": 0.3,
+    "right": 0.32432432432432434,
+    "spread": 0.9,
+    "tone": 0.65
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 412,
+   "kind": "pingpong",
+   "name": "Clean Arpeggio",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.3,
+    "right": 0.23986486486486486,
+    "spread": 1,
+    "tone": 0.75
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 413,
+   "kind": "pingpong",
+   "name": "Keys Sparkle Bounce",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.12162162162162163,
+    "lowcut": 0.3,
+    "mix": 0.3,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.95
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 414,
+   "kind": "pingpong",
+   "name": "Synth Pluck Bounce",
+   "values": {
+    "feedback": 0.6,
+    "left": 0.11283783783783784,
+    "lowcut": 0.2,
+    "mix": 0.35,
+    "right": 0.11283783783783784,
+    "spread": 1,
+    "tone": 0.85
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 415,
+   "kind": "pingpong",
+   "name": "Trance Gate",
+   "values": {
+    "feedback": 0.65,
+    "left": 0.07837837837837838,
+    "lowcut": 0.25,
+    "mix": 0.35,
+    "right": 0.07837837837837838,
+    "spread": 1,
+    "tone": 0.8
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 416,
+   "kind": "pingpong",
+   "name": "House Stab",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.06891891891891892,
+    "lowcut": 0.3,
+    "mix": 0.3,
+    "right": 0.15135135135135136,
+    "spread": 1,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 417,
+   "kind": "pingpong",
+   "name": "Snare Throw",
+   "values": {
+    "feedback": 0.35,
+    "left": 0.1554054054054054,
+    "lowcut": 0.4,
+    "mix": 0.3,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 418,
+   "kind": "pingpong",
+   "name": "Rimshot Bounce",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.0945945945945946,
+    "lowcut": 0.45,
+    "mix": 0.35,
+    "right": 0.14864864864864866,
+    "spread": 1,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 419,
+   "kind": "pingpong",
+   "name": "Hi-Hat Scatter",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.02837837837837838,
+    "lowcut": 0.7,
+    "mix": 0.3,
+    "right": 0.04932432432432433,
+    "spread": 1,
+    "tone": 0.95
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 420,
+   "kind": "pingpong",
+   "name": "Percussion Cloud",
+   "values": {
+    "feedback": 0.75,
+    "left": 0.04256756756756757,
+    "lowcut": 0.5,
+    "mix": 0.35,
+    "right": 0.07094594594594594,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 421,
+   "kind": "pingpong",
+   "name": "Ambient Ping",
+   "values": {
+    "feedback": 0.7,
+    "left": 0.3918918918918919,
+    "lowcut": 0.3,
+    "mix": 0.4,
+    "right": 0.3918918918918919,
+    "spread": 1,
+    "tone": 0.35
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 422,
+   "kind": "pingpong",
+   "name": "Slow Canyon",
+   "values": {
+    "feedback": 0.6,
+    "left": 0.5945945945945946,
+    "lowcut": 0.25,
+    "mix": 0.4,
+    "right": 0.5945945945945946,
+    "spread": 1,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 423,
+   "kind": "pingpong",
+   "name": "Grand Canyon",
+   "values": {
+    "feedback": 0.55,
+    "left": 0.7972972972972973,
+    "lowcut": 0.25,
+    "mix": 0.4,
+    "right": 1,
+    "spread": 1,
+    "tone": 0.25
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 424,
+   "kind": "pingpong",
+   "name": "Cave Drip",
+   "values": {
+    "feedback": 0.65,
+    "left": 0.4594594594594595,
+    "lowcut": 0.5,
+    "mix": 0.35,
+    "right": 0.6959459459459459,
+    "spread": 1,
+    "tone": 0.4
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 425,
+   "kind": "pingpong",
+   "name": "Infinite Bounce",
+   "values": {
+    "feedback": 1,
+    "left": 0.1891891891891892,
+    "lowcut": 0.3,
+    "mix": 0.3,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 426,
+   "kind": "pingpong",
+   "name": "Almost Forever",
+   "values": {
+    "feedback": 0.95,
+    "left": 0.2905405405405405,
+    "lowcut": 0.35,
+    "mix": 0.3,
+    "right": 0.2905405405405405,
+    "spread": 1,
+    "tone": 0.45
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 427,
+   "kind": "pingpong",
+   "name": "Dark Tunnel",
+   "values": {
+    "feedback": 0.7,
+    "left": 0.21621621621621623,
+    "lowcut": 0.2,
+    "mix": 0.4,
+    "right": 0.3310810810810811,
+    "spread": 1,
+    "tone": 0.1
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 428,
+   "kind": "pingpong",
+   "name": "Bright Glass",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.12837837837837837,
+    "lowcut": 0.4,
+    "mix": 0.3,
+    "right": 0.12837837837837837,
+    "spread": 1,
+    "tone": 1
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 429,
+   "kind": "pingpong",
+   "name": "Lo-Fi Bounce",
+   "values": {
+    "feedback": 0.6,
+    "left": 0.18243243243243243,
+    "lowcut": 0.6,
+    "mix": 0.4,
+    "right": 0.18243243243243243,
+    "spread": 0.8,
+    "tone": 0.15
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 430,
+   "kind": "pingpong",
+   "name": "Telephone Bounce",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.14189189189189189,
+    "lowcut": 0.9,
+    "mix": 0.4,
+    "right": 0.14189189189189189,
+    "spread": 0.7,
+    "tone": 0.25
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 431,
+   "kind": "pingpong",
+   "name": "Radio Play",
+   "values": {
+    "feedback": 0.4,
+    "left": 0.08783783783783784,
+    "lowcut": 0.7,
+    "mix": 0.35,
+    "right": 0.13851351351351351,
+    "spread": 0.6,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 432,
+   "kind": "pingpong",
+   "name": "Narrow Bounce",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.3,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 433,
+   "kind": "pingpong",
+   "name": "Centre Echo",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 434,
+   "kind": "pingpong",
+   "name": "Half Wide",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.5,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 435,
+   "kind": "pingpong",
+   "name": "Speech Safe",
+   "values": {
+    "feedback": 0.2,
+    "left": 0.08108108108108109,
+    "lowcut": 0.5,
+    "mix": 0.2,
+    "right": 0.08108108108108109,
+    "spread": 0.6,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 436,
+   "kind": "pingpong",
+   "name": "Announcer Hall",
+   "values": {
+    "feedback": 0.3,
+    "left": 0.24324324324324326,
+    "lowcut": 0.4,
+    "mix": 0.2,
+    "right": 0.24324324324324326,
+    "spread": 0.7,
+    "tone": 0.45
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 437,
+   "kind": "pingpong",
+   "name": "Karaoke Bounce",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.12837837837837837,
+    "lowcut": 0.3,
+    "mix": 0.35,
+    "right": 0.12837837837837837,
+    "spread": 0.8,
+    "tone": 0.55
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 438,
+   "kind": "pingpong",
+   "name": "Wedding Speech",
+   "values": {
+    "feedback": 0.2,
+    "left": 0.10135135135135136,
+    "lowcut": 0.5,
+    "mix": 0.15,
+    "right": 0.15878378378378377,
+    "spread": 0.5,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 439,
+   "kind": "pingpong",
+   "name": "Stadium Call",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.33783783783783783,
+    "lowcut": 0.35,
+    "mix": 0.35,
+    "right": 0.5135135135135135,
+    "spread": 1,
+    "tone": 0.4
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 440,
+   "kind": "pingpong",
+   "name": "Game Arcade",
+   "values": {
+    "feedback": 0.7,
+    "left": 0.05067567567567568,
+    "lowcut": 0.4,
+    "mix": 0.35,
+    "right": 0.05067567567567568,
+    "spread": 1,
+    "tone": 0.9
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 441,
+   "kind": "pingpong",
+   "name": "Bounce 30 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.006756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.006756756756756757,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 442,
+   "kind": "pingpong",
+   "name": "Bounce 60 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.02702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.02702702702702703,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 443,
+   "kind": "pingpong",
+   "name": "Bounce 90 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.0472972972972973,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.0472972972972973,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 444,
+   "kind": "pingpong",
+   "name": "Bounce 120 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.06756756756756757,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 445,
+   "kind": "pingpong",
+   "name": "Bounce 150 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.08783783783783784,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.08783783783783784,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 446,
+   "kind": "pingpong",
+   "name": "Bounce 180 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10810810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.10810810810810811,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 447,
+   "kind": "pingpong",
+   "name": "Bounce 210 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.12837837837837837,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.12837837837837837,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 448,
+   "kind": "pingpong",
+   "name": "Bounce 240 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14864864864864866,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.14864864864864866,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 449,
+   "kind": "pingpong",
+   "name": "Bounce 270 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.16891891891891891,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.16891891891891891,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 450,
+   "kind": "pingpong",
+   "name": "Bounce 300 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1891891891891892,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 451,
+   "kind": "pingpong",
+   "name": "Bounce 330 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.20945945945945946,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.20945945945945946,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 452,
+   "kind": "pingpong",
+   "name": "Bounce 360 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22972972972972974,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.22972972972972974,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 453,
+   "kind": "pingpong",
+   "name": "Bounce 390 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.25,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.25,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 454,
+   "kind": "pingpong",
+   "name": "Bounce 420 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2702702702702703,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 455,
+   "kind": "pingpong",
+   "name": "Bounce 450 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2905405405405405,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2905405405405405,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 456,
+   "kind": "pingpong",
+   "name": "Bounce 480 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3108108108108108,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3108108108108108,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 457,
+   "kind": "pingpong",
+   "name": "Bounce 510 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3310810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3310810810810811,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 458,
+   "kind": "pingpong",
+   "name": "Bounce 540 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.35135135135135137,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.35135135135135137,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 459,
+   "kind": "pingpong",
+   "name": "Bounce 570 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3716216216216216,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3716216216216216,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 460,
+   "kind": "pingpong",
+   "name": "Bounce 600 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.3918918918918919,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3918918918918919,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 461,
+   "kind": "pingpong",
+   "name": "Bounce 630 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.41216216216216217,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.41216216216216217,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 462,
+   "kind": "pingpong",
+   "name": "Bounce 660 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.43243243243243246,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.43243243243243246,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 463,
+   "kind": "pingpong",
+   "name": "Bounce 690 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.4527027027027027,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.4527027027027027,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 464,
+   "kind": "pingpong",
+   "name": "Bounce 720 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.47297297297297297,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.47297297297297297,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 465,
+   "kind": "pingpong",
+   "name": "Bounce 750 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.49324324324324326,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.49324324324324326,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 466,
+   "kind": "pingpong",
+   "name": "Bounce 780 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5135135135135135,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.5135135135135135,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 467,
+   "kind": "pingpong",
+   "name": "Bounce 810 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5337837837837838,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.5337837837837838,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 468,
+   "kind": "pingpong",
+   "name": "Bounce 840 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5540540540540541,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.5540540540540541,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 469,
+   "kind": "pingpong",
+   "name": "Bounce 870 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5743243243243243,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.5743243243243243,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 470,
+   "kind": "pingpong",
+   "name": "Bounce 900 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.5945945945945946,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.5945945945945946,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 471,
+   "kind": "pingpong",
+   "name": "Bounce 930 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6148648648648649,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.6148648648648649,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 472,
+   "kind": "pingpong",
+   "name": "Bounce 960 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6351351351351351,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.6351351351351351,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 473,
+   "kind": "pingpong",
+   "name": "Bounce 990 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.6554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 474,
+   "kind": "pingpong",
+   "name": "Bounce 1020 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.6756756756756757,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 475,
+   "kind": "pingpong",
+   "name": "Bounce 1050 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.6959459459459459,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.6959459459459459,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 476,
+   "kind": "pingpong",
+   "name": "Bounce 1080 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.7162162162162162,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.7162162162162162,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 477,
+   "kind": "pingpong",
+   "name": "Bounce 1110 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.7364864864864865,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.7364864864864865,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 478,
+   "kind": "pingpong",
+   "name": "Bounce 1140 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.7567567567567568,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.7567567567567568,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 479,
+   "kind": "pingpong",
+   "name": "Bounce 1170 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.777027027027027,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.777027027027027,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 480,
+   "kind": "pingpong",
+   "name": "Bounce 1200 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.7972972972972973,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.7972972972972973,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 481,
+   "kind": "pingpong",
+   "name": "Swing L 120 / R 160 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.0945945945945946,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 482,
+   "kind": "pingpong",
+   "name": "Swing L 180 / R 220 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10810810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.13513513513513514,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 483,
+   "kind": "pingpong",
+   "name": "Swing L 240 / R 280 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14864864864864866,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.17567567567567569,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 484,
+   "kind": "pingpong",
+   "name": "Swing L 300 / R 340 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.21621621621621623,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 485,
+   "kind": "pingpong",
+   "name": "Swing L 360 / R 400 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22972972972972974,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.25675675675675674,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 486,
+   "kind": "pingpong",
+   "name": "Swing L 420 / R 460 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2972972972972973,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 487,
+   "kind": "pingpong",
+   "name": "Swing L 120 / R 205 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.125,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 488,
+   "kind": "pingpong",
+   "name": "Swing L 180 / R 265 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10810810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.16554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 489,
+   "kind": "pingpong",
+   "name": "Swing L 240 / R 325 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14864864864864866,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.20608108108108109,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 490,
+   "kind": "pingpong",
+   "name": "Swing L 300 / R 385 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.24662162162162163,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 491,
+   "kind": "pingpong",
+   "name": "Swing L 360 / R 445 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22972972972972974,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.28716216216216217,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 492,
+   "kind": "pingpong",
+   "name": "Swing L 420 / R 505 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3277027027027027,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 493,
+   "kind": "pingpong",
+   "name": "Swing L 120 / R 250 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 494,
+   "kind": "pingpong",
+   "name": "Swing L 180 / R 310 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10810810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.19594594594594594,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 495,
+   "kind": "pingpong",
+   "name": "Swing L 240 / R 370 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14864864864864866,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.23648648648648649,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 496,
+   "kind": "pingpong",
+   "name": "Swing L 300 / R 430 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.27702702702702703,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 497,
+   "kind": "pingpong",
+   "name": "Swing L 360 / R 490 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22972972972972974,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.31756756756756754,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 498,
+   "kind": "pingpong",
+   "name": "Swing L 420 / R 550 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3581081081081081,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 499,
+   "kind": "pingpong",
+   "name": "Swing L 120 / R 295 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1858108108108108,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 500,
+   "kind": "pingpong",
+   "name": "Swing L 180 / R 355 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10810810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.22635135135135134,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 501,
+   "kind": "pingpong",
+   "name": "Swing L 240 / R 415 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14864864864864866,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2668918918918919,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 502,
+   "kind": "pingpong",
+   "name": "Swing L 300 / R 475 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.30743243243243246,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 503,
+   "kind": "pingpong",
+   "name": "Swing L 360 / R 535 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22972972972972974,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.34797297297297297,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 504,
+   "kind": "pingpong",
+   "name": "Swing L 420 / R 595 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3885135135135135,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 505,
+   "kind": "pingpong",
+   "name": "Swing L 120 / R 340 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.06756756756756757,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.21621621621621623,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 506,
+   "kind": "pingpong",
+   "name": "Swing L 180 / R 400 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.10810810810810811,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.25675675675675674,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 507,
+   "kind": "pingpong",
+   "name": "Swing L 240 / R 460 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.14864864864864866,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.2972972972972973,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 508,
+   "kind": "pingpong",
+   "name": "Swing L 300 / R 520 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1891891891891892,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.33783783783783783,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 509,
+   "kind": "pingpong",
+   "name": "Swing L 360 / R 580 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.22972972972972974,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.3783783783783784,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 510,
+   "kind": "pingpong",
+   "name": "Swing L 420 / R 640 ms",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.2702702702702703,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.4189189189189189,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 511,
+   "kind": "pingpong",
+   "name": "Bounces 4 %",
+   "values": {
+    "feedback": 0.04,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 512,
+   "kind": "pingpong",
+   "name": "Bounces 7 %",
+   "values": {
+    "feedback": 0.07,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 513,
+   "kind": "pingpong",
+   "name": "Bounces 10 %",
+   "values": {
+    "feedback": 0.1,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 514,
+   "kind": "pingpong",
+   "name": "Bounces 13 %",
+   "values": {
+    "feedback": 0.13,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 515,
+   "kind": "pingpong",
+   "name": "Bounces 16 %",
+   "values": {
+    "feedback": 0.16,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 516,
+   "kind": "pingpong",
+   "name": "Bounces 19 %",
+   "values": {
+    "feedback": 0.19,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 517,
+   "kind": "pingpong",
+   "name": "Bounces 22 %",
+   "values": {
+    "feedback": 0.22,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 518,
+   "kind": "pingpong",
+   "name": "Bounces 25 %",
+   "values": {
+    "feedback": 0.25,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 519,
+   "kind": "pingpong",
+   "name": "Bounces 28 %",
+   "values": {
+    "feedback": 0.28,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 520,
+   "kind": "pingpong",
+   "name": "Bounces 31 %",
+   "values": {
+    "feedback": 0.31,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 521,
+   "kind": "pingpong",
+   "name": "Bounces 34 %",
+   "values": {
+    "feedback": 0.34,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 522,
+   "kind": "pingpong",
+   "name": "Bounces 37 %",
+   "values": {
+    "feedback": 0.37,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 523,
+   "kind": "pingpong",
+   "name": "Bounces 40 %",
+   "values": {
+    "feedback": 0.4,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 524,
+   "kind": "pingpong",
+   "name": "Bounces 43 %",
+   "values": {
+    "feedback": 0.43,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 525,
+   "kind": "pingpong",
+   "name": "Bounces 46 %",
+   "values": {
+    "feedback": 0.46,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 526,
+   "kind": "pingpong",
+   "name": "Bounces 49 %",
+   "values": {
+    "feedback": 0.49,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 527,
+   "kind": "pingpong",
+   "name": "Bounces 52 %",
+   "values": {
+    "feedback": 0.52,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 528,
+   "kind": "pingpong",
+   "name": "Bounces 55 %",
+   "values": {
+    "feedback": 0.55,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 529,
+   "kind": "pingpong",
+   "name": "Bounces 58 %",
+   "values": {
+    "feedback": 0.58,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 530,
+   "kind": "pingpong",
+   "name": "Bounces 61 %",
+   "values": {
+    "feedback": 0.61,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 531,
+   "kind": "pingpong",
+   "name": "Bounces 64 %",
+   "values": {
+    "feedback": 0.64,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 532,
+   "kind": "pingpong",
+   "name": "Bounces 67 %",
+   "values": {
+    "feedback": 0.67,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 533,
+   "kind": "pingpong",
+   "name": "Bounces 70 %",
+   "values": {
+    "feedback": 0.7,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 534,
+   "kind": "pingpong",
+   "name": "Bounces 73 %",
+   "values": {
+    "feedback": 0.73,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 535,
+   "kind": "pingpong",
+   "name": "Bounces 76 %",
+   "values": {
+    "feedback": 0.76,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 536,
+   "kind": "pingpong",
+   "name": "Bounces 79 %",
+   "values": {
+    "feedback": 0.79,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 537,
+   "kind": "pingpong",
+   "name": "Bounces 82 %",
+   "values": {
+    "feedback": 0.82,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 538,
+   "kind": "pingpong",
+   "name": "Bounces 85 %",
+   "values": {
+    "feedback": 0.85,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 539,
+   "kind": "pingpong",
+   "name": "Bounces 88 %",
+   "values": {
+    "feedback": 0.88,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 540,
+   "kind": "pingpong",
+   "name": "Bounces 91 %",
+   "values": {
+    "feedback": 0.91,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 541,
+   "kind": "pingpong",
+   "name": "Side To Side 5 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.05,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 542,
+   "kind": "pingpong",
+   "name": "Side To Side 10 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 543,
+   "kind": "pingpong",
+   "name": "Side To Side 15 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.15,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 544,
+   "kind": "pingpong",
+   "name": "Side To Side 20 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.2,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 545,
+   "kind": "pingpong",
+   "name": "Side To Side 25 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.25,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 546,
+   "kind": "pingpong",
+   "name": "Side To Side 30 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.3,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 547,
+   "kind": "pingpong",
+   "name": "Side To Side 35 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.35,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 548,
+   "kind": "pingpong",
+   "name": "Side To Side 40 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.4,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 549,
+   "kind": "pingpong",
+   "name": "Side To Side 45 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.45,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 550,
+   "kind": "pingpong",
+   "name": "Side To Side 50 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.5,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 551,
+   "kind": "pingpong",
+   "name": "Side To Side 55 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.55,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 552,
+   "kind": "pingpong",
+   "name": "Side To Side 60 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.6,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 553,
+   "kind": "pingpong",
+   "name": "Side To Side 65 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.65,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 554,
+   "kind": "pingpong",
+   "name": "Side To Side 70 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.7,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 555,
+   "kind": "pingpong",
+   "name": "Side To Side 75 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.75,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 556,
+   "kind": "pingpong",
+   "name": "Side To Side 80 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.8,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 557,
+   "kind": "pingpong",
+   "name": "Side To Side 85 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.85,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 558,
+   "kind": "pingpong",
+   "name": "Side To Side 90 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.9,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 559,
+   "kind": "pingpong",
+   "name": "Side To Side 95 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 0.95,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 560,
+   "kind": "pingpong",
+   "name": "Side To Side 100 %",
+   "values": {
+    "feedback": 0.45,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 561,
+   "kind": "pingpong",
+   "name": "Bounce Tone 0.6 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.05
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 562,
+   "kind": "pingpong",
+   "name": "Bounce Tone 0.7 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.1
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 563,
+   "kind": "pingpong",
+   "name": "Bounce Tone 0.9 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.15
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 564,
+   "kind": "pingpong",
+   "name": "Bounce Tone 1.1 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.2
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 565,
+   "kind": "pingpong",
+   "name": "Bounce Tone 1.3 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.25
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 566,
+   "kind": "pingpong",
+   "name": "Bounce Tone 1.6 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.3
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 567,
+   "kind": "pingpong",
+   "name": "Bounce Tone 2.0 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.35
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 568,
+   "kind": "pingpong",
+   "name": "Bounce Tone 2.4 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.4
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 569,
+   "kind": "pingpong",
+   "name": "Bounce Tone 2.9 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.45
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 570,
+   "kind": "pingpong",
+   "name": "Bounce Tone 3.5 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.5
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 571,
+   "kind": "pingpong",
+   "name": "Bounce Tone 4.0 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.55
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 572,
+   "kind": "pingpong",
+   "name": "Bounce Tone 4.7 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 573,
+   "kind": "pingpong",
+   "name": "Bounce Tone 5.4 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.65
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 574,
+   "kind": "pingpong",
+   "name": "Bounce Tone 6.2 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.7
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 575,
+   "kind": "pingpong",
+   "name": "Bounce Tone 7.0 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.75
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 576,
+   "kind": "pingpong",
+   "name": "Bounce Tone 7.9 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.8
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 577,
+   "kind": "pingpong",
+   "name": "Bounce Tone 8.8 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.85
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 578,
+   "kind": "pingpong",
+   "name": "Bounce Tone 9.8 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.9
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 579,
+   "kind": "pingpong",
+   "name": "Bounce Tone 10.9 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.95
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 580,
+   "kind": "pingpong",
+   "name": "Bounce Tone 12.0 kHz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 1
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 581,
+   "kind": "pingpong",
+   "name": "Bounce Full Range",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 582,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 61 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.05263157894736842,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 583,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 102 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.10526315789473684,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 584,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 143 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.15789473684210525,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 585,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 184 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.21052631578947367,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 586,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 225 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.2631578947368421,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 587,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 266 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.3157894736842105,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 588,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 307 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.3684210526315789,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 589,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 348 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.42105263157894735,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 590,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 389 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.47368421052631576,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 591,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 431 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.5263157894736842,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 592,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 472 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.5789473684210527,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 593,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 513 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.631578947368421,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 594,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 554 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.6842105263157895,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 595,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 595 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.7368421052631579,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 596,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 636 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.7894736842105263,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 597,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 677 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.8421052631578947,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 598,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 718 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.8947368421052632,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 599,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 759 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 0.9473684210526315,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  },
+  {
+   "category": "Ping-Pong",
+   "id": 600,
+   "kind": "pingpong",
+   "name": "Bounce Low Cut 800 Hz",
+   "values": {
+    "feedback": 0.5,
+    "left": 0.1554054054054054,
+    "lowcut": 1,
+    "mix": 0.35,
+    "right": 0.1554054054054054,
+    "spread": 1,
+    "tone": 0.6
+   }
+  }
+ ],
+ "tone": [
+  {
+   "category": "UTILITY",
+   "dsp": {},
+   "kind": "chain",
+   "name": "FLAT"
+  },
+  {
+   "category": "VOICE",
+   "dsp": {
+    "compAtt": 5,
+    "compKnee": 6,
+    "compMakeup": 3,
+    "compOn": true,
+    "compRatio": 3,
+    "compRel": 80,
+    "compThr": -18,
+    "eq": [
+     {
+      "f": 250,
+      "g": -2.5,
+      "q": 1.2,
+      "t": 1
+     },
+     {
+      "f": 3200,
+      "g": 2.5,
+      "q": 1,
+      "t": 1
+     },
+     {
+      "f": 10000,
+      "g": 2,
+      "q": 0.7,
+      "t": 3
+     }
+    ],
+    "gateAtt": 1,
+    "gateHold": 80,
+    "gateOn": true,
+    "gateRange": -40,
+    "gateRel": 150,
+    "gateThr": -48,
+    "hpFreq": 90,
+    "hpOrder": 2,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "VOCAL"
+  },
+  {
+   "category": "VOICE",
+   "dsp": {
+    "compAtt": 8,
+    "compKnee": 8,
+    "compMakeup": 4,
+    "compOn": true,
+    "compRatio": 4,
+    "compRel": 120,
+    "compThr": -20,
+    "eq": [
+     {
+      "f": 180,
+      "g": 2,
+      "q": 1,
+      "t": 1
+     },
+     {
+      "f": 400,
+      "g": -3,
+      "q": 1.4,
+      "t": 1
+     },
+     {
+      "f": 4500,
+      "g": 2,
+      "q": 1.2,
+      "t": 1
+     },
+     {
+      "f": 14000,
+      "g": 0,
+      "q": 0.7,
+      "t": 4
+     }
+    ],
+    "hpFreq": 80,
+    "hpOrder": 2,
+    "limCeil": -1,
+    "limOn": true,
+    "limRel": 80,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "PODCAST VOICE"
+  },
+  {
+   "category": "DRUMS",
+   "dsp": {
+    "compAtt": 15,
+    "compKnee": 2,
+    "compMakeup": 2,
+    "compOn": true,
+    "compRatio": 4,
+    "compRel": 120,
+    "compThr": -12,
+    "eq": [
+     {
+      "f": 60,
+      "g": 4,
+      "q": 1,
+      "t": 1
+     },
+     {
+      "f": 350,
+      "g": -5,
+      "q": 1.4,
+      "t": 1
+     },
+     {
+      "f": 4000,
+      "g": 3,
+      "q": 1.2,
+      "t": 1
+     }
+    ],
+    "gateAtt": 0.3,
+    "gateHold": 30,
+    "gateOn": true,
+    "gateRange": -80,
+    "gateRel": 60,
+    "gateThr": -30
+   },
+   "kind": "chain",
+   "name": "KICK"
+  },
+  {
+   "category": "DRUMS",
+   "dsp": {
+    "compAtt": 10,
+    "compKnee": 4,
+    "compMakeup": 2,
+    "compOn": true,
+    "compRatio": 4,
+    "compRel": 100,
+    "compThr": -14,
+    "eq": [
+     {
+      "f": 200,
+      "g": 2,
+      "q": 1.2,
+      "t": 1
+     },
+     {
+      "f": 600,
+      "g": -3,
+      "q": 1.5,
+      "t": 1
+     },
+     {
+      "f": 5000,
+      "g": 3,
+      "q": 1,
+      "t": 1
+     }
+    ],
+    "gateAtt": 0.3,
+    "gateHold": 40,
+    "gateOn": true,
+    "gateRange": -60,
+    "gateRel": 80,
+    "gateThr": -28,
+    "hpFreq": 80,
+    "hpOrder": 2,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "SNARE"
+  },
+  {
+   "category": "INSTRUMENTS",
+   "dsp": {
+    "compAtt": 10,
+    "compKnee": 4,
+    "compMakeup": 4,
+    "compOn": true,
+    "compRatio": 5,
+    "compRel": 150,
+    "compThr": -20,
+    "eq": [
+     {
+      "f": 80,
+      "g": 2,
+      "q": 1,
+      "t": 1
+     },
+     {
+      "f": 250,
+      "g": -2,
+      "q": 1.2,
+      "t": 1
+     },
+     {
+      "f": 900,
+      "g": 1.5,
+      "q": 1,
+      "t": 1
+     }
+    ],
+    "hpFreq": 35,
+    "hpOrder": 1,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "BASS"
+  },
+  {
+   "category": "INSTRUMENTS",
+   "dsp": {
+    "compAtt": 15,
+    "compKnee": 10,
+    "compMakeup": 2,
+    "compOn": true,
+    "compRatio": 2.5,
+    "compRel": 200,
+    "compThr": -22,
+    "eq": [
+     {
+      "f": 220,
+      "g": -3,
+      "q": 1.4,
+      "t": 1
+     },
+     {
+      "f": 2500,
+      "g": 1.5,
+      "q": 1,
+      "t": 1
+     },
+     {
+      "f": 9000,
+      "g": 2,
+      "q": 0.7,
+      "t": 3
+     }
+    ],
+    "hpFreq": 100,
+    "hpOrder": 2,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "ACOUSTIC GUITAR"
+  },
+  {
+   "category": "INSTRUMENTS",
+   "dsp": {
+    "eq": [
+     {
+      "f": 400,
+      "g": -2,
+      "q": 1.2,
+      "t": 1
+     },
+     {
+      "f": 2200,
+      "g": 2,
+      "q": 1,
+      "t": 1
+     }
+    ],
+    "gateAtt": 2,
+    "gateHold": 120,
+    "gateOn": true,
+    "gateRange": -40,
+    "gateRel": 250,
+    "gateThr": -50,
+    "hpFreq": 110,
+    "hpOrder": 2,
+    "lpFreq": 9000,
+    "lpOrder": 2,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "ELECTRIC GUITAR"
+  },
+  {
+   "category": "INSTRUMENTS",
+   "dsp": {
+    "compAtt": 20,
+    "compKnee": 12,
+    "compMakeup": 1,
+    "compOn": true,
+    "compRatio": 2,
+    "compRel": 300,
+    "compThr": -24,
+    "hpFreq": 40,
+    "hpOrder": 1,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "KEYS / STEREO LINE"
+  },
+  {
+   "category": "CAR AUDIO",
+   "dsp": {
+    "eq": [
+     {
+      "f": 2500,
+      "g": -2,
+      "q": 1.5,
+      "t": 1
+     },
+     {
+      "f": 8000,
+      "g": 1.5,
+      "q": 0.7,
+      "t": 3
+     }
+    ],
+    "hpFreq": 80,
+    "hpOrder": 4,
+    "limCeil": -1,
+    "limOn": true,
+    "limRel": 80,
+    "xoverType": 1
+   },
+   "kind": "chain",
+   "name": "CAR FRONT (TWEETER + MID)"
+  },
+  {
+   "category": "CAR AUDIO",
+   "dsp": {
+    "delayMs": 1.2,
+    "eq": [
+     {
+      "f": 3000,
+      "g": -3,
+      "q": 1.2,
+      "t": 1
+     }
+    ],
+    "hpFreq": 100,
+    "hpOrder": 4,
+    "limCeil": -1,
+    "limOn": true,
+    "limRel": 80,
+    "lpFreq": 12000,
+    "lpOrder": 2,
+    "xoverType": 1
+   },
+   "kind": "chain",
+   "name": "CAR REAR"
+  },
+  {
+   "category": "CAR AUDIO",
+   "dsp": {
+    "eq": [
+     {
+      "f": 45,
+      "g": 3,
+      "q": 1,
+      "t": 1
+     }
+    ],
+    "hpFreq": 25,
+    "hpOrder": 2,
+    "limCeil": -0.5,
+    "limOn": true,
+    "limRel": 120,
+    "lpFreq": 80,
+    "lpOrder": 4,
+    "xoverType": 1
+   },
+   "kind": "chain",
+   "name": "CAR SUBWOOFER"
+  },
+  {
+   "category": "LIVE",
+   "dsp": {
+    "eq": [
+     {
+      "f": 250,
+      "g": -2,
+      "q": 1,
+      "t": 1
+     },
+     {
+      "f": 2500,
+      "g": -1.5,
+      "q": 1.4,
+      "t": 1
+     }
+    ],
+    "hpFreq": 40,
+    "hpOrder": 4,
+    "limCeil": -1,
+    "limOn": true,
+    "limRel": 100,
+    "xoverType": 1
+   },
+   "kind": "chain",
+   "name": "PA MAIN (FULL RANGE)"
+  },
+  {
+   "category": "LIVE",
+   "dsp": {
+    "eq": [
+     {
+      "f": 315,
+      "g": 0,
+      "q": 8,
+      "t": 6
+     },
+     {
+      "f": 2500,
+      "g": 0,
+      "q": 8,
+      "t": 6
+     },
+     {
+      "f": 4000,
+      "g": -2,
+      "q": 1,
+      "t": 1
+     }
+    ],
+    "hpFreq": 100,
+    "hpOrder": 4,
+    "limCeil": -2,
+    "limOn": true,
+    "limRel": 60,
+    "xoverType": 1
+   },
+   "kind": "chain",
+   "name": "STAGE MONITOR"
+  },
+  {
+   "category": "EFFECT",
+   "dsp": {
+    "compAtt": 1,
+    "compKnee": 2,
+    "compMakeup": 4,
+    "compOn": true,
+    "compRatio": 8,
+    "compRel": 60,
+    "compThr": -20,
+    "eq": [
+     {
+      "f": 1500,
+      "g": 4,
+      "q": 1,
+      "t": 1
+     }
+    ],
+    "hpFreq": 300,
+    "hpOrder": 4,
+    "lpFreq": 3400,
+    "lpOrder": 4,
+    "xoverType": 0
+   },
+   "kind": "chain",
+   "name": "TELEPHONE"
+  },
+  {
+   "bands": [
+    {
+     "freq": 90,
+     "gainDb": 4,
+     "q": 0.8,
+     "type": 2
+    },
+    {
+     "freq": 250,
+     "gainDb": -2.5,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 1000,
+     "gainDb": 1.5,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 3200,
+     "gainDb": -2.5,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 9000,
+     "gainDb": 4,
+     "q": 0.8,
+     "type": 3
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 30,
+   "hpOrder": 2,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "AmiX W Shape",
+   "slot": 1
+  },
+  {
+   "bands": [
+    {
+     "freq": 85,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 5
+    },
+    {
+     "freq": 180,
+     "gainDb": 1.5,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 450,
+     "gainDb": -2,
+     "q": 1.4,
+     "type": 1
+    },
+    {
+     "freq": 2800,
+     "gainDb": 2.5,
+     "q": 1.1,
+     "type": 1
+    },
+    {
+     "freq": 5500,
+     "gainDb": 1.5,
+     "q": 1.6,
+     "type": 1
+    },
+    {
+     "freq": 12000,
+     "gainDb": 2,
+     "q": 0.7,
+     "type": 3
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "AmiX Golden EQ",
+   "slot": 2
+  },
+  {
+   "bands": [
+    {
+     "freq": 100,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 5
+    },
+    {
+     "freq": 300,
+     "gainDb": -2,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 3000,
+     "gainDb": 3,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 10000,
+     "gainDb": 1.5,
+     "q": 0.7,
+     "type": 3
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "Vocal Presence",
+   "slot": 3
+  },
+  {
+   "bands": [
+    {
+     "freq": 100,
+     "gainDb": 3,
+     "q": 0.7,
+     "type": 2
+    },
+    {
+     "freq": 700,
+     "gainDb": -1.5,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 2500,
+     "gainDb": 1.5,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 8000,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 4
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "Warm Bass",
+   "slot": 4
+  },
+  {
+   "bands": [
+    {
+     "freq": 8000,
+     "gainDb": 3.5,
+     "q": 0.6,
+     "type": 3
+    },
+    {
+     "freq": 12000,
+     "gainDb": 1.5,
+     "q": 1,
+     "type": 1
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "Air Lift",
+   "slot": 5
+  },
+  {
+   "bands": [
+    {
+     "freq": 200,
+     "gainDb": -3,
+     "q": 1.4,
+     "type": 1
+    },
+    {
+     "freq": 400,
+     "gainDb": -2,
+     "q": 1.6,
+     "type": 1
+    },
+    {
+     "freq": 4000,
+     "gainDb": 1,
+     "q": 1,
+     "type": 1
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 60,
+   "hpOrder": 2,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "De-Mud",
+   "slot": 6
+  },
+  {
+   "bands": [
+    {
+     "freq": 300,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 5
+    },
+    {
+     "freq": 1800,
+     "gainDb": 4,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 3400,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 4
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 300,
+   "hpOrder": 4,
+   "kind": "eq",
+   "lpFreq": 3400,
+   "lpOrder": 4,
+   "name": "Telephone",
+   "slot": 7
+  },
+  {
+   "bands": [
+    {
+     "freq": 70,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 5
+    },
+    {
+     "freq": 120,
+     "gainDb": 2,
+     "q": 0.8,
+     "type": 2
+    },
+    {
+     "freq": 250,
+     "gainDb": -1.5,
+     "q": 1.3,
+     "type": 1
+    },
+    {
+     "freq": 2200,
+     "gainDb": 2,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 6500,
+     "gainDb": -1.5,
+     "q": 2,
+     "type": 1
+    },
+    {
+     "freq": 10000,
+     "gainDb": 1,
+     "q": 0.7,
+     "type": 3
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "Broadcast Voice",
+   "slot": 8
+  },
+  {
+   "bands": [
+    {
+     "freq": 60,
+     "gainDb": 3,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 300,
+     "gainDb": -3,
+     "q": 1.4,
+     "type": 1
+    },
+    {
+     "freq": 4000,
+     "gainDb": 3,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 12000,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 4
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "Kick Punch",
+   "slot": 9
+  },
+  {
+   "bands": [
+    {
+     "freq": 80,
+     "gainDb": 0,
+     "q": 0.71,
+     "type": 5
+    },
+    {
+     "freq": 180,
+     "gainDb": -2,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 1200,
+     "gainDb": 1,
+     "q": 1,
+     "type": 1
+    },
+    {
+     "freq": 5000,
+     "gainDb": 2,
+     "q": 1.2,
+     "type": 1
+    },
+    {
+     "freq": 11000,
+     "gainDb": 1.5,
+     "q": 0.7,
+     "type": 3
+    }
+   ],
+   "category": "EQ",
+   "hpFreq": 80,
+   "hpOrder": 0,
+   "kind": "eq",
+   "lpFreq": 16000,
+   "lpOrder": 0,
+   "name": "Acoustic Guitar",
+   "slot": 10
+  }
+ ]
+}

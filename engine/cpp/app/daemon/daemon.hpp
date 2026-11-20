@@ -134,7 +134,7 @@ class Daemon {
   // ROUTING, kept here so the phones show it and a fresh device gets it: per strip the device input it reads (-1 none), per output its source
   int inRoute_[kMaxStrips] = {}; int outRoute_[Runtime::kMaxOutputs] = {}; bool routesInit_ = false; void initRoutes();
   json::Value routingJson() const;
-  Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1};
+  Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1}; std::string masterPreset_;   // the MASTERING PRESET picked last (its name)
   json::Value programEqJson() const;
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
   std::map<int, std::vector<PlugSlot>> racks_; std::map<int, std::string> rackNames_; std::atomic<unsigned long long> racksV_{1};

@@ -44,7 +44,7 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
 }
 QVariantList Remote::eqList(const SyncStrip& s) { QVariantList l; for (const auto& e : s.eq) l << QVariant(QVariantList{e.type, e.freq, e.q, e.gain}); return l; }
 QVariantMap Remote::mastNow() const {   // MASTERING as LIVE SYNC carries it (the keys the service knows)
-  const QVariantMap m = engine_->mastering(); QVariantMap o; for (const char* k : {"on", "low", "air", "thr", "ratio", "attack", "release", "makeup", "drive", "gain"}) if (m.contains(k)) o[k] = m.value(k); return o; }
+  const QVariantMap m = engine_->mastering(); QVariantMap o; for (const char* k : {"on", "low", "air", "thr", "ratio", "attack", "release", "makeup", "drive", "gain"}) if (m.contains(k)) o[k] = m.value(k); o["preset"] = m.value("preset").toString(); return o; }
 QByteArray Remote::rackJson(int strip) const { return QJsonDocument::fromVariant(engine_->remoteRack(strip)).toJson(QJsonDocument::Compact); }
 void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
@@ -106,7 +106,7 @@ void Remote::syncTick() {
     rackTick_ = 0; for (int i = 0; i < c.size(); ++i) { const QByteArray j = rackJson(i); if (j == baseRacks_.value(i, QByteArrayLiteral("[]"))) continue;
       baseRacks_[i] = j; post({{"op", "rack"}, {"strip", i}, {"plugins", QJsonDocument::fromJson(j).toVariant()}}); } }
   { const QVariantMap mn = mastNow(); QVariantMap diff;   // MASTERING moved on the console: out to the service and the remotes
-    for (auto it = mn.cbegin(); it != mn.cend(); ++it) { const QVariant b = baseMast_.value(it.key()); if (it.value().typeId() == QMetaType::Bool ? it.value().toBool() != b.toBool() : std::abs(it.value().toDouble() - b.toDouble()) > 0.005) diff[it.key()] = it.value(); }
+    for (auto it = mn.cbegin(); it != mn.cend(); ++it) { const QVariant b = baseMast_.value(it.key()); if (it.value().typeId() == QMetaType::QString ? it.value().toString() != b.toString() : it.value().typeId() == QMetaType::Bool ? it.value().toBool() != b.toBool() : std::abs(it.value().toDouble() - b.toDouble()) > 0.005) diff[it.key()] = it.value(); }
     if (!diff.isEmpty()) { baseMast_ = mn; diff["op"] = "mastering"; post(diff); } }
   {   // ROUTING moved on the console: out to the service (and so to the phones)
     const QVariantList in = engine_->inputRoutes(), out = engine_->outputRoutes();
@@ -131,7 +131,9 @@ void Remote::syncTick() {
     { const quint64 mv = o.value("masterV").toULongLong(); const QVariantMap pe = o.value("programEq").toMap();   // a remote's RTA EQ onto the console
       if (mv && mv != masterV_) { const bool first = masterV_ == 0; masterV_ = mv; if (!first && pe.contains("gains")) engine_->setGraphicEq(-1, pe.value("gains").toList(), pe.value("on").toBool());
         const QVariantMap ms = o.value("mastering").toMap();   // a remote's MASTERING onto the console (what it already has is not sent back)
-        if (!first && !ms.isEmpty()) { QVariantMap in; for (auto it = ms.cbegin(); it != ms.cend(); ++it) if (it.key() != QLatin1String("reductionDb")) in[it.key()] = it.value(); engine_->setMastering(in); baseMast_ = mastNow(); } } }   // a phone changed a plug-in: the console's instance follows
+        const QString pn = ms.value("preset").toString();   // a remote picked a MASTERING PRESET by name: the console applies its own tuned values, and the next tick sends them back out
+        if (!first && !pn.isEmpty() && pn != engine_->mastering().value("preset").toString() && engine_->masteringPresets().contains(pn)) engine_->applyMasteringPreset(pn);
+        else if (!first && !ms.isEmpty()) { QVariantMap in; for (auto it = ms.cbegin(); it != ms.cend(); ++it) if (it.key() != QLatin1String("reductionDb")) in[it.key()] = it.value(); engine_->setMastering(in); baseMast_ = mastNow(); } } }   // a phone changed a plug-in: the console's instance follows
     { const QVariantMap rs = o.value("settings").toMap();   // a setting changed on a remote lands on the console
       for (auto it = baseSet_.begin(); it != baseSet_.end(); ++it) { if (!rs.contains(it.key())) continue; const QVariant r = rs.value(it.key());
         const bool diff = it.value().typeId() == QMetaType::Double ? std::abs(r.toDouble() - it.value().toDouble()) > 0.005 : (it.value().typeId() == QMetaType::Bool ? r.toBool() != it.value().toBool() : r.toInt() != it.value().toInt());

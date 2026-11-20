@@ -157,6 +157,10 @@ class MasteringActivity : ConsoleSection() {
     override fun build() {
         onBtn = ToggleButton(this).apply { textOn = getString(R.string.mast_on); textOff = getString(R.string.mast_off); setOnCheckedChangeListener { b, on -> if (b.tag == null) send { it.mastering(mapOf("on" to on)) } } }
         root.addView(onBtn)
+        // the owner's MASTERING PRESETS (the preset pack): a preset goes to the console by NAME and the console applies its own tuned values
+        root.addView(Button(this).apply { text = getString(R.string.mast_presets); setOnClickListener { showMasteringPresets() } })
+        root.addView(Button(this).apply { text = getString(R.string.presets_all); setOnClickListener { showAllPresets() } })
+        if (android.os.Build.FINGERPRINT != "robolectric") io.execute { PresetPack.refresh(applicationContext) }   // a newer pack, if the owner signed one (not in the unit tests)
         gr = label("", cyan, 13f).apply { typeface = Typeface.MONOSPACE }; root.addView(gr)
         for (k in knobs) { val t = label(""); texts[k.key] = t; root.addView(t)
             root.addView(SeekBar(this).apply { max = 1000; bars[k.key] = this
@@ -166,6 +170,17 @@ class MasteringActivity : ConsoleSection() {
         root.addView(label(getString(R.string.mast_help)).apply { setPadding(0, 16, 0, 0) })
         ui.post(poll)
     }
+    internal fun showMasteringPresets() { val p = PresetPack.current(this) ?: run { toast(getString(R.string.presets_none)); return }
+        val names = p.mastering.map { it.name }.toTypedArray()
+        android.app.AlertDialog.Builder(this).setTitle(getString(R.string.presets_title, p.version)).setItems(names) { _, w -> applyPreset(names[w]) }.show() }
+    internal fun applyPreset(name: String) { lastSet = 0; send { it.mastering(mapOf("preset" to name)) }; toast(getString(R.string.presets_sent, name)) }
+    private fun toast(t: String) = android.widget.Toast.makeText(this, t, android.widget.Toast.LENGTH_SHORT).show()
+    internal fun showAllPresets() { val p = PresetPack.current(this) ?: run { toast(getString(R.string.presets_none)); return }
+        val groups = arrayOf(getString(R.string.presets_mastering, p.mastering.size), getString(R.string.presets_effects, p.effects.size), getString(R.string.presets_tone, p.tone.size))
+        android.app.AlertDialog.Builder(this).setTitle(getString(R.string.presets_title, p.version)).setItems(groups) { _, g -> when (g) {
+            0 -> showMasteringPresets()
+            1 -> android.app.AlertDialog.Builder(this).setTitle(groups[1]).setItems(p.effects.map { "${it.category} · ${it.name}" }.toTypedArray(), null).show()
+            else -> android.app.AlertDialog.Builder(this).setTitle(groups[2]).setItems(p.tone.map { "${it.category} · ${it.name}" }.toTypedArray(), null).show() } }.show() }
     private fun valueOf(k: Knob, p: Int): Double { val v = k.lo + (k.hi - k.lo) * p / 1000.0; return Math.round(v / k.step) * k.step }
     private fun posOf(k: Knob, v: Double) = ((v - k.lo) / (k.hi - k.lo) * 1000).toInt().coerceIn(0, 1000)
     private fun show(k: Knob, v: Double) { texts[k.key]?.text = getString(k.label) + "   " + (if (k.unit == "") String.format("%.0f %%", v * 100) else String.format(if (k.step < 0.1) "%.2f %s" else "%.1f %s", v, k.unit)) }

@@ -210,6 +210,11 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
   if (r.method == "OPTIONS") { res.status = cors ? 204 : 403; if (cors) { res.headers.push_back({"Access-Control-Allow-Headers", "Content-Type, X-Amix-Token"}); res.headers.push_back({"Access-Control-Allow-Methods", "GET, POST, OPTIONS"}); } return res; }
   if (r.method == "GET" && r.path == "/api/status") { res.body = status().dump(); return res; }
   if (r.method == "GET" && r.path == "/api/devices") { res.body = devices().dump(); return res; }
+  if (r.method == "GET" && r.path == "/api/presets") {   // the PRESET PACK built in (releases/presets/presets-pack.json): the owner's factory presets, nothing private
+    static const char kPack[] =
+#include "presets_pack.inc"
+      ;
+    res.body = kPack; return res; }
   if (r.method == "GET" && (r.path == "/api/bluetooth" || r.path.rfind("/api/bluetooth?", 0) == 0)) {   // ?scan=SECONDS also listens for devices in range
     if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }   // device names and a radio scan: control only
     int scan = 0; const auto q = r.path.find("scan="); if (q != std::string::npos) scan = std::clamp(std::atoi(r.path.c_str() + q + 5), 0, 20);
@@ -480,7 +485,7 @@ json::Value Daemon::state() const {
   o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
     m.set("on", mp_.on); m.set("low", mp_.lowDb); m.set("air", mp_.airDb); m.set("thr", mp_.thrDb); m.set("ratio", mp_.ratio); m.set("attack", mp_.attackMs); m.set("release", mp_.releaseMs);
-    m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); o.set("mastering", m); }
+    m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); m.set("preset", masterPreset_); o.set("mastering", m); }
   return o;
 }
 
@@ -648,6 +653,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (cmd.has("on")) mp_.on = cmd["on"].asBool(mp_.on);
     num("low", mp_.lowDb, -12, 12); num("air", mp_.airDb, -12, 12); num("thr", mp_.thrDb, -40, 0); num("ratio", mp_.ratio, 1, 20); num("attack", mp_.attackMs, 0.1, 200);
     num("release", mp_.releaseMs, 10, 2000); num("makeup", mp_.makeupDb, 0, 18); num("drive", mp_.drive, 0, 1); num("gain", mp_.gainDb, -12, 12);
+    if (cmd.has("preset")) { masterPreset_ = cmd["preset"].asString(); if (masterPreset_.size() > 40) masterPreset_.resize(40); }   // a preset by NAME: the console applies its values and sends them here
     master_.set(mp_); ++masterV_; ++version_; return ok; }
   if (op == "rack") {   // the console's rack of one strip, as it is now (a plug-in added, removed, a knob turned in its window, bypass):
     // slots that keep their plug-in keep their instance and take the new state; the rest are made; the chain is handed over at once

@@ -741,6 +741,9 @@ class Engine : public QObject {
   Q_INVOKABLE bool recallSafe(int strip) const;
   // PRESETS: a channel's DSP chain by name (factory + user)
   QVariantList presets() const;
+  // PRESET PACK: every factory preset the owner tuned (MASTERING, the 600 effect presets, the channel chains and the EQ curves) as one JSON object,
+  // taken from the code itself; amixos --dump-presets writes it and the smoke checks releases/presets/presets-pack.json against it
+  QJsonObject presetPack();
   Q_INVOKABLE bool applyPreset(const QString& name, int strip);
   Q_INVOKABLE bool savePreset(const QString& name, int strip);
   Q_INVOKABLE bool deletePreset(const QString& name);
