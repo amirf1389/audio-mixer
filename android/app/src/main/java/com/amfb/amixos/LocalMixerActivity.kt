@@ -81,6 +81,11 @@ class LocalMixerActivity : FitActivity() {
     private class IoViews(val lamp: View, val name: TextView, val state: TextView, val meter: ProgressBar)
     private val io = HashMap<Boolean, IoViews>()   // false = INPUT, true = OUTPUT
     private fun prefs() = Prefs.local(this)
+    // STRIP ZOOM: the − / + keys beside the sections show more, narrower channels or fewer, wider ones (3 to 8 across)
+    private fun across(land: Boolean) = (RemoteActivity.acrossFor(land) + prefs().getInt("stripZoom", 0)).coerceIn(3, 8)
+    private fun stripZoom(d: Int) { val l = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val now = across(l); val next = (now + d).coerceIn(3, 8); if (next == now) return
+        prefs().edit().putInt("stripZoom", next - RemoteActivity.acrossFor(l)).apply(); render() }
     // LANDSCAPE: the screen is short, so everything above a fader is made small: no sub-title, no pan knob, FX and MUTE side by side
     private var land = false
     private fun pairKeys(col: LinearLayout) { if (!land || col.childCount < 2) return
@@ -116,6 +121,8 @@ class LocalMixerActivity : FitActivity() {
         val secBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "sectionBar" }
         for ((id, label) in listOf("faders" to R.string.lm_sec_faders, "media" to R.string.lm_sec_media, "setup" to R.string.lm_sec_setup))
             secKeys[id] = PadButton(this, getString(label), cyan, 12f).apply { contentDescription = "sec_$id"; layoutParams = LinearLayout.LayoutParams(0, if (land) 96 else 84, 1f).apply { setMargins(0, 0, 8, 0) } }.also { secBar.addView(it) }
+        for ((tag, glyph, d) in listOf(Triple("zoomOut", "−", 1), Triple("zoomIn", "+", -1)))   // − : more channels (smaller), + : fewer (bigger)
+            secBar.addView(PadButton(this, glyph, cyan, 16f).apply { contentDescription = tag; layoutParams = LinearLayout.LayoutParams(if (land) 96 else 84, if (land) 96 else 84).apply { setMargins(0, 0, 8, 0) }; setOnClickListener { stripZoom(d) } })
         val setupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; val mediaBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }
         if (land) { setupBox.addView(modeBar); body.setPadding(16, 8, 16, 6); head.removeViewAt(0); head.addView(secBar.apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }, 0); head.addView(recBtn); head.addView(startBtn); head.setPadding(0, 0, 0, 8); body.addView(head); setupBox.addView(status) }
@@ -176,7 +183,7 @@ class LocalMixerActivity : FitActivity() {
             for (d in 2 * r..2 * r + 1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d % 2 == 0) 0 else 6, 0, if (d % 2 == 0) 6 else 0, 0) } })
             deckBox.addView(deckRow) }
         // the channels side by side, four across in portrait, six in landscape (swipe for the rest), the master fixed on the right: every fader stays finger-wide
-        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels - (if (land) 88 else 0), RemoteActivity.acrossFor(land))   // on its side the master is 88 px wider (its two keys stand side by side)
+        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels - (if (land) 88 else 0), across(land))   // on its side the master is 88 px wider (its two keys stand side by side)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until inChannels()) chans.addView(fixed(stripView(s)))
         if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) chans.addView(fixed(playersStripView()))   // beside the inputs: on screen without a swipe

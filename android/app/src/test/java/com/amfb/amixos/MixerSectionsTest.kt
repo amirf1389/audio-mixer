@@ -68,4 +68,15 @@ class MixerSectionsTest {
         val a = Robolectric.buildActivity(RemoteActivity::class.java).setup().get()
         assertEquals(View.VISIBLE, find(a.window.decorView, "remoteHint")!!.visibility)
     }
+    @Test fun zoomKeysChangeHowManyChannelsStandAcross() {
+        val c = Robolectric.buildActivity(LocalMixerActivity::class.java).setup(); val a = c.get()
+        fun across() = (find(a.window.decorView, "localChannels") as ViewGroup).getChildAt(0).layoutParams.width
+        val w0 = across(); find(a.window.decorView, "zoomIn")!!.performClick(); val w1 = across()
+        assertTrue("zoom in makes strips wider: $w0 -> $w1", w1 > w0)
+        repeat(10) { find(a.window.decorView, "zoomIn")!!.performClick() }; val wMax = across()
+        repeat(10) { find(a.window.decorView, "zoomOut")!!.performClick() }; val wMin = across()
+        assertTrue(wMax > wMin && wMin >= 176)                                                        // never thinner than a finger
+        assertEquals(RemoteActivity.stripWidthFor(a.resources.displayMetrics.widthPixels, 3), wMax)  // at most 3 across, at least …
+        Prefs.local(a).edit().remove("stripZoom").apply()
+    }
 }

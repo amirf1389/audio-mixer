@@ -1047,10 +1047,12 @@ bool Engine::startRecording() {
   if (recorder_.recording()) return true;
   am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if (armed_.test(static_cast<std::size_t>(i))) o.strips.push_back(i);
   std::string err; if (!recorder_.start(o, rt_->sampleRate(), err)) { recMsg_ = QString::fromStdString(err); emit recordChanged(); return false; }
-  taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2").arg(recorder_.files().size()).arg(recordFolder()); emit recordChanged(); return true;
+  taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2 · %3 thread(s) writing at low priority").arg(recorder_.files().size()).arg(recordFolder()).arg(recorder_.workers()); emit recordChanged(); return true;
 }
 void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store(nullptr); recorder_.stop(); recMsg_ = QStringLiteral("Recorded %1 s, %2 file(s)%3 in %4").arg(recorder_.seconds(), 0, 'f', 1).arg(recorder_.files().size()).arg(recorder_.dropped() ? QStringLiteral(" (%1 blocks DROPPED: disk too slow)").arg(recorder_.dropped()) : QString()).arg(recordFolder()); emit recordChanged(); }
-void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; armed_.set(static_cast<std::size_t>(i), on); emit stripsChanged(); emit recordChanged(); }
+void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return;
+  if (on && !armed_.test(static_cast<std::size_t>(i)) && static_cast<int>(armed_.count()) >= am::rec::kMaxTracks) { recMsg_ = QStringLiteral("MULTITRACK: at most 100 channels can be armed at once."); emit recordChanged(); return; }
+  armed_.set(static_cast<std::size_t>(i), on); emit stripsChanged(); emit recordChanged(); }
 // DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }

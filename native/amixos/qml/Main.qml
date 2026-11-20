@@ -65,9 +65,22 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
+    // ZOOM IN / OUT: the whole console is drawn larger or smaller at once (no restart), keeping its layout; the window size stays
+    readonly property real liveZoom: settings.liveZoom
+    Shortcut { sequences: ["Ctrl+=", "Ctrl++", StandardKey.ZoomIn]; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: { settings.zoomIn(); zoomToast.show() } }
+    Shortcut { sequences: ["Ctrl+-", StandardKey.ZoomOut]; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: { settings.zoomOut(); zoomToast.show() } }
+    Shortcut { sequence: "Ctrl+0"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: { settings.zoomReset(); zoomToast.show() } }
+    Rectangle { id: zoomToast; objectName: "zoomToast"; z: 95; anchors.horizontalCenter: parent.horizontalCenter; y: 64; radius: 8; color: Theme.card; border.color: Theme.cyan; opacity: 0
+        width: ztT.implicitWidth + 28; height: 30; function show() { opacity = 1; ztHide.restart() }
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+        Text { id: ztT; anchors.centerIn: parent; text: i18n.t("ZOOM", i18n.lang) + "  " + Math.round(root.liveZoom * 100) + " %   ·   Ctrl + / Ctrl - / Ctrl 0"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
+        Timer { id: ztHide; interval: 1400; onTriggered: zoomToast.opacity = 0 } }
     ColumnLayout {
-        anchors.fill: parent
+        objectName: "zoomRoot"
+        width: root.width / root.liveZoom; height: root.height / root.liveZoom; scale: root.liveZoom; transformOrigin: Item.TopLeft
         spacing: 0
+        // Ctrl + wheel anywhere on the console zooms too
+        WheelHandler { acceptedModifiers: Qt.ControlModifier; enabled: !root.setupLocked; onWheel: (e) => { if (e.angleDelta.y > 0) settings.zoomIn(); else if (e.angleDelta.y < 0) settings.zoomOut(); zoomToast.show() } }
         Rectangle {   // header
             Layout.fillWidth: true; implicitHeight: 52; color: Theme.chrome
             Songket { anchors.bottom: parent.bottom; width: parent.width; height: 7; unit: 14 }   // the songket band under the header
@@ -124,6 +137,9 @@ ApplicationWindow {
                         MItem { text: i18n.t("Soft restart", i18n.lang) + "   Ctrl+Shift+R"; onTriggered: root.softRestart() }
                         }
                     Menu { id: viewMenu; objectName: "viewMenu"; width: 260
+                        MItem { objectName: "menuZoomIn"; text: i18n.t("Zoom in", i18n.lang) + "   Ctrl +"; onTriggered: { settings.zoomIn(); zoomToast.show() } }
+                        MItem { objectName: "menuZoomOut"; text: i18n.t("Zoom out", i18n.lang) + "   Ctrl -"; onTriggered: { settings.zoomOut(); zoomToast.show() } }
+                        MItem { objectName: "menuZoomReset"; text: i18n.t("Actual size", i18n.lang) + "   Ctrl 0"; onTriggered: { settings.zoomReset(); zoomToast.show() } }
                         MItem { text: i18n.t("Mixer", i18n.lang); onTriggered: root.current = "mixer" }
                         MItem { text: i18n.t("Meters", i18n.lang); onTriggered: root.current = "meter" }
                         MItem { text: i18n.t("Routing", i18n.lang); onTriggered: root.current = "routing" }
@@ -326,6 +342,8 @@ ApplicationWindow {
             else if (t === "Light look" || t === "Dark look") { const d = settings.darkTheme; it.triggered(); if (settings.darkTheme === d) bad.push(t); settings.darkTheme = d }
             else if (t.indexOf("Colour motion") === 0) { const c = settings.colorMotion; it.triggered(); if (settings.colorMotion === c) bad.push(t); settings.colorMotion = c }
             else if (t.indexOf("Tooltips") >= 0) { const d = settings.tooltips; it.triggered(); if (settings.tooltips === d) bad.push(t); settings.tooltips = d }
+            else if (t.indexOf("Zoom in") === 0 || t.indexOf("Zoom out") === 0 || t.indexOf("Actual size") === 0) { const z = settings.liveZoom; settings.liveZoom = 1.0; it.triggered()
+                const want = t.indexOf("Zoom in") === 0 ? 1.1 : t.indexOf("Zoom out") === 0 ? 0.9 : 1.0; if (Math.abs(settings.liveZoom - want) > 0.001) bad.push(t + " -> " + settings.liveZoom); settings.liveZoom = z }
             else if (t.indexOf("LIVE MODE") === 0) { it.triggered(); if (!engine.liveMode) bad.push(t); engine.stopLive(); if (engine.liveMode) bad.push(t + " (stop)") }
             else if (t.indexOf("AUTO LIVE") >= 0) { const d = apps.autoLive; it.triggered(); if (apps.autoLive === d) bad.push(t); apps.autoLive = d }
             else if (t === "Volume Enhancer") { it.triggered(); if (!enhancer.opened && !enhancer.visible) bad.push(t) }

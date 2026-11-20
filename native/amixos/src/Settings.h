@@ -7,6 +7,8 @@
 // Changing a value saves it at once; nothing here phones home.
 #pragma once
 #include <QObject>
+#include <algorithm>
+#include <cmath>
 #include <QSettings>
 #include <QTimer>
 #include <QVariant>
@@ -30,6 +32,7 @@ class Settings : public QObject {
   Q_PROPERTY(int peakHoldMs READ peakHoldMs WRITE setPeakHoldMs NOTIFY changed)
   Q_PROPERTY(int uiZoom READ uiZoom WRITE setUiZoom NOTIFY changed)   // INTERFACE ZOOM: 0 = AUTO (fit the screen), else % of the Windows scale; at the next start (AutoZoom.h)
   Q_PROPERTY(QString zoomNote READ zoomNote CONSTANT)
+  Q_PROPERTY(double liveZoom READ liveZoom WRITE setLiveZoom NOTIFY changed)   // ZOOM IN / OUT at once (Ctrl + / - / 0, Ctrl + wheel): 0.5 .. 2.0 on top of the interface zoom
   Q_PROPERTY(bool vuDefault READ vuDefault WRITE setVuDefault NOTIFY changed)
   Q_PROPERTY(bool bootAnimation READ bootAnimation WRITE setBootAnimation NOTIFY changed)   // the opening animation
   Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
@@ -66,6 +69,11 @@ class Settings : public QObject {
   double clipDb() const { return s_.value("audio/clipDb", -0.1).toDouble(); } void setClipDb(double v);
   int peakHoldMs() const { return s_.value("audio/peakHoldMs", 1400).toInt(); } void setPeakHoldMs(int v);
   int uiZoom() const { return s_.value("ui/zoom", 0).toInt(); } void setUiZoom(int v) { set("ui/zoom", v); }
+  double liveZoom() const { const double z = s_.value("ui/liveZoom", 1.0).toDouble(); return z >= 0.5 && z <= 2.0 ? z : 1.0; }
+  void setLiveZoom(double z) { z = std::round(std::clamp(z, 0.5, 2.0) * 20.0) / 20.0; if (std::abs(z - liveZoom()) < 1e-9) return; set("ui/liveZoom", z); }
+  Q_INVOKABLE void zoomIn() { setLiveZoom(liveZoom() + 0.1); }
+  Q_INVOKABLE void zoomOut() { setLiveZoom(liveZoom() - 0.1); }
+  Q_INVOKABLE void zoomReset() { setLiveZoom(1.0); }
   QString zoomNote() const { return zoomNote_; } void setZoomNote(const QString& n) { zoomNote_ = n; }
  private: QString zoomNote_;
  public:
