@@ -45,6 +45,19 @@ Report assess(const Input& in) {
   return r;
 }
 
+int suggestFastBlock(const Input& in) {
+  const double rate = in.rate > 0 ? in.rate : 48000; const int cur = std::clamp(in.blockFrames, 16, 8192);
+  int floor = 64;
+  if (in.backend == "asio") floor = 32; else if (in.backend == "dsound") floor = 512; else if (in.backend == "null") floor = 16;
+  else if (in.backend == "wasapi" && !in.exclusive) floor = static_cast<int>(std::ceil(rate * 0.010));   // Windows' shared engine period
+  if (in.xruns > 0) floor = std::max(floor, cur);   // it already dropped out at this size: do not go lower
+  // the worst block's cost per frame at the current size, plus a fixed part (a quarter of it, the per-block overhead): under half the block
+  const double perFrameUs = in.maxBlockUs > 0 ? 0.75 * in.maxBlockUs / cur : 0, fixedUs = in.maxBlockUs > 0 ? 0.25 * in.maxBlockUs : 0;
+  int b = 16;
+  while (b < 8192 && (b < floor || fixedUs + perFrameUs * b > 0.5 * 1e6 * b / rate)) b *= 2;
+  return b;
+}
+
 std::vector<float> testClick(double rate) {
   // a 40 ms logarithmic sweep 300 Hz -> 6 kHz under a Hann window: a sharp, unambiguous correlation peak, quiet enough to be polite
   const std::size_t n = static_cast<std::size_t>(std::max(256.0, 0.040 * (rate > 0 ? rate : 48000))); std::vector<float> v(n);

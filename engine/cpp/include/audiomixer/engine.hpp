@@ -23,6 +23,29 @@ namespace am {
 constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr int kMaxStrips = 300;   // the ULTIMATE console; a licence runs fewer (BASIC 10 ... MASTER 32). Strips that get no input cost nothing (see Mixer::process idle)
 
+// ───────── true peak (FAST mode's master limiter) ─────────
+// TRUE PEAK, 4x: the inter-sample peak a converter's reconstruction filter can make between two samples (ITU-R BS.1770 style). A
+// polyphase 12-tap windowed-sinc interpolator gives the 3 points between each pair of samples (the same filter as Loudness' true-peak
+// meter). push() takes one sample and answers for the sample kDelay behind it (the interpolation needs 6 samples after it): the magnitude
+// of that sample and of the 3 points between it and the next. Fixed storage, no allocation: real-time safe. 36 multiply-adds a sample.
+class TruePeak4x {
+ public:
+  static constexpr int kTaps = 12, kDelay = 6;
+  TruePeak4x() { reset(); }
+  void reset() { for (double& v : h_) v = 0; w_ = 0; }
+  double push(double x) {
+    h_[w_] = x; h_[w_ + kTaps] = x; w_ = (w_ + 1) % kTaps;            // the window is h_[w_ .. w_ + 11], oldest first
+    const double* b = h_ + w_; const double (&c)[3][kTaps] = coeffs();
+    double pk = b[5] < 0 ? -b[5] : b[5];                               // the sample itself (kDelay behind the newest)
+    for (int p = 0; p < 3; ++p) { double s = 0; for (int j = 0; j < kTaps; ++j) s += b[j] * c[p][j]; if (s < 0) s = -s; if (s > pk) pk = s; }
+    return pk;
+  }
+  double delayed() const { return h_[w_ + 5]; }                        // the sample push() just answered for (kDelay behind)
+  static const double (&coeffs())[3][kTaps];
+ private:
+  double h_[2 * kTaps]; int w_ = 0;
+};
+
 // ───────── level meter ─────────
 struct ClipConfig {
   double lin = std::pow(10.0, -0.1 / 20);   // threshold, linear
@@ -146,6 +169,11 @@ class Mixer {
   void applyOutputTrim(float* const* ch, int nch, std::size_t n);
   double outputTrimDb() const { return trimTarget_ <= 0 ? -120.0 : 20.0 * std::log10(trimTarget_); }
   void setLimiter(bool on, double ceilingDb = -0.5, double releaseMs = 100);   // brick-wall peak limiter: instant attack
+  // TRUE-PEAK limiter (DSP MODE FAST): the master limiter's detector looks at the 4x-oversampled signal (TruePeak4x), so the inter-sample
+  // peaks also stay under the ceiling (dBTP, not dBFS). The master is then 6 samples late (0.125 ms at 48 kHz: the interpolation's look-ahead).
+  // Off (the default): the sample-peak limiter, no delay, bit-exact as before.
+  void setTruePeakLimiter(bool on);
+  bool truePeakLimiter() const { return tpOn_; }
   void setClipDb(double db);
   void setPeakHoldMs(double ms);              // how long the peak-hold line stays (all meters); 0 = no hold
   void setSend(int strip, int bus, double db, bool pre);     // -60 and below = off, +10 at most
@@ -205,6 +233,7 @@ class Mixer {
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
   bool analog_ = false; int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100, limGrDb_ = 0;
+  bool tpOn_ = false; TruePeak4x tpL_, tpR_; double tpPrevNeed_ = 1;   // the true-peak detector of the master limiter (FAST)
   std::uint64_t nonFinite_ = 0;
   ClipConfig clip_; Meter master_[2]; Loudness loudness_; PhaseResult phase_{0, 0, 0, 0, true};
   Send sends_[kMaxStrips][kMaxBuses]{}; Bus buses_[kMaxBuses]; bool anySend_ = false; BusProcessor* masterFx_ = nullptr;

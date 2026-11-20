@@ -55,6 +55,7 @@ class MonoInsert : public Runtime::Insert {
       done += n;
     }
   }
+  bool bypassed() const override { return p_->bypass(); }   // DSP MODE FAST skips it then (TRUE BYPASS)
   const std::shared_ptr<Plugin>& plugin() const { return p_; }
  private:
   std::shared_ptr<Plugin> p_; std::vector<float> ol_, or_;
