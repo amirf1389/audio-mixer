@@ -184,6 +184,17 @@
     <string name="lm_output">OUTPUT</string>
     <string name="lm_mono">MONO · 1 CHANNEL</string>
     <string name="lm_stereo">STEREO · 2 CHANNELS</string>
+    <string name="lm_multi_in">MULTI · 6 CHANNELS</string>
+    <string name="lm_eq">EQ</string>
+    <string name="lm_eq_on">EQ ●</string>
+    <string name="lm_eq_title">%1$s · 3-BAND EQ</string>
+    <string name="lm_eq_low">LOW  %1$s dB</string>
+    <string name="lm_eq_mid">MID  %1$s dB</string>
+    <string name="lm_eq_high">HIGH  %1$s dB</string>
+    <string name="lm_eq_flat">FLAT</string>
+    <string name="lm_eq_tone">TONE PRESET: %1$s</string>
+    <string name="lm_eq_tone_none">none</string>
+    <string name="lm_fx_pack">★ PRESET PACK EFFECT</string>
     <string name="lm_in_system">The phone\'s choice (built-in or plugged-in microphone)</string>
     <string name="lm_out_system">The phone\'s choice (speaker, headphones when plugged in)</string>
     <string name="lm_gone">That device is not connected now: the phone\'s choice is used</string>

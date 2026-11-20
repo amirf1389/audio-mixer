@@ -387,6 +387,10 @@ add_executable(decks_test test/decks_test.cpp)   # the standalone phone mixer's 
 target_include_directories(decks_test PRIVATE app ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/c/include)
 target_link_libraries(decks_test PRIVATE amix_static Threads::Threads)
 add_test(NAME decks COMMAND decks_test)
+add_executable(phone_decks_test test/phone_decks_test.cpp)   # the phone mixer's decks heard on its 14 strips (channel EQ in slot 4)
+target_include_directories(phone_decks_test PRIVATE app ${CMAKE_CURRENT_SOURCE_DIR}/../../sdk/c/include)
+target_link_libraries(phone_decks_test PRIVATE amix_static Threads::Threads)
+add_test(NAME phone_decks COMMAND phone_decks_test)
 install(TARGETS amix amix_soxr amixos-daemon LIBRARY DESTINATION lib RUNTIME DESTINATION bin PUBLIC_HEADER DESTINATION include)
 
 # the hybrid mixer (sixteen strips, programs captured next to the device inputs)
