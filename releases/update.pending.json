@@ -1,10 +1,28 @@
 {
   "product": "audio-mixer",
-  "version": "1.24.0.5",
+  "version": "1.25.0.0",
   "channel": "stable",
   "released": "2026-11-20",
   "notes": [],
   "features": [
+    {
+      "version": "1.25.0.0",
+      "date": "2026-11-20",
+      "title": "1.25.0.0: multitrack recording, zoom, mini player above the faders, factory setup on every new install",
+      "items": [
+        "NEW · MULTITRACK on the console: up to 100 armed channels, each to its own file beside the master; the files are written and compressed on every core but one, at low priority, so the sound never waits for them",
+        "NEW · MULTITRACK on the phone mixer (SETUP): REC also writes every channel to its own FLAC file, inputs mono and decks stereo, from each channel's own input before its fader",
+        "NEW · ZOOM on the console: Ctrl + / Ctrl - / Ctrl 0 and Ctrl + mouse wheel draw the whole console larger or smaller at once (50 to 200 %), also in the VIEW menu; Ctrl + Shift + / - makes the mixer strips wider or narrower",
+        "NEW · ZOOM on the phone mixer: the - and + keys beside FADERS / MEDIA / SETUP show more, narrower channels or fewer, wider ones (3 to 8 across)",
+        "NEW · MINI PLAYER on the phone mixer: the PLAYERS link plays in a small video pane right above the faders (beside them when the phone lies on its side); VIDEO on the PLAYERS strip shows or hides it",
+        "NEW · PLAYERS channel on the phone mixer: a fader that sets the YouTube player's volume and a MUTE for every service; the streamed sound is not recorded or passed through the effects",
+        "NEW · A new Windows installation opens the factory setup at its first start; it cannot be skipped or closed past, and nothing behind it can be clicked until FINISH",
+        "NEW · Phone mixer sections FADERS, MEDIA and SETUP, a landscape layout with six channels across, bigger faders in the KNOBS view of the console remote",
+        "FIX · ONE VOICE acts on a microphone only: computer sound or a program's sound that is the same on both sides keeps both channels",
+        "FIX · Windows microphone privacy: the console follows it by itself, and listing the devices never touches a microphone",
+        "FIX · Buttons that were cut off on EFFECTS, MASTERING, ARRANGE, ACOUSTICS and NETWORK; the effects list scrolls"
+      ]
+    },
     {
       "version": "1.24.0.5",
       "date": "2026-11-19",
@@ -242,23 +260,17 @@
     }
   ],
   "files": {
-    "win-x64-exe": {
-      "name": "AmF-X1-1.24.0.5-setup.exe",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.24.0.5-setup.exe",
-      "size": 27970498,
-      "sha256": "eb769f063d35440e7510d5ec189af7b03196ddb4b7a840327422978d50f3b1b7"
-    },
     "android-apk": {
-      "name": "AmF-X1-1.24.0.5-b4-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.5-b4-android.apk",
-      "size": 14647258,
-      "sha256": "0be6ccbb5d98dca2dd14c978b5a822892a5f5e06452fe8a502dc279d596f4fd5"
+      "name": "AmF-X1-1.25.0.0-b2-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b2-android.apk",
+      "size": 14649566,
+      "sha256": "68704a4169a961a8c1a6d679f322e5a6170d3cdfdef8d42666b65a02a9561d71"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.24.0.5-b4-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.5-b4-android.apk",
-      "size": 14646962,
-      "sha256": "411578407ad05c33bcf808529ed954fe0a566b4f2f194209e601030037c705c1"
+      "name": "AmF-X1-Mixer-1.25.0.0-b2-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b2-android.apk",
+      "size": 14649266,
+      "sha256": "444f985271e001bac0f01c6ebf30093d2fc824a9e0247b7c74caec890273d218"
     }
   },
   "plugins": []
