@@ -2,7 +2,7 @@
   "product": "audio-mixer",
   "version": "1.24.0.5",
   "channel": "stable",
-  "released": "2026-11-19",
+  "released": "2026-11-20",
   "notes": [],
   "features": [
     {
@@ -249,16 +249,16 @@
       "sha256": "eb769f063d35440e7510d5ec189af7b03196ddb4b7a840327422978d50f3b1b7"
     },
     "android-apk": {
-      "name": "AmF-X1-1.24.0.5-b1-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.5-b1-android.apk",
-      "size": 14591693,
-      "sha256": "226c1a674cfb3ce46ceb5b6c991e24a4f1133a33884bac08a62ee263e23f9b99"
+      "name": "AmF-X1-1.24.0.5-b3-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.24.0.5-b3-android.apk",
+      "size": 14647262,
+      "sha256": "917f6509cd12994b9ecd3bb1eb971cc5d4c138e28daf9ef2de2bb1d5ed625880"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.24.0.5-b1-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.5-b1-android.apk",
-      "size": 14591417,
-      "sha256": "724aa436c5cd9fe2155c18d338b71471d48835654dcee978ed2f7a28d981d5a4"
+      "name": "AmF-X1-Mixer-1.24.0.5-b3-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.24.0.5-b3-android.apk",
+      "size": 14646962,
+      "sha256": "24feff4d0d900864f243ad77259b4868aa02a86eb4c88fdec9771c09e487db2b"
     }
   },
   "plugins": []
