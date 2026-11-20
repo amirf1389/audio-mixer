@@ -32,12 +32,14 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
         if (running) return
         running = true
         // the NDK's recommended path first: AAudio in native code. A device change (headphones in / out) disconnects the stream: the watcher reopens it
-        if (engine.startNative(sampleRate, useInput, outDevice, inDevice, bursts, inChannels) > 0) {
+        // more than two inputs (the phone mixer's CH 1-6 from an interface): the multi-channel native loop, inputs on strips 1..inChannels
+        fun open() = if (useInput && inChannels > 2) engine.startUsb(sampleRate, outDevice, inDevice, inChannels, 2, bursts) else engine.startNative(sampleRate, useInput, outDevice, inDevice, bursts, inChannels)
+        if (open() > 0) {
             path = "aaudio"
             watcher = thread(name = "amix-aaudio-watch") {
                 while (running) {
                     lastPeaks = engine.peaks(); lastInPeaks = engine.inputPeaks()
-                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && engine.startNative(sampleRate, useInput, outDevice, inDevice, bursts, inChannels) <= 0) { running = false; path = "" } }
+                    if (engine.nativeState()[1] == 1) { Engine.aaudioStop(); if (running && open() <= 0) { running = false; path = "" } }
                     Thread.sleep(33)
                 }
             }

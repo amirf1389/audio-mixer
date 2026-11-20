@@ -69,6 +69,15 @@ class PadButton(ctx: Context, label: String, private val onColor: Int, private v
 object ConsoleUi {
     val palette = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt(), 0xFFFBBF24.toInt(), 0xFFF472B6.toInt())
     const val RED = 0xFFEF4444.toInt(); const val AMBER = 0xFFFBBF24.toInt(); const val GREEN = 0xFF34D399.toInt(); const val CYAN = 0xFF7FD8E8.toInt(); const val VIOLET = 0xFFA78BFA.toInt()
+    // COMPACT KEYS (the AmF X1 app, not the AmF X1 Mixer app): smaller keys that still take a finger: at least KEY_DP tall (PRIMARY_DP
+    // for the main ones), tight padding, one line, and on a key of fixed size the text shrinks to fit instead of being cut off
+    const val KEY_DP = 40f; const val PRIMARY_DP = 44f
+    fun dp(c: Context, v: Float): Int = (v * c.resources.displayMetrics.density + 0.5f).toInt()
+    /** a key made compact: [hDp] tall at least, [maxSp] text that shrinks (down to 8 sp) when [fit] and the key's width is fixed */
+    fun <T : android.widget.TextView> compact(v: T, hDp: Float = KEY_DP, maxSp: Int = 12, fit: Boolean = true): T = v.apply {
+        val c = context; minWidth = 0; minimumWidth = 0; minHeight = dp(c, hDp); minimumHeight = dp(c, hDp); maxLines = 1; isSingleLine = true
+        setPadding(dp(c, 6f), 0, dp(c, 6f), 0); textSize = maxSp.toFloat()
+        if (fit) androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 8, maxSp, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
     fun mix(a: Int, b: Int, t: Float): Int = Color.rgb((Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(), (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(), (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt())
     /** a strip's panel: a dark body faintly tinted with its colour, rounded, with the colour as a bar across the top */
     fun stripBackground(color: Int, master: Boolean = false): LayerDrawable {

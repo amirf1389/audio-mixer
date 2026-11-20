@@ -26,11 +26,12 @@ class StandaloneMixerTest {
     @Test fun oneScreenHasInputsDecksMasterAndRec() {
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
         val t = texts(a.window.decorView)
-        // A 10-CHANNEL MIXER: 2 inputs + DECK A .. D (stereo pairs); every deck has its card and its channel with a rack of its own
-        assertEquals(10, LocalMixerActivity.STRIPS); assertEquals(10, LocalMixerActivity.INPUTS + 2 * LocalMixerActivity.DECKS)
+        // A 10-CHANNEL MIXER: CH 1 .. 6 + DECK A .. D (stereo pairs) on 14 engine strips; every deck has its card and its channel with a rack of its own
+        assertEquals(10, LocalMixerActivity.CHANNELS); assertEquals(14, LocalMixerActivity.STRIPS); assertEquals(LocalMixerActivity.STRIPS, LocalMixerActivity.INPUTS + 2 * LocalMixerActivity.DECKS)
+        for (c in 1..6) assertTrue("CH $c on the desk", t.any { it.startsWith("CH $c") })
         for (d in listOf("DECK A", "DECK B", "DECK C", "DECK D")) assertEquals("$d: a card and a channel", 2, t.count { it == d })
         assertTrue(t.contains("MASTER")); assertTrue(t.contains("● REC")); assertTrue(t.count { it == "LOAD" } == 4); assertTrue(t.count { it == "LOOP" } == 4)
-        assertEquals(listOf(2, 3), LocalMixerActivity.mates(2)); assertEquals(listOf(8, 9), LocalMixerActivity.mates(8)); assertEquals(listOf(0), LocalMixerActivity.mates(0)); assertEquals(listOf(-1), LocalMixerActivity.mates(-1)); assertEquals(listOf(3), LocalMixerActivity.mates(3))
+        assertEquals(listOf(6, 7), LocalMixerActivity.mates(6)); assertEquals(listOf(12, 13), LocalMixerActivity.mates(12)); assertEquals(listOf(0), LocalMixerActivity.mates(0)); assertEquals(listOf(2), LocalMixerActivity.mates(2)); assertEquals(listOf(-1), LocalMixerActivity.mates(-1)); assertEquals(listOf(7), LocalMixerActivity.mates(7))
         assertTrue("a rack button on the master, the input and each of the four decks", t.count { it.contains("FX") } >= 6)
         assertTrue("the deck tells why it cannot play here", t.any { it.contains("engine") || it.contains("No song") })
     }

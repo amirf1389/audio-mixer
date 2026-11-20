@@ -105,6 +105,7 @@ class RemoteActivity : FitActivity() {
         val viewBtn = Button(this).apply { contentDescription = "remoteView"; text = viewName() }
         viewBtn.setOnClickListener { Prefs.remote(this).edit().putBoolean("bigFaders", !Prefs.bigFaders(this)).apply(); viewBtn.text = viewName(); state?.let { buildStrips(it) } }
         row2.addView(viewBtn, 0)
+        for (i in 0 until row2.childCount) (row2.getChildAt(i) as? Button)?.let { ConsoleUi.compact(it, ConsoleUi.PRIMARY_DP, 12, fit = false).setPadding(ConsoleUi.dp(this, 12f), 0, ConsoleUi.dp(this, 12f), 0) }   // one line each, no cut text
         connected = listOf(busesBtn, monBtn, clipBtn, recBtn, mgBtn, inBtn)
         find.setOnClickListener {   // FIND: the consoles on this Wi-Fi that run the phone remote
             val ip = localIp(); if (ip == null) { status.text = getString(R.string.no_wifi); return@setOnClickListener }
@@ -205,30 +206,40 @@ class RemoteActivity : FitActivity() {
         /** channels across beside the master: four upright, six when the phone lies on its side (each still wider than a thumb) */
         fun acrossFor(landscape: Boolean) = if (landscape) 6 else ACROSS
         fun stripWidthFor(screenPx: Int, across: Int): Int = maxOf(176, (screenPx - 40 - (252 + 8)) / maxOf(1, across) - 8)
+        /** COMPACT (the AmF X1 app; the AmF X1 Mixer app keeps [ACROSS]): five channels across upright, eight on its side */
+        const val COMPACT_ACROSS = 5
+        fun compactAcrossFor(landscape: Boolean) = if (landscape) 8 else COMPACT_ACROSS
+        /** a compact strip: as [stripWidthFor] but never thinner than [MIN_STRIP_DP] (a fingertip with its key) */
+        const val MIN_STRIP_DP = 52f
+        fun compactStripWidthFor(screenPx: Int, across: Int, density: Float): Int = maxOf((MIN_STRIP_DP * density).toInt(), (screenPx - 40 - (252 + 8)) / maxOf(1, across) - 8)
+        /** the KNOBS view's strip, the knobs on it and the keys under them, in dp */
+        const val KNOB_STRIP_DP = 58f; const val KNOB_DP = 34f; const val PAN_DP = 38f
     }
     private fun buildStrips(s: ConsoleState) {
         strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear(); toneUi.clear()
         val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         // FADERS view: exactly five channels beside the master, so the ten channels of a console are two pages and each fader is as wide
         // as a finger and as tall as the screen allows. KNOBS view: narrower strips with pan, gain and the 3-band EQ above a shorter fader.
-        val big = Prefs.bigFaders(this); val stripW = if (big) stripWidthFor(resources.displayMetrics.widthPixels, acrossFor(resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)) else 200
+        // COMPACT: five channels across upright (eight on its side), the keys 40 dp tall with text that shrinks instead of being cut
+        val dens = resources.displayMetrics.density
+        val big = Prefs.bigFaders(this); val stripW = if (big) compactStripWidthFor(resources.displayMetrics.widthPixels, compactAcrossFor(resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE), dens) else ConsoleUi.dp(this, KNOB_STRIP_DP)
         for (st in s.strips.take(Prefs.stripCount(this))) {
             val tint = colors[(st.id / 8) % colors.size]
             val col = ConsoleUi.strip(this, tint, stripW)
-            val name = TextView(this).apply { text = ConsoleUi.title(st.id, st.name); setTextColor(Color.WHITE); textSize = 11f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD
+            val name = TextView(this).apply { text = ConsoleUi.title(st.id, st.name); setTextColor(Color.WHITE); textSize = 10f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD
                 setOnClickListener { showChannel(st.id, st.name) }; setOnLongClickListener { rename(st.id, this); true } }
             col.addView(name)
             // KNOBS view: pan, gain and EQ sit in their own scrolling box that takes at most 45 % of the strip, so the fader under it always
             // keeps more than half the height (before, the knobs took it all and the fader shrank to a sliver)
             val knobBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-            if (!big && Prefs.showPan(this)) knobBox.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(128, LinearLayout.LayoutParams.WRAP_CONTENT)
+            if (!big && Prefs.showPan(this)) knobBox.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(ConsoleUi.dp(this@RemoteActivity, PAN_DP), LinearLayout.LayoutParams.WRAP_CONTENT)
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
                 onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } })
             if (!big && Prefs.showTone(this)) knobBox.addView(toneBlock(st, tint))
             if (knobBox.childCount > 0) col.addView(android.widget.ScrollView(this).apply { tag = "knobScroll"; isVerticalScrollBarEnabled = false; addView(knobBox)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.8f) })
             val ms = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            fun small(t: ToggleButton) = t.apply { textSize = 13f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(0, 84, 1f).apply { setMargins(3, 4, 3, 4) } }
+            fun small(t: ToggleButton) = ConsoleUi.compact(t, ConsoleUi.KEY_DP, 12).apply { setPadding(0, 0, 0, 0); contentDescription = "stripKey"; layoutParams = LinearLayout.LayoutParams(0, ConsoleUi.dp(this@RemoteActivity, ConsoleUi.KEY_DP), 1f).apply { setMargins(2, 3, 2, 3) } }
             val mute = small(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = st.mute; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.mute(st.id, on) } } } } })
             val solo = small(ToggleButton(this).apply { textOn = "S"; textOff = "S"; isChecked = st.solo; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#FBBF24") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.solo(st.id, on) } } } } })
             mute.setTextColor(if (st.mute) Color.parseColor("#EF4444") else Color.WHITE); solo.setTextColor(if (st.solo) Color.parseColor("#FBBF24") else Color.WHITE)
@@ -670,12 +681,12 @@ class RemoteActivity : FitActivity() {
         // a little room above GAIN: the pan knob's value ("C", "L40") sits right under it
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 14, 0, 0) }
         val dbF: (Float, Double) -> String = { v, r -> val d = Math.round(v * r * 2) / 2.0; (if (d > 0) "+" else "") + String.format("%.1f", d) }
-        fun k(title: String, color: Int, f: (Float) -> String) = KnobView(this, color).apply { this.title = title; fmt = f; layoutParams = LinearLayout.LayoutParams(112, LinearLayout.LayoutParams.WRAP_CONTENT)
+        fun k(title: String, color: Int, f: (Float) -> String) = KnobView(this, color).apply { this.title = title; fmt = f; layoutParams = LinearLayout.LayoutParams(ConsoleUi.dp(this@RemoteActivity, KNOB_DP), LinearLayout.LayoutParams.WRAP_CONTENT)
             onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() } }
         val gain = k("GAIN", Color.parseColor("#FBBF24")) { dbF(it, 24.0) }
         val hi = k("HI", tint) { dbF(it, 15.0) }; val mid = k("MID", tint) { dbF(it, 15.0) }; val lo = k("LO", tint) { dbF(it, 15.0) }
         val freq = k("FREQ", Color.parseColor("#22D3EE")) { val hz = knobToHz(it); if (hz >= 1000) String.format("%.1fk", hz / 1000) else "${hz.toInt()}" }.apply { home = hzToKnob(1000.0) }
-        val eq = ToggleButton(this).apply { textOn = "EQ"; textOff = "EQ"; textSize = 11f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); layoutParams = LinearLayout.LayoutParams(112, 64).apply { setMargins(0, 2, 0, 2) } }
+        val eq = ConsoleUi.compact(ToggleButton(this).apply { textOn = "EQ"; textOff = "EQ" }, ConsoleUi.KEY_DP, 11).apply { setPadding(0, 0, 0, 0); contentDescription = "eqKey"; layoutParams = LinearLayout.LayoutParams(ConsoleUi.dp(this@RemoteActivity, KNOB_DP + 8), ConsoleUi.dp(this@RemoteActivity, ConsoleUi.KEY_DP)).apply { setMargins(0, 2, 0, 2) } }
         ConsoleUi.styleToggle(eq, ConsoleUi.AMBER)
         val ui = ToneUi(gain, eq, hi, mid, freq, lo); toneUi[st.id] = ui; ui.show(st)
         val id = st.id; fun sendTone() { val t = ui.tone; live.submit("tone$id") { client?.tone(id, t) } }

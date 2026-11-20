@@ -104,7 +104,7 @@ class HomeActivity : FitActivity() {
         phoneCard.removeAllViews(); val cyan = getColor(R.color.cyan); val dim = getColor(R.color.dim); val p = Prefs.local(this)
         phoneCard.addView(TextView(this).apply { text = getString(R.string.home_phone_card); setTextColor(cyan); textSize = 12f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.15f })
         val hal = runCatching { AudioHal.read(this) }.getOrNull()
-        val inText = if (!Prefs.localInputOn(this)) getString(R.string.home_phone_input_off) else getString(if (p.getInt("inChannels", 1) == 2) R.string.lm_stereo else R.string.lm_mono)
+        val inText = if (!Prefs.localInputOn(this)) getString(R.string.home_phone_input_off) else getString(when (p.getInt("inChannels", 1)) { 2 -> R.string.lm_stereo; LocalMixerActivity.INPUTS -> R.string.lm_multi_in; else -> R.string.lm_mono })
         val chain = LocalChains.byId(LocalChains.current(p, 0))
         phoneCard.addView(TextView(this).apply { tag = "phoneStatus"; setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 6, 0, 14)
             text = getString(R.string.home_phone_io, inText, chain?.title ?: "—", hal?.nativeRate?.takeIf { it in 8000..192000 } ?: 48000, hal?.nativeFrames?.takeIf { it in 32..2048 } ?: 256) })

@@ -41,10 +41,12 @@ class MixerSectionsTest {
         assertEquals(6, RemoteActivity.acrossFor(true)); assertEquals(4, RemoteActivity.acrossFor(false))
         assertEquals(listOf("secFaders"), shown(a))
         val w = a.resources.displayMetrics.widthPixels; val h = a.resources.displayMetrics.heightPixels; assertTrue(w > h)
-        val strip = RemoteActivity.stripWidthFor(w - 88, 6)
-        assertTrue(strip >= RemoteActivity.stripWidthFor(1233, 4))                               // on its side each fader is at least as wide as upright
-        assertTrue(6 * (strip + 8) + 340 + 8 + 40 <= w)                                          // six strips and the wider master fit the screen
-        val f = faders(root); assertTrue(f.size >= 6)
+        // the AmF X1 app is COMPACT: eight across on its side (the AmF X1 Mixer app keeps six)
+        val d = a.resources.displayMetrics.density; val strip = RemoteActivity.compactStripWidthFor(w - 88, 8, d)
+        assertEquals(strip, (find(root, "localChannels") as ViewGroup).getChildAt(0).layoutParams.width)
+        assertTrue(strip >= RemoteActivity.compactStripWidthFor(1233, 5, d))                     // on its side each fader is at least as wide as upright
+        assertTrue(8 * (strip + 8) + 340 + 8 + 40 <= w)                                          // eight strips and the wider master fit the screen
+        val f = faders(root); assertTrue(f.size >= 8)
         assertTrue("fader ${f[0].height} of $h", f[0].height > h * 0.50)                         // and takes more than half of the short height
         val bar = find(root, "sectionBar")!!; val start = find(root, "sec_faders")!!
         assertTrue(bar.isShown && start.isShown)
@@ -75,8 +77,18 @@ class MixerSectionsTest {
         assertTrue("zoom in makes strips wider: $w0 -> $w1", w1 > w0)
         repeat(10) { find(a.window.decorView, "zoomIn")!!.performClick() }; val wMax = across()
         repeat(10) { find(a.window.decorView, "zoomOut")!!.performClick() }; val wMin = across()
-        assertTrue(wMax > wMin && wMin >= 176)                                                        // never thinner than a finger
+        val dn = a.resources.displayMetrics.density
+        assertTrue(wMax > wMin && wMin >= (RemoteActivity.MIN_STRIP_DP * dn).toInt())               // never thinner than a fingertip (compact: up to ten across)
+        assertEquals(RemoteActivity.compactStripWidthFor(a.resources.displayMetrics.widthPixels, 10, dn), wMin)
         assertEquals(RemoteActivity.stripWidthFor(a.resources.displayMetrics.widthPixels, 3), wMax)  // at most 3 across, at least …
         Prefs.local(a).edit().remove("stripZoom").apply()
+    }
+    /** the AmF X1 Mixer app is not made compact: four across, 176 px at least, as before */
+    @Test fun theMixerAppKeepsItsOwnStrips() {
+        Nav.standaloneForTests = true
+        try { val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
+            val w = (find(a.window.decorView, "localChannels") as ViewGroup).getChildAt(0).layoutParams.width
+            assertEquals(RemoteActivity.stripWidthFor(a.resources.displayMetrics.widthPixels, 4), w)
+            assertEquals(84, find(a.window.decorView, "eq_0")!!.layoutParams.height) } finally { Nav.standaloneForTests = null }
     }
 }

@@ -24,7 +24,8 @@ import java.util.Base64
 object PresetPack {
     data class Mastering(val name: String, val params: Map<String, Any>)
     data class Effect(val id: Int, val kind: String, val name: String, val category: String, val values: Map<String, Double>)
-    data class Tone(val kind: String, val name: String, val category: String)
+    /** a tone preset: its filters ([ChannelEq.Band]) and cut filters (0 = off), so it can be put on any channel of the phone mixer */
+    data class Tone(val kind: String, val name: String, val category: String, val bands: List<ChannelEq.Band> = emptyList(), val hpHz: Double = 0.0, val lpHz: Double = 0.0)
     data class Pack(val version: String, val mastering: List<Mastering>, val effects: List<Effect>, val tone: List<Tone>) {
         fun effectsOf(kind: String) = effects.filter { it.kind == kind }
     }
@@ -42,10 +43,20 @@ object PresetPack {
         val m = list("mastering").let { a -> (0 until a.length()).map { a.getJSONObject(it).let { x -> Mastering(x.getString("name"), map(x.getJSONObject("params"))) } } }
         val e = list("effects").let { a -> (0 until a.length()).map { a.getJSONObject(it).let { x -> val v = x.getJSONObject("values")
             Effect(x.getInt("id"), x.getString("kind"), x.getString("name"), x.optString("category"), v.keys().asSequence().associateWith { k -> v.getDouble(k) }) } } }
-        val t = list("tone").let { a -> (0 until a.length()).map { a.getJSONObject(it).let { x -> Tone(x.getString("kind"), x.getString("name"), x.optString("category")) } } }
+        val t = list("tone").let { a -> (0 until a.length()).map { a.getJSONObject(it).let { x -> toneOf(x) } } }
         if (m.isEmpty() || e.isEmpty() || t.isEmpty()) null else Pack(o.getString("version"), m, e, t)
     }.getOrNull()
 
+    /** a tone preset in either form of the pack: a "chain" (dsp.eq of f / g / q / t, dsp.hpFreq) or an "eq" (bands of freq / gainDb / q / type,
+     *  hpFreq / lpFreq, each on when its order is above 0) */
+    private fun toneOf(x: JSONObject): Tone {
+        val dsp = x.optJSONObject("dsp"); val bands = ArrayList<ChannelEq.Band>(); var hp = 0.0; var lp = 0.0
+        dsp?.optJSONArray("eq")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { b -> bands += ChannelEq.Band(b.optDouble("f", 0.0), b.optDouble("g", 0.0), b.optDouble("q", 1.0), b.optInt("t", 1)) } }
+        if (dsp != null && dsp.optInt("hpOrder", 0) > 0) hp = dsp.optDouble("hpFreq", 0.0)
+        x.optJSONArray("bands")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { b -> bands += ChannelEq.Band(b.optDouble("freq", 0.0), b.optDouble("gainDb", 0.0), b.optDouble("q", 1.0), b.optInt("type", 1)) } }
+        if (x.optInt("hpOrder", 0) > 0) hp = x.optDouble("hpFreq", 0.0); if (x.optInt("lpOrder", 0) > 0) lp = x.optDouble("lpFreq", 0.0)
+        return Tone(x.getString("kind"), x.getString("name"), x.optString("category"), bands, hp, lp)
+    }
     fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
     private fun vendorKey(x: String = VENDOR_X, y: String = VENDOR_Y): ECPublicKey {

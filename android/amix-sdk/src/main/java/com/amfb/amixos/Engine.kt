@@ -61,6 +61,8 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     companion object {
         const val MAX_FRAMES = 4096
         const val MAX_INSERTS = 4
+        /** the slot past the rack where the phone mixer keeps each channel's 3-band EQ (the native side has MAX_INSERTS + 1 slots) */
+        const val EQ_SLOT = 4
         /** [{"kind","name"}]: every effect the inserts take */
         @JvmStatic external fun fxCatalogJson(): String
         /** the input channels the native loop really opened (2 = stereo on strips 1-2, 1 = mono, 0 = none) */
