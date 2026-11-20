@@ -229,11 +229,21 @@ class ScreenshotTest {
         a.showTakes(listOf(RecorderActivity.Take(File("2026-11-16_10-42-07.flac"), "96 kHz · 24-bit · stereo · 03:25 · 41.8 MB"), RecorderActivity.Take(File("2026-11-15_19-03-55.wav"), "48 kHz · 32-bit float · mono · 00:48 · 9.2 MB")))
         shot(a.window.decorView.rootView, "recorder")
     }
+    @Test @Config(qualifiers = "w891dp-h411dp-land-xxhdpi") fun phoneMixerOnItsSide() {   // landscape: six channels across, the faders over most of the height
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString("section", "faders").putString(LocalMixerActivity.rackKey(0), "comp|plate|delay|drive").commit()
+        val v = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get().window.decorView.rootView
+        v.measure(View.MeasureSpec.makeMeasureSpec(2673, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1233, View.MeasureSpec.EXACTLY)); v.layout(0, 0, 2673, 1233)
+        val b = Bitmap.createBitmap(2673, 1233, Bitmap.Config.ARGB_8888); v.draw(Canvas(b)); FileOutputStream(File(out, "phone-mixer-landscape.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
     @Test fun phoneMixer() {   // no native engine on the JVM: the screen and a rack are drawn from saved choices and made-up engine JSON
         val ctx = org.robolectric.RuntimeEnvironment.getApplication()
         Prefs.local(ctx).edit().putInt("inChannels", 2).putFloat("db0", -3f).putString(LocalMixerActivity.rackKey(0), "comp|plate|delay|drive").putString(LocalMixerActivity.rackKey(-1), "maximizer|||").commit()
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
-        shot(a.window.decorView.rootView, "phone-mixer")
+        fun tap(d: String) { fun f(v: View): View? { if (v.contentDescription == d) return v; if (v is android.view.ViewGroup) for (i in 0 until v.childCount) f(v.getChildAt(i))?.let { return it }; return null }; f(a.window.decorView)!!.performClick() }
+        tap("sec_faders"); shot(a.window.decorView.rootView, "phone-mixer")                                              // FADERS: the desk has the screen
+        tap("sec_media"); shot(a.window.decorView.rootView, "phone-mixer-media")                                         // MEDIA: the decks
+        tap("sec_setup")                                                                                                 // SETUP: input, output, chains
         a.paintIo(true, true, true, 0.12f, 0.35f, 0, 0); shot(a.window.decorView.rootView, "phone-mixer-io-live")        // the INPUT / OUTPUT indicator while it runs
         a.paintIo(true, false, true, 0f, 0f, 0, 0); shot(a.window.decorView.rootView, "phone-mixer-io-no-input")         // no microphone: shown red
         val cat = listOf("comp" to "COMPRESSOR", "plate" to "PLATE REVERB", "delay" to "DELAY", "chorus" to "CHORUS")

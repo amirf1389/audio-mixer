@@ -76,6 +76,13 @@ class LocalMixerActivity : FitActivity() {
     private class IoViews(val lamp: View, val name: TextView, val state: TextView, val meter: ProgressBar)
     private val io = HashMap<Boolean, IoViews>()   // false = INPUT, true = OUTPUT
     private fun prefs() = Prefs.local(this)
+    // LANDSCAPE: the screen is short, so everything above a fader is made small: no sub-title, no pan knob, FX and MUTE side by side
+    private var land = false
+    private fun pairKeys(col: LinearLayout) { if (!land || col.childCount < 2) return
+        val a = col.getChildAt(col.childCount - 2); val b = col.getChildAt(col.childCount - 1); if (a !is PadButton || b !is PadButton) return
+        col.removeView(a); col.removeView(b)
+        col.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL
+            for (k in listOf(a, b)) addView(k, LinearLayout.LayoutParams(0, 76, 1f).apply { setMargins(3, 4, 3, 4) }) }) }
     private fun inChannels() = prefs().getInt("inChannels", 1).coerceIn(1, 2)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,13 +98,23 @@ class LocalMixerActivity : FitActivity() {
      *  OUTPUT keys, then the desk: one strip per channel and the MASTER strip on the right, like the console's own mixer */
     fun render() {
         body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear()
-        body.addView(Nav.modeBar(this, true))   // DUAL MODE: THIS PHONE | CONSOLE
+        val modeBar = Nav.modeBar(this, true)   // DUAL MODE: THIS PHONE | CONSOLE (upright: on top; on its side: in SETUP, so the faders get the height)
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
         startBtn = PadButton(this, getString(if (loop == null) R.string.start else R.string.stop), ConsoleUi.GREEN, 14f).apply { on = loop != null; layoutParams = LinearLayout.LayoutParams(300, 96); setOnClickListener { if (loop == null) startAudio() else stopAudio() } }
         recBtn = PadButton(this, getString(if (recWriter != null) R.string.lm_rec_stop else R.string.lm_rec), ConsoleUi.RED, 14f).apply { on = recWriter != null; layoutParams = LinearLayout.LayoutParams(220, 96).apply { setMargins(0, 0, 12, 0) }; setOnClickListener { toggleRec() } }
-        head.addView(recBtn); head.addView(startBtn); body.addView(head)
-        status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }; body.addView(status); showStatus()
+        // THREE SECTIONS, one at a time, so the faders get the whole screen: FADERS (the desk), MEDIA (the decks and the picture of a video)
+        // and SETUP (input, output, channels, quick chains). In landscape the section keys share the top row with REC and START.
+        land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val secKeys = LinkedHashMap<String, PadButton>()
+        val secBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "sectionBar" }
+        for ((id, label) in listOf("faders" to R.string.lm_sec_faders, "media" to R.string.lm_sec_media, "setup" to R.string.lm_sec_setup))
+            secKeys[id] = PadButton(this, getString(label), cyan, 12f).apply { contentDescription = "sec_$id"; layoutParams = LinearLayout.LayoutParams(0, if (land) 96 else 84, 1f).apply { setMargins(0, 0, 8, 0) } }.also { secBar.addView(it) }
+        val setupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; val mediaBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }
+        if (land) { setupBox.addView(modeBar); body.setPadding(16, 8, 16, 6); head.removeViewAt(0); head.addView(secBar.apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }, 0); head.addView(recBtn); head.addView(startBtn); head.setPadding(0, 0, 0, 8); body.addView(head); setupBox.addView(status) }
+        else { body.addView(modeBar); body.setPadding(20, 20, 20, 16); head.addView(recBtn); head.addView(startBtn); body.addView(head); body.addView(status); body.addView(secBar.apply { setPadding(0, 0, 0, 10) }) }
+        showStatus()
         // ---- INPUT / OUTPUT: two keys that open the device lists, and MONO / STEREO
         // each row: a LAMP (stopped / not open / no signal / live / clipping), the device, what it is doing and a level bar under it
         fun ioRow(tag: String, name: String, color: Int, out: Boolean, click: () -> Unit): LinearLayout {
@@ -118,8 +135,8 @@ class LocalMixerActivity : FitActivity() {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, 8) }
                 addView(row); addView(meter); contentDescription = tag }
         }
-        body.addView(ioRow(getString(R.string.lm_input), deviceName(Prefs.localInDevice(this), false), cyan, false) { pickDevice(false) })
-        body.addView(ioRow(getString(R.string.lm_output), deviceName(Prefs.localOutDevice(this), true), accent, true) { pickDevice(true) })
+        setupBox.addView(ioRow(getString(R.string.lm_input), deviceName(Prefs.localInDevice(this), false), cyan, false) { pickDevice(false) })
+        setupBox.addView(ioRow(getString(R.string.lm_output), deviceName(Prefs.localOutDevice(this), true), accent, true) { pickDevice(true) })
         showIo()
         val chRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 10) }
         listOf(1 to getString(R.string.lm_mono), 2 to getString(R.string.lm_stereo)).forEach { (n, t) ->
@@ -129,38 +146,43 @@ class LocalMixerActivity : FitActivity() {
         listOf(true to getString(R.string.lm_input_on), false to getString(R.string.lm_input_off)).forEach { (v, t) ->
             inRow.addView(PadButton(this, t, if (v) cyan else ConsoleUi.RED, 11f).apply { on = Prefs.localInputOn(this@LocalMixerActivity) == v; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (v) 8 else 0, 0) }
                 setOnClickListener { if (Prefs.localInputOn(this@LocalMixerActivity) != v) { Prefs.setLocalInputOn(this@LocalMixerActivity, v); restartIfRunning(); render() } } }) }
-        body.addView(chRow); body.addView(inRow)
+        setupBox.addView(chRow); setupBox.addView(inRow)
         // ---- QUICK CHAINS: one tap fills the channel's rack (both channels in STEREO) with a ready chain
-        body.addView(TextView(this).apply { text = getString(R.string.lm_chains); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 0, 0, 6) })
+        setupBox.addView(TextView(this).apply { text = getString(R.string.lm_chains); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 0, 0, 6) })
         val chainRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "chainRow" }; val nowChain = LocalChains.current(prefs(), 0)
         for (c in LocalChains.chains) chainRow.addView(PadButton(this, c.glyph + " " + c.title, cyan, 11f).apply { on = nowChain == c.id; contentDescription = c.sub; setPadding(22, 0, 22, 0)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 80).apply { setMargins(0, 0, 8, 0) }; setOnClickListener { applyChain(c) } })
-        body.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; setPadding(0, 0, 0, 10); addView(chainRow) })
+        setupBox.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; setPadding(0, 0, 0, 10); addView(chainRow) })
         // ---- THE PICTURE of a video deck (hidden until a deck's VIDEO button is on); its sound is the deck's channel on the desk
         val tv = android.view.TextureView(this); deckVideo = DeckVideo(this, tv)
         videoPane = android.widget.FrameLayout(this).apply { tag = "localVideo"; setBackgroundColor(Color.BLACK); visibility = View.GONE; addView(tv, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.view.Gravity.CENTER))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0).apply { setMargins(0, 0, 0, 10) } }
-        body.addView(videoPane)
+        mediaBox.addView(videoPane)
         // ---- THE DESK
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         // ---- DECKS: two song players (a card each: the file, time, seek, LOAD / PLAY / STOP / LOOP); their channels are on the desk
-        // BIG FADERS: the deck cards fold away behind one button, so the desk gets the height (a deck's channel stays on the desk either way)
-        val deckBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "deckBox"; visibility = if (prefs().getBoolean("decksOpen", false)) View.VISIBLE else View.GONE }
-        val deckBtn = PadButton(this, "", cyan, 11f).apply { contentDescription = "decksToggle"; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 72).apply { setMargins(0, 0, 0, 8) } }
-        fun deckLabel() { val open = deckBox.visibility == View.VISIBLE; deckBtn.on = open; deckBtn.text = getString(if (open) R.string.lm_decks_hide else R.string.lm_decks_show) }
-        deckBtn.setOnClickListener { val open = deckBox.visibility != View.VISIBLE; deckBox.visibility = if (open) View.VISIBLE else View.GONE; prefs().edit().putBoolean("decksOpen", open).apply(); deckLabel() }
-        deckLabel(); body.addView(deckBtn); body.addView(deckBox)
+        val deckBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "deckBox" }; mediaBox.addView(deckBox)
         for (r in 0 until DECKS / 2) { val deckRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 8) }
             for (d in 2 * r..2 * r + 1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d % 2 == 0) 0 else 6, 0, if (d % 2 == 0) 6 else 0, 0) } })
             deckBox.addView(deckRow) }
-        // the channels side by side, four across (swipe for the rest), the master fixed on the right: every fader stays finger-wide
-        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels, RemoteActivity.ACROSS)
+        // the channels side by side, four across in portrait, six in landscape (swipe for the rest), the master fixed on the right: every fader stays finger-wide
+        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels - (if (land) 88 else 0), RemoteActivity.acrossFor(land))   // on its side the master is 88 px wider (its two keys stand side by side)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until inChannels()) chans.addView(fixed(stripView(s)))
         for (d in 0 until DECKS) chans.addView(fixed(deckStripView(d)))
         desk.addView(android.widget.HorizontalScrollView(this).apply { isFillViewport = true; addView(chans, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
-        desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(252, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
+        desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(if (land) 340 else 252, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
+        desk.tag = "secFaders"
+        fun scroller(t: String, v: View) = android.widget.ScrollView(this).apply { tag = t; isFillViewport = true; addView(v); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+        val mediaView = scroller("secMedia", mediaBox); val setupView = scroller("secSetup", setupBox); body.addView(mediaView); body.addView(setupView)
+        fun show(sec: String) { desk.visibility = if (sec == "faders") View.VISIBLE else View.GONE; mediaView.visibility = if (sec == "media") View.VISIBLE else View.GONE
+            setupView.visibility = if (sec == "setup") View.VISIBLE else View.GONE; for ((id, k) in secKeys) k.on = id == sec; prefs().edit().putString("section", sec).apply() }
+        for ((id, k) in secKeys) k.setOnClickListener { show(id) }
+        show(prefs().getString("section", "faders").takeIf { it in secKeys } ?: "faders")
+        if (videoDeck >= 0) showVideo(videoDeck)
     }
+    /** the phone was turned: the screen is laid out again for the new shape (the sound keeps running, nothing is restarted) */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) { super.onConfigurationChanged(newConfig); Nav.fit(this); render() }
     private val faders = HashMap<Int, FaderView>()
 
     /** one channel strip (0, 1) or the MASTER (-1), top to bottom: name, FX (the insert rack), pan knob or LIMIT, MUTE, the fader with
@@ -170,20 +192,21 @@ class LocalMixerActivity : FitActivity() {
         val color = if (master) accent else ConsoleUi.palette[(s + 1) % ConsoleUi.palette.size]
         val col = ConsoleUi.strip(this, color, 0, master).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, if (master) 1.15f else 1f).apply { setMargins(4, 0, 4, 0) } }
         col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_master) else getString(R.string.lm_channel, s + 1, if (two) (if (s == 0) "L" else "R") else "").trim(); setTextColor(if (master) accent else Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
-        col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_sub_master) else getString(if (two) R.string.lm_sub_in_n else R.string.lm_sub_in, s + 1); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        if (!land) col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_sub_master) else getString(if (two) R.string.lm_sub_in_n else R.string.lm_sub_in, s + 1); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
         fun full(v: View, h: Int = 84) = v.apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { setMargins(6, 4, 6, 4) } }
         col.addView(full(PadButton(this, fxLabel(s), ConsoleUi.VIOLET, 12f).apply { on = rack(s).any { it.isNotEmpty() }; setOnClickListener { showRack(s) } }.also { fxBtns[s] = it }))
         if (master) {
             col.addView(full(PadButton(this, getString(R.string.lm_limit), ConsoleUi.GREEN, 12f).apply { on = p.getBoolean("limiter", true)
                 setOnClickListener { val v = !p.getBoolean("limiter", true); p.edit().putBoolean("limiter", v).apply(); engine?.setLimiter(v, -0.5, 100.0); on = v } }))
-            col.addView(TextView(this).apply { text = getString(R.string.lm_limit_at); setTextColor(dim); textSize = 9f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 6) })
+            if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_limit_at); setTextColor(dim); textSize = 9f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 6) })
         } else {
             val defPan = if (two) (if (s == 0) -1f else 1f) else 0f
-            col.addView(KnobView(this, color).apply { value = p.getFloat("pan$s", defPan); layoutParams = LinearLayout.LayoutParams(150, LinearLayout.LayoutParams.WRAP_CONTENT)
+            if (!land) col.addView(KnobView(this, color).apply { value = p.getFloat("pan$s", defPan); layoutParams = LinearLayout.LayoutParams(150, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onChange = { v -> p.edit().putFloat("pan$s", v).apply(); engine?.setPan(s, v.toDouble()) } })
             col.addView(full(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("mute$s", false)
                 setOnClickListener { val v = !p.getBoolean("mute$s", false); p.edit().putBoolean("mute$s", v).apply(); engine?.setMute(s, v); on = v } }))
         }
+        pairKeys(col)
         val key = if (master) "masterDb" else "db$s"; val readout = ConsoleUi.dbReadout(this)
         fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
         val db0 = p.getFloat(key, 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
@@ -387,11 +410,12 @@ class LocalMixerActivity : FitActivity() {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
         val col = ConsoleUi.strip(this, color, 0, false).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
         col.addView(TextView(this).apply { text = getString(R.string.lm_deck, deckName(d)); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
-        col.addView(TextView(this).apply { text = getString(R.string.lm_sub_deck); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_sub_deck); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
         col.addView(PadButton(this, fxLabel(l), ConsoleUi.VIOLET, 12f).apply { on = rack(l).any { it.isNotEmpty() }; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
             setOnClickListener { showRack(l) } }.also { fxBtns[l] = it })   // the deck's own rack: the same effects on its left and its right
         col.addView(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("deckMute$d", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
             setOnClickListener { val v = !p.getBoolean("deckMute$d", false); p.edit().putBoolean("deckMute$d", v).apply(); engine?.setMute(l, v); engine?.setMute(l + 1, v); on = v } })
+        pairKeys(col)
         val readout = ConsoleUi.dbReadout(this); fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
         val db0 = p.getFloat("deckDb$d", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
         col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()

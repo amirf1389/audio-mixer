@@ -29,8 +29,8 @@ class DeckVideoTest {
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
         fun find(v: android.view.View, t: String): android.view.View? { if (v.tag == t || v.contentDescription == t) return v; if (v is android.view.ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i), t)?.let { return it }; return null }
         val pane = find(a.window.decorView, "localVideo"); assertNotNull(pane); assertEquals(android.view.View.GONE, pane!!.visibility)
-        val box = find(a.window.decorView, "deckBox")!!; assertEquals(android.view.View.GONE, box.visibility)            // BIG FADERS: the deck cards start folded away
-        find(a.window.decorView, "decksToggle")!!.performClick(); assertEquals(android.view.View.VISIBLE, box.visibility)
+        val media = find(a.window.decorView, "secMedia")!!; assertEquals(android.view.View.GONE, media.visibility)        // the decks have their own section
+        find(a.window.decorView, "sec_media")!!.performClick(); assertEquals(android.view.View.VISIBLE, media.visibility)
         val b = find(a.window.decorView, "deckVideo0"); assertNotNull(b); assertEquals(android.view.View.GONE, b!!.visibility)   // no video on the deck: no VIDEO button
     }
 }

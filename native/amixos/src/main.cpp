@@ -735,6 +735,18 @@ int main(int argc, char* argv[]) {
         const bool openOn = engine.open("null", "", "", 48000, 256, 2, 2) && engine.deviceInputs() == 2; QObject::disconnect(c); engine.privacyNow = was; engine.checkMicPrivacy();
         std::printf("amixos --smoke: MIC PRIVACY off is seen %d, opens outputs only %d, no answer keeps it %d, allowed again once %d, the microphone is back %d\n", seen, openOff, unknownKeeps, back, openOn);
         if (!seen || !openOff || !unknownKeeps || !back || !openOn) { std::fprintf(stderr, "amixos --smoke: MIC PRIVACY failed\n"); return 106; } }
+      { // A MICROPHONE IS A MICROPHONE: computer sound and one program's sound are inputs, but never microphones. The microphone rules
+        // (Windows privacy off, MIC ACCESS OFF, ONE VOICE) leave them alone.
+        const bool kinds = Engine::isMicrophoneInput("") && Engine::isMicrophoneInput("{0.0.1.00000000}.{mic}") && !Engine::isMicrophoneInput("loopback:system")
+          && !Engine::isMicrophoneInput("loopback:app:4242") && !Engine::isMicrophoneInput("loopback:{0.0.0.00000000}.{speakers}") && !Engine::isMicrophoneInput("-");
+        const auto was = engine.privacyNow; engine.privacyNow = [] { return 1; }; engine.stop(); engine.checkMicPrivacy(); const bool keepAccess = engine.micAccessOff(); engine.setMicAccessOff(true);
+        // both microphone switches are off, and a computer-sound input still opens with its two channels
+        const bool music = engine.open("null", "loopback:system", "", 48000, 256, 2, 2) && engine.deviceInputs() == 2 && engine.micOffNote().isEmpty(); engine.stop();
+        const bool app = engine.open("null", "loopback:app:4242", "", 48000, 256, 2, 2) && engine.deviceInputs() == 2; engine.stop();
+        const bool mic = engine.open("null", "", "", 48000, 256, 2, 2) && engine.deviceInputs() == 0; engine.stop();   // the microphone itself stays closed
+        engine.setMicAccessOff(keepAccess); engine.privacyNow = [] { return 0; }; engine.checkMicPrivacy(); engine.privacyNow = was; engine.open("null", "", "", 48000, 256, 2, 2);   // allowed again before the real reader is put back ("no answer" would keep it off)
+        std::printf("amixos --smoke: MIC IS MIC kinds %d, computer sound opens with the microphone off %d, a program's sound too %d, the microphone stays closed %d\n", kinds, music, app, mic);
+        if (!kinds || !music || !app || !mic) { std::fprintf(stderr, "amixos --smoke: MIC IS MIC failed\n"); return 108; } }
       { // a custom rate as high as 1100 kHz opens on the null device and runs (the engine has no rate ceiling of its own)
         const double r0 = engine.sampleRate(); const int f0 = engine.blockFrames(); engine.stop();
         const bool ok = engine.open("null", "", "", 1100000, 1024, 2, 2); QElapsedTimer t; t.start(); while (t.elapsed() < 300) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
