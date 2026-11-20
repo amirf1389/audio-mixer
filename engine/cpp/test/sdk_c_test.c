@@ -14,7 +14,7 @@
 static atomic_int g_blocks; static int g_frames, g_strips;
 static void on_block(void* user, const float* const* strips, int n, const float* l, const float* r, int frames, double rate) { (void)user; (void)strips; (void)l; (void)r; (void)rate; g_frames = frames; g_strips = n; atomic_fetch_add(&g_blocks, 1); }
 int main(void) {
-  CHECK(amix_api_version() == 7 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
+  CHECK(amix_api_version() == 8 && amix_api_version() == AMIX_API_VERSION && strlen(amix_version()) >= 5);
   { amix_set_dirs("/tmp/amix-sdk-paths/data", "/tmp/amix-sdk-paths/cache", NULL); char* pj = amix_paths_json(); CHECK(pj && strstr(pj, "\"data\":\"/tmp/amix-sdk-paths/data\"") && strstr(pj, "\"downloads\":\"/tmp/amix-sdk-paths/cache/downloads\"") && strstr(pj, "\"os\":")); amix_free(pj); }
   char* devs = amix_devices_json(); CHECK(devs && strstr(devs, "\"null\"")); amix_free(devs);
   char* bk = amix_backends_json(); CHECK(bk && bk[0] == '['); amix_free(bk);

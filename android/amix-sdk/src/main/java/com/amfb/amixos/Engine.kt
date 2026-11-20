@@ -23,6 +23,13 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     /** Peak meters: strips 0..strips-1, then master L and R, linear 0..1+. */
     /** starts the native AAudio loop (microphone on strip 1 -> mixer -> speaker / headphones); the rate in use, 0 = not available */
     fun startNative(rate: Int, mic: Boolean, outDevice: Int = 0, inDevice: Int = 0, bursts: Int = 2, inChannels: Int = 1): Int = aaudioStart(handle, rate, mic, outDevice, inDevice, bursts, inChannels)
+    /** MULTI-CHANNEL USB: the native AAudio loop on a chosen interface ([UsbAudio.list] gives the ids), [inChannels] device inputs on strips
+     *  1..[inChannels] (0 = no input; capped at the mixer's strips), [outChannels] outputs with the master on 1 / 2. A device that refuses
+     *  the count falls back to stereo / mono: [nativeInChannels] / [nativeOutChannels] say what opened. The rate in use, 0 = not available. */
+    fun startUsb(rate: Int, outDevice: Int, inDevice: Int, inChannels: Int, outChannels: Int = 2, bursts: Int = 2): Int =
+        aaudioStartMulti(handle, rate, outDevice, inDevice, bursts, inChannels.coerceIn(0, strips), outChannels.coerceAtLeast(2))
+    fun nativeInChannels(): Int = aaudioInChannels()
+    fun nativeOutChannels(): Int = aaudioOutChannels()
     /** INSERTS: [Engine.MAX_INSERTS] AmF X1 rack effects per strip and on the master (strip = -1); kind "" empties the slot. 0 = ok. */
     fun insert(strip: Int, slot: Int, kind: String): Int = insert(handle, strip, slot, kind)
     /** {"kind","name","bypass","mix","params":[{"id","title","value","default","text"}]} or "null" */
@@ -81,6 +88,8 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         // AAUDIO: the native low-latency loop (amix_jni.cpp). aaudioStart returns the rate in use, 0 = not available (use AudioLoop's Java path)
         @JvmStatic private external fun aaudioStart(handle: Long, rate: Int, mic: Boolean, outDev: Int, inDev: Int, bursts: Int, inChannels: Int): Int
         /** AUDIO HAL PROBE (see AudioHal): what AAudio grants when asked for the best, output then input; nothing is played */
+        @JvmStatic private external fun aaudioStartMulti(handle: Long, rate: Int, outDev: Int, inDev: Int, bursts: Int, inChannels: Int, outChannels: Int): Int
+        @JvmStatic external fun aaudioOutChannels(): Int
         @JvmStatic external fun aaudioProbe(out: IntArray)
         @JvmStatic external fun aaudioStop()
         @JvmStatic private external fun aaudioState(out: IntArray)

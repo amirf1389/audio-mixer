@@ -24,6 +24,22 @@ loop.stop()
 ```
 Device ids are `AudioDeviceInfo.id` values from `AudioManager.getDevices(...)`; 0 is the system route.
 
+## Multi-channel USB interfaces
+Class-compliant USB audio interfaces work without drivers. `UsbAudio` lists them (`AudioManager.getDevices`, `TYPE_USB_DEVICE` and
+`TYPE_USB_HEADSET`), one entry per direction, with what Android reports: `channelCounts`, `channelIndexMasks`, `sampleRates` (empty =
+any) and `maxChannels` (the highest count or the widest index mask, 0 = not told). `Engine.startUsb` opens the native AAudio loop on a
+chosen device id with N channels (`AAudioStreamBuilder_setDeviceId` / `setChannelCount`):
+```kotlin
+val input = UsbAudio.inputs(context).firstOrNull() ?: return
+val output = UsbAudio.outputs(context).firstOrNull()
+val rate = if (input.supportsRate(48000)) 48000 else input.sampleRates.first()
+engine.startUsb(rate, outDevice = output?.id ?: 0, inDevice = input.id, inChannels = input.channelsFor(0), outChannels = 2)
+engine.nativeInChannels()                     // what opened: a device that refuses the count falls back to stereo, then mono
+```
+Device input k plays on strip k (`UsbAudio.stripMap(channels, strips)` gives the same mapping; channels past the mixer's strips are not
+used). On the output the master is on channels 1 / 2 and the others are silent. Tested with Robolectric shadows (the list, the
+filtering and the channel arithmetic); multi-channel streams on a real phone with a real interface are not covered by the tests.
+
 ## Brand tuning
 - **Buffer:** taken from what the HAL reported, not from the brand name: exclusive (MMAP) or shared low-latency output -> 2 bursts,
   a burst longer than 10 ms -> 3, no low-latency path or no AAudio -> 4.
