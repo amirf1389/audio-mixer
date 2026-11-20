@@ -14,6 +14,8 @@ ApplicationWindow {
     minimumHeight: 480
     title: Theme.product + " " + appVersion + " · " + Theme.vendor + " · build " + buildStamp
     property bool forceSetup: false   // the smoke / shots show the wizard on demand
+    // THE FACTORY SETUP LOCKS THE CONSOLE: while it is up, nothing under it takes a click, a wheel or a keyboard shortcut
+    readonly property bool setupLocked: forceSetup || !settings.setupDone
     color: Theme.obsidian
     // FIT THE SCREEN: when the window as designed does not fit the work area (a small laptop, or an enlarged interface), or in RESPONSIVE
     // zoom, it opens maximised instead of hanging over the edges. Not in the tests (offscreen), which need the designed size.
@@ -60,7 +62,7 @@ ApplicationWindow {
     Connections { target: engine; function onMicPrivacyChanged() { if (engine.running) root.softRestart() } }
     Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
     function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
-    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: root.softRestart() }
+    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
     ColumnLayout {
@@ -444,5 +446,5 @@ ApplicationWindow {
                     Text { anchors.centerIn: parent; text: i18n.t("UNLOCK", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: liveGo.go() } } }
             Text { visible: liveScreen.note !== ""; anchors.horizontalCenter: parent.horizontalCenter; text: liveScreen.note; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } } }
-    SetupPage { anchors.fill: parent; z: 100; visible: root.forceSetup || !settings.setupDone; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
+    SetupPage { anchors.fill: parent; z: 100; visible: root.setupLocked; onFinished: { settings.finishSetup(); root.forceSetup = false; root.current = settings.startPage } }
 }

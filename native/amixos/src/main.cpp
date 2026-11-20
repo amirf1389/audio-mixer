@@ -169,6 +169,7 @@ int main(int argc, char* argv[]) {
     else if (a == "--big" && i + 1 < argc) { smoke = true; bigShots = QString::fromLocal8Bit(argv[++i]); }   // test builds: the 300-channel console, checked and photographed
 #endif
   }
+  { QSettings first; Settings::decideSetup(first, smoke || bench || !shots.isEmpty() || !film.isEmpty() || !bigShots.isEmpty()); }   // before anything else writes a setting
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());
 #if defined(_WIN32) && defined(_WIN64)
@@ -980,6 +981,25 @@ int main(int argc, char* argv[]) {
         if (thr > -1 || thr < -30.01 || !ch["gateOn"].toBool() || std::fabs(ch["gateThresholdDb"].toDouble() - thr) > 1e-6) { std::fprintf(stderr, "amixos --smoke: CLOSE NOISE did not set the gate (%.1f)\n", thr); return 209; }
         engine.setGate(0, false, -50, -80, 1, 50, 100); if (engine.closeNoise(30) != 0) { std::fprintf(stderr, "amixos --smoke: CLOSE NOISE on a silent channel must do nothing\n"); return 210; } engine.setNullTestInput(false); engine.stop(); engine.open("null", "", "", 48000, 256, 2, 2);
         if (!settings.setupDone()) { std::fprintf(stderr, "amixos --smoke: the factory setup must not be asked for without a factory reset\n"); return 211; } }
+      { // A NEW INSTALLATION starts in the factory setup, and the setup is locked: nothing under it can be clicked
+        const QString ini = QDir::tempPath() + "/amix-setup-test.ini"; QFile::remove(ini);
+        bool fresh, again, closed, used, kept, test;
+        { QSettings s(ini, QSettings::IniFormat); fresh = !Settings::decideSetup(s, false); again = !Settings::decideSetup(s, false); }      // empty settings: the setup, and still the setup at the next ask
+        { QSettings s(ini, QSettings::IniFormat); s.setValue("audio/rate", 48000); closed = !Settings::decideSetup(s, false); }              // closed mid-setup, something else was saved: still the setup
+        QFile::remove(ini); { QSettings s(ini, QSettings::IniFormat); s.setValue("ui/lang", "en"); used = Settings::decideSetup(s, false); }  // a console in use, updated: straight to the console
+        { QSettings s(ini, QSettings::IniFormat); s.setValue("general/setupDone", false); kept = !Settings::decideSetup(s, false); }          // a factory reset asked for it: kept
+        QFile::remove(ini); { QSettings s(ini, QSettings::IniFormat); test = Settings::decideSetup(s, true); } QFile::remove(ini);
+        auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); win->setProperty("forceSetup", true); QCoreApplication::processEvents();
+        QQuickItem* wiz = win->findChild<QQuickItem*>("setupPage"); QQuickItem* blocker = win->findChild<QQuickItem*>("setupBlocker");
+        const bool covers = wiz && blocker && wiz->isVisible() && blocker->isEnabled() && qAbs(blocker->width() - win->width()) < 1.5 && qAbs(blocker->height() - win->height()) < 1.5 && win->property("setupLocked").toBool();
+        const QString before = win->property("current").toString();
+        // a click where the navigation rail is: with the setup up it must not open a page
+        for (const QPointF p : {QPointF(40, 200), QPointF(40, 330), QPointF(300, 20)}) { QMouseEvent d(QEvent::MouseButtonPress, p, win->mapToGlobal(p.toPoint()), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier), u(QEvent::MouseButtonRelease, p, win->mapToGlobal(p.toPoint()), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+          QCoreApplication::sendEvent(win, &d); QCoreApplication::sendEvent(win, &u); QCoreApplication::processEvents(); }
+        const bool locked = win->property("current").toString() == before;
+        win->setProperty("forceSetup", false); QCoreApplication::processEvents(); const bool open = !win->property("setupLocked").toBool();
+        std::printf("amixos --smoke: FACTORY SETUP new install asks %d (again %d, closed mid-way %d), a console in use does not %d, a reset is kept %d, tests skip %d; locked: covers %d, clicks do nothing %d, open after %d\n", fresh, again, closed, used, kept, test, covers, locked, open);
+        if (!fresh || !again || !closed || !used || !kept || !test || !covers || !locked || !open) { std::fprintf(stderr, "amixos --smoke: FACTORY SETUP failed\n"); return 109; } }
       { // MASTER MUTE comes back to where the fader was; LIMIT CHANNELS switches every channel limiter; AUTO -INF pulls down the strips without an input
         { engine.setMonitorSync(true); engine.setMaster(0); const double m0 = engine.monitor()["db"].toDouble(); engine.setMaster(-6);
           const bool follow = std::fabs(engine.monitor()["db"].toDouble() - (m0 - 6)) < 1e-9; engine.setMonitor(engine.monitor()["source"].toInt(), m0 - 6 + 3, false, false, false);
