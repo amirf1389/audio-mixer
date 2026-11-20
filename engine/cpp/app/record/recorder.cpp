@@ -5,6 +5,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <cerrno>
+#include <algorithm>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #include <ctime>
 
 #ifdef _WIN32
@@ -62,14 +67,54 @@ bool Recorder::start(const Options& o, double sampleRate, std::string& err) {
       out_.push_back(x); files_.push_back(x.path); return true; }
     x.f = std::fopen(x.path.c_str(), "wb"); if (!x.f) { err = "cannot write " + x.path; return false; } writeHeader(x, false); out_.push_back(x); files_.push_back(x.path); return true; };
   if (opt_.master && !open("master", 2)) return false;
-  for (int s : opt_.strips) { char n[16]; std::snprintf(n, sizeof n, "ch%02d", s + 1); if (!open(n, 1)) { stop(); return false; } }
+  if (static_cast<int>(opt_.strips.size()) > kMaxTracks) { err = "at most 100 channels can be recorded at once"; for (File& x : out_) { if (x.flac) FLAC__stream_encoder_delete(x.flac); if (x.f) std::fclose(x.f); } out_.clear(); files_.clear(); return false; }
+  for (int s : opt_.strips) { char n[16]; std::snprintf(n, sizeof n, s >= 99 ? "ch%03d" : "ch%02d", s + 1); if (!open(n, 1)) { stop(); return false; } }
   if (out_.empty()) { err = "nothing to record: arm the master or a strip"; return false; }
   chans_ = (opt_.master ? 2 : 0) + static_cast<int>(opt_.strips.size());
   ringFrames_ = static_cast<std::size_t>(sampleRate_ * 4);   // 4 s of audio between the threads
   ring_.assign(ringFrames_ * static_cast<std::size_t>(chans_), 0.f); head_ = 0; tail_ = 0; framesTaken_ = 0; dropped_ = 0;
   scratch_.resize(static_cast<std::size_t>(sampleRate_) * static_cast<std::size_t>(chans_) * 4);
+  { std::size_t col = 0; for (File& x : out_) { x.col = col; col += static_cast<std::size_t>(x.channels); } }
+  // workers: every core but one by default (the audio thread keeps a core), never more than there are files; one file needs none
+  const int cores = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+  int want = opt_.workers > 0 ? opt_.workers : std::max(1, cores - 1); want = std::min({want, 16, static_cast<int>(out_.size())});
+  poolQuit_ = false; poolGen_ = 0; poolBusy_ = 0; poolScratch_.assign(static_cast<std::size_t>(want), Scratch{});
+  for (int k = 1; k < want; ++k) pool_.emplace_back([this, k] { poolLoop(k); });
   quit_ = false; recording_ = true; writer_ = std::thread([this] { writerLoop(); });
   return true;
+}
+
+// LOW PRIORITY: the recorder's threads yield to the audio and to the interface; a long multitrack session never takes the machine
+static void lowPriority() {
+#ifdef _WIN32
+  SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#else
+  errno = 0; if (nice(5) == -1 && errno != 0) { /* not allowed to lower it: keep the normal priority */ }
+#endif
+}
+
+void Recorder::encode(File& x, std::size_t t, std::size_t n, Scratch& sc) {
+  const std::size_t ch = static_cast<std::size_t>(chans_); const int fmt = fmtOf(opt_), bps = bytesOf(fmt); const std::size_t cols = static_cast<std::size_t>(x.channels);
+  if (sc.bytes.size() < n * cols * static_cast<std::size_t>(bps)) sc.bytes.resize(n * cols * static_cast<std::size_t>(bps));
+  unsigned char* o = sc.bytes.data();
+  for (std::size_t i = 0; i < n; ++i) { const float* src = ring_.data() + ((t + i) % ringFrames_) * ch + x.col;
+    for (std::size_t c = 0; c < cols; ++c) { const float v = src[c]; if (fmt == 1) { std::memcpy(o, &v, 4); o += 4; } else if (fmt == 2) { const double d = v; std::memcpy(o, &d, 8); o += 8; } else if (fmt == 3) { const std::int32_t q = am::fmt::toI32(v); std::memcpy(o, &q, 4); o += 4; }
+      else { const std::int32_t q = am::fmt::toI24(v); o[0] = static_cast<unsigned char>(q & 0xFF); o[1] = static_cast<unsigned char>((q >> 8) & 0xFF); o[2] = static_cast<unsigned char>((q >> 16) & 0xFF); o += 3; } } }
+  if (x.flac) { const std::size_t m = static_cast<std::size_t>(o - sc.bytes.data()) / 3; sc.flac.resize(m);
+    for (std::size_t k = 0; k < m; ++k) { const unsigned char* b = sc.bytes.data() + 3 * k; sc.flac[k] = static_cast<FLAC__int32>((static_cast<std::uint32_t>(b[0]) << 8 | static_cast<std::uint32_t>(b[1]) << 16 | static_cast<std::uint32_t>(b[2]) << 24)) >> 8; }
+    FLAC__stream_encoder_process_interleaved(x.flac, sc.flac.data(), static_cast<unsigned>(n)); }
+  if (x.f) std::fwrite(sc.bytes.data(), 1, static_cast<std::size_t>(o - sc.bytes.data()), x.f);
+  x.frames += n;
+}
+
+void Recorder::poolLoop(int k) {
+  lowPriority(); std::uint64_t seen = 0; const int K = static_cast<int>(poolScratch_.size());
+  for (;;) {
+    std::size_t t, n;
+    { std::unique_lock<std::mutex> lk(poolM_); poolGo_.wait(lk, [&] { return poolQuit_ || poolGen_ != seen; }); if (poolQuit_) return; seen = poolGen_; t = jobT_; n = jobN_; }
+    for (std::size_t i = static_cast<std::size_t>(k); i < out_.size(); i += static_cast<std::size_t>(K)) encode(out_[i], t, n, poolScratch_[static_cast<std::size_t>(k)]);
+    { std::lock_guard<std::mutex> lk(poolM_); if (--poolBusy_ == 0) poolDone_.notify_one(); }
+  }
 }
 
 void Recorder::onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double) {
@@ -86,21 +131,14 @@ void Recorder::onBlock(const float* const* strips, int nStrips, const float* L, 
 }
 
 void Recorder::writerLoop() {
-  const std::size_t ch = static_cast<std::size_t>(chans_); const int fmt = fmtOf(opt_), bps = bytesOf(fmt);
+  lowPriority();
+  const int K = static_cast<int>(poolScratch_.size()); const std::size_t chunk = static_cast<std::size_t>(sampleRate_ / 2);   // half a second per round
   auto flush = [&]() {
-    const std::size_t h = head_.load(std::memory_order_acquire), t = tail_.load(std::memory_order_relaxed); const std::size_t n = std::min<std::size_t>(h - t, scratch_.size() / (ch * static_cast<std::size_t>(bps)) / 2);
+    const std::size_t h = head_.load(std::memory_order_acquire), t = tail_.load(std::memory_order_relaxed); const std::size_t n = std::min(h - t, std::max<std::size_t>(chunk, 256));
     if (!n) return false;
-    std::size_t fileCol = 0;
-    for (File& x : out_) {
-      unsigned char* o = scratch_.data(); const std::size_t cols = static_cast<std::size_t>(x.channels);
-      for (std::size_t i = 0; i < n; ++i) { const float* src = ring_.data() + ((t + i) % ringFrames_) * ch + fileCol;
-        for (std::size_t c = 0; c < cols; ++c) { const float v = src[c]; if (fmt == 1) { std::memcpy(o, &v, 4); o += 4; } else if (fmt == 2) { const double d = v; std::memcpy(o, &d, 8); o += 8; } else if (fmt == 3) { const std::int32_t q = am::fmt::toI32(v); std::memcpy(o, &q, 4); o += 4; }   /* FLOAT files keep everything above 0 dBFS (that is what float is for); integer formats round and clamp (sample_format.hpp) */ else { const std::int32_t s = am::fmt::toI24(v); *o++ = static_cast<unsigned char>(s & 255); *o++ = static_cast<unsigned char>((s >> 8) & 255); *o++ = static_cast<unsigned char>((s >> 16) & 255); } } }
-      if (x.flac) { const std::size_t m = static_cast<std::size_t>(o - scratch_.data()) / 3; flacBuf_.resize(m);   // the 24-bit samples just packed, widened for libFLAC
-        for (std::size_t k = 0; k < m; ++k) { const unsigned char* b = scratch_.data() + 3 * k; flacBuf_[k] = static_cast<FLAC__int32>((static_cast<std::uint32_t>(b[0]) << 8 | static_cast<std::uint32_t>(b[1]) << 16 | static_cast<std::uint32_t>(b[2]) << 24)) >> 8; }
-        FLAC__stream_encoder_process_interleaved(x.flac, flacBuf_.data(), static_cast<unsigned>(n)); }
-      if (x.f) std::fwrite(scratch_.data(), 1, static_cast<std::size_t>(o - scratch_.data()), x.f);
-      x.frames += n; fileCol += cols;
-    }
+    { std::lock_guard<std::mutex> lk(poolM_); jobT_ = t; jobN_ = n; poolBusy_ = K - 1; ++poolGen_; } poolGo_.notify_all();
+    for (std::size_t i = 0; i < out_.size(); i += static_cast<std::size_t>(K)) encode(out_[i], t, n, poolScratch_[0]);   // the writer takes share 0
+    { std::unique_lock<std::mutex> lk(poolM_); poolDone_.wait(lk, [&] { return poolBusy_ == 0; }); }
     tail_.store(t + n, std::memory_order_release); return true;
   };
   while (!quit_.load(std::memory_order_acquire)) { if (!flush()) std::this_thread::sleep_for(std::chrono::milliseconds(20)); }
@@ -111,6 +149,7 @@ void Recorder::writerLoop() {
 void Recorder::stop() {
   if (!recording_.exchange(false)) { if (writer_.joinable()) { quit_ = true; writer_.join(); } return; }
   quit_ = true; if (writer_.joinable()) writer_.join();
+  { std::lock_guard<std::mutex> lk(poolM_); poolQuit_ = true; } poolGo_.notify_all(); for (std::thread& w : pool_) if (w.joinable()) w.join(); pool_.clear();
   out_.clear();
 }
 

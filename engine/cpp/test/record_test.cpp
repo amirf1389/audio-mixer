@@ -46,6 +46,20 @@ int main(int argc, char** argv) {
     float pk = 0; for (std::size_t i = 100; i < a.L.size(); ++i) pk = std::max(pk, std::fabs(a.L[i])); CHECK(std::fabs(pk - pl) < 0.002f);
     std::remove(rf.files()[0].c_str());
   }
+  // MULTITRACK: 100 channels at once, FLAC, on several workers: every file is complete and holds its own channel; 101 channels is refused
+  { Runtime big(120); DeviceConfig bc; bc.backend = "null"; bc.frames = 64; bc.inChannels = 120; CHECK(big.open(bc, err));
+    for (int i = 0; i < 100; ++i) { big.setGainDb(i, 0); }
+    std::vector<std::vector<float>> src(120, std::vector<float>(n)); std::vector<const float*> bin(120);
+    for (int i = 0; i < 120; ++i) { for (std::size_t k = 0; k < n; ++k) src[i][k] = 0.002f * static_cast<float>(i + 1) * std::sin(static_cast<float>(k) * 0.2f); bin[i] = src[i].data(); }
+    rec::Recorder mt; rec::Options mo; mo.folder = dir; mo.session = "multi"; mo.master = true; mo.format = 4; mo.workers = 4; for (int i = 0; i < 100; ++i) mo.strips.push_back(i);
+    CHECK(mt.start(mo, 48000, err)); CHECK(mt.workers() == 4); big.setTap(&mt);
+    for (int k = 0; k < 375; ++k) big.onBlock(bin.data(), outs, n);   // 0.5 s
+    big.setTap(nullptr); mt.stop(); CHECK(mt.files().size() == 101 && mt.dropped() == 0);
+    for (int i : {0, 49, 99}) { arr::Audio a; CHECK(arr::readAudio(mt.files()[static_cast<std::size_t>(i + 1)], a, err) && a.L.size() == 24000);
+      float pk = 0; for (float v : a.L) pk = std::max(pk, std::fabs(v)); CHECK(std::fabs(pk - 0.002f * static_cast<float>(i + 1)) < 0.0005f); }   // each file holds its own channel
+    CHECK(mt.files()[100].find("multi-ch100.flac") != std::string::npos);
+    for (const auto& f : mt.files()) std::remove(f.c_str());
+    rec::Recorder over; rec::Options oo = mo; oo.session = "over"; oo.strips.push_back(100); CHECK(!over.start(oo, 48000, err) && err.find("100") != std::string::npos); }
   std::printf("record_test: master + armed strip to 24-bit WAV through the Runtime tap, 1 s, no drops, pre-fader strip, read back OK; 24-bit, 32-bit float, 64-bit float, 32-bit integer WAV and FLAC 24-bit read back the same\n");
   return 0;
 }

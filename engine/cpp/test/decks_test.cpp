@@ -59,6 +59,14 @@ int main() {
   std::vector<float> back(2000); CHECK(sd.rec.popInter(back.data(), 1000) == 1000);
   bool same = true; for (int i = 0; i < 1000; ++i) same = same && back[2 * i] == mL[i] && back[2 * i + 1] == mR[i]; CHECK(same);
   std::vector<float> big(300000, 0.f); recordMaster(&sd, big.data(), big.data(), 300000); CHECK(sd.rec.readable() == sd.rec.cap); CHECK(sd.recDropped.load() == 300000 - sd.rec.cap);
+  { // MULTITRACK ring: every strip's own input comes out in order, interleaved; nothing while it is off; a full ring counts the loss
+    Side ms; std::vector<float> a1(64, 0.25f), b1(64, -0.5f); const float* p[3] = {a1.data(), nullptr, b1.data()};
+    recordStrips(&ms, p, 3, 64); CHECK(ms.multi.readable() == 0);
+    ms.multiOn = true; recordStrips(&ms, p, 3, 64);
+    std::vector<float> o(3 * 64); CHECK(ms.multi.pop(o.data(), 3, 64) == 64);
+    CHECK(o[0] == 0.25f && o[1] == 0.f && o[2] == -0.5f && o[3 * 63 + 2] == -0.5f);
+    for (int k = 0; k < 2100; ++k) recordStrips(&ms, p, 3, 64);
+    CHECK(ms.multiDropped.load() > 0); }
   std::printf(fails ? "decks_test: %d FAILED\n" : "decks_test: all passed\n", fails);
   return fails ? 1 : 0;
 }

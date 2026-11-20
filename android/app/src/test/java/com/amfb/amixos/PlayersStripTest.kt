@@ -40,12 +40,13 @@ class PlayersStripTest {
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
         assertNull(find(a.window.decorView, "playersStrip"))
     }
-    @org.junit.After fun backToTheMainApp() { Nav.standaloneForTests = null }
+    @org.junit.After fun backToTheMainApp() { Nav.standaloneForTests = null; PlayersBus.clear() }
+    @org.junit.Before fun fresh() { PlayersBus.clear() }
     @Test fun theMixerAppHasThePlayersStripAndItRemembersItsLevel() {
         Nav.standaloneForTests = true
         val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get(); val root = a.window.decorView
         val strip = find(root, "playersStrip"); assertNotNull(strip)
-        assertEquals("No player open. Press OPEN.", (find(root, "playersNote") as android.widget.TextView).text.toString())
+        assertEquals("No link yet. Press VIDEO to pick one.", (find(root, "playersNote") as android.widget.TextView).text.toString())
         val mute = find(root, "playersMute") as PadButton; assertFalse(mute.on); mute.performClick(); assertTrue(mute.on && Prefs.local(a).getBoolean("playersMute", false))
         val f = find(root, "playersFader") as FaderView; f.onMove?.invoke((com.amfb.amixos.remote.DaemonClient.dbToPos(-12.0) * 1000).toInt())
         assertEquals(-12.0, Prefs.local(a).getFloat("playersDb", 0f).toDouble(), 0.3)
@@ -58,5 +59,28 @@ class PlayersStripTest {
         PlayersBus.screenStarted(); PlayersBus.screenStarted(); PlayersBus.screenStopped(); PlayersBus.screenStopped(); PlayersBus.screenStopped()   // an extra stop does not go below zero
         PlayersBus.screenStarted(); PlayersBus.screenStopped()
         assertFalse(PlayersBus.loaded)
+    }
+    @Test fun theLinkPlaysInAMiniPlayerAboveTheFaders() {
+        Nav.standaloneForTests = true
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.local(ctx).edit().putString("section", "faders").putString("playerService", "YOUTUBE").putString("playerLink_YOUTUBE", "https://youtu.be/dQw4w9WgXcQ").commit()
+        val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get(); val root = a.window.decorView
+        val pane = find(root, "miniPlayer")!!; val sec = find(root, "secFaders") as ViewGroup; val desk = find(root, "desk")!!
+        assertEquals(View.VISIBLE, pane.visibility); assertTrue(sec.indexOfChild(pane) < sec.indexOfChild(desk))          // the video sits above the faders, in FADERS
+        assertNotNull(find(pane, "playerWeb")); assertTrue(PlayersBus.loaded)
+        val h = a.resources.displayMetrics.heightPixels; assertTrue(pane.layoutParams.height in 1..(h / 4))               // at most a quarter of the screen: the faders keep the rest
+        (find(root, "miniToggle") as PadButton).performClick(); assertEquals(View.GONE, pane.visibility); assertFalse(PlayersBus.loaded)   // VIDEO hides it and stops it
+        (find(root, "miniToggle") as PadButton).performClick(); assertEquals(View.VISIBLE, pane.visibility)
+        find(root, "sec_media")!!.performClick(); assertEquals(View.GONE, sec.visibility)                                   // only in FADERS
+        Prefs.local(ctx).edit().remove("playerLink_YOUTUBE").commit()
+        val b = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
+        b.window.decorView.let { r -> find(r, "sec_faders")!!.performClick(); assertEquals(View.GONE, find(r, "miniPlayer")!!.visibility) }   // no link: no pane
+    }
+    @Test fun onlyOnePlayerPlaysAtATime() {
+        var closed = 0; val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        val w1 = android.webkit.WebView(ctx); val w2 = android.webkit.WebView(ctx)
+        PlayersBus.attach(w1, StreamLinks.Service.YOUTUBE) { closed++ }; PlayersBus.attach(w2, StreamLinks.Service.SPOTIFY) { closed += 10 }
+        assertEquals(1, closed); assertEquals(StreamLinks.Service.SPOTIFY, PlayersBus.service)                          // the first was closed for the second
+        PlayersBus.detach(w1); assertTrue(PlayersBus.loaded); PlayersBus.detach(w2); assertFalse(PlayersBus.loaded)
     }
 }

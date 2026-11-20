@@ -239,7 +239,7 @@ class ScreenshotTest {
     @Test fun mixerAppWithPlayersStrip() {   // the AmF X1 Mixer app: the PLAYERS channel beside the inputs
         Nav.standaloneForTests = true
         try { val ctx = org.robolectric.RuntimeEnvironment.getApplication()
-            Prefs.local(ctx).edit().putInt("inChannels", 2).putString("section", "faders").putFloat("playersDb", -9f).commit()
+            Prefs.local(ctx).edit().putInt("inChannels", 2).putString("section", "faders").putFloat("playersDb", -9f).putString("playerService", "YOUTUBE").putString("playerLink_YOUTUBE", "https://youtu.be/dQw4w9WgXcQ").commit()
             shot(Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get().window.decorView.rootView, "mixer-app-players") } finally { Nav.standaloneForTests = null }
     }
     @Test fun phoneMixer() {   // no native engine on the JVM: the screen and a rack are drawn from saved choices and made-up engine JSON

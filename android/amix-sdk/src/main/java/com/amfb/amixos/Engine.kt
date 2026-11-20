@@ -41,6 +41,10 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     fun recArm(on: Boolean) = recArm(handle, on)
     fun recPop(out: FloatArray, maxFrames: Int): Int = recPop(handle, out, maxFrames)
     fun recDropped(): Long = recDropped(handle)
+    /** MULTITRACK: every strip's own input (before fader and effects) for recording, `strips` channels a frame, interleaved */
+    fun multiArm(on: Boolean) = multiArm(handle, on)
+    fun multiPop(out: FloatArray, strips: Int, maxFrames: Int): Int = multiPop(handle, out, strips, maxFrames)
+    fun multiDropped(): Long = multiDropped(handle)
     fun peaks(): FloatArray { peaks(handle, peakBuf); return peakBuf.copyOf() }
     /** each strip's INPUT level before fader, mute and effects (linear peak, 0..1+): the input indicator */
     fun inputPeaks(): FloatArray = FloatArray(strips).also { inputPeaks(handle, it) }
@@ -89,5 +93,8 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         @JvmStatic private external fun recArm(handle: Long, on: Boolean)
         @JvmStatic private external fun recPop(handle: Long, out: FloatArray, maxFrames: Int): Int
         @JvmStatic private external fun recDropped(handle: Long): Long
+        @JvmStatic private external fun multiArm(handle: Long, on: Boolean)
+        @JvmStatic private external fun multiPop(handle: Long, out: FloatArray, strips: Int, maxFrames: Int): Int
+        @JvmStatic private external fun multiDropped(handle: Long): Long
     }
 }
