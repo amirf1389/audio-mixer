@@ -65,6 +65,10 @@ Item {
     readonly property var lay: { const d = Object.assign({}, layDefault); let o = {}; try { o = JSON.parse(settings.mixerLayout || "{}") || {} } catch (e) { o = {} }
         for (const k in d) { if (k === "stripW") { const w = Number(o.stripW); if (isFinite(w) && w >= 96 && w <= 180) d.stripW = Math.round(w) } else if (typeof o[k] === "boolean") d[k] = o[k] } return d }
     function setLay(k, v) { const o = Object.assign({}, lay); o[k] = v; settings.mixerLayout = JSON.stringify(o) }
+    // STRIP ZOOM: wider or narrower channel strips (more or fewer channels on the screen): Ctrl+Shift + / - , or the − / + keys on the toolbar
+    function stripZoom(d) { setLay("stripW", Math.max(96, Math.min(180, lay.stripW + d))) }
+    Shortcut { sequences: ["Ctrl+Shift+=", "Ctrl+Shift++"]; enabled: page.visible; onActivated: page.stripZoom(8) }
+    Shortcut { sequences: ["Ctrl+Shift+-", "Ctrl+Shift+_"]; enabled: page.visible; onActivated: page.stripZoom(-8) }
     property bool simple: settings.mixerSimple   // SIMPLE strips: the name, the tone knobs, pan, MUTE / SOLO and the fader; FULL adds every key and readout
     property bool showInput: true
     property bool showTone: true   // GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers

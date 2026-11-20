@@ -38,6 +38,9 @@ class LocalMixerActivity : FitActivity() {
         /** the engine strips one rack works on: a deck's rack is put on its left and its right strip alike */
         fun mates(s: Int): List<Int> = if (s >= INPUTS && s < STRIPS && (s - INPUTS) % 2 == 0) listOf(s, s + 1) else listOf(s)
         fun deckStrip(d: Int) = INPUTS + 2 * d
+        /** the tracks of a multitrack recording: (the strip numbers in it, the file name part); inputs mono, decks stereo */
+        fun trackPlan(inChannels: Int): List<Pair<IntArray, String>> =
+            (0 until inChannels).map { intArrayOf(it) to "ch${it + 1}" } + (0 until DECKS).map { d -> intArrayOf(deckStrip(d), deckStrip(d) + 1) to "deck${deckName(d)}" }
         /** the rack of a strip (-1 = master) as kept in prefs: one entry per slot, "kind" or "" */
         fun rackKey(strip: Int) = if (strip < 0) "rackMaster" else "rack$strip"
         fun paramKey(strip: Int, slot: Int) = "fx_${if (strip < 0) "m" else strip.toString()}_$slot"
@@ -68,7 +71,9 @@ class LocalMixerActivity : FitActivity() {
         showDecks()
     }
     // MASTER RECORDER: the stereo master to a file (FLAC 24-bit, the recorder's folder)
-    @Volatile private var recWriter: HiRes.Writer? = null; private var recThread: Thread? = null; private var recFile: java.io.File? = null; private lateinit var recBtn: PadButton
+    // MULTITRACK: with it on, REC also writes every channel to its own file (inputs mono, decks stereo), beside the master
+    @Volatile private var multiWriters: List<Pair<IntArray, HiRes.Writer>> = emptyList(); private var multiThread: Thread? = null
+        @Volatile private var recWriter: HiRes.Writer? = null; private var recThread: Thread? = null; private var recFile: java.io.File? = null; private lateinit var recBtn: PadButton
     private val ui = Handler(Looper.getMainLooper())
     private val accent by lazy { getColor(R.color.accent) }; private val cyan by lazy { getColor(R.color.cyan) }; private val dim by lazy { getColor(R.color.dim) }
     private lateinit var body: LinearLayout; private lateinit var status: TextView; private lateinit var startBtn: PadButton
@@ -76,6 +81,11 @@ class LocalMixerActivity : FitActivity() {
     private class IoViews(val lamp: View, val name: TextView, val state: TextView, val meter: ProgressBar)
     private val io = HashMap<Boolean, IoViews>()   // false = INPUT, true = OUTPUT
     private fun prefs() = Prefs.local(this)
+    // STRIP ZOOM: the − / + keys beside the sections show more, narrower channels or fewer, wider ones (3 to 8 across)
+    private fun across(land: Boolean) = (RemoteActivity.acrossFor(land) + prefs().getInt("stripZoom", 0)).coerceIn(3, 8)
+    private fun stripZoom(d: Int) { val l = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val now = across(l); val next = (now + d).coerceIn(3, 8); if (next == now) return
+        prefs().edit().putInt("stripZoom", next - RemoteActivity.acrossFor(l)).apply(); render() }
     // LANDSCAPE: the screen is short, so everything above a fader is made small: no sub-title, no pan knob, FX and MUTE side by side
     private var land = false
     private fun pairKeys(col: LinearLayout) { if (!land || col.childCount < 2) return
@@ -97,6 +107,7 @@ class LocalMixerActivity : FitActivity() {
     /** builds the whole screen from the saved choices (again after a change of input channels or devices): a header with the INPUT and
      *  OUTPUT keys, then the desk: one strip per channel and the MASTER strip on the right, like the console's own mixer */
     fun render() {
+        miniWeb?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }; miniPane = null   // the player keeps playing through a re-layout (a turn of the phone)
         body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear()
         val modeBar = Nav.modeBar(this, true)   // DUAL MODE: THIS PHONE | CONSOLE (upright: on top; on its side: in SETUP, so the faders get the height)
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -110,6 +121,8 @@ class LocalMixerActivity : FitActivity() {
         val secBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "sectionBar" }
         for ((id, label) in listOf("faders" to R.string.lm_sec_faders, "media" to R.string.lm_sec_media, "setup" to R.string.lm_sec_setup))
             secKeys[id] = PadButton(this, getString(label), cyan, 12f).apply { contentDescription = "sec_$id"; layoutParams = LinearLayout.LayoutParams(0, if (land) 96 else 84, 1f).apply { setMargins(0, 0, 8, 0) } }.also { secBar.addView(it) }
+        for ((tag, glyph, d) in listOf(Triple("zoomOut", "−", 1), Triple("zoomIn", "+", -1)))   // − : more channels (smaller), + : fewer (bigger)
+            secBar.addView(PadButton(this, glyph, cyan, 16f).apply { contentDescription = tag; layoutParams = LinearLayout.LayoutParams(if (land) 96 else 84, if (land) 96 else 84).apply { setMargins(0, 0, 8, 0) }; setOnClickListener { stripZoom(d) } })
         val setupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; val mediaBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         status = TextView(this).apply { setTextColor(dim); textSize = 11f; typeface = Typeface.MONOSPACE; setPadding(0, 2, 0, 10) }
         if (land) { setupBox.addView(modeBar); body.setPadding(16, 8, 16, 6); head.removeViewAt(0); head.addView(secBar.apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }, 0); head.addView(recBtn); head.addView(startBtn); head.setPadding(0, 0, 0, 8); body.addView(head); setupBox.addView(status) }
@@ -147,6 +160,10 @@ class LocalMixerActivity : FitActivity() {
             inRow.addView(PadButton(this, t, if (v) cyan else ConsoleUi.RED, 11f).apply { on = Prefs.localInputOn(this@LocalMixerActivity) == v; layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, if (v) 8 else 0, 0) }
                 setOnClickListener { if (Prefs.localInputOn(this@LocalMixerActivity) != v) { Prefs.setLocalInputOn(this@LocalMixerActivity, v); restartIfRunning(); render() } } }) }
         setupBox.addView(chRow); setupBox.addView(inRow)
+        val mt = PadButton(this, "", ConsoleUi.RED, 12f).apply { contentDescription = "multitrack"; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 80).apply { setMargins(0, 0, 0, 10) } }
+        fun mtLabel() { val on = prefs().getBoolean("multitrack", false); mt.on = on; mt.text = getString(if (on) R.string.lm_multi_on else R.string.lm_multi_off) }
+        mt.setOnClickListener { if (recWriter != null) return@setOnClickListener; prefs().edit().putBoolean("multitrack", !prefs().getBoolean("multitrack", false)).apply(); mtLabel() }   // not while recording
+        mtLabel(); setupBox.addView(mt)
         // ---- QUICK CHAINS: one tap fills the channel's rack (both channels in STEREO) with a ready chain
         setupBox.addView(TextView(this).apply { text = getString(R.string.lm_chains); setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 0, 0, 6) })
         val chainRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "chainRow" }; val nowChain = LocalChains.current(prefs(), 0)
@@ -166,7 +183,7 @@ class LocalMixerActivity : FitActivity() {
             for (d in 2 * r..2 * r + 1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d % 2 == 0) 0 else 6, 0, if (d % 2 == 0) 6 else 0, 0) } })
             deckBox.addView(deckRow) }
         // the channels side by side, four across in portrait, six in landscape (swipe for the rest), the master fixed on the right: every fader stays finger-wide
-        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels - (if (land) 88 else 0), RemoteActivity.acrossFor(land))   // on its side the master is 88 px wider (its two keys stand side by side)
+        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = RemoteActivity.stripWidthFor(resources.displayMetrics.widthPixels - (if (land) 88 else 0), across(land))   // on its side the master is 88 px wider (its two keys stand side by side)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until inChannels()) chans.addView(fixed(stripView(s)))
         if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) chans.addView(fixed(playersStripView()))   // beside the inputs: on screen without a swipe
@@ -174,9 +191,21 @@ class LocalMixerActivity : FitActivity() {
         desk.addView(android.widget.HorizontalScrollView(this).apply { isFillViewport = true; addView(chans, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
         desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(if (land) 340 else 252, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
         desk.tag = "secFaders"
+        // THE MINI PLAYER: the PLAYERS link plays in a small video pane right above the faders (beside them when the phone lies on its
+        // side), so the video and the faders are on one screen. It shows only in FADERS, and only when it is switched on and a link exists.
+        if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) {
+            val idx = body.indexOfChild(desk); body.removeView(desk)
+            val fadersView = LinearLayout(this).apply { orientation = if (land) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL; tag = "secFaders"; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+            desk.tag = "desk"; miniPane = android.widget.FrameLayout(this).apply { tag = "miniPlayer"; setBackgroundColor(Color.BLACK); visibility = View.GONE
+                layoutParams = if (land) LinearLayout.LayoutParams((resources.displayMetrics.widthPixels * 0.36).toInt(), LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(0, 0, 8, 0) }
+                    else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, miniHeight()).apply { setMargins(0, 0, 0, 8) } }
+            fadersView.addView(miniPane); desk.layoutParams = if (land) LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            fadersView.addView(desk); body.addView(fadersView, idx); faderSection = fadersView
+            showMini()
+        } else faderSection = desk
         fun scroller(t: String, v: View) = android.widget.ScrollView(this).apply { tag = t; isFillViewport = true; addView(v); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         val mediaView = scroller("secMedia", mediaBox); val setupView = scroller("secSetup", setupBox); body.addView(mediaView); body.addView(setupView)
-        fun show(sec: String) { desk.visibility = if (sec == "faders") View.VISIBLE else View.GONE; mediaView.visibility = if (sec == "media") View.VISIBLE else View.GONE
+        fun show(sec: String) { faderSection?.visibility = if (sec == "faders") View.VISIBLE else View.GONE; mediaView.visibility = if (sec == "media") View.VISIBLE else View.GONE
             setupView.visibility = if (sec == "setup") View.VISIBLE else View.GONE; for ((id, k) in secKeys) k.on = id == sec; prefs().edit().putString("section", sec).apply() }
         for ((id, k) in secKeys) k.setOnClickListener { show(id) }
         show(prefs().getString("section", "faders").takeIf { it in secKeys } ?: "faders")
@@ -364,7 +393,9 @@ class LocalMixerActivity : FitActivity() {
         for (d in 0 until DECKS) faders[100 + d]?.apply { val l = deckStrip(d); val m = maxOf(p.getOrElse(l) { 0f }, p.getOrElse(l + 1) { 0f }); level = lvl(m); clip = m >= 1f }
         faders[-1]?.apply { val m = maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }); level = lvl(m); clip = m >= 1f }
     }
-    override fun onDestroy() { deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
+    override fun onResume() { super.onResume(); val e = StreamPlayerActivity.lastEmbed(this); if (e != null && miniWeb != null && miniUrl != e.url) closeMini(); miniUrl = e?.url; showMini() }
+    private var miniUrl: String? = null
+    override fun onDestroy() { closeMini(); deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
 
     // ---- DECKS
     private fun loadDeck(d: Int, u: android.net.Uri, fresh: Boolean) {
@@ -414,8 +445,11 @@ class LocalMixerActivity : FitActivity() {
         val col = ConsoleUi.strip(this, color, 0, false).apply { tag = "playersStrip"; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
         col.addView(TextView(this).apply { text = getString(R.string.lm_players); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
         if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_sub_players); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
-        col.addView(PadButton(this, getString(R.string.lm_players_open), cyan, 12f).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
-            setOnClickListener { Nav.go(this@LocalMixerActivity, StreamPlayerActivity::class.java) } })
+        col.addView(PadButton(this, getString(R.string.lm_players_video), cyan, 12f).apply { contentDescription = "miniToggle"; on = p.getBoolean("miniPlayer", true) && StreamPlayerActivity.lastEmbed(this@LocalMixerActivity) != null
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
+            setOnClickListener { if (StreamPlayerActivity.lastEmbed(this@LocalMixerActivity) == null) { Nav.go(this@LocalMixerActivity, StreamPlayerActivity::class.java); return@setOnClickListener }   // no link yet: pick one first
+                val v = !p.getBoolean("miniPlayer", true); p.edit().putBoolean("miniPlayer", v).apply(); on = v; showMini() }
+            setOnLongClickListener { Nav.go(this@LocalMixerActivity, StreamPlayerActivity::class.java); true } })
         col.addView(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { contentDescription = "playersMute"; on = p.getBoolean("playersMute", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84).apply { setMargins(6, 4, 6, 4) }
             setOnClickListener { val v = !p.getBoolean("playersMute", false); p.edit().putBoolean("playersMute", v).apply(); on = v; PlayersBus.apply(this@LocalMixerActivity) } })
         pairKeys(col)
@@ -431,6 +465,18 @@ class LocalMixerActivity : FitActivity() {
         col.addView(readout)
         return col
     }
+    private var miniPane: android.widget.FrameLayout? = null; private var miniWeb: android.webkit.WebView? = null; private var faderSection: View? = null
+    /** the mini player's height upright: 16:9 of the width, never more than a quarter of the screen (the faders keep the rest) */
+    private fun miniHeight() = minOf(resources.displayMetrics.widthPixels * 9 / 16, resources.displayMetrics.heightPixels / 4)
+    /** shows or hides the mini player above the faders: on when switched on and the PLAYERS tab has a link */
+    private fun showMini() {
+        val pane = miniPane ?: return; val e = StreamPlayerActivity.lastEmbed(this)
+        if (!prefs().getBoolean("miniPlayer", true) || e == null) { closeMini(); pane.visibility = View.GONE; return }
+        pane.visibility = View.VISIBLE
+        miniWeb?.let { if (it.parent == null) pane.addView(it, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT)) }
+        if (miniWeb == null) { val w = StreamPlayerActivity.buildPlayer(this, e) { closeMini() }; miniWeb = w; pane.removeAllViews(); pane.addView(w, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT)) }
+    }
+    private fun closeMini() { val w = miniWeb ?: return; miniWeb = null; PlayersBus.detach(w); (w.parent as? android.view.ViewGroup)?.removeView(w); runCatching { w.stopLoading(); w.loadUrl("about:blank"); w.destroy() } }
     private fun deckStripView(d: Int): View {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
         val col = ConsoleUi.strip(this, color, 0, false).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
@@ -458,15 +504,36 @@ class LocalMixerActivity : FitActivity() {
         val rateNow = mixRate().toInt(); val w = runCatching { HiRes.open(f.path, 2, rateNow, "flac24", "tpdf") }.getOrNull()
         if (w == null) { status.text = getString(R.string.rec_cannot_write, runCatching { HiRes.lastError() }.getOrDefault("")); return }
         recWriter = w; recFile = f; e.recArm(true)
+        if (prefs().getBoolean("multitrack", false)) startMultitrack(e, dir, f.nameWithoutExtension, rateNow)
         recThread = kotlin.concurrent.thread(name = "amix-master-rec", isDaemon = true) { val buf = FloatArray(2 * 4096)
             while (recWriter != null) { val n = e.recPop(buf, 4096); if (n > 0) recWriter?.write(buf, n) else Thread.sleep(10) } }
         recBtn.text = getString(R.string.lm_rec_stop); recBtn.on = true; window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     private fun stopRec() {
-        val w = recWriter ?: return; engine?.recArm(false); recWriter = null; recThread?.join(1000); recThread = null
+        val w = recWriter ?: return; engine?.recArm(false); recWriter = null; recThread?.join(1000); recThread = null; val tracks = stopMultitrack()
         val buf = FloatArray(2 * 4096); engine?.let { e -> while (true) { val n = e.recPop(buf, 4096); if (n <= 0) break; w.write(buf, n) } }   // what is left
         val dropped = engine?.recDropped() ?: 0L; w.finish()
         if (::recBtn.isInitialized) { recBtn.text = getString(R.string.lm_rec); recBtn.on = false }; window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        status.text = getString(R.string.lm_rec_saved, recFile?.name.orEmpty()) + if (dropped > 0) " · " + getString(R.string.lm_rec_dropped, dropped) else ""
+        status.text = getString(R.string.lm_rec_saved, recFile?.name.orEmpty()) + (if (tracks > 0) " · " + getString(R.string.lm_multi_saved, tracks) else "") + if (dropped > 0) " · " + getString(R.string.lm_rec_dropped, dropped) else ""
+    }
+    private fun startMultitrack(e: Engine, dir: java.io.File, base: String, rate: Int) {
+        val ws = trackPlan(inChannels()).mapNotNull { (strips, name) -> runCatching { HiRes.open(java.io.File(dir, base + "_" + name + ".flac").path, strips.size, rate, "flac24", "tpdf") }.getOrNull()?.let { strips to it } }
+        if (ws.isEmpty()) return
+        multiWriters = ws; e.multiArm(true)
+        multiThread = kotlin.concurrent.thread(name = "amix-multitrack", isDaemon = true) {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)   // the tracks are written at low priority: the sound never waits for them
+            val n = STRIPS; val buf = FloatArray(n * 4096); val one = FloatArray(2 * 4096)
+            fun drain(): Int { val got = e.multiPop(buf, n, 4096); if (got > 0) for ((strips, w) in multiWriters) { val c = strips.size
+                for (i in 0 until got) for (k in 0 until c) one[i * c + k] = buf[i * n + strips[k]]
+                w.write(one, got) }; return got }
+            while (multiWriters.isNotEmpty()) { if (drain() <= 0) Thread.sleep(10) }
+        }
+    }
+    private fun stopMultitrack(): Int {
+        val ws = multiWriters; if (ws.isEmpty()) return 0
+        engine?.multiArm(false); val t = multiThread; multiWriters = emptyList(); t?.join(1000); multiThread = null
+        engine?.let { e -> val n = STRIPS; val buf = FloatArray(n * 4096); val one = FloatArray(2 * 4096)
+            while (true) { val got = e.multiPop(buf, n, 4096); if (got <= 0) break; for ((strips, w) in ws) { val c = strips.size; for (i in 0 until got) for (k in 0 until c) one[i * c + k] = buf[i * n + strips[k]]; w.write(one, got) } } }
+        ws.forEach { it.second.finish() }; return ws.size
     }
 }

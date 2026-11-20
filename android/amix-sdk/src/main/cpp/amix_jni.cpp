@@ -54,6 +54,7 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_process(JNIEnv* env, jclass, 
   { const std::size_t f = static_cast<std::size_t>(frames); if (sd->dL.size() < 2 * kDecks * f) { sd->dL.assign(2 * kDecks * f, 0.f); }
     float* bl[kDecks]; float* br[kDecks]; for (int d = 0; d < kDecks; ++d) { bl[d] = sd->dL.data() + static_cast<std::size_t>(d) * f; br[d] = sd->dL.data() + static_cast<std::size_t>(kDecks + d) * f; }
     readDecks(sd, ptrs.data(), n, frames, bl, br); }
+  recordStrips(sd, ptrs.data(), n, frames);   // MULTITRACK: each strip's own input, before the mixer
   const int done = amix_mixer_process(m, ptrs.data(), frames, L.data(), R.data());
   recordMaster(sd, L.data(), R.data(), done);
   for (int i = 0; i < done; ++i) { inter[static_cast<std::size_t>(2 * i)] = L[static_cast<std::size_t>(i)]; inter[static_cast<std::size_t>(2 * i + 1)] = R[static_cast<std::size_t>(i)]; }
@@ -97,6 +98,7 @@ aaudio_data_callback_result_t onOut(AAudioStream*, void* user, void* audio, int3
   else { for (int i = 0; i < frames; ++i) l->inL[static_cast<std::size_t>(i)] = i < got ? l->mic[static_cast<std::size_t>(i)] : 0.f; }
   const int n = static_cast<int>(l->ptrs.size()); for (int s = 0; s < n; ++s) l->ptrs[static_cast<std::size_t>(s)] = s == 0 ? l->inL.data() : (s == 1 && l->inCh == 2) ? l->inR.data() : nullptr;   // input 1 on strip 1, input 2 on strip 2
   if (l->side) { const std::size_t c = l->L.size(); float* bl[kDecks]; float* br[kDecks]; for (int d = 0; d < kDecks; ++d) { bl[d] = l->dk.data() + static_cast<std::size_t>(d) * c; br[d] = l->dk.data() + static_cast<std::size_t>(kDecks + d) * c; } readDecks(l->side, l->ptrs.data(), n, frames, bl, br); }   // the decks on their strips
+  if (l->side) recordStrips(l->side, l->ptrs.data(), n, frames);
   const int done = amix_mixer_process(l->m, l->ptrs.data(), frames, l->L.data(), l->R.data());
   if (l->side) recordMaster(l->side, l->L.data(), l->R.data(), done);
   for (int i = 0; i < frames; ++i) { o[2 * i] = i < done ? l->L[static_cast<std::size_t>(i)] : 0.f; o[2 * i + 1] = i < done ? l->R[static_cast<std::size_t>(i)] : 0.f; }
@@ -229,5 +231,13 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_recPop(JNIEnv* env, jclass, j
   std::vector<float> tmp(2 * static_cast<std::size_t>(maxFrames)); const std::size_t n = sd->rec.popInter(tmp.data(), static_cast<std::size_t>(maxFrames));
   if (n) env->SetFloatArrayRegion(out, 0, static_cast<jsize>(2 * n), tmp.data()); return static_cast<jint>(n);
 }
+// MULTITRACK: arm every strip's input for recording; pop gives `strips` channels a frame, interleaved
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_multiArm(JNIEnv*, jclass, jlong h, jboolean on) { if (!h) return; Side* sd = sideOf(mixerOf(h)); if (on) { sd->multi.r.store(sd->multi.w.load()); sd->multiDropped.store(0); } sd->multiOn.store(on); }
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_multiPop(JNIEnv* env, jclass, jlong h, jfloatArray out, jint strips, jint maxFrames) {
+  if (!h || !out || maxFrames <= 0 || strips <= 0 || strips > MultiRing::kCh || env->GetArrayLength(out) < strips * maxFrames) return 0; Side* sd = sideOf(mixerOf(h));
+  std::vector<float> tmp(static_cast<std::size_t>(strips) * static_cast<std::size_t>(maxFrames)); const std::size_t n = sd->multi.pop(tmp.data(), strips, static_cast<std::size_t>(maxFrames));
+  if (n) env->SetFloatArrayRegion(out, 0, static_cast<jsize>(n * static_cast<std::size_t>(strips)), tmp.data()); return static_cast<jint>(n);
+}
+JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_multiDropped(JNIEnv*, jclass, jlong h) { return h ? static_cast<jlong>(sideOf(mixerOf(h))->multiDropped.load()) : 0; }
 JNIEXPORT jlong JNICALL Java_com_amfb_amixos_Engine_recDropped(JNIEnv*, jclass, jlong h) { return h ? static_cast<jlong>(sideOf(mixerOf(h))->recDropped.load()) : 0; }
 }

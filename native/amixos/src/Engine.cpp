@@ -482,6 +482,14 @@ bool Engine::applyRackPreset(int i, int slot, int presetId) {
 QVariantMap Engine::mastering() const {
   QVariantMap m; m["eqOn"] = mp_.eqOn; m["analog"] = mp_.analog; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
 }
+void Engine::setDspMode(const QString& m) {
+  const bool eng = m == QLatin1String("engineer"), was = settings_.value("audio/engineer", false).toBool();
+  if (eng && !was) { settings_.setValue("audio/engineerPrevBits", outputBits()); settings_.setValue("audio/engineer", true); setDcBlock(true); setOutputBits(24); setMasterLimiter(true, -1.0); }
+  if (!eng && was) { settings_.setValue("audio/engineer", false); setOutputBits(settings_.value("audio/engineerPrevBits", -1).toInt()); settings_.remove("audio/engineerPrevBits"); }
+  QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog");   // ANALOG: the master and every channel
+  emit masterChainChanged();
+}
+
 void Engine::setMastering(const QVariantMap& m) {
   auto d = [&m](const char* k, double cur, double lo, double hi) { return m.contains(k) ? std::clamp(m.value(k).toDouble(), lo, hi) : cur; };
   if (m.contains("eqOn")) mp_.eqOn = m.value("eqOn").toBool(); if (m.contains("on")) mp_.on = m.value("on").toBool();
@@ -1047,10 +1055,12 @@ bool Engine::startRecording() {
   if (recorder_.recording()) return true;
   am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if (armed_.test(static_cast<std::size_t>(i))) o.strips.push_back(i);
   std::string err; if (!recorder_.start(o, rt_->sampleRate(), err)) { recMsg_ = QString::fromStdString(err); emit recordChanged(); return false; }
-  taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2").arg(recorder_.files().size()).arg(recordFolder()); emit recordChanged(); return true;
+  taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2 · %3 thread(s) writing at low priority").arg(recorder_.files().size()).arg(recordFolder()).arg(recorder_.workers()); emit recordChanged(); return true;
 }
 void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store(nullptr); recorder_.stop(); recMsg_ = QStringLiteral("Recorded %1 s, %2 file(s)%3 in %4").arg(recorder_.seconds(), 0, 'f', 1).arg(recorder_.files().size()).arg(recorder_.dropped() ? QStringLiteral(" (%1 blocks DROPPED: disk too slow)").arg(recorder_.dropped()) : QString()).arg(recordFolder()); emit recordChanged(); }
-void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return; armed_.set(static_cast<std::size_t>(i), on); emit stripsChanged(); emit recordChanged(); }
+void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return;
+  if (on && !armed_.test(static_cast<std::size_t>(i)) && static_cast<int>(armed_.count()) >= am::rec::kMaxTracks) { recMsg_ = QStringLiteral("MULTITRACK: at most 100 channels can be armed at once."); emit recordChanged(); return; }
+  armed_.set(static_cast<std::size_t>(i), on); emit stripsChanged(); emit recordChanged(); }
 // DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }

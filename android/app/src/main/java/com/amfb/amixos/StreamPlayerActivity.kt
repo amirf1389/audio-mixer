@@ -54,6 +54,28 @@ class StreamPlayerActivity : FitActivity() {
                 field.setText(Prefs.local(this@StreamPlayerActivity).getString("playerLink_" + s.name, "")); closePlayer(); paintChips() } } })
     }
     companion object {
+        /** THE OFFICIAL PLAYER in a WebView, for the PLAYERS tab and for the mini player above the mixer's faders. The page stays on the
+         *  service's own addresses; nothing starts by itself; the mixer's PLAYERS level is applied once the player is up. Only one player
+         *  plays at a time: opening one closes the other (onClose). */
+        @SuppressLint("SetJavaScriptEnabled")
+        fun buildPlayer(a: android.app.Activity, e: StreamLinks.Embed, onClose: () -> Unit): WebView {
+            val w = WebView(a).apply { setBackgroundColor(Color.TRANSPARENT); contentDescription = "playerWeb"
+                settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.mediaPlaybackRequiresUserGesture = true
+                settings.allowFileAccess = false; settings.allowContentAccess = false; settings.setSupportMultipleWindows(false); settings.javaScriptCanOpenWindowsAutomatically = false
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !StreamLinks.allowed(e.service, request.url.toString()) } }
+            PlayersBus.attach(w, e.service, onClose)
+            for (ms in longArrayOf(1500, 4000, 9000)) w.postDelayed({ PlayersBus.apply(a) }, ms)
+            // the player sits in a frame on a page of this app's own name: the services ask an embedding app to say who it is
+            val html = "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">" +
+                "<style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%}</style></head><body>" +
+                "<iframe src=\"" + frameUrl(e, a.packageName) + "\" allow=\"autoplay; encrypted-media; clipboard-write; fullscreen; picture-in-picture\" allowfullscreen></iframe></body></html>"
+            runCatching { w.loadDataWithBaseURL("https://" + a.packageName + "/", html, "text/html", "utf-8", null) }
+            return w
+        }
+        /** the link the PLAYERS tab opened last (for its chosen service), as an embed; null when there is none */
+        fun lastEmbed(c: android.content.Context): StreamLinks.Embed? { val p = Prefs.local(c); val svc = p.getString("playerService", "YOUTUBE") ?: "YOUTUBE"
+            return StreamLinks.parse(p.getString("playerLink_$svc", "") ?: "") }
         /** the address the frame loads: YouTube's player is asked to accept its documented volume messages from this app's page */
         fun frameUrl(e: StreamLinks.Embed, pkg: String): String = if (e.service != StreamLinks.Service.YOUTUBE) e.url
             else e.url + (if (e.url.contains("?")) "&" else "?") + "enablejsapi=1&origin=https://" + pkg
@@ -67,24 +89,12 @@ class StreamPlayerActivity : FitActivity() {
         runCatching { load(e) }   // a phone without a system WebView: the link is kept, the message below stays
         return e.url
     }
-    @SuppressLint("SetJavaScriptEnabled")
     private fun load(e: StreamLinks.Embed) {
         closePlayer()
-        val w = WebView(this).apply { setBackgroundColor(Color.TRANSPARENT)
-            settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.mediaPlaybackRequiresUserGesture = true   // the players need scripts; nothing starts by itself
-            settings.allowFileAccess = false; settings.allowContentAccess = false; settings.setSupportMultipleWindows(false); settings.javaScriptCanOpenWindowsAutomatically = false
-            webViewClient = object : WebViewClient() {   // the page stays on the service's own addresses
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !StreamLinks.allowed(e.service, request.url.toString()) } }
+        val w = buildPlayer(this, e) { closePlayer() }
         web = w; holder.addView(w, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
-        PlayersBus.attach(w, e.service)
-        for (ms in longArrayOf(1500, 4000, 9000)) w.postDelayed({ if (web === w) PlayersBus.apply(this) }, ms)   // the mixer's PLAYERS level, once the player is up
-        // the player sits in a frame on a page of this app's own name: the services ask an embedding app to say who it is
-        val html = "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">" +
-            "<style>html,body{margin:0;height:100%;background:#1D2024}iframe{border:0;width:100%;height:100%}</style></head><body>" +
-            "<iframe src=\"" + frameUrl(e, packageName) + "\" allow=\"autoplay; encrypted-media; clipboard-write; fullscreen; picture-in-picture\" allowfullscreen></iframe></body></html>"
-        w.loadDataWithBaseURL("https://" + packageName + "/", html, "text/html", "utf-8", null)
     }
-    private fun closePlayer() { if (web != null) PlayersBus.attach(null, null); web?.let { holder.removeView(it); it.stopLoading(); it.loadUrl("about:blank"); it.destroy() }; web = null }
+    private fun closePlayer() { web?.let { PlayersBus.detach(it) }; web?.let { holder.removeView(it); it.stopLoading(); it.loadUrl("about:blank"); it.destroy() }; web = null }
     // The player keeps playing while another tab of this app is open (so the PLAYERS strip on the mixer has something to control);
     // it is paused when the whole app leaves the screen (PlayersBus counts the app's screens).
     override fun onDestroy() { closePlayer(); super.onDestroy() }
@@ -102,7 +112,14 @@ object PlayersBus {
     val loaded: Boolean get() = web?.get() != null
     /** only YouTube's player takes a volume from outside; the others have their own volume control inside the player */
     fun volumeWorks(s: StreamLinks.Service? = service): Boolean = s == StreamLinks.Service.YOUTUBE
-    fun attach(w: WebView?, s: StreamLinks.Service?) { web = w?.let { java.lang.ref.WeakReference(it) }; service = if (w == null) null else s }
+    private var closer: (() -> Unit)? = null
+    /** a new player: the one that played before is closed first (only one plays at a time) */
+    fun attach(w: WebView?, s: StreamLinks.Service?, onClose: (() -> Unit)? = null) {
+        val prev = web?.get(); val c = closer
+        web = w?.let { java.lang.ref.WeakReference(it) }; service = if (w == null) null else s; closer = if (w == null) null else onClose
+        if (prev != null && prev !== w) runCatching { c?.invoke() } }
+    fun clear() { web = null; service = null; closer = null; screens = 0 }   // the tests start from nothing
+    fun detach(w: WebView) { if (web?.get() === w) { web = null; service = null; closer = null } }
     /** the player's volume (0..100) for a fader level in dB: 0 dB and above is full, the bottom of the fader is silent */
     fun percentFor(db: Double): Int = if (db <= -60.0) 0 else Math.round(100 * Math.pow(10.0, minOf(0.0, db) / 20.0)).toInt().coerceIn(0, 100)
     /** what is sent to YouTube's player (its documented IFrame API messages: listening, setVolume) */

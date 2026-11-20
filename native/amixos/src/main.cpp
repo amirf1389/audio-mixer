@@ -1000,6 +1000,18 @@ int main(int argc, char* argv[]) {
         win->setProperty("forceSetup", false); QCoreApplication::processEvents(); const bool open = !win->property("setupLocked").toBool();
         std::printf("amixos --smoke: FACTORY SETUP new install asks %d (again %d, closed mid-way %d), a console in use does not %d, a reset is kept %d, tests skip %d; locked: covers %d, clicks do nothing %d, open after %d\n", fresh, again, closed, used, kept, test, covers, locked, open);
         if (!fresh || !again || !closed || !used || !kept || !test || !covers || !locked || !open) { std::fprintf(stderr, "amixos --smoke: FACTORY SETUP failed\n"); return 109; } }
+      { // ZOOM: in, out and actual size, clamped to 50 .. 200 %, and the console is drawn at that scale; MULTITRACK: at most 100 armed channels
+        auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); QQuickItem* zr = win->findChild<QQuickItem*>("zoomRoot");
+        const double z0 = settings.liveZoom(); settings.zoomReset(); settings.zoomIn(); settings.zoomIn(); QCoreApplication::processEvents();
+        const bool in = std::abs(settings.liveZoom() - 1.2) < 1e-9 && zr && std::abs(zr->scale() - 1.2) < 1e-6 && std::abs(zr->width() * 1.2 - win->width()) < 1.5;
+        for (int k = 0; k < 30; ++k) settings.zoomOut(); const bool floor = std::abs(settings.liveZoom() - 0.5) < 1e-9;
+        for (int k = 0; k < 30; ++k) settings.zoomIn(); const bool ceil = std::abs(settings.liveZoom() - 2.0) < 1e-9;
+        settings.zoomReset(); QCoreApplication::processEvents(); const bool back = zr && std::abs(zr->scale() - 1.0) < 1e-9; settings.setLiveZoom(z0);
+        std::vector<int> was; for (int i = 0; i < 110; ++i) if (engine.armed(i)) was.push_back(i);
+        for (int i = 0; i < 110; ++i) engine.setArmed(i, true); const int armed = engine.armedCount(); const bool said = engine.recordMessage().contains("100");
+        for (int i = 0; i < 110; ++i) engine.setArmed(i, false); for (int i : was) engine.setArmed(i, true);
+        std::printf("amixos --smoke: ZOOM in 120 %% %d, floor 50 %% %d, ceiling 200 %% %d, actual size %d; MULTITRACK armed %d of 110 asked (said %d)\n", in, floor, ceil, back, armed, said);
+        if (!in || !floor || !ceil || !back || armed != 100 || !said) { std::fprintf(stderr, "amixos --smoke: ZOOM / MULTITRACK failed\n"); return 110; } }
       { // MASTER MUTE comes back to where the fader was; LIMIT CHANNELS switches every channel limiter; AUTO -INF pulls down the strips without an input
         { engine.setMonitorSync(true); engine.setMaster(0); const double m0 = engine.monitor()["db"].toDouble(); engine.setMaster(-6);
           const bool follow = std::fabs(engine.monitor()["db"].toDouble() - (m0 - 6)) < 1e-9; engine.setMonitor(engine.monitor()["source"].toInt(), m0 - 6 + 3, false, false, false);
@@ -1681,6 +1693,10 @@ int main(int argc, char* argv[]) {
               { // DSP MODE: ANALOG leaves a quiet tone alone and rounds a loud one off; DIGITAL is exact again. DAC DETECTION: a USB DAC is listed, its microphone side is not
                 engine.setDspMode("analog"); if (engine.dspMode() != "analog" || !engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE ANALOG did not switch on\n"); std::exit(255); }
                 engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255);
+                { const int bits0 = engine.outputBits(); engine.setDspMode("engineer");   // HI-RES ENGINEER: 24-bit dither, DC block, limiter at -1.0 dB; DIGITAL gives the word length back
+                  if (engine.dspMode() != "engineer" || engine.outputBits() != 24 || !engine.dcBlock() || engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE HI-RES ENGINEER did not set 24-bit / DC block / digital\n"); std::exit(255); }
+                  engine.setDspMode("analog"); if (engine.dspMode() != "analog" || engine.outputBits() != bits0) { std::fprintf(stderr, "amixos --shots: leaving HI-RES ENGINEER did not restore the word length\n"); std::exit(255); }
+                  engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255); }
                 const QVariantList real = engine.devices(); QVariantList rig;
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["sampleRates"] = QVariantList{44100.0, 48000.0, 96000.0, 192000.0}; return m; };
                 rig << dev("wasapi", "{d1}", "FiiO K7 USB DAC", 0, 2) << dev("wasapi", "{s1}", "Speakers (Realtek(R) Audio)", 0, 2) << dev("wasapi", "{m1}", "Microphone (USB DAC mic)", 1, 0);

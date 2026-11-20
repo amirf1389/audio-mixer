@@ -481,10 +481,14 @@
     <string name="lm_deck_loop">LOOP</string>
     <string name="lm_deck_video">VIDEO</string>
     <string name="lm_sec_faders">FADERS</string>
+    <string name="lm_multi_on">MULTITRACK ON: REC writes every channel to its own file</string>
+    <string name="lm_multi_off">MULTITRACK OFF: REC writes the master only</string>
+    <string name="lm_multi_saved">%1$d channel files</string>
     <string name="lm_players">PLAYERS</string>
     <string name="lm_sub_players">LINK · STEREO</string>
     <string name="lm_players_open">OPEN</string>
-    <string name="lm_players_none">No player open. Press OPEN.</string>
+    <string name="lm_players_video">VIDEO</string>
+    <string name="lm_players_none">No link yet. Press VIDEO to pick one.</string>
     <string name="lm_players_volume">Fader sets the player\u2019s volume.</string>
     <string name="lm_players_mute_only">This service: MUTE only. Its volume is inside the player.</string>
     <string name="lm_sec_media">MEDIA</string>

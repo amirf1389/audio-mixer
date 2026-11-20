@@ -41,11 +41,29 @@ struct Deck {
   amix_hr_resampler* rs = nullptr; double rsFrom = 0, rsTo = 0; std::vector<float> pending;   // resampled frames that did not fit yet (interleaved)
   ~Deck() { if (rs) amix_hr_resampler_destroy(rs); }
 };
+// MULTITRACK on the phone: every strip's own input (before its fader and effects), interleaved, for the writer thread to split into files
+struct MultiRing {
+  static constexpr int kCh = 16;                                // room for every strip of the phone mixer
+  std::vector<float> buf; std::size_t cap = 0; std::atomic<std::size_t> w{0}, r{0};
+  explicit MultiRing(std::size_t frames) : buf(static_cast<std::size_t>(kCh) * frames, 0.f), cap(frames) {}
+  std::size_t readable() const { return w.load(std::memory_order_acquire) - r.load(std::memory_order_relaxed); }
+  std::size_t writable() const { return cap - (w.load(std::memory_order_relaxed) - r.load(std::memory_order_acquire)); }
+  std::size_t push(const float* const* ptrs, int strips, std::size_t n) {   // nothing allocated: called on the audio thread
+    n = std::min(n, writable()); std::size_t at = w.load(std::memory_order_relaxed); const int c = std::min(strips, kCh);
+    for (std::size_t i = 0; i < n; ++i, ++at) { float* d = buf.data() + static_cast<std::size_t>(kCh) * (at % cap); for (int s = 0; s < c; ++s) d[s] = ptrs[s] ? ptrs[s][i] : 0.f; for (int s = c; s < kCh; ++s) d[s] = 0.f; }
+    w.store(at, std::memory_order_release); return n; }
+  std::size_t pop(float* out, int strips, std::size_t n) {   // interleaved, `strips` channels a frame
+    n = std::min(n, readable()); std::size_t at = r.load(std::memory_order_relaxed); const int c = std::min(strips, kCh);
+    for (std::size_t i = 0; i < n; ++i, ++at) { const float* d = buf.data() + static_cast<std::size_t>(kCh) * (at % cap); for (int s = 0; s < c; ++s) out[i * static_cast<std::size_t>(c) + static_cast<std::size_t>(s)] = d[s]; }
+    r.store(at, std::memory_order_release); return n; }
+};
 constexpr int kDecks = 4;                  // DECK A .. D: four stereo file players (a 10-channel phone mixer: 2 inputs + 4 stereo decks)
 struct Side {
   Deck deck[kDecks];
   Ring rec{262144};                         // about 5 s of master for the writer thread
   std::atomic<bool> recording{false}; std::atomic<unsigned long long> recDropped{0};
+  MultiRing multi{131072};                  // about 2.7 s of every strip at 48 kHz
+  std::atomic<bool> multiOn{false}; std::atomic<unsigned long long> multiDropped{0};
   std::atomic<long long> lastRead{0};       // when a mixer block last ran (ns): nobody reading = a flush can be done at once
   std::vector<float> dL, dR;                // deck blocks for the Java path (the native loop has its own)
 };
@@ -59,6 +77,11 @@ inline void readDecks(Side* sd, const float** ptrs, int strips, int frames, floa
     for (int i = static_cast<int>(got); i < frames; ++i) { bufL[d][i] = 0.f; bufR[d][i] = 0.f; }
     k.played.fetch_add(got, std::memory_order_relaxed);
     ptrs[sl] = bufL[d]; ptrs[sl + 1] = bufR[d]; }
+}
+inline void recordStrips(Side* sd, const float* const* ptrs, int strips, int frames) {
+  if (!sd->multiOn.load(std::memory_order_relaxed) || frames <= 0) return;
+  const std::size_t put = sd->multi.push(ptrs, strips, static_cast<std::size_t>(frames));
+  if (put < static_cast<std::size_t>(frames)) sd->multiDropped.fetch_add(static_cast<unsigned long long>(frames) - put);
 }
 inline void recordMaster(Side* sd, const float* L, const float* R, int frames) {
   if (!sd->recording.load(std::memory_order_relaxed)) return;
