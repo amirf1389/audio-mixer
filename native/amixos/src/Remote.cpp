@@ -58,12 +58,13 @@ void Remote::writeSeed() {
   if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}, {"routes", QVariantMap{{"in", baseIn_}, {"out", baseOut_}}}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
-  return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")},
+  return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")}, {"engineer", engine_->dspMode() == QLatin1String("engineer")},
           {"autoLevel", engine_->autoLevelOn()}, {"autoTarget", engine_->autoLevelTarget()}, {"autoMax", engine_->autoLevelMax()}, {"winGain", engine_->windowsGainMode()}, {"winMuteSync", engine_->windowsMuteSync()}};
 }
 void Remote::applySetting(const QString& k, const QVariant& v) {
   if (k == "width") engine_->setWidth(v.toDouble()); else if (k == "outputBits") engine_->setOutputBits(v.toInt()); else if (k == "dcBlock") engine_->setDcBlock(v.toBool());
   else if (k == "analog") engine_->setDspMode(v.toBool() ? QStringLiteral("analog") : QStringLiteral("digital"));
+  else if (k == "engineer") engine_->setDspMode(v.toBool() ? QStringLiteral("engineer") : QStringLiteral("digital"));
   else if (k == "autoLevel") engine_->setAutoLevelOn(v.toBool()); else if (k == "autoTarget") engine_->setAutoLevelTarget(v.toDouble()); else if (k == "autoMax") engine_->setAutoLevelMax(v.toDouble());
   else if (k == "winGain") engine_->setWindowsGainMode(v.toBool()); else if (k == "winMuteSync") engine_->setWindowsMuteSync(v.toBool());
 }

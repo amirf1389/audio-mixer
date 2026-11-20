@@ -416,8 +416,10 @@ class Engine : public QObject {
   // channel stage on every strip (Mixer::setAnalogChannels: warmth, transformer roll-off, bus crosstalk) (unity gain for quiet
   // signals, peaks rounded off the way an analogue output stage does), independent of the MASTERING switch
   Q_PROPERTY(QString dspMode READ dspMode WRITE setDspMode NOTIFY masterChainChanged)
-  QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : QStringLiteral("digital"); }
-  void setDspMode(const QString& m) { QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog"); }   // ANALOG: the master and every channel
+  // "engineer" = HI-RES ENGINEER: the clean digital path set up the way a mastering engineer works: 64-bit mix (as always), DC block on,
+  // the master limiter on at -1.0 dB (true-peak headroom for codecs), 24-bit output with TPDF dither. Leaving it gives the earlier word length back.
+  QString dspMode() const { return mastering()["analog"].toBool() ? QStringLiteral("analog") : settings_.value("audio/engineer", false).toBool() ? QStringLiteral("engineer") : QStringLiteral("digital"); }
+  void setDspMode(const QString& m);
   Q_INVOKABLE QVariantList asioDrivers() const;                 // discovery only: every ASIO driver found {id, name, inChannels, outChannels, rate, kind, current, maker, model, asioType, note, known, own, status, statusText, lastSeen, seenWhen}
   Q_INVOKABLE bool openAsioDriver(const QString& id, int frames);
   Q_INVOKABLE int readAsioChannels(const QString& id);   // input n of the running device -> strip n; returns how many (done by itself after an ASIO open)

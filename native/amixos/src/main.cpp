@@ -1693,6 +1693,10 @@ int main(int argc, char* argv[]) {
               { // DSP MODE: ANALOG leaves a quiet tone alone and rounds a loud one off; DIGITAL is exact again. DAC DETECTION: a USB DAC is listed, its microphone side is not
                 engine.setDspMode("analog"); if (engine.dspMode() != "analog" || !engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE ANALOG did not switch on\n"); std::exit(255); }
                 engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255);
+                { const int bits0 = engine.outputBits(); engine.setDspMode("engineer");   // HI-RES ENGINEER: 24-bit dither, DC block, limiter at -1.0 dB; DIGITAL gives the word length back
+                  if (engine.dspMode() != "engineer" || engine.outputBits() != 24 || !engine.dcBlock() || engine.mastering()["analog"].toBool()) { std::fprintf(stderr, "amixos --shots: DSP MODE HI-RES ENGINEER did not set 24-bit / DC block / digital\n"); std::exit(255); }
+                  engine.setDspMode("analog"); if (engine.dspMode() != "analog" || engine.outputBits() != bits0) { std::fprintf(stderr, "amixos --shots: leaving HI-RES ENGINEER did not restore the word length\n"); std::exit(255); }
+                  engine.setDspMode("digital"); if (engine.dspMode() != "digital") std::exit(255); }
                 const QVariantList real = engine.devices(); QVariantList rig;
                 const auto dev = [](const char* b, const char* id, const char* name, int in, int out) { QVariantMap m; m["backend"] = b; m["id"] = id; m["name"] = name; m["inChannels"] = in; m["outChannels"] = out; m["defaultRate"] = 48000.0; m["sampleRates"] = QVariantList{44100.0, 48000.0, 96000.0, 192000.0}; return m; };
                 rig << dev("wasapi", "{d1}", "FiiO K7 USB DAC", 0, 2) << dev("wasapi", "{s1}", "Speakers (Realtek(R) Audio)", 0, 2) << dev("wasapi", "{m1}", "Microphone (USB DAC mic)", 1, 0);

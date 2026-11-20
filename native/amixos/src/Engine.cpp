@@ -482,6 +482,14 @@ bool Engine::applyRackPreset(int i, int slot, int presetId) {
 QVariantMap Engine::mastering() const {
   QVariantMap m; m["eqOn"] = mp_.eqOn; m["analog"] = mp_.analog; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
 }
+void Engine::setDspMode(const QString& m) {
+  const bool eng = m == QLatin1String("engineer"), was = settings_.value("audio/engineer", false).toBool();
+  if (eng && !was) { settings_.setValue("audio/engineerPrevBits", outputBits()); settings_.setValue("audio/engineer", true); setDcBlock(true); setOutputBits(24); setMasterLimiter(true, -1.0); }
+  if (!eng && was) { settings_.setValue("audio/engineer", false); setOutputBits(settings_.value("audio/engineerPrevBits", -1).toInt()); settings_.remove("audio/engineerPrevBits"); }
+  QVariantMap v; v["analog"] = (m == "analog"); setMastering(v); if (rt_) rt_->setAnalogChannels(m == "analog");   // ANALOG: the master and every channel
+  emit masterChainChanged();
+}
+
 void Engine::setMastering(const QVariantMap& m) {
   auto d = [&m](const char* k, double cur, double lo, double hi) { return m.contains(k) ? std::clamp(m.value(k).toDouble(), lo, hi) : cur; };
   if (m.contains("eqOn")) mp_.eqOn = m.value("eqOn").toBool(); if (m.contains("on")) mp_.on = m.value("on").toBool();
