@@ -13,6 +13,17 @@
 #include <cmath>
 #include <thread>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <mmreg.h>
+#include <mmdeviceapi.h>
+#include <propsys.h>
+#endif
+#include <algorithm>
+
 #include "Engine.h"
 #include "audiomixer/app_sound.hpp"
 
@@ -237,4 +248,92 @@ void Apps::load() {
     QString dev = o.value("dev").toString().left(200); dev.remove(QRegularExpression(QStringLiteral("[\\x00-\\x1f<>]")));
     if (k >= 0 && k < Capture::kSlots && !n.isEmpty()) { waiting_[k] = n; waitingDev_[k] = dev; } }
   prune();   // a slot the saved console no longer listens to is not waited for
+}
+
+// ---- WINDOWS SOUND SETTINGS (documented Core Audio only: IMMDeviceEnumerator, the endpoint property store)
+#ifdef _WIN32
+namespace {
+const CLSID kWsEnumClsid = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
+const IID kWsEnumIid = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+const PROPERTYKEY kWsName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};        // PKEY_Device_FriendlyName
+const PROPERTYKEY kWsContainer = {{0x8c7ed206, 0x3f8a, 0x4827, {0xb3, 0xab, 0xae, 0x9e, 0x1f, 0xae, 0xfc, 0x6c}}, 2};   // PKEY_Device_ContainerId
+const PROPERTYKEY kWsFormat = {{0xf19f064d, 0x082c, 0x4e27, {0xbc, 0x73, 0x68, 0x82, 0xa1, 0xbb, 0x8e, 0x4c}}, 0};      // PKEY_AudioEngine_DeviceFormat: the shared-mode format
+QString wsId(IMMDevice* d) { LPWSTR w = nullptr; QString id; if (d && SUCCEEDED(d->GetId(&w)) && w) { id = QString::fromWCharArray(w); CoTaskMemFree(w); } return id; }
+QVariantMap wsEndpoint(IMMDevice* d, const QString& flow) {
+  QVariantMap m{{"id", wsId(d)}, {"flow", flow}, {"name", QString()}, {"container", QString()}, {"rate", 0}, {"bits", 0}, {"channels", 0}, {"isFloat", false}};
+  IPropertyStore* ps = nullptr; if (!d || FAILED(d->OpenPropertyStore(STGM_READ, &ps)) || !ps) return m;
+  PROPVARIANT v; PropVariantInit(&v);
+  if (SUCCEEDED(ps->GetValue(kWsName, &v)) && v.vt == VT_LPWSTR && v.pwszVal) m["name"] = QString::fromWCharArray(v.pwszVal);
+  PropVariantClear(&v); PropVariantInit(&v);
+  if (SUCCEEDED(ps->GetValue(kWsContainer, &v)) && v.vt == VT_CLSID && v.puuid) { const GUID& g = *v.puuid;
+    m["container"] = QString::asprintf("{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", static_cast<unsigned long>(g.Data1), g.Data2, g.Data3, g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7]); }
+  PropVariantClear(&v); PropVariantInit(&v);
+  if (SUCCEEDED(ps->GetValue(kWsFormat, &v)) && v.vt == VT_BLOB && v.blob.pBlobData && v.blob.cbSize >= sizeof(WAVEFORMATEX)) {
+    const WAVEFORMATEX* f = reinterpret_cast<const WAVEFORMATEX*>(v.blob.pBlobData); int bits = f->wBitsPerSample; bool fl = f->wFormatTag == 3;   // WAVE_FORMAT_IEEE_FLOAT
+    if (f->wFormatTag == WAVE_FORMAT_EXTENSIBLE && v.blob.cbSize >= sizeof(WAVEFORMATEXTENSIBLE)) { const WAVEFORMATEXTENSIBLE* x = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(f);
+      if (x->Samples.wValidBitsPerSample) bits = x->Samples.wValidBitsPerSample; fl = x->SubFormat.Data1 == 3; }
+    m["rate"] = static_cast<int>(f->nSamplesPerSec); m["bits"] = bits; m["channels"] = static_cast<int>(f->nChannels); m["isFloat"] = fl; }
+  PropVariantClear(&v); ps->Release(); return m;
+}
+QVariantMap wsScan() {
+  QVariantMap out{{"available", true}, {"note", QString()}}; const HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);   // the interface thread is STA already: fine
+  IMMDeviceEnumerator* en = nullptr;
+  if (FAILED(CoCreateInstance(kWsEnumClsid, nullptr, CLSCTX_ALL, kWsEnumIid, reinterpret_cast<void**>(&en))) || !en) { out["available"] = false; out["note"] = QStringLiteral("Windows' audio service did not answer."); if (SUCCEEDED(co)) CoUninitialize(); return out; }
+  auto def = [&](EDataFlow f, ERole r, const char* flow) { IMMDevice* d = nullptr; QVariantMap m; if (SUCCEEDED(en->GetDefaultAudioEndpoint(f, r, &d)) && d) { m = wsEndpoint(d, QLatin1String(flow)); d->Release(); } return m; };
+  out["playback"] = def(eRender, eConsole, "out"); out["recording"] = def(eCapture, eConsole, "in");
+  out["commPlayback"] = def(eRender, eCommunications, "out"); out["commRecording"] = def(eCapture, eCommunications, "in");
+  QVariantList eps;
+  for (const EDataFlow f : {eRender, eCapture}) { IMMDeviceCollection* col = nullptr; if (FAILED(en->EnumAudioEndpoints(f, DEVICE_STATE_ACTIVE, &col)) || !col) continue;
+    UINT n = 0; col->GetCount(&n);
+    for (UINT i = 0; i < n; ++i) { IMMDevice* d = nullptr; if (SUCCEEDED(col->Item(i, &d)) && d) { eps << wsEndpoint(d, f == eRender ? QStringLiteral("out") : QStringLiteral("in")); d->Release(); } }
+    col->Release(); }
+  out["endpoints"] = eps; en->Release(); if (SUCCEEDED(co)) CoUninitialize(); return out;
+}
+}  // namespace
+#endif
+QVariantMap Apps::windowsDefaults() {
+  if (!testWindows.isEmpty()) return testWindows;
+#ifdef _WIN32
+  return wsScan();
+#else
+  return QVariantMap{{"available", false}, {"note", QStringLiteral("Windows only: Windows' default devices and formats are read on Windows.")}, {"playback", QVariantMap()}, {"recording", QVariantMap()},
+                     {"commPlayback", QVariantMap()}, {"commRecording", QVariantMap()}, {"endpoints", QVariantList()}};
+#endif
+}
+QString Apps::alsaCard(const QString& id) {
+  static const QRegularExpression named(QStringLiteral("CARD=([^,]+)")), num(QStringLiteral("^(?:plug)?hw:(\\d+)"));
+  QRegularExpressionMatch m = named.match(id); if (m.hasMatch()) return m.captured(1);
+  m = num.match(id); return m.hasMatch() ? m.captured(1) : QString();
+}
+QVariantList Apps::pairInterfaces(const QVariantList& devices, const QVariantMap& containers) {
+  struct Group { QString key, name, backend; QVariantMap in, out; int inRank = 99, outRank = 99; };
+  std::vector<Group> groups;
+  auto rank = [](const QString& id) { return id.startsWith(QLatin1String("plughw:")) ? 0 : id.startsWith(QLatin1String("hw:")) ? 1 : id.startsWith(QLatin1String("sysdefault:")) ? 2 : 3; };
+  for (const QVariant& v : devices) { const QVariantMap d = v.toMap(); const QString backend = d["backend"].toString(), id = d["id"].toString();
+    if (id.isEmpty() || id == "default" || id == "-" || id.startsWith(QLatin1String("loopback:"))) continue;
+    QString key, name = d["name"].toString();
+    if (backend == "wasapi") { const QString c = containers.value(id).toString().toLower();
+      if (c.isEmpty() || c == "{00000000-0000-0000-ffff-ffffffffffff}" || c == "{00000000-0000-0000-0000-000000000000}") continue;   // the computer's own (built-in) devices share the null container
+      key = "win:" + c; const int a = name.indexOf('('), b = name.lastIndexOf(')'); if (a >= 0 && b > a + 1) name = name.mid(a + 1, b - a - 1).trimmed(); }   // "Speakers (USB Audio CODEC)" -> the box
+    else if (backend == "alsa") { const QString card = alsaCard(id); if (card.isEmpty()) continue; key = "alsa:" + card; const int c = name.indexOf(','); if (c > 0) name = name.left(c).trimmed(); }
+    else continue;
+    auto it = std::find_if(groups.begin(), groups.end(), [&](const Group& g) { return g.key == key; });
+    if (it == groups.end()) { groups.push_back(Group{key, name, backend, {}, {}}); it = groups.end() - 1; }
+    const int r = backend == "alsa" ? rank(id) : 0;
+    if (d["inChannels"].toInt() > 0 && r < it->inRank) { it->in = d; it->inRank = r; }
+    if (d["outChannels"].toInt() > 0 && r < it->outRank) { it->out = d; it->outRank = r; } }
+  QVariantList usb, other;
+  for (const Group& g : groups) { if (g.in.isEmpty() || g.out.isEmpty()) continue;
+    const bool isUsb = g.name.contains(QLatin1String("usb"), Qt::CaseInsensitive) || g.in["name"].toString().contains(QLatin1String("usb"), Qt::CaseInsensitive) || g.out["name"].toString().contains(QLatin1String("usb"), Qt::CaseInsensitive);
+    const QVariantMap p{{"key", g.key}, {"name", g.name}, {"backend", g.backend}, {"in", g.in["id"]}, {"out", g.out["id"]}, {"inChannels", g.in["inChannels"]}, {"outChannels", g.out["outChannels"]},
+                        {"rate", g.out["defaultRate"].toDouble() > 0 ? g.out["defaultRate"].toDouble() : 48000.0}, {"usb", isUsb}};
+    (isUsb ? usb : other) << p; }
+  return usb + other;
+}
+QVariantList Apps::interfacePairs() {
+  QVariantMap containers = testContainers;
+#ifdef _WIN32
+  if (containers.isEmpty() && !testMode) for (const QVariant& e : wsScan()["endpoints"].toList()) { const QVariantMap m = e.toMap(); containers[m["id"].toString()] = m["container"]; }
+#endif
+  return pairInterfaces(engine_->devices(), containers);
 }

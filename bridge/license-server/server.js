@@ -19,6 +19,7 @@
 //                                            GET  /admin/stats   GET /admin/audit?limit=   GET /admin/audit/verify
 //                                            GET|PUT /admin/website/state   POST /admin/website/publish   (the portal downloads)
 //   public                                   GET /portal/downloads   GET /portal/download/:platform/:name   (LICENSE_RELEASES_DIR, default ../../releases)
+//                                            GET|POST /admin/website/presets (staff)   GET /portal/presets (public: the published preset pack)
 //
 // The private key is read from a file, not from the repository and not from an environment variable. It is never returned, logged or stored.
 // Keys use the same format and signature as scripts/license.js, so every installed copy that trusts the vendor public key accepts them.
@@ -327,6 +328,18 @@ function checkWebsite(b, rel) {
   if (note.length > 600) return { error: 'the note can have at most 600 characters' };
   return { value: { version, hidden, headline: clean(headline, 120), note: note.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 600) } };
 }
+// A PRESET PACK's shape (scripts/make-presets.js): {version, mastering:[{name, params}], effects:[{kind, id, name, values}], tone:[{kind, name}]}. Returns an error text or null.
+function checkPresetPack(p) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return 'the pack must be a JSON object (releases/presets/presets-pack.json)';
+  if (typeof p.version !== 'string' || !/^[0-9A-Za-z.+-]{1,32}$/.test(p.version)) return 'version: a short text such as 2026.11.20';
+  const txt = (v, n) => typeof v === 'string' && v.length > 0 && v.length <= n && !/[\u0000-\u001f\u007f<>]/.test(v);
+  const flat = o => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length <= 64 && Object.entries(o).every(([k, v]) => txt(k, 32) && (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'boolean'));
+  for (const k of ['mastering', 'effects', 'tone']) if (!Array.isArray(p[k]) || !p[k].length || p[k].length > 5000) return k + ': a list of 1 to 5000 presets';
+  for (const m of p.mastering) if (!m || !txt(m.name, 40) || !flat(m.params)) return 'mastering: each {name, params of numbers}';
+  for (const e of p.effects) if (!e || !txt(e.kind, 24) || !txt(e.name, 60) || !Number.isInteger(e.id) || !flat(e.values)) return 'effects: each {kind, id, name, values of numbers}';
+  for (const t of p.tone) if (!t || !txt(t.kind, 24) || !txt(t.name, 60)) return 'tone: each {kind, name}';
+  return null;
+}
 // What the portal shows: the published choice, or with nothing published yet the newest version with every file.
 function publicDownloads(site, rel) {
   const pub = site.published || { version: rel.versions[0] ? rel.versions[0].version : null, hidden: [], headline: '', note: '' };
@@ -517,6 +530,31 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
     const r = checkWebsite(site.draft, rel); if (r.error) return c.json(400, { ok: false, error: r.error });   // the folder may have changed since the save
     site.published = r.value; site.publishedAt = Date.now(); site.publishedBy = who(c); saveSite(site);
     audit.add('website.publish', r.value.version, c.ip, 'hidden=' + r.value.hidden.length + ' by ' + who(c)); return c.json(200, { ok: true, live: publicDownloads(site, rel) }); });
+  // PRESETS (staff, on the WEBSITE page): publish a PRESET PACK (scripts/make-presets.js writes one from the console's code). GET /portal/presets
+  // gives it out as published, byte for byte. It is NOT trusted for that: an app takes a downloaded pack only when its sha256 is in an update
+  // manifest the owner signed (node scripts/make-update.js --prepare puts it in the pending manifest; the owner's signature makes it count).
+  const presetFile = dataFile + '.presets.json', builtInPack = path.join(releasesDir, 'presets', 'presets-pack.json');
+  const manifestPresets = (name, signed) => { try { let j = JSON.parse(fs.readFileSync(path.join(releasesDir, name), 'utf8')); if (signed) j = typeof j.payload === 'string' ? JSON.parse(j.payload) : null;
+    return j && j.presets && /^[0-9a-f]{64}$/.test(String(j.presets.sha256)) ? { version: String(j.presets.version), sha256: j.presets.sha256 } : null; } catch (_) { return null; } };
+  const signedPresets = () => ({ signed: manifestPresets('update.json', true), pending: manifestPresets('update.pending.json', false) });   // what the signed and the pending manifest say
+  const packInfo = (text, extra = {}) => { const p = JSON.parse(text); return { version: p.version, sha256: crypto.createHash('sha256').update(text).digest('hex'), size: Buffer.byteLength(text),
+    mastering: p.mastering.length, effects: p.effects.length, tone: p.tone.length, ...extra }; };
+  const readText = f => { try { return fs.readFileSync(f, 'utf8'); } catch (_) { return null; } };
+  app.get('/admin/website/presets', admin, limit('adm', 120), c => { const pub = readText(presetFile), built = readText(builtInPack); let meta = {}; try { meta = JSON.parse(readText(presetFile + '.meta') || '{}'); } catch (_) { /* none */ }
+    const m = signedPresets(), live = pub ? packInfo(pub, meta) : built ? packInfo(built, { builtIn: true }) : null;
+    return c.json(200, { ok: true, live, builtIn: built ? packInfo(built) : null, manifest: m, trusted: !!(live && m.signed && m.signed.sha256 === live.sha256) }); });
+  app.post('/admin/website/presets', admin, limit('adm', 30), async c => { const b = await c.body(4 * 1024 * 1024);
+    let pack = b.fromBuiltIn === true ? (() => { try { return JSON.parse(readText(builtInPack)); } catch (_) { return null; } })() : b.pack;
+    const err = checkPresetPack(pack); if (err) return c.json(400, { ok: false, error: err });
+    pack = { version: pack.version, generated: String(pack.generated || '').slice(0, 32), mastering: pack.mastering, effects: pack.effects, tone: pack.tone };
+    const text = JSON.stringify(pack, null, 1) + '\n', tmp = presetFile + '.tmp';   // the same text scripts/make-presets.js writes, so the same pack has the same sha256
+    fs.mkdirSync(path.dirname(presetFile), { recursive: true }); fs.writeFileSync(tmp, text, { mode: 0o600 }); fs.renameSync(tmp, presetFile);
+    fs.writeFileSync(presetFile + '.meta', JSON.stringify({ publishedAt: Date.now(), publishedBy: who(c) }), { mode: 0o600 });
+    const info = packInfo(text); audit.add('website.presets.publish', pack.version, c.ip, 'sha256=' + info.sha256 + ' by ' + who(c));
+    const m = signedPresets(); return c.json(200, { ok: true, live: info, trusted: !!(m.signed && m.signed.sha256 === info.sha256) }); });
+  app.get('/portal/presets', limit('pub', 60), c => { const text = readText(presetFile) || readText(builtInPack);
+    if (!text) return c.json(404, { ok: false, error: 'no preset pack is published' });
+    return c.send(200, text, { 'content-type': 'application/json', 'cache-control': 'public, max-age=300', 'x-preset-sha256': crypto.createHash('sha256').update(text).digest('hex') }); });
   // PUBLIC: the published release and its visible files; a file is given out only when it is on that list
   app.get('/portal/downloads', limit('pub', 60), c => c.json(200, { ok: true, ...publicDownloads(loadWebsite(siteFile), scanReleases(releasesDir)) }));
   app.get('/portal/download/:platform/:name', limit('pub', 30), c => {

@@ -54,6 +54,7 @@ object Nav {
     }
     /** content above, the bar below; current = the tab of this screen (null: a sub-screen such as the calculator, nothing lit). */
     fun wrap(a: Activity, content: View, current: Tab?): View {
+        if (ChromeFrame.active(a)) return ChromeFrame.wrap(a, content)   // CHROMEBOOK MODE: a rail on the left instead of this bar
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(a.getColor(R.color.bg)) }
         content.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f); root.addView(content)
         // a Material navigation bar: a tonal surface (no divider line), the open tab's icon on a pill, labels under the icons

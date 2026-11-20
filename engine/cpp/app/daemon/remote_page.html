@@ -69,7 +69,7 @@ table.dv{width:100%;border-collapse:collapse;font-size:12px}table.dv td,table.dv
 kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 </style></head><body>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
 <div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
@@ -128,6 +128,9 @@ kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:
 <p class="note">A scene keeps every fader, pan, mute, solo and name, the master, the buses, the monitor and what this browser set on CHANNEL. RECALL sends it all to the console.</p>
 <div class="bar" style="margin:10px 0 0"><button id="scExport" class="sm">EXPORT ALL</button><label class="chip" style="cursor:pointer">IMPORT<input id="scImport" type="file" accept="application/json" hidden></label></div><p id="scNote" class="note"></p></div>
 <div class="card"><h2>SCENES IN THIS BROWSER</h2><div id="scList"></div></div></div></section>
+<section id="pre" class="page"><div class="bar"><span class="seg" id="preKinds"></span><span class="sp"></span><input id="preFind" class="t" placeholder="find a preset" aria-label="Find a preset" style="max-width:200px"></div>
+<p class="note" id="preNote">The owner's factory presets (the preset pack built into the console's service). MASTERING: APPLY sends the preset's name and the console applies its own tuned values. EFFECTS and TONE are listed for reference: load them on the console's racks and channels.</p>
+<div class="card"><div id="preList"></div></div></section>
 <section id="grp" class="page"><div class="grid" id="groups"></div><p class="note">MUTE GROUPS: tap the channels that belong to a group, then MUTE / UNMUTE them together. Kept in this browser.</p></section>
 <section id="dev" class="page"><div class="grid">
 <div class="card"><h2>SOUND CARD ON THE COMPUTER</h2>
@@ -510,10 +513,22 @@ addEventListener("keydown",e=>{if(!opt.keys||!token||e.ctrlKey||e.metaKey||e.alt
 $("#oBackup").onclick=()=>download("amfx1-remote-backup.json",{amfx1:"remote-backup",opts:opt,scenes,groups,channels:chp});
 $("#oRestore").onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());if(j.amfx1!=="remote-backup")throw 0;Object.assign(opt,j.opts||{});save();scenes=j.scenes||[];ls.set(scKey,scenes);groups=j.groups||groups;ls.set(gKey,groups);
   for(const k of Object.keys(chp))delete chp[k];Object.assign(chp,j.channels||{});keep();chDrawn=-1;setSt("backup restored")}catch(x){setSt("not a backup file",true)}e.target.value=""};
+// ---- PRESETS: the preset pack the service has built in (GET /api/presets); a MASTERING preset is applied on the console by its name
+let pack=null,preKind="mastering";
+async function loadPresets(){if(!pack){try{const r=await fetch("/api/presets");pack=await r.json()}catch(e){setSt("the presets could not be read",true);return}}drawPresets()}
+function drawPresets(){if(!pack)return;const kinds=[["mastering","MASTERING"],["effects","EFFECTS"],["tone","TONE"]],seg=$("#preKinds");seg.replaceChildren();
+ for(const[k,l]of kinds){const b=document.createElement("button");b.textContent=l+" "+(pack[k]||[]).length;b.classList.toggle("on",k===preKind);b.onclick=()=>{preKind=k;drawPresets()};seg.appendChild(b)}
+ const q=$("#preFind").value.trim().toLowerCase(),list=$("#preList"),cur=state&&state.mastering?state.mastering.preset:"";list.replaceChildren();
+ for(const p of (pack[preKind]||[]).filter(p=>!q||p.name.toLowerCase().includes(q)||(p.kind||"").includes(q)||(p.category||"").toLowerCase().includes(q)).slice(0,400)){
+  const r=document.createElement("div");r.className="scn";const b=document.createElement("b");b.textContent=p.name;const sm=document.createElement("small");
+  sm.textContent=preKind==="mastering"?Object.entries(p.params).filter(([k,v])=>typeof v==="number").map(([k,v])=>k+" "+v).join(" · "):preKind==="effects"?(p.category||p.kind)+" · #"+p.id:(p.category||p.kind);b.appendChild(sm);r.appendChild(b);
+  if(preKind==="mastering"){const a=document.createElement("button");a.className="sm"+(p.name===cur?" on":"");a.textContent=p.name===cur?"ON":"APPLY";a.onclick=()=>{buzz();api("/api/control",{op:"mastering",preset:p.name}).then(()=>{if(state&&state.mastering)state.mastering.preset=p.name;setSt(p.name+" sent to the console");drawPresets()}).catch(e=>setSt(e.message,true))};r.appendChild(a)}
+  list.appendChild(r)}}
+$("#preFind").oninput=drawPresets;
 // ---- pages
 function go(p){tab=p;for(const s of document.querySelectorAll(".page"))s.style.display=s.id===p?"block":"none";for(const b of document.querySelectorAll("#nav button"))b.classList.toggle("cur",b.dataset.p===p);ls.set("tab",p);
  clearInterval(statusT);if(p==="rec"||p==="sys"){readStatus();statusT=setInterval(()=>{if(!document.hidden)readStatus()},2000)}panels();if(p==="rec"&&lastMeters)meters(lastMeters)
- if(p==="scn")drawScenes();if(p==="dev"&&!devs.length)loadDevices();if(p==="ch")drawEq()}
+ if(p==="scn")drawScenes();if(p==="pre")loadPresets();if(p==="dev"&&!devs.length)loadDevices();if(p==="ch")drawEq()}
 for(const b of document.querySelectorAll("#nav button"))b.onclick=()=>go(b.dataset.p);
 $("#bAux").onclick=()=>{busSet=0;$("#bAux").classList.add("on");$("#bFx").classList.remove("on");buses()};$("#bFx").onclick=()=>{busSet=1;$("#bFx").classList.add("on","acc");$("#bAux").classList.remove("on");buses()};
 // DISCONNECTED BY THE CONSOLE (CONNECTED PHONES → DISCONNECT / FORGET): no reconnecting while the console holds this device out

@@ -42,6 +42,15 @@ class Apps : public QObject {
   Q_INVOKABLE void readProperties(const QString& id);              // asks Windows on a thread of its own; propertiesReady follows
   Q_INVOKABLE bool openWindowsSound(const QString& what);          // "settings" | "recording" | "playback" | "mixer": Windows' own panels
   QString lastPanel;                                               // tests: the panel that would have been opened
+  // WINDOWS SOUND SETTINGS: Windows' default devices (playback / recording, and the communications ones) and the shared-mode format of
+  // every endpoint, read with the documented IMMDeviceEnumerator / property store only; the defaults are changed in Windows' own panel
+  Q_INVOKABLE QVariantMap windowsDefaults();                       // {available, note, playback, recording, commPlayback, commRecording: {id, name, rate, bits, channels} | {}, endpoints: [{id, flow, name, container, rate, bits, channels}]}
+  // ONE INTERFACE FOR INPUT AND OUTPUT: the devices of one box (same Windows container id, or the same ALSA card) that have an input and an output
+  Q_INVOKABLE QVariantList interfacePairs();                       // [{key, name, backend, in, out, inChannels, outChannels, rate, usb}]
+  static QVariantList pairInterfaces(const QVariantList& devices, const QVariantMap& containers);   // pure: devices as Engine::devices(); containers: endpoint id -> container id
+  static QString alsaCard(const QString& id);                      // "hw:CARD=Device,DEV=0" -> "Device"; "" when the id names no card
+  QVariantMap testWindows;                                         // tests: what windowsDefaults() returns (empty = ask Windows)
+  QVariantMap testContainers;                                      // tests: endpoint id -> container id
   QVariantList testDevices;
   // tests and the screenshots: a steady tone in place of a program (the same path from the slot to the strip)
   Q_INVOKABLE QVariantMap captureTest(const QString& name, double hz, int strip, bool stereo);

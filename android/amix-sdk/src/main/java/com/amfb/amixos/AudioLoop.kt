@@ -20,7 +20,12 @@ class AudioLoop(private val engine: Engine, private val sampleRate: Int = 48000,
 
     /** "aaudio" (native, low latency) or "java" (AudioRecord / AudioTrack fallback); "" = stopped */
     @Volatile var path: String = ""
-        private set
+        private set(v) { field = v; activePath = v }
+    companion object {
+        /** the path of the loop that runs now ("aaudio", "java", "" = none), for the LOW LATENCY report */
+        @Volatile @JvmStatic var activePath: String = ""
+            private set
+    }
     private var watcher: Thread? = null
 
     fun start() {

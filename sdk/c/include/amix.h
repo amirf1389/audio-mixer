@@ -24,7 +24,7 @@ extern "C" {
 #define AMIX_API __attribute__((visibility("default")))
 #endif
 
-#define AMIX_API_VERSION 7   // 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h); 7: ASIO details, latency, block callback
+#define AMIX_API_VERSION 8   // 8: ASIO driver info, buffer choice, amix_asio_open, amix_device_list; 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h); 7: ASIO details, latency, block callback
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
 #define AMIX_MAX_INSERTS 4
@@ -135,6 +135,45 @@ AMIX_API char* amix_rt_output_names_json(const amix_rt*);   /* the driver's own 
  * the stereo master. Never block, allocate or lock in it. NULL detaches; detach before amix_rt_destroy. */
 typedef void (*amix_block_fn)(void* user, const float* const* strips, int n_strips, const float* master_l, const float* master_r, int frames, double sample_rate);
 AMIX_API void  amix_rt_set_block_callback(amix_rt*, amix_block_fn fn, void* user);
+
+/* ---- ASIO THROUGH THE SDK (API 8). Windows only: on every other system these return AMIX_ERR_UNSUPPORTED (amix_asio_choose_buffer, plain
+ * arithmetic, works everywhere). The host code is the console's own (engine backend "asio" over the Steinberg ASIO SDK interface): a driver
+ * is loaded, asked and released again to describe it, so do not call amix_asio_driver_info for a driver that a running runtime has open.
+ *
+ *   char* j; if (amix_device_list("asio", &j) == AMIX_OK) { ...pick "id"... } amix_free(j);
+ *   amix_asio_info inf; amix_asio_driver_info(id, &inf, err, sizeof err);            // channels, rates, buffer min / max / preferred
+ *   amix_asio_open_params p = {id, 8, 8, AMIX_ASIO_BUFFER_PREFERRED, 48000};        // 8 in / 8 out at the driver's preferred buffer
+ *   amix_asio_open(rt, &p, err, sizeof err);                                        // device input k feeds strip k (amix_rt_set_input_route) */
+#define AMIX_OK 0
+#define AMIX_ERR_ARG (-1)           /* a NULL or invalid argument */
+#define AMIX_ERR_FAILED (-2)        /* the device or driver refused (message in err) */
+#define AMIX_ERR_NOT_FOUND (-3)     /* no such driver / device */
+#define AMIX_ERR_UNSUPPORTED (-4)   /* not available on this system (ASIO outside Windows) */
+#define AMIX_ASIO_BUFFER_PREFERRED 0L
+#define AMIX_ASIO_BUFFER_MIN (-1L)
+#define AMIX_ASIO_BUFFER_MAX (-2L)
+#define AMIX_ASIO_MAX_RATES 16
+typedef struct amix_asio_info {
+  int in_channels, out_channels;            /* what the driver reports (getChannels) */
+  long buffer_min, buffer_max, buffer_preferred, buffer_granularity;   /* frames (getBufferSize); granularity -1 = powers of two between min and max */
+  double default_rate;                      /* 48000 when accepted, else the first accepted rate */
+  int n_rates; double rates[AMIX_ASIO_MAX_RATES];   /* the standard rates the driver accepts (canSampleRate) */
+} amix_asio_info;
+typedef struct amix_asio_open_params {
+  const char* driver;       /* the "id" from amix_device_list("asio") = the driver's registered name */
+  int in_channels;          /* 0 = all the driver's inputs, -1 = none; more than the driver has is an AMIX_ERR_ARG */
+  int out_channels;         /* 0 = all the driver's outputs (at least 2 are opened when there are) */
+  long buffer_frames;       /* AMIX_ASIO_BUFFER_PREFERRED / _MIN / _MAX, or a size: the nearest one the driver allows is used */
+  double sample_rate;       /* 0 = default_rate; must be one of the driver's rates when it lists any */
+} amix_asio_open_params;
+/* devices of one backend ("asio", "wasapi", "alsa", "null" ...; NULL or "" = all): *json gets
+ * [{"backend","id","name","inChannels","outChannels","defaultRate","rates":[..],"bufferMin","bufferMax","bufferPreferred","bufferGranularity","probeError"}]
+ * (rates / buffer* only for ASIO; others as amix_devices_json). Always sets *json (free it), "[]" with AMIX_ERR_UNSUPPORTED for "asio" off Windows. */
+AMIX_API int  amix_device_list(const char* backend, char** json);
+AMIX_API int  amix_asio_supported(void);   /* 1 on Windows builds, 0 elsewhere */
+AMIX_API int  amix_asio_driver_info(const char* driver, amix_asio_info* out, char* err, size_t err_len);
+AMIX_API long amix_asio_choose_buffer(const amix_asio_info* info, long want);   /* the size amix_asio_open will use for buffer_frames = want */
+AMIX_API int  amix_asio_open(amix_rt*, const amix_asio_open_params* p, char* err, size_t err_len);   /* stops the runtime, opens, starts */
 
 /* ---- network audio over IP: the open AES67 profile (RTP, L16 / L24 big-endian, 1 ms packets, SAP / SDP announcements) ----
  * SEND: the master as channels 1 / 2 of one stream (1 channel = the mono sum; more than 2 = the strips before their faders follow).

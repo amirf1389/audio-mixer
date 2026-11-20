@@ -73,6 +73,31 @@ work as before.
 | `amix_rt_output_names_json(rt)` | The driver's own output channel names, when it reports them (ASIO). |
 | `amix_rt_set_block_callback(rt, fn, user)` | `fn` runs on the audio thread once per block, with each strip's input and the stereo master. Never block, allocate or lock in it. Pass `NULL` to detach, and detach before `amix_rt_destroy`. |
 
+### ASIO through the SDK: list, describe, open (API version 8)
+
+A typed way to the same ASIO host code the console uses (the engine's `asio` backend over the Steinberg ASIO SDK interface; nothing is
+duplicated and no driver code is involved). **Windows only:** on Linux and macOS each of these returns `AMIX_ERR_UNSUPPORTED` (-4).
+Errors: `AMIX_OK` 0, `AMIX_ERR_ARG` -1, `AMIX_ERR_FAILED` -2 (the driver refused; the message is in `err`), `AMIX_ERR_NOT_FOUND` -3.
+
+| Call | What it does |
+| --- | --- |
+| `amix_device_list(backend, &json)` | The devices of one backend (`NULL` / `""` = all). For `"asio"`: `[{"backend","id","name","inChannels","outChannels","defaultRate","rates":[..],"bufferMin","bufferMax","bufferPreferred","bufferGranularity","probeError"}]`, `id` = the driver's registered name. Always sets `json` (free it); `"[]"` with `AMIX_ERR_UNSUPPORTED` for `"asio"` off Windows. |
+| `amix_asio_supported()` | 1 in a Windows build, 0 elsewhere. |
+| `amix_asio_driver_info(id, &info, err, n)` | One driver: channels, `buffer_min` / `_max` / `_preferred` / `_granularity` (the driver's `getBufferSize`; granularity -1 = powers of two), accepted rates, `default_rate` (48 kHz when accepted). Loads the driver for a moment: not for a driver your runtime has open. |
+| `amix_asio_choose_buffer(&info, want)` | The buffer the driver allows nearest to `want`; `AMIX_ASIO_BUFFER_PREFERRED` (0), `_MIN` (-1), `_MAX` (-2). Plain arithmetic, on every system. |
+| `amix_asio_open(rt, &params, err, n)` | Stops `rt`, checks the channels and rate against the driver, chooses the buffer, opens and starts. `params`: `driver`, `in_channels` / `out_channels` (0 = all the driver has), `buffer_frames`, `sample_rate` (0 = `default_rate`). Device input k feeds strip k; change it with `amix_rt_set_input_route`. |
+
+```c
+char* j = NULL; char err[256];
+if (amix_device_list("asio", &j) == AMIX_OK) puts(j);          /* pick an "id" */
+amix_free(j);
+amix_asio_open_params p = {"My Interface ASIO", 8, 8, AMIX_ASIO_BUFFER_MIN, 48000};
+if (amix_asio_open(rt, &p, err, sizeof err) != AMIX_OK) fprintf(stderr, "%s\n", err);
+```
+
+Tested in CI on Linux (`sdk_asio_test`: the unsupported path, the list shape, the buffer choice) and cross-built for Windows; opening a
+real ASIO interface through these calls has to be checked on a Windows machine with one.
+
 On Android the same low-latency idea goes through AAudio: USB audio interfaces work there without drivers (see `android-sdk.md`).
 
 ## Bindings

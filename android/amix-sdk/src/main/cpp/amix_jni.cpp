@@ -85,23 +85,26 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_inputPeaks(JNIEnv* env, jclas
 namespace {
 struct NativeLoop {
   amix_mixer* m = nullptr; AAudioStream* in = nullptr; AAudioStream* out = nullptr;
-  std::vector<float> mic, inL, inR, L, R; std::vector<const float*> ptrs; int inCh = 1; std::atomic<bool> disconnected{false}; std::atomic<int> underruns{0};
+  // mic: what AAudio delivers, inCh channels interleaved; inBuf: one block per input channel (input k feeds strip k); outCh: the output's
+  // channels (master L / R on the first two, the rest silent: a multi-channel USB interface's outputs 3.. stay quiet)
+  std::vector<float> mic, inBuf, L, R; std::vector<const float*> ptrs; int inCh = 1, outCh = 2; std::size_t cap = 0; std::atomic<bool> disconnected{false}; std::atomic<int> underruns{0};
   Side* side = nullptr; std::vector<float> dk;   // the decks and the recorder of this mixer; 4 deck blocks (A L, B L, A R, B R)
 };
 NativeLoop* g_loop = nullptr;
 aaudio_data_callback_result_t onOut(AAudioStream*, void* user, void* audio, int32_t frames) {
   NativeLoop* l = static_cast<NativeLoop*>(user); float* o = static_cast<float*>(audio);
-  if (frames > static_cast<int32_t>(l->L.size())) { std::fill(o, o + 2 * frames, 0.f); return AAUDIO_CALLBACK_RESULT_CONTINUE; }   // never allocate here
+  const int oc = l->outCh; const std::size_t cap = l->cap;
+  if (frames > static_cast<int32_t>(l->L.size())) { std::fill(o, o + static_cast<std::size_t>(oc) * static_cast<std::size_t>(frames), 0.f); return AAUDIO_CALLBACK_RESULT_CONTINUE; }   // never allocate here
   int32_t got = 0;
   if (l->in) { got = AAudioStream_read(l->in, l->mic.data(), frames, 0); if (got < 0) got = 0; }   // non-blocking: what has arrived (interleaved when stereo)
-  if (l->inCh == 2) { for (int i = 0; i < frames; ++i) { l->inL[static_cast<std::size_t>(i)] = i < got ? l->mic[2 * static_cast<std::size_t>(i)] : 0.f; l->inR[static_cast<std::size_t>(i)] = i < got ? l->mic[2 * static_cast<std::size_t>(i) + 1] : 0.f; } }
-  else { for (int i = 0; i < frames; ++i) l->inL[static_cast<std::size_t>(i)] = i < got ? l->mic[static_cast<std::size_t>(i)] : 0.f; }
-  const int n = static_cast<int>(l->ptrs.size()); for (int s = 0; s < n; ++s) l->ptrs[static_cast<std::size_t>(s)] = s == 0 ? l->inL.data() : (s == 1 && l->inCh == 2) ? l->inR.data() : nullptr;   // input 1 on strip 1, input 2 on strip 2
+  const int ic = l->inCh;
+  for (int c = 0; c < ic; ++c) { float* d = l->inBuf.data() + static_cast<std::size_t>(c) * cap; for (int i = 0; i < frames; ++i) d[i] = i < got ? l->mic[static_cast<std::size_t>(i) * static_cast<std::size_t>(ic) + static_cast<std::size_t>(c)] : 0.f; }
+  const int n = static_cast<int>(l->ptrs.size()); for (int s = 0; s < n; ++s) l->ptrs[static_cast<std::size_t>(s)] = s < ic ? l->inBuf.data() + static_cast<std::size_t>(s) * cap : nullptr;   // input k on strip k
   if (l->side) { const std::size_t c = l->L.size(); float* bl[kDecks]; float* br[kDecks]; for (int d = 0; d < kDecks; ++d) { bl[d] = l->dk.data() + static_cast<std::size_t>(d) * c; br[d] = l->dk.data() + static_cast<std::size_t>(kDecks + d) * c; } readDecks(l->side, l->ptrs.data(), n, frames, bl, br); }   // the decks on their strips
   if (l->side) recordStrips(l->side, l->ptrs.data(), n, frames);
   const int done = amix_mixer_process(l->m, l->ptrs.data(), frames, l->L.data(), l->R.data());
   if (l->side) recordMaster(l->side, l->L.data(), l->R.data(), done);
-  for (int i = 0; i < frames; ++i) { o[2 * i] = i < done ? l->L[static_cast<std::size_t>(i)] : 0.f; o[2 * i + 1] = i < done ? l->R[static_cast<std::size_t>(i)] : 0.f; }
+  for (int i = 0; i < frames; ++i) { float* f = o + static_cast<std::size_t>(i) * static_cast<std::size_t>(oc); f[0] = i < done ? l->L[static_cast<std::size_t>(i)] : 0.f; if (oc > 1) f[1] = i < done ? l->R[static_cast<std::size_t>(i)] : 0.f; for (int c = 2; c < oc; ++c) f[c] = 0.f; }
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 void onErr(AAudioStream*, void* user, aaudio_result_t e) { if (e == AAUDIO_ERROR_DISCONNECTED) static_cast<NativeLoop*>(user)->disconnected = true; }
@@ -125,20 +128,23 @@ void closeLoop() {
   if (g_loop->in) { AAudioStream_requestStop(g_loop->in); AAudioStream_close(g_loop->in); }
   delete g_loop; g_loop = nullptr;
 }
-}  // namespace
-extern "C" {
-// starts the native loop on mixer h at `rate` (the output may run at the device's own rate: it is returned), mic = open the microphone too.
-// Returns the rate in use, 0 = AAudio could not open (Java falls back to its AudioRecord / AudioTrack loop).
-JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic, jint outDev, jint inDev, jint bursts, jint inChannels) {
-  closeLoop(); amix_mixer* m = mixerOf(h); if (!m) return 0;
-  NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->inCh = inChannels == 2 && amix_mixer_strips(m) >= 2 ? 2 : 1; l->mic.assign(2 * cap, 0.f); l->inL.assign(cap, 0.f); l->inR.assign(cap, 0.f); l->L.assign(cap, 0.f); l->R.assign(cap, 0.f); l->ptrs.assign(static_cast<std::size_t>(amix_mixer_strips(m)), nullptr);
+constexpr int kMaxIn = AMIX_MAX_STRIPS, kMaxOut = 32;
+int startLoop(amix_mixer* m, int rate, bool mic, int outDev, int inDev, int bursts, int inCh, int outCh) {
+  closeLoop();
+  NativeLoop* l = new NativeLoop(); l->m = m; const std::size_t cap = 8192; l->cap = cap; l->inCh = inCh; l->outCh = outCh;
+  l->mic.assign(static_cast<std::size_t>(kMaxIn) * cap, 0.f); l->inBuf.assign(static_cast<std::size_t>(kMaxIn) * cap, 0.f); l->L.assign(cap, 0.f); l->R.assign(cap, 0.f); l->ptrs.assign(static_cast<std::size_t>(amix_mixer_strips(m)), nullptr);
   l->side = sideOf(m); l->dk.assign(2 * kDecks * cap, 0.f);   // made here, never in the callback
-  l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, outDev);
-  if (!l->out && outDev > 0) l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, 0);   // the chosen output is gone: the system route
+  l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, outCh, l, true, outDev);
+  if (!l->out && outCh > 2) { l->outCh = 2; l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, outDev); }   // the device will not take that many: stereo
+  if (!l->out && outDev > 0) { l->outCh = 2; l->out = openStream(AAUDIO_DIRECTION_OUTPUT, rate, 2, l, true, 0); }   // the chosen output is gone: the system route
   if (!l->out) { delete l; return 0; }
   const int real = AAudioStream_getSampleRate(l->out);
-  if (mic) { l->in = openStream(AAUDIO_DIRECTION_INPUT, real, l->inCh, l, false, inDev); if (!l->in && inDev > 0) l->in = openStream(AAUDIO_DIRECTION_INPUT, real, l->inCh, l, false, 0);
+  if (mic) { l->in = openStream(AAUDIO_DIRECTION_INPUT, real, l->inCh, l, false, inDev);
+    if (!l->in && l->inCh > 2) { l->inCh = 2; l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 2, l, false, inDev); }   // not that many inputs there: stereo
+    if (!l->in && inDev > 0) l->in = openStream(AAUDIO_DIRECTION_INPUT, real, l->inCh, l, false, 0);
     if (!l->in && l->inCh == 2) { l->inCh = 1; l->in = openStream(AAUDIO_DIRECTION_INPUT, real, 1, l, false, inDev); } }   // no stereo input there: mono on strip 1
+  if (l->in) l->inCh = AAudioStream_getChannelCount(l->in);
+  if (l->inCh > kMaxIn) l->inCh = kMaxIn;
   { std::vector<float> warm(cap, 0.f); const float* none[AMIX_MAX_STRIPS] = {}; amix_mixer_process(m, none, static_cast<int>(cap), warm.data(), warm.data()); }   // the mixer's buffers sized once, here, never in the callback   // the same rate as the output: no resampling in the callback
   AAudioStream_setBufferSizeInFrames(l->out, AAudioStream_getFramesPerBurst(l->out) * (bursts >= 1 && bursts <= 8 ? bursts : 2));   // bursts of headroom (2 = the guide's low-latency start; the brand profile may ask for more)
   g_loop = l;
@@ -146,6 +152,22 @@ JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, 
   if (AAudioStream_requestStart(l->out) != AAUDIO_OK) { closeLoop(); return 0; }
   return real;
 }
+}  // namespace
+extern "C" {
+// starts the native loop on mixer h at `rate` (the output may run at the device's own rate: it is returned), mic = open the microphone too.
+// Returns the rate in use, 0 = AAudio could not open (Java falls back to its AudioRecord / AudioTrack loop).
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStart(JNIEnv*, jclass, jlong h, jint rate, jboolean mic, jint outDev, jint inDev, jint bursts, jint inChannels) {
+  amix_mixer* m = mixerOf(h); if (!m) { closeLoop(); return 0; }
+  return startLoop(m, rate, mic != JNI_FALSE, outDev, inDev, bursts, inChannels == 2 && amix_mixer_strips(m) >= 2 ? 2 : 1, 2);
+}
+// MULTI-CHANNEL (USB interfaces): inChannels inputs on strips 1..inChannels (0 = no input; at most the mixer's strips), outChannels outputs
+// (master L / R on 1 / 2). A device that refuses the count falls back to stereo, then mono (input) / stereo (output); aaudioInChannels /
+// aaudioOutChannels tell what was opened.
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioStartMulti(JNIEnv*, jclass, jlong h, jint rate, jint outDev, jint inDev, jint bursts, jint inChannels, jint outChannels) {
+  amix_mixer* m = mixerOf(h); if (!m) { closeLoop(); return 0; }
+  return startLoop(m, rate, inChannels > 0, outDev, inDev, bursts, std::min<int>(std::max<int>(inChannels, 1), std::min<int>(amix_mixer_strips(m), kMaxIn)), std::min<int>(std::max<int>(outChannels, 2), kMaxOut));
+}
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioOutChannels(JNIEnv*, jclass) { return g_loop && g_loop->out ? g_loop->outCh : 0; }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_aaudioStop(JNIEnv*, jclass) { closeLoop(); }
 // [running, disconnected, framesPerBurst, bufferFrames, xruns, inputOpen, outDeviceId, inDeviceId, sampleRate]
 JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_aaudioInChannels(JNIEnv*, jclass) { return g_loop && g_loop->in ? g_loop->inCh : 0; }

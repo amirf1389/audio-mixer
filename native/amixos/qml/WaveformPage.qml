@@ -23,7 +23,8 @@ Item {
         canvas.requestPaint()
     }
     Timer { interval: engine.uiAwake ? 50 : 500; running: page.visible; repeat: true; onTriggered: page.refresh() }
-    Component.onCompleted: refresh()
+    function pageShown() { refresh() }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     function dbOf(v) { return v > 1e-6 ? (20 * Math.log(v) / Math.LN10).toFixed(1) + " dBFS" : "-inf" }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8

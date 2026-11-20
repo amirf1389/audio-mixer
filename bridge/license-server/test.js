@@ -527,3 +527,44 @@ test('WEBSITE page: staff choose the release, hide files and publish; the portal
     assert.ok((await call('/portal/')).text.includes('placeholder="1.25.0.0"'));
   } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('PRESETS on the WEBSITE page: staff publish a preset pack, /portal/presets serves it byte for byte; trusted only when the signed manifest has its sha256', async () => {
+  const os = require('node:os'), fsx = require('node:fs'), pathx = require('node:path');
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'presets-')), rel = pathx.join(dir, 'releases');
+  fsx.mkdirSync(pathx.join(rel, 'presets'), { recursive: true });
+  fsx.writeFileSync(pathx.join(rel, 'features.json'), JSON.stringify({ features: [{ version: '1.25.0.0', date: '2026-11-20', title: 'new', items: [] }] }));
+  const pack = v => ({ version: v, generated: '2026-11-20', mastering: [{ name: 'WARM', params: { low: 2.5, air: -1, on: true } }], effects: [{ kind: 'reverb', id: 1, name: 'Small Booth', category: 'Reverb', values: { decay: 0.06, mix: 1 } }], tone: [{ kind: 'chain', name: 'FLAT', category: 'UTILITY', dsp: {} }] });
+  const text = p => JSON.stringify(p, null, 1) + '\n', sha = t => crypto.createHash('sha256').update(t).digest('hex');
+  fsx.writeFileSync(pathx.join(rel, 'presets', 'presets-pack.json'), text(pack('1.0')));
+  const srv = createServer({ privateKey: pair.privateKey, token: TOKEN, dataFile: pathx.join(dir, 'licenses.json'), portalDb: pathx.join(dir, 'portal.db'), portalSecret: 'p'.repeat(48), releasesDir: rel, quiet: true });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const call = async (p, { method, body, tok } = {}) => { const r = await fetch(base + p, { method: method || (body ? 'POST' : 'GET'), headers: { ...(tok ? { authorization: 'Bearer ' + tok } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (_) {} return { status: r.status, text: t, json: j, headers: r.headers }; };
+  try {
+    // staff only: no token, a wrong token
+    assert.strictEqual((await call('/admin/website/presets')).status, 401);
+    assert.strictEqual((await call('/admin/website/presets', { body: { pack: pack('2.0') } })).status, 401);
+    assert.strictEqual((await call('/admin/website/presets', { body: { pack: pack('2.0') }, tok: 'y'.repeat(40) })).status, 401);
+    await call('/admin/staff', { body: { email: 'presets@amfb.my', name: 'Presets', password: 'presets long password' }, tok: TOKEN });
+    const jwt = (await call('/admin/auth/login', { body: { email: 'presets@amfb.my', password: 'presets long password' } })).json.token;
+    // nothing published: the release folder's pack
+    let pub = await call('/portal/presets'); assert.strictEqual(pub.status, 200); assert.strictEqual(pub.text, text(pack('1.0'))); assert.strictEqual(pub.headers.get('x-preset-sha256'), sha(text(pack('1.0'))));
+    // bad packs are refused
+    for (const bad of [null, { version: '2' }, { ...pack('2'), version: '../x' }, { ...pack('2'), mastering: [{ name: '<b>', params: {} }] }, { ...pack('2'), effects: [{ kind: 'reverb', id: 'x', name: 'n', values: {} }] }, { ...pack('2'), mastering: [{ name: 'A', params: { x: 'str' } }] }])
+      assert.strictEqual((await call('/admin/website/presets', { body: { pack: bad }, tok: jwt })).status, 400, JSON.stringify(bad).slice(0, 60));
+    // a big pack (more than the server's usual 4 KB body) is published; the portal serves exactly the text make-presets.js writes
+    const big = pack('2.0'); for (let i = 2; i <= 600; i++) big.effects.push({ kind: 'delay', id: i, name: 'Echo ' + i, category: 'Delay', values: { time: i / 600, fb: 0.4, mix: 0.35 } });
+    let r = await call('/admin/website/presets', { body: { pack: big }, tok: jwt }); assert.strictEqual(r.status, 200, r.text); assert.strictEqual(r.json.trusted, false);
+    pub = await call('/portal/presets'); assert.strictEqual(pub.text, text(big)); assert.strictEqual(r.json.live.sha256, sha(text(big))); assert.strictEqual(pub.json.effects.length, 600);
+    let st = (await call('/admin/website/presets', { tok: jwt })).json; assert.strictEqual(st.live.version, '2.0'); assert.strictEqual(st.live.effects, 600); assert.strictEqual(st.trusted, false); assert.strictEqual(st.live.publishedBy, 'presets@amfb.my');
+    // the owner signs a manifest with this sha256: the page says the apps take it
+    fsx.writeFileSync(pathx.join(rel, 'update.json'), JSON.stringify({ payload: JSON.stringify({ product: 'audio-mixer', version: '1.25.0.0', files: {}, presets: { version: '2.0', sha256: sha(text(big)) } }), signature: 'x' }));
+    st = (await call('/admin/website/presets', { tok: jwt })).json; assert.strictEqual(st.trusted, true); assert.strictEqual(st.manifest.signed.version, '2.0');
+    // the release folder's pack again
+    r = await call('/admin/website/presets', { body: { fromBuiltIn: true }, tok: jwt }); assert.strictEqual(r.status, 200); assert.strictEqual((await call('/portal/presets')).text, text(pack('1.0')));
+    const log = (await call('/admin/audit?limit=50', { tok: TOKEN })).json.entries;
+    assert.ok(log.some(e => e.action === 'website.presets.publish' && /presets@amfb\.my/.test(e.detail || '')));
+    const page = await call('/admin/website'); assert.ok(page.text.includes('packPublish'));
+  } finally { srv.close(); fsx.rmSync(dir, { recursive: true, force: true }); }
+});

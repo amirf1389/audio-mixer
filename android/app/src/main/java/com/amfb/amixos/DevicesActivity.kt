@@ -64,6 +64,9 @@ class DevicesActivity : FitActivity() {
     private fun halSection() {
         head(getString(R.string.dev_hal), getString(R.string.dev_hal_sub))
         val c = card(); for (l in hal.lines()) line(c, l, Color.WHITE, 12f, mono = true); box.addView(c)
+        head(getString(R.string.dev_latency), getString(R.string.dev_latency_sub))
+        val lc = card(); for (l in hal.latencyLines(AudioLoop.activePath)) line(lc, l, Color.WHITE, 12f, mono = true)
+        for (a in hal.latencyAdvice(AudioLoop.activePath)) line(lc, "• " + a, getColor(R.color.dim), 12f); box.addView(lc)
         val p = BrandProfile.of(hal)
         head(getString(R.string.dev_brand), getString(R.string.dev_brand_sub))
         val b = card()

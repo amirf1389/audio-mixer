@@ -52,7 +52,8 @@ Flickable {
     function setBand(b, v) { const e = engine.eqBand(strip, b); const g = Math.round(Math.max(-12, Math.min(12, v)) * 2) / 2; band = b; engine.setEq(strip, b, g === 0 && e.type <= 1 ? 0 : (e.type > 0 ? e.type : 1), e.type > 0 ? e.freq : bands[b], e.type > 0 ? e.q : 1.41, g); presetName = "" }
     function loadPreset(name) { for (let i = 0; i < presets.length; ++i) if (presets[i].n === name) { apply(presets[i].g); presetName = name; return } }
     function dbText(v) { return (v > 0 ? "+" : "") + Number(v).toFixed(1) + "dB" }
-    Component.onCompleted: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
+    function pageShown() { if (strip >= 0) engine.setScopeStrip(strip); reload() }   // also when shown again from the page cache
+    Component.onCompleted: pageShown()
     onStripChanged: { if (strip >= 0) engine.setScopeStrip(strip); reload() }
     onBandChanged: bandNow = engine.eqBand(strip, band)
     Connections { target: engine; function onStripsChanged() { page.reload() } function onMasterChainChanged() { page.reload() } function onPresetsChanged() { page.slotTick++ } }   // the master's EQ reports through masterChainChanged: without it the sliders and diamonds snapped back after every move

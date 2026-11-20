@@ -28,6 +28,7 @@ struct Input {
 struct Report {
   double inMs = 0, outMs = 0, blockMs = 0, totalMs = 0;   // totalMs: input + output (what a monitored voice is late by)
   bool reported = false;        // the driver said it (true) or it is our estimate (false)
+  std::string driver;           // "ASIO", "WASAPI exclusive", "WASAPI shared", "DirectSound", ...
   Level level = Level::High;
   std::string levelName;        // "LOW LATENCY", "OK", "HIGH"
   std::string verdict;          // one sentence
@@ -38,6 +39,11 @@ struct Report {
 Report assess(const Input& in);
 Level levelOf(double totalMs);
 const char* levelName(Level l);
+/** the driver type in the words the panel shows: "ASIO", "WASAPI exclusive", "WASAPI shared", "DirectSound", "ALSA", "Core Audio", "none" */
+std::string driverLabel(const std::string& backend, bool exclusive);
+/** ROUND TRIP in milliseconds from a whole recording that started with the click at `clickAt`; -1 when no click is heard
+ *  (confidence under 0.3: no loop cable or microphone, or the volume is down) */
+double roundTripMs(const float* recorded, std::size_t nRec, std::size_t clickAt, double rate, double* confidence);
 
 /** ROUND TRIP: where `sent` (the click as played) appears in `recorded` (the input over the same time), in frames; `confidence` 0..1
  *  (how clearly the click stands out: under 0.3 the result is not trusted). -1 when it is not found. */

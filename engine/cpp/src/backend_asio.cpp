@@ -76,6 +76,8 @@ AsioProbeInfo probeAsioDriver(const AsioDriverInfo& d) {
   info.inChannels = nIn; info.outChannels = nOut;
   static const double kRates[] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000};
   for (double rate : kRates) if (drv->canSampleRate(rate) == ASE_OK) info.sampleRates.push_back(rate);
+  long mn = 0, mx = 0, pref = 0, gran = 0;
+  if (drv->getBufferSize(&mn, &mx, &pref, &gran) == ASE_OK) { info.bufMin = mn; info.bufMax = mx; info.bufPreferred = pref; info.bufGranularity = gran; }
   drv->Release();
   return info;
 }
@@ -215,17 +217,7 @@ class AsioBackend : public Backend {
   std::uint64_t resets() const { return resets_; }
 
  private:
-  static long chooseBuffer(long want, long mn, long mx, long pref, long gran) {
-    if (mn == mx) return mn;
-    if (want <= 0) return pref;
-    long best = pref;
-    if (gran == -1) {                                           // powers of two between min and max
-      long b = mn, bestD = 1L << 30; for (; b <= mx; b *= 2) { const long d = std::labs(b - want); if (d < bestD) { bestD = d; best = b; } if (b == 0) break; }
-    } else if (gran > 0) {                                      // min + k * granularity
-      long k = (want - mn + gran / 2) / gran; if (k < 0) k = 0; best = mn + k * gran; if (best > mx) best = mx;
-    } else best = std::min(std::max(want, mn), mx);
-    return best;
-  }
+  static long chooseBuffer(long want, long mn, long mx, long pref, long gran) { return asioChooseBuffer(want, mn, mx, pref, gran); }
   static const char* typeName(ASIOSampleType t) {
     switch (t) { case ASIOSTInt16LSB: return "16-bit integer"; case ASIOSTInt24LSB: return "24-bit integer"; case ASIOSTInt32LSB: return "32-bit integer";
                  case ASIOSTFloat32LSB: return "32-bit float"; case ASIOSTFloat64LSB: return "64-bit float"; default: return "unknown"; }

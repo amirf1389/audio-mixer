@@ -273,5 +273,11 @@
       "sha256": "444f985271e001bac0f01c6ebf30093d2fc824a9e0247b7c74caec890273d218"
     }
   },
-  "plugins": []
+  "plugins": [],
+  "presets": {
+    "version": "2026.11.20",
+    "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/presets/presets-pack.json",
+    "size": 161120,
+    "sha256": "81e4f2f3ffa527ea6d1acb9cbac2f883db582606acf1b961768912b929eb3b86"
+  }
 }

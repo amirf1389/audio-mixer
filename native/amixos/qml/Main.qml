@@ -25,13 +25,15 @@ ApplicationWindow {
     // one change signal), so a setting saved before the first click (the audio starting, a device remembered) sent the window back to
     // the start page and logged a binding loop on "current"
     property string current: ""
+    property int pageStatus: Loader.Null   // the shown page's Loader status (set by the page cache)
+    readonly property bool pageReady: current === "mixer" ? mixerKeep.status === Loader.Ready : pageStatus === Loader.Ready   // the bench times a page switch up to the frame after this
     property bool mixerEver: false   // the mixer has been opened once: from then on it stays built
     // LOW-CPU INTERFACE: the meters redraw at 30 fps in front, 4 fps behind another app, 1 fps minimised (the sound is never throttled).
     // Not on the offscreen platform (--smoke, --shots, --film): there the window is never "active" and the film needs every frame.
     function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
     onActiveChanged: uiActivity()
     onVisibilityChanged: uiActivity()
-    Component.onCompleted: { fitScreen(); if (current === "") current = settings.startPage; if (current === "mixer") mixerEver = true }
+    Component.onCompleted: { fitScreen(); if (current === "") current = settings.startPage; touchPage(current); if (current === "mixer") mixerEver = true }
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
@@ -45,7 +47,7 @@ ApplicationWindow {
     Timer { id: warmTimer; interval: 60; repeat: true; running: false
         onTriggered: { if (!root.warmQueue.length) { stop(); return }
             const n = root.warmQueue.shift(); const c = Qt.createComponent("qrc:/qt/qml/AmixOS/qml/" + n + ".qml", Component.Asynchronous); root.warmKeep.push(c) } }
-    Timer { interval: 3000; running: asyncPages; onTriggered: warmTimer.start() }
+    Timer { interval: 3000; running: asyncPages; onTriggered: { warmTimer.start(); if (pageCacheOff) return; root.mixerEver = true; root.touchPage("asio", true) } }   // the most used pages (MIXER, SOUND CARD) built ahead, in the background
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
@@ -56,12 +58,25 @@ ApplicationWindow {
     property bool autoFailed: false
     readonly property bool testRun: Qt.application.arguments.indexOf("--smoke") >= 0 || Qt.application.arguments.indexOf("--shots") >= 0 || Qt.application.arguments.indexOf("--bench") >= 0   // the checks drive the engine themselves
     function autoAudio() { if (root.testRun || engine.running || engine.busy) return; root.autoFailed = !settings.startLastDevice() }   // the remembered card, else AUTO DETECT (default output + the default microphone)
-    onCurrentChanged: { gcTimer.restart(); if (current === "mixer" && !mixerEver) mixerEver = true; if ((current === "mixer" || current === "home") && !engine.running) autoAudio() }
+    // PAGE CACHE: the last few pages opened stay built (hidden, their timers and meters stop with their visibility), so going back
+    // to one is a frame, not a rebuild. Capped: the oldest page is let go when a new one comes in (memory stays bounded).
+    readonly property int pageCacheMax: pageCacheOff ? 1 : 6   // AMIX_PAGE_CACHE=0: every page rebuilt on each visit (as before; for the bench)
+    property var pageSlots: ["", "", "", "", "", ""]   // the page each slot holds (fixed slots: a page keeps its slot while cached)
+    property var pageUsed: []                             // the cached pages, the most recently opened last
+    function touchPage(id, behind) { if (!id || id === "mixer") return
+        const used = pageUsed.filter(function (p) { return p !== id }); if (behind) used.unshift(id); else used.push(id)
+        const slots = pageSlots.slice(); if (slots.indexOf(id) < 0) {
+            let k = -1; for (let i = 0; i < pageCacheMax; ++i) if (slots[i] === "") { k = i; break }
+            if (k < 0) { for (let j = 0; j < used.length; ++j) { const v = used[j]; if (v !== id && v !== root.current) { k = slots.indexOf(v); used.splice(j, 1); break } } }
+            if (k < 0) return; slots[k] = id; pageSlots = slots }
+        pageUsed = used }
+    function clearPages() { pageSlots = ["", "", "", "", "", ""]; pageUsed = [] }
+    onCurrentChanged: { touchPage(current); gcTimer.restart(); if (current === "mixer" && !mixerEver) mixerEver = true; if ((current === "mixer" || current === "home") && !engine.running) autoAudio() }
     Connections { target: engine; function onStateChanged() { if (engine.running) root.autoFailed = false } }
     // WINDOWS MICROPHONE PRIVACY changed: the sound card restarts by itself, without the microphone (released at once) or with it again
     Connections { target: engine; function onMicPrivacyChanged() { if (engine.running) root.softRestart() } }
     Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
-    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; pageLoader.active = false; pageLoader.active = true; if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
+    function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; clearPages(); touchPage(c); if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: root.softRestart() }
     function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
 
@@ -248,25 +263,38 @@ ApplicationWindow {
             NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? engine.pages : engine.pages.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Loader {
-                    id: pageLoader
+                id: pageArea
+                component PageSlot: Loader {
+                    property int slot: 0
+                    readonly property string pid: root.pageSlots[slot]
                     anchors.fill: parent
+                    active: pid !== ""
+                    visible: active && pid === root.current
                     // CLICK TO PAGE: the page is built over a few frames instead of in one blocking step, so the rail answers the click at
                     // once; the new page fades in when ready. (The tests build synchronously unless they ask for this.)
                     asynchronous: asyncPages
                     opacity: status === Loader.Ready ? 1 : 0
                     Behavior on opacity { enabled: asyncPages; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-                    sourceComponent: {
-                        switch (root.current) {
-                        case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
-                        case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "streaming": return streamingC; case "update": return updateC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
-                        }
+                    sourceComponent: pid !== "" ? pageArea.pageComponent(pid) : null
+                    Binding { target: root; property: "pageStatus"; value: status; when: visible; restoreMode: Binding.RestoreNone }
+                    onVisibleChanged: if (visible && item && typeof item.pageShown === "function") item.pageShown()   // shown again from the cache: the page reads its data again, as a fresh one would
+                }
+                PageSlot { slot: 0 }
+                PageSlot { slot: 1 }
+                PageSlot { slot: 2 }
+                PageSlot { slot: 3 }
+                PageSlot { slot: 4 }
+                PageSlot { slot: 5 }
+                function pageComponent(id) {
+                    switch (id) {
+                    case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
+                    case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "streaming": return streamingC; case "update": return updateC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                     }
                 }
                 Rectangle {   // building a page: a thin line runs along the top
-                    id: pageBusy; objectName: "pageBusy"; visible: pageLoader.status === Loader.Loading; z: 50; height: 2; color: Theme.orange
+                    id: pageBusy; objectName: "pageBusy"; visible: root.current !== "mixer" && root.pageStatus === Loader.Loading; z: 50; height: 2; color: Theme.orange
                     width: parent.width * 0.3; y: 0
-                    SequentialAnimation on x { running: pageLoader.status === Loader.Loading; loops: Animation.Infinite
+                    SequentialAnimation on x { running: pageBusy.visible; loops: Animation.Infinite
                         NumberAnimation { from: -pageBusy.width; to: pageBusy.parent ? pageBusy.parent.width : 0; duration: 700; easing.type: Easing.InOutQuad } }
                 }
                 // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).

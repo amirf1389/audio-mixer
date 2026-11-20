@@ -33,6 +33,9 @@ int main() {
   { Input i; i.backend = "asio"; i.blockFrames = 256; i.inFrames = 600; i.outFrames = 600; i.xruns = 3; Report r = assess(i); CHECK(!has(r, "smaller buffer")); CHECK(has(r, "Raise it")); }
   // hybrid processor with fast cores off
   { Input i; i.backend = "asio"; i.blockFrames = 64; i.inFrames = 64; i.outFrames = 64; i.hybrid = true; i.fastCores = false; Report r = assess(i); CHECK(has(r, "FAST CORES")); }
+  // a 1024-frame WASAPI shared buffer (21 ms): the driver type in words and the plain buffer advice
+  { Input i; i.backend = "wasapi"; i.blockFrames = 1024; Report r = assess(i); CHECK(r.driver == "WASAPI shared"); CHECK(has(r, "Buffer above 10 ms")); CHECK(has(r, "Windows mixer buffer")); }
+  CHECK(driverLabel("asio", false) == "ASIO" && driverLabel("wasapi", true) == "WASAPI exclusive" && driverLabel("dsound", false) == "DirectSound");
   CHECK(levelOf(9.9) == Level::Low && levelOf(10) == Level::Ok && levelOf(20) == Level::Ok && levelOf(20.1) == Level::High);
 
   // ROUND TRIP: the click back after 517 frames (10.77 ms at 48 kHz), at a quarter of the level, with noise; then through an inverted cable
@@ -45,6 +48,13 @@ int main() {
     CHECK(found == lag); CHECK(conf > 0.8);
     std::printf("latency_test: round trip %s: found %ld frames (%.2f ms), confidence %.2f\n", invert ? "inverted" : "normal", found, found * 1000.0 / rate, conf);
   }
+  // ROUND TRIP in ms: a whole synthetic recording, click played at 0.1 s, back 12.34 ms later through noise: right within 1 ms; silence: -1
+  for (double r2 : {44100.0, 48000.0, 96000.0}) {
+    const std::vector<float> ck = testClick(r2); std::vector<float> rec(static_cast<std::size_t>(0.8 * r2)); for (auto& x : rec) x = noise(g);
+    const std::size_t at = static_cast<std::size_t>(0.1 * r2), d = static_cast<std::size_t>(0.01234 * r2); for (std::size_t i = 0; i < ck.size(); ++i) rec[at + d + i] += 0.3f * ck[i];
+    double conf = 0; const double got = roundTripMs(rec.data(), rec.size(), at, r2, &conf); CHECK(std::fabs(got - 12.34) < 1.0); CHECK(conf > 0.8);
+    std::vector<float> quiet(rec.size()); for (auto& x : quiet) x = noise(g); CHECK(roundTripMs(quiet.data(), quiet.size(), at, r2, &conf) < 0);
+    std::printf("latency_test: round trip %.0f Hz: %.2f ms (sent 12.34 ms)\n", r2, got); }
   // nothing came back (no loop cable): low confidence, not trusted
   { std::vector<float> rec(24000); for (auto& x : rec) x = noise(g); double conf = 1; findDelay(click.data(), click.size(), rec.data(), rec.size(), &conf); CHECK(conf < 0.3); }
   { double c = 1; CHECK(findDelay(click.data(), click.size(), click.data(), 10, &c) == -1 && c == 0); }

@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <atomic>
 #include "audiomixer/driver_intel.hpp"
+#include "audiomixer/asio.hpp"
 #include "audiomixer/latency.hpp"
 #include "net/aoip.hpp"
 #include "net/midi.hpp"
@@ -251,5 +252,110 @@ char* amix_rt_sample_format(const amix_rt* r) { return dup(r ? r->rt.sampleForma
 char* amix_rt_output_names_json(const amix_rt* r) { std::string o = "["; if (r) { const auto n = r->rt.outputNames(); for (std::size_t i = 0; i < n.size(); ++i) o += (i ? "," : "") + jstr(n[i]); } return dup(o + "]"); }
 void amix_rt_set_block_callback(amix_rt* r, amix_block_fn fn, void* user) {
   if (!r) return; r->tap.user.store(user); r->tap.fn.store(fn); r->rt.setTap(fn ? &r->tap : nullptr);
+}
+}  // extern "C"
+
+// ---- API 8: ASIO through the SDK (the engine's own "asio" backend and driver probe; Windows only)
+namespace {
+int sdkFail(int code, const std::string& e, char* err, size_t n) { if (err && n) std::snprintf(err, n, "%s", e.c_str()); return code; }
+void fillAsioInfo(const am::AsioProbeInfo& p, amix_asio_info* o) {
+  std::memset(o, 0, sizeof *o);
+  o->in_channels = static_cast<int>(p.inChannels); o->out_channels = static_cast<int>(p.outChannels);
+  o->buffer_min = p.bufMin; o->buffer_max = p.bufMax; o->buffer_preferred = p.bufPreferred; o->buffer_granularity = p.bufGranularity;
+  o->default_rate = p.sampleRates.empty() ? 0 : p.sampleRates.front();
+  for (const double r : p.sampleRates) { if (r == 48000) o->default_rate = r; if (o->n_rates < AMIX_ASIO_MAX_RATES) o->rates[o->n_rates++] = r; }
+}
+#ifdef _WIN32
+// the registered driver whose name is `name` (exact, else case-insensitive), probed once
+int probeNamed(const char* name, am::AsioProbeInfo& p, std::string& e) {
+  if (!name || !*name) { e = "no ASIO driver named"; return AMIX_ERR_ARG; }
+  const auto all = am::listAsioDrivers(); const am::AsioDriverInfo* hit = nullptr;
+  for (const auto& d : all) if (d.name == name) { hit = &d; break; }
+  if (!hit) for (const auto& d : all) if (_stricmp(d.name.c_str(), name) == 0) { hit = &d; break; }
+  if (!hit) { e = std::string("no ASIO driver \"") + name + "\" is registered"; return AMIX_ERR_NOT_FOUND; }
+  p = am::probeAsioDriver(*hit);
+  if (!p.error.empty()) { e = hit->name + ": " + p.error; return AMIX_ERR_FAILED; }
+  return AMIX_OK;
+}
+#endif
+}  // namespace
+
+extern "C" {
+int amix_asio_supported(void) {
+#ifdef _WIN32
+  return 1;
+#else
+  return 0;
+#endif
+}
+int amix_device_list(const char* backend, char** json) {
+  if (!json) return AMIX_ERR_ARG;
+  const std::string want = backend ? backend : "";
+  if (want == "asio") {
+#ifdef _WIN32
+    std::string o = "["; bool first = true;
+    for (const auto& d : am::listAsioDrivers()) {
+      const am::AsioProbeInfo p = am::probeAsioDriver(d); amix_asio_info inf; fillAsioInfo(p, &inf);
+      std::string rates = "["; for (int i = 0; i < inf.n_rates; ++i) rates += (i ? "," : "") + std::to_string(static_cast<long long>(inf.rates[i]));
+      o += std::string(first ? "" : ",") + "{\"backend\":\"asio\",\"id\":" + jstr(d.name) + ",\"name\":" + jstr(d.name) + ",\"inChannels\":" + std::to_string(inf.in_channels) + ",\"outChannels\":" + std::to_string(inf.out_channels)
+         + ",\"defaultRate\":" + std::to_string(static_cast<long long>(inf.default_rate)) + ",\"rates\":" + rates + "],\"bufferMin\":" + std::to_string(inf.buffer_min) + ",\"bufferMax\":" + std::to_string(inf.buffer_max)
+         + ",\"bufferPreferred\":" + std::to_string(inf.buffer_preferred) + ",\"bufferGranularity\":" + std::to_string(inf.buffer_granularity) + ",\"probeError\":" + jstr(p.error) + "}";
+      first = false;
+    }
+    *json = dup(o + "]"); return AMIX_OK;
+#else
+    *json = dup("[]"); return AMIX_ERR_UNSUPPORTED;
+#endif
+  }
+  std::string o = "["; bool first = true;
+  for (const am::DeviceInfo& d : am::listDevices()) {
+    if (!want.empty() && d.backend != want) continue;
+    o += std::string(first ? "" : ",") + "{\"backend\":" + jstr(d.backend) + ",\"id\":" + jstr(d.id) + ",\"name\":" + jstr(d.name) + ",\"inChannels\":" + std::to_string(d.inChannels) + ",\"outChannels\":" + std::to_string(d.outChannels)
+       + ",\"defaultRate\":" + std::to_string(static_cast<int>(d.defaultRate)) + ",\"defaultIn\":" + (d.defaultIn ? "true" : "false") + ",\"defaultOut\":" + (d.defaultOut ? "true" : "false") + ",\"kind\":" + jstr(d.kind) + ",\"probeError\":" + jstr(d.probeError) + "}";
+    first = false;
+  }
+  *json = dup(o + "]"); return AMIX_OK;
+}
+long amix_asio_choose_buffer(const amix_asio_info* i, long want) {
+  if (!i) return 0;
+  if (want == AMIX_ASIO_BUFFER_MIN) return i->buffer_min;
+  if (want == AMIX_ASIO_BUFFER_MAX) return i->buffer_max;
+  return am::asioChooseBuffer(want, i->buffer_min, i->buffer_max, i->buffer_preferred, i->buffer_granularity);
+}
+int amix_asio_driver_info(const char* driver, amix_asio_info* out, char* err, size_t errLen) {
+  if (err && errLen) err[0] = 0;
+  if (!out) return sdkFail(AMIX_ERR_ARG, "no info to fill", err, errLen);
+  std::memset(out, 0, sizeof *out);
+#ifdef _WIN32
+  am::AsioProbeInfo p; std::string e; const int rc = probeNamed(driver, p, e);
+  if (rc != AMIX_OK) return sdkFail(rc, e, err, errLen);
+  fillAsioInfo(p, out); return AMIX_OK;
+#else
+  (void)driver; return sdkFail(AMIX_ERR_UNSUPPORTED, "ASIO is Windows-only", err, errLen);
+#endif
+}
+int amix_asio_open(amix_rt* r, const amix_asio_open_params* p, char* err, size_t errLen) {
+  if (err && errLen) err[0] = 0;
+#ifdef _WIN32
+  if (!r || !p) return sdkFail(AMIX_ERR_ARG, "no runtime or parameters", err, errLen);
+  r->rt.stop();   // the driver may be ours already: release it before it is probed (ASIO drivers are single-client)
+  am::AsioProbeInfo pr; std::string e; int rc = probeNamed(p->driver, pr, e);
+  if (rc != AMIX_OK) return sdkFail(rc, e, err, errLen);
+  amix_asio_info inf; fillAsioInfo(pr, &inf);
+  if (p->in_channels > inf.in_channels) return sdkFail(AMIX_ERR_ARG, "the driver has " + std::to_string(inf.in_channels) + " inputs", err, errLen);
+  if (p->out_channels > inf.out_channels) return sdkFail(AMIX_ERR_ARG, "the driver has " + std::to_string(inf.out_channels) + " outputs", err, errLen);
+  const double rate = p->sample_rate > 0 ? p->sample_rate : (inf.default_rate > 0 ? inf.default_rate : 48000);
+  if (inf.n_rates > 0) { bool ok = false; for (int i = 0; i < inf.n_rates; ++i) ok = ok || inf.rates[i] == rate; if (!ok) return sdkFail(AMIX_ERR_ARG, "the driver does not accept " + std::to_string(static_cast<long long>(rate)) + " Hz", err, errLen); }
+  long frames = amix_asio_choose_buffer(&inf, p->buffer_frames); if (frames <= 0) frames = 256;
+  amix_config c; std::memset(&c, 0, sizeof c);
+  c.backend = "asio"; c.in_device = p->driver; c.out_device = p->driver; c.sample_rate = rate; c.frames = static_cast<int>(frames);
+  c.in_channels = p->in_channels < 0 ? 0 : p->in_channels == 0 ? inf.in_channels : p->in_channels;
+  c.out_channels = p->out_channels == 0 ? inf.out_channels : p->out_channels;
+  if (c.in_channels == 0) c.in_device = "-";
+  rc = amix_rt_open(r, &c, err, errLen);
+  return rc == 0 ? AMIX_OK : rc == -1 ? AMIX_ERR_ARG : AMIX_ERR_FAILED;
+#else
+  (void)r; (void)p; return sdkFail(AMIX_ERR_UNSUPPORTED, "ASIO is Windows-only", err, errLen);
+#endif
 }
 }  // extern "C"
