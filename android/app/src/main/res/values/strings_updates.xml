@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_updates">AUTO UPDATES</string>
+    <string name="set_upd_auto">Check for updates on start</string>
+    <string name="set_upd_auto_note">At most once every 12 hours. The update is signed by AMFB Audio and checked before it is offered.</string>
+    <string name="set_upd_wifi">Only on Wi-Fi</string>
+    <string name="set_upd_check">CHECK FOR UPDATES</string>
+    <string name="set_upd_skipped">Skipped build: %1$s</string>
+    <string name="upd_title">Update to %1$s (build %2$d)</string>
+    <string name="upd_size">Download size: %1$s</string>
+    <string name="upd_update">UPDATE</string>
+    <string name="upd_later">LATER</string>
+    <string name="upd_skip">SKIP THIS VERSION</string>
+    <string name="upd_none">This is the newest version.</string>
+    <string name="upd_offline">Could not reach the update server.</string>
+    <string name="upd_invalid">The update information is not signed by AMFB Audio. Nothing was downloaded.</string>
+    <string name="upd_downloading">Downloading the update…</string>
+    <string name="upd_bad_download">The download did not match the signed checksum and was deleted.</string>
+    <string name="upd_wrong_apk">The downloaded file is not a newer version of this app and was deleted.</string>
+    <string name="upd_install_failed">The update could not be installed.</string>
+    <string name="upd_perm_title">Allow updates</string>
+    <string name="upd_perm_note">To install its own updates, this app needs the \"Install unknown apps\" permission. Turn it on for this app on the next screen, then tap UPDATE again. Android always asks you to confirm the install.</string>
+    <string name="upd_open_settings">OPEN SETTINGS</string>
+</resources>

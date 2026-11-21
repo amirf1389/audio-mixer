@@ -80,6 +80,12 @@ class SettingsActivity : FitActivity() {
         // PHONE AUDIO is not chosen here any more: the phone mixer runs at what the phone's own audio HAL reports (rate, buffer, and the
         // brand profile's headroom), and the interface is picked on DEVICES & NETWORK
 
+        section(getString(R.string.set_updates))
+        toggle(r, "updAuto", true, getString(R.string.set_upd_auto), getString(R.string.set_upd_auto_note))
+        toggle(r, "updWifi", true, getString(R.string.set_upd_wifi), null)
+        AppUpdater.skipped(this).takeIf { it > 0 }?.let { box.addView(note(getString(R.string.set_upd_skipped, (it % 100).toString()))) }
+        button(getString(R.string.set_upd_check)) { AppUpdater.check(this, manual = true) }
+
         section(getString(R.string.set_about))
         info(getString(R.string.app_name), "AMFB Audio · " + runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrDefault("?"))
         info(getString(R.string.set_privacy), getString(R.string.set_privacy_note))
