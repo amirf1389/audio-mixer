@@ -42,6 +42,10 @@ function build({ releases, flatUrls = false, version, base, notes = [], features
     if (!f) continue;
     const rel = releases || flatUrls ? '' : path.relative(ROOT, path.dirname(f)).split(path.sep).map(encodeURIComponent).join('/') + '/';   // where the file really is (releases/<os>/ or platforms/<os>/releases/)
     files[key] = { name, url: `${base}/${rel}${encodeURIComponent(name)}`, size: fs.statSync(f).size, sha256: sha(f) };
+    // THE ANDROID APPS update themselves from this entry (AppUpdater.kt): which app it is, its build and version code (the same formula as the
+    // apps' build.gradle.kts), so a phone compares it with its own and refuses another package or a downgrade
+    const ab = /-b(\d+)-android\.apk$/.exec(name);
+    if (ab && androidApps[key]) Object.assign(files[key], androidEntry(version, Number(ab[1]), androidApps[key]));
   }
   if (!Object.keys(files).length) throw new Error('no release files for version ' + version + ' in ' + (releases || '<os>/releases'));
   // PLUG-IN DOWNLOADS: releases/plugins.json lists the plug-ins the console may offer; their files live in releases/plugins/. Size and
@@ -58,6 +62,12 @@ function build({ releases, flatUrls = false, version, base, notes = [], features
   // licence portal's /portal/presets or this URL) only when its sha256 is the one in a manifest the owner signed; otherwise it keeps its built-in pack.
   const presets = releases ? null : presetsEntry(base);   // a flat release folder (the OTA server's) has no pack
   return Object.assign({ product: 'audio-mixer', version, channel: require('./release-label').channel() || 'stable', released: now.toISOString().slice(0, 10), notes, features, files, plugins }, presets ? { presets } : {});
+}
+const androidApps = { 'android-apk': 'com.amfb.amixos', 'android-mixer-apk': 'com.amfb.amixos.mixer' };
+function androidEntry(version, build, pkg) {
+  const v = String(version).split('.').map(n => parseInt(n, 10) || 0);
+  const code = ((v[0] || 0) * 1000000 + (v[1] || 0) * 10000 + (v[2] || 0) * 100 + (v[3] || 0)) * 100 + build;
+  return { package: pkg, build, versionCode: code, versionName: `${version} (build ${build})` };
 }
 function presetsEntry(base, file = path.join(ROOT, 'releases', 'presets', 'presets-pack.json')) {
   let text; try { text = fs.readFileSync(file); } catch (_) { return null; }
@@ -87,4 +97,4 @@ if (require.main === module) (async () => {
     console.log(`releases/update.json signed: version ${version}, ${Object.keys(manifest.files).length} files`);
   } catch (e) { console.error('Error: ' + e.message); process.exit(1); }
 })();
-module.exports = { build, presetsEntry };
+module.exports = { build, presetsEntry, androidEntry };

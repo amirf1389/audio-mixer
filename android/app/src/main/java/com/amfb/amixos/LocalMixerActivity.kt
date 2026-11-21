@@ -131,6 +131,7 @@ class LocalMixerActivity : FitActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) AppUpdater.checkOnStart(this)   // AUTO UPDATES (at most once per 12 h)
         migrate(prefs())   // old saves (2 inputs, the decks on strips 2-9) before anything reads them
         runCatching { Engine.setDirs(filesDir.absolutePath, cacheDir.absolutePath, cacheDir.absolutePath) }
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 20, 20, 16); setBackgroundColor(Color.parseColor("#0B0F15")) }

@@ -2455,6 +2455,15 @@ test('OS detection for update links: user agents, Client Hints, explicit choice,
   assert.deepStrictEqual([pf('win32', 'x64'), pf('win32', 'ia32'), pf('linux', 'x64', true), pf('linux', 'x64', false), pf('darwin', 'arm64'), pf('android', 'arm64')], ['win-x64-exe', 'win-x86-msi', 'linux-deb', 'linux-tar', 'macos-dmg', 'android-apk']);
   delete man.files['macos-dmg']; delete man.files['linux-deb']; assert.deepStrictEqual([pf('darwin', 'x64'), pf('linux', 'x64', true)], ['macos', 'linux-tar']); assert.strictEqual(update.platformFile({ files: {} }, { platform: 'win32', arch: 'x64' }), null);
   assert.ok(require('../scripts/make-update').build.toString().includes("'android-apk'") && require('../scripts/make-update').build.toString().includes("'ios-project'"));
+  { // AUTO UPDATES (android/AppUpdater.kt): each app's APK entry names its package, build and version code (the apps' build.gradle.kts formula)
+    const mk = require('../scripts/make-update'), d = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-'));
+    for (const n of ['AmF-X1-1.25.0.0-b5-android.apk', 'AmF-X1-1.25.0.0-b6-android.apk', 'AmF-X1-Mixer-1.25.0.0-b6-android.apk']) fs.writeFileSync(path.join(d, n), n);
+    const f = mk.build({ releases: d, version: '1.25.0.0', base: 'https://ota.test/releases' }).files;
+    assert.deepStrictEqual([f['android-apk'].name, f['android-apk'].package, f['android-apk'].build, f['android-apk'].versionCode], ['AmF-X1-1.25.0.0-b6-android.apk', 'com.amfb.amixos', 6, 125000006]);
+    assert.deepStrictEqual([f['android-mixer-apk'].package, f['android-mixer-apk'].versionCode, f['android-mixer-apk'].sha256.length], ['com.amfb.amixos.mixer', 125000006, 64]);
+    assert.strictEqual(mk.androidEntry('1.26.1.2', 3, 'x').versionCode, 126010203);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   // the OTA server
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ol-')), keysDir = path.join(tmp, 'v'); lic.initKeys(keysDir); const jwk = lic.loadPublic(keysDir), priv = lic.loadPrivate(keysDir);
   const ota = createOta({ dataDir: path.join(tmp, 'data'), token: 'tk', jwk, publicUrl: 'https://ota.test', rate: 1000 }); await ota.reindex();
