@@ -71,6 +71,7 @@ class Engine : public QObject {
   Q_PROPERTY(QVariantList dcaState READ dcaState NOTIFY groupsChanged)
   Q_PROPERTY(QVariantMap duckState READ duckState NOTIFY duckChanged)
   Q_PROPERTY(double duckGrDb READ duckGrDb NOTIFY metersChanged)
+  Q_PROPERTY(QVariantMap loudState READ loudState NOTIFY loudChanged)
   Q_PROPERTY(QVariantList autoDcaProposal READ autoDcaProposal NOTIFY autoDcaChanged)
   Q_PROPERTY(bool autoDcaBusy READ autoDcaBusy NOTIFY autoDcaChanged)
   Q_PROPERTY(QVariantList muteGroupState READ muteGroupState NOTIFY groupsChanged)
@@ -115,7 +116,7 @@ class Engine : public QObject {
   Q_INVOKABLE QVariantMap meterAt(int i) const { return i >= 0 && i < meters_.size() ? meters_[i].toMap() : silentMeter(); }
   // a strip the lists do not hold (the moment the licence changes the number of strips shown, a page still asks for the old ones): a
   // silent meter and the strip as it is, never an empty map (a page that reads .peakDb of nothing fills the log with warnings)
-  static QVariantMap silentMeter() { static const QVariantMap m{{"peakDb", -120.0}, {"rmsDb", -120.0}, {"holdDb", -120.0}, {"clip", false}, {"compGrDb", 0.0}, {"gateDb", 0.0}, {"inDb", -120.0}, {"vuDb", -120.0}, {"polCorr", 0.0}, {"polInv", false}, {"amGainDb", 0.0}, {"overComp", false}}; return m; }
+  static QVariantMap silentMeter() { static const QVariantMap m{{"peakDb", -120.0}, {"rmsDb", -120.0}, {"holdDb", -120.0}, {"clip", false}, {"compGrDb", 0.0}, {"gateDb", 0.0}, {"inDb", -120.0}, {"vuDb", -120.0}, {"polCorr", 0.0}, {"polInv", false}, {"amGainDb", 0.0}, {"overComp", false}, {"rideDb", 0.0}, {"rideGateDb", 0.0}, {"rideLufs", -120.0}, {"rideSusp", false}}; return m; }
   Q_INVOKABLE int clippedStrips() const { int n = 0; for (const QVariant& v : meters_) if (v.toMap().value("clip").toBool()) ++n; return n; }
   int meterTick() const { return meterTick_; }
   // FAST READS for the interface: engine.stripState[i] builds and converts all 32 strips (about 40 values each) on every read, and every
@@ -374,7 +375,7 @@ class Engine : public QObject {
   bool autoLevelOn() const { return autoOn_; } void setAutoLevelOn(bool v) { autoOn_ = v; pushAutoLevel(); emit stripsChanged(); }
   double autoLevelTarget() const { return autoTarget_; } void setAutoLevelTarget(double v) { autoTarget_ = std::clamp(v, -30.0, -6.0); pushAutoLevel(); emit stripsChanged(); }
   double autoLevelMax() const { return autoMax_; } void setAutoLevelMax(double v) { autoMax_ = std::clamp(v, 0.0, 24.0); pushAutoLevel(); emit stripsChanged(); }
-  void pushAutoLevel() { if (rt_) rt_->setAutoLevel(autoOn_, autoTarget_, autoMax_); }
+  void pushAutoLevel() { if (!rt_) return; if (loudUi_.masterOn) { rt_->setAutoLevel(true, loudUi_.masterTarget, 6); rt_->setAutoLevelLimits(-6, 1, 1); } else { rt_->setAutoLevel(autoOn_, autoTarget_, autoMax_); rt_->setAutoLevelLimits(-12, 1, 6); } }   // the LOUDNESS MANAGER's master target takes AUTO LEVEL over while it is on
   Q_INVOKABLE QVariantMap scopeFrame(int channel, double windowMs, int points, bool trigger);   // {samples: [..], vpp, vrms, freq, crest}
   Q_INVOKABLE QVariantList lissajous(int points);                                                // [l0, r0, l1, r1, ...]
   Q_INVOKABLE void setScopeStrip(int strip) { scope_.setStrip(strip); }
@@ -743,6 +744,16 @@ class Engine : public QObject {
   Q_INVOKABLE void setDuck(const QVariantMap& changes);
   double duckGrDb() const;                                      // the targets' gain now (<= 0 dB)
   Q_INVOKABLE int duckRole(int strip) const;                    // 1 key, 2 target, 0 neither
+  // LOUDNESS MANAGER (audiomixer/loudness_ride.hpp, in the engine block by block): per strip AUTO FADER (ride toward a target) and AUTO ON/OFF
+  // (a silent channel fades out after the hold), and the master target (AUTO LEVEL with the preset, +-6 dB at 1 dB/s, the limiter as safety).
+  // Gain order on a strip: user fader + DCA (effectiveDb, max +10)  x  ride (fader + ride <= +10)  x  auto on/off  x  automix share  x  ducker.
+  // global keys: masterOn, preset (STREAMING / PODCAST / BROADCAST / CUSTOM), masterTarget, range, speed (slow / medium / fast), up, down,
+  // gateThr, hold, globalOn, globalTarget, strips [{ride, gate, cls (-1 auto, 0 voice, 1 music, 2 instrument), target}]
+  QVariantMap loudState() const;
+  Q_INVOKABLE void setLoud(const QVariantMap& changes);
+  Q_INVOKABLE void setLoudStrip(int strip, const QVariantMap& changes);   // ride, gate, cls
+  Q_INVOKABLE void setLoudAll(const QString& what, bool on);              // what: "ride" or "gate", every shown strip
+  Q_INVOKABLE double loudTargetOf(int strip) const;
   // AUTO DCA: listens to every strip for `seconds`, classifies it (audiomixer/classify.hpp: fixed rules, no network) and proposes groups.
   // The proposal is only shown: applyAutoDca() assigns VOICES / MUSIC / INSTRUMENTS (and, if asked, mutes the SILENT strips); cancel drops it.
   QVariantList autoDcaProposal() const { return autoProp_; }   // [{strip, name, cls, why, voice, music, instrument, group}]
@@ -792,6 +803,7 @@ class Engine : public QObject {
   void busesChanged();
   void groupsChanged();
   void duckChanged();
+  void loudChanged();
   void autoDcaChanged();
   void scenesChanged();
   void selectedStripChanged();
@@ -848,6 +860,9 @@ class Engine : public QObject {
   struct DcaUi { QString name; double db = 0; bool mute = false; int color = 0; };
   struct DuckUi { bool on = false; int keyDca = 0, targetDca = 0; QList<int> keyStrips, targetStrips; double thr = -40, depth = -12, att = 20, hold = 300, rel = 600, lift = 0; } duckUi_;
   void pushDuck(); QJsonObject duckJson() const; void duckFromJson(const QJsonObject& o);
+  struct LoudStripUi { bool ride = false, gate = false; int cls = -1; };
+  struct LoudUi { bool masterOn = false; QString preset = QStringLiteral("STREAMING"); double masterTarget = -14, range = 10, up = 3, down = 6, gateThr = -50, hold = 4; QString speed = QStringLiteral("medium"); bool globalOn = false; double globalTarget = -18; LoudStripUi strips[kStrips]; } loudUi_;
+  void pushLoud(int strip); void pushLoudAll(); QJsonObject loudJson() const; void loudFromJson(const QJsonObject& o);
   QVariantList autoProp_; bool autoBusy_ = false; int autoWait_ = 0;
   struct MuteGroupUi { QString name; bool active = false; };
   void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime

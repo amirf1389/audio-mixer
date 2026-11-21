@@ -17,6 +17,8 @@ Item {
     property bool remoteHot: false    // LIVE SYNC: a phone or browser is moving this fader now: the cap lights cyan and glides to each new value
     property bool numbers: false      // the dB figures printed beside the scale marks (the mixer strips)
     property color tint: Theme.orange // the cap's line and the bubble: the channel's colour on a strip
+    property real ghost: NaN          // LOUDNESS MANAGER: the user's own fader position while AUTO FADER rides it (NaN = none)
+    property string badge: ""         // "AUTO" (riding), "OFF" (auto on/off closed), "HOLD" (a hand on it: suspended)
     readonly property bool unity: Math.abs(value) < 0.05   // exactly 0 dB: the cap's line turns green
     signal moved(real db)
     function lvl(db) { return Math.max(0, Math.min(1, (db - from) / (to - from))) }
@@ -38,6 +40,9 @@ Item {
             Text { visible: fader.numbers; x: 0; width: fader.cx - 17; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter
                 text: modelData === -60 ? "∞" : (modelData > 0 ? "+" : "") + modelData; color: modelData === 0 ? Theme.ink : Theme.muted; font.family: Theme.mono; font.pixelSize: modelData === -60 ? 9 : 7; font.bold: modelData === 0 } }
     }
+    Rectangle { objectName: "faderGhost"; visible: !isNaN(fader.ghost); x: fader.cx - 13; width: 26; height: 2; y: fader.pos(isNaN(fader.ghost) ? 0 : fader.ghost) + knob.height / 2 - 1; color: fader.tint; opacity: 0.55; z: 2 }   // the user's own position
+    Rectangle { objectName: "faderBadge"; visible: fader.badge !== ""; z: 6; anchors.top: parent.top; x: fader.cx - width / 2; width: badgeT.implicitWidth + 6; height: 11; radius: 3; color: fader.badge === "OFF" ? Theme.dim : fader.badge === "HOLD" ? Theme.amber : Theme.cyan
+        Text { id: badgeT; anchors.centerIn: parent; text: i18n.t(fader.badge, i18n.lang); color: "#0b0f14"; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
     Rectangle {
         id: knob
         x: fader.cx - width / 2

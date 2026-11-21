@@ -102,7 +102,7 @@ std::string deviceFingerprint();
 
 // the meters, copied out consistently
 struct Snapshot {
-  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk, amGainDb, polCorr; bool polInv; };   // polCorr: the strip against the rest of the mix (-1..1, AUTO PHASE strips), polInv: its polarity now   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate), amGainDb <= 0 (automix share)
+  struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk, amGainDb, polCorr; bool polInv; double rideDb, rideGateDb, rideLufs; bool rideSusp; };   // ride*: the LOUDNESS MANAGER (auto fader offset, auto on/off gain, the input's short-term LUFS, suspended by a hand on the fader)   // polCorr: the strip against the rest of the mix (-1..1, AUTO PHASE strips), polInv: its polarity now   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate), amGainDb <= 0 (automix share)
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
@@ -182,6 +182,10 @@ class Runtime {
   // both carrying signal) its polarity is flipped, then left alone for 3 s. The current polarity is in the strip's meter (polInv).
   void setAutoPolarity(int strip, bool on);
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
+  void setAutoLevelLimits(double minDb, double upDbS, double downDbS);   // Mixer::setAutoLevelLimits (LOUDNESS MANAGER master target)
+  // LOUDNESS MANAGER (audiomixer/loudness_ride.hpp): per-strip AUTO FADER + AUTO ON/OFF; rideTouch() when a hand moves the fader
+  void setRide(int strip, const RideParams& p);
+  void rideTouch(int strip, double seconds = 5);
   void setOutputBits(int bits);                       // 0 = float out (no dither); 16 / 24 = TPDF dither to that depth
   void setDcBlock(bool on);
   void setAnalogChannels(bool on);   // DSP MODE ANALOG on every strip (Mixer::setAnalogChannels)

@@ -20,6 +20,7 @@
 
 #include "audiomixer/classify.hpp"
 #include "audiomixer/ducker.hpp"
+#include "audiomixer/loudness_ride.hpp"
 
 namespace am {
 
@@ -80,6 +81,7 @@ class Meter {
 };
 
 // ───────── loudness ─────────
+void kWeightCoeffs(double fs, double* pre5, double* hp5);   // BS.1770 K-weighting at fs: the shelf and the high-pass (b0 b1 b2 a1 a2 each)
 class Loudness {
  public:
   explicit Loudness(double sampleRate, std::size_t maxBlocks = 216000);   // the page keeps 6 hours of 100 ms blocks
@@ -145,7 +147,7 @@ class S16Meter {
 // HRTF data set, no licensed format. Off = the strip pans as before (bit-exact).
 struct Spatial { bool on = false; double az = 0, el = 0, dist = 1, spread = 0;   // degrees (0 front, +90 right, 180 behind), elevation -90..90, metres, 0..1 (1 = no direction)
   double tgtL = 0, tgtR = 0, dL = 0, dR = 0, gL = 0.7071, gR = 0.7071, aL = 1, aR = 1, aRear = 1, lpL = 0, lpR = 0, rrL = 0, rrR = 0; unsigned w = 0; float ring[512] = {}; };
-struct Strip { double anLp = 0; Spatial sp; double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
+struct Strip { double anLp = 0; Spatial sp; double gainDb = 0, gainLin = 1, pan = 0, depth = 1; bool mute = false, solo = false; Meter meter; double inPk = 0; bool automix = false; double amWeight = 1, amLevel = 0, amGain = 1; LoudRide ride; };   // inPk: pre-fader input peak of the last block; automix: gain-sharing member, amGain its share (linear)
 // AUX SENDS: kMaxBuses stereo buses. Each strip sends to each bus at its own level, pre-fader (the raw input: monitor mixes) or post-fader
 // (after gain, mute and solo: effects sends). A bus has a level, a mute, a meter and a RETURN level into the master (an effects return or a
 // way to hear a monitor mix); its own stereo output is handed to the caller through process()'s busOut (the runtime maps it to output channels).
@@ -207,6 +209,12 @@ class Mixer {
   // never above maxGainDb, +1 dB/s up and -6 dB/s down; the brick-wall limiter after it keeps the true peak in check
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
   double autoLevelGainDb() const { return autoDb_; }
+  // LOUDNESS MANAGER (master): AUTO LEVEL's range and speeds; the default is [-12, +max] dB, +1 dB/s up, -6 dB/s down
+  void setAutoLevelLimits(double minDb, double upDbS, double downDbS) { autoMin_ = clampLim(minDb, -24, 0); autoUp_ = clampLim(upDbS, 0.1, 12); autoDown_ = clampLim(downDbS, 0.1, 12); }
+  // LOUDNESS MANAGER (audiomixer/loudness_ride.hpp): per-strip AUTO FADER and AUTO ON/OFF. touch(): a hand on the fader suspends the ride.
+  void setRide(int strip, const RideParams& p);
+  void rideTouch(int strip, double seconds = 5);
+  const LoudRide& ride(int strip) const { return strips_[static_cast<std::size_t>(strip)].ride; }
   // OUTPUT STAGE (roadmap 12): an optional DC blocker (first-order high-pass at 5 Hz) before the auto level and the limiter, and TPDF
   // dither after the limiter when the device takes 16 or 24-bit integers (0 = float, no dither): the last thing before the converter.
   void setOutputBits(int bits) { outBits_ = bits == 16 || bits == 24 ? bits : 0; }
@@ -245,7 +253,8 @@ class Mixer {
   double masterDb_ = 0, masterLin_ = 1;
   double trimLin_ = 1, trimTarget_ = 1;   // the output trim now and where it ramps to
   double width_ = 1.0;   // master stereo width
-  bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
+  static double clampLim(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
+  bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0, autoMin_ = -12, autoUp_ = 1, autoDown_ = 6; int rideN_ = 0; int automixN_ = 0;
   Ducker duck_; std::vector<unsigned char> duckRole_; bool duckAny_ = false; bool anaOn_ = false; std::vector<ChannelFeatures> ana_;
   bool analog_ = false; int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100, limGrDb_ = 0;

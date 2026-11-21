@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lm_loud_title">LOUDNESS MANAGER</string>
+    <string name="lm_loud_help">AUTO FADER rides each channel toward the target loudness within the range around your fader. AUTO ON/OFF fades a silent channel out after the hold and brings it back at once. Moving a fader pauses its ride for 5 s.</string>
+    <string name="lm_loud_master_on">MASTER TARGET ON</string>
+    <string name="lm_loud_master_off">MASTER TARGET OFF</string>
+    <string name="lm_loud_preset">%1$s %2$.0f</string>
+    <string name="lm_loud_all_ride">ALL AUTO</string>
+    <string name="lm_loud_all_gate">ALL ON/OFF</string>
+    <string name="lm_loud_ride">AUTO</string>
+    <string name="lm_loud_gate">ON/OFF</string>
+    <string name="lm_loud_target">TARGET %1$.0f LUFS</string>
+    <string name="lm_loud_rangeDb">RANGE ±%1$.0f dB</string>
+    <string name="lm_loud_gateDb">ON/OFF BELOW %1$.0f LUFS</string>
+    <string name="lm_loud_holdS">HOLD %1$.1f s</string>
+    <string name="lm_loud_now">MASTER %1$s LUFS · GAIN %2$+.1f dB</string>
+    <string name="lm_loud_ch_now">%1$s · %2$s</string>
+    <string name="lm_loud_state_off">OFF</string>
+    <string name="lm_loud_state_hold">HOLD</string>
+    <string name="lm_loud_state_ride">%1$+.1f dB</string>
+</resources>

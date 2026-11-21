@@ -271,6 +271,8 @@ int main() {
     CHECK(set("analog", "true") == 200 && set("autoLevel", "true") == 200 && set("autoTarget", "-40") == 200 && d.state()["settings"]["autoTarget"].asNumber() == -30);
     CHECK(set("clipDb", "-3") == 200 && set("peakHoldMs", "99999") == 200 && d.state()["settings"]["peakHoldMs"].asNumber() == 10000);
     CHECK(set("nonsense", "1") == 400);
+    CHECK(set("loudPreset", "\"BROADCAST\"") == 200 && d.state()["settings"]["loudTarget"].asNumber() == -23 && set("loudPreset", "\"LOUD\"") == 400);   // LOUDNESS MANAGER from a remote
+    CHECK(set("loudRide", "true") == 200 && d.state()["settings"]["loudRide"].asBool() && set("loudTarget", "-50") == 200 && d.state()["settings"]["loudTarget"].asNumber() == -30 && d.state()["settings"]["loudPreset"].asString() == "CUSTOM");
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":1}", {}, status, body) && (status == 401 || status == 429));   // no token, no settings
     float winLevel = 0.5f; d.setVolumeBackend([&](float& f) { f = winLevel; return true; }, [&](float f) { winLevel = f; return true; });
     d.pollVolume(); CHECK(d.state()["settings"]["winVolume"].asInt() == 50 && d.state()["settings"]["winTrimDb"].asNumber() == 0);   // GAIN MODE off: no trim

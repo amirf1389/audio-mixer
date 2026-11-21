@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis, kRide, kRideTouch, kAutoLimits };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
@@ -160,6 +160,9 @@ int Runtime::deviceOutputBits() const {
 }
 void Runtime::setAutoPolarity(int s, bool on) { post({kAutoPol, s, on ? 1.0 : 0.0, 0, 0}); }
 void Runtime::setAutoLevel(bool on, double t, double m) { post({kAutoLevel, on ? 1 : 0, t, m, 0}); }
+void Runtime::setAutoLevelLimits(double minDb, double up, double down) { post({kAutoLimits, 0, minDb, up, down}); }
+void Runtime::setRide(int s, const RideParams& p) { Cmd c{kRide, s, p.targetLufs, p.rangeDb, p.upDbS}; c.b = (p.on ? 1 : 0) | (p.gate ? 2 : 0); c.w = p.downDbS; c.v = p.gateLufs; c.u = p.holdS; post(c); }
+void Runtime::rideTouch(int s, double sec) { post({kRideTouch, s, sec, 0, 0}); }
 void Runtime::setBusProcessor(int b, BusProcessor* p) { Cmd c{kBusFx, b, 0, 0, 0}; c.p = p; post(c); }
 void Runtime::setMasterProcessor(BusProcessor* p) { Cmd c{kMasterFx, 0, 0, 0, 0}; c.p = p; post(c); }
 void Runtime::setWidth(double w) { post({kWidth, 0, w, 0, 0}); }
@@ -218,6 +221,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kAnalysis: mixer_.setAnalysis(c.a != 0); if (c.a == 0) anaReady_.store(true, std::memory_order_release); break;
       case kAutoPol: if (c.a >= 0 && c.a < kMaxStrips) { autoPol_[c.a] = c.x != 0; apXY_[c.a] = apXX_[c.a] = apYY_[c.a] = apBad_[c.a] = apHold_[c.a] = apCorr_[c.a] = 0; } break;
       case kAutoLevel: mixer_.setAutoLevel(c.a != 0, c.x, c.y); break;
+      case kAutoLimits: mixer_.setAutoLevelLimits(c.x, c.y, c.z); break;
+      case kRide: { RideParams p; p.on = (c.b & 1) != 0; p.gate = (c.b & 2) != 0; p.targetLufs = c.x; p.rangeDb = c.y; p.upDbS = c.z; p.downDbS = c.w; p.gateLufs = c.v; p.holdS = c.u; mixer_.setRide(c.a, p); } break;
+      case kRideTouch: mixer_.rideTouch(c.a, c.x); break;
       case kOutBits: mixer_.setOutputBits(c.a); break;
       case kDcBlock: mixer_.setDcBlock(c.a != 0); break;
       case kAnalogCh: mixer_.setAnalogChannels(c.a != 0); break;
@@ -341,9 +347,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
 
 void Runtime::publish() {
   Snapshot s; std::memset(&s, 0, sizeof s);
-  for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0, mixer_.strip(i).inPk, mixer_.automixGainDb(i), apCorr_[i], k < ch_.size() && ch_[k].params().polarityInvert}; }
-  for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
-  for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
+  for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0, mixer_.strip(i).inPk, mixer_.automixGainDb(i), apCorr_[i], k < ch_.size() && ch_[k].params().polarityInvert, 0.0, 0.0, -120.0, false}; const LoudRide& rd = mixer_.ride(i); s.strips[i].rideDb = rd.rideDb(); s.strips[i].rideGateDb = rd.gateDb(); s.strips[i].rideLufs = rd.shortTerm(); s.strips[i].rideSusp = rd.suspended(); }
+  for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false, 0.0, 0.0, -120.0, false}; }
+  for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false, 0.0, 0.0, -120.0, false}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb(); s.duckGrDb = mixer_.duckGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
   for (int o = 0; o < kMaxOutputs; ++o) { s.ampPk[o] = amp_[o].peak(); s.ampGrDb[o] = amp_[o].gainReductionDb(); }

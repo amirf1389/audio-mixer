@@ -1535,6 +1535,19 @@ int main(int argc, char* argv[]) {
         engine.setDuck({{"on", false}, {"keyDca", 0}, {"targetDca", 0}, {"targetStrips", QVariantList{}}, {"depth", -12.0}, {"attack", 20.0}, {"lift", 0.0}});
         for (int i = 0; i < 6; ++i) { engine.setDca(i, 0); engine.setMute(i, false); }
         for (int g = 1; g <= 8; ++g) engine.setDcaName(g, QStringLiteral("DCA %1").arg(g)); }
+      {  // LOUDNESS MANAGER: master preset, per-channel AUTO FADER / AUTO ON/OFF, class targets, saved with the console, meters, ALL ON / OFF
+        engine.setLoud({{"preset", "BROADCAST"}, {"masterOn", true}, {"speed", "slow"}});
+        QVariantMap L = engine.loudState(); if (!L.value("masterOn").toBool() || std::fabs(L.value("masterTarget").toDouble() + 23) > 1e-9 || std::fabs(L.value("up").toDouble() - 1.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager master preset\n"); return 820; }
+        engine.setLoudStrip(2, {{"ride", true}, {"gate", true}});
+        L = engine.loudState(); { const QVariantMap s2 = L.value("strips").toList().value(2).toMap(); if (!s2.value("ride").toBool() || !s2.value("gate").toBool() || !engine.stripState()[2].toMap().value("loudRide").toBool() || L.value("rides").toInt() != 1) { std::fprintf(stderr, "amixos --smoke: loudness manager strip switches\n"); return 821; } }
+        if (std::fabs(engine.loudTargetOf(2) + 18) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager voice target\n"); return 822; }
+        engine.setLoudStrip(2, {{"cls", 1}}); if (std::fabs(engine.loudTargetOf(2) + 20) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager music target\n"); return 822; }
+        { const QJsonObject lo = engine.consoleExport().value("loudness").toObject(); const QJsonArray ls = lo.value("strips").toArray();
+          if (!lo.value("masterOn").toBool() || lo.value("preset").toString() != QLatin1String("BROADCAST") || ls.size() < 3 || !ls[2].toObject().value("ride").toBool() || ls[2].toObject().value("cls").toInt() != 1) { std::fprintf(stderr, "amixos --smoke: loudness manager in the saved console\n"); return 823; } }
+        engine.setGain(2, -3); waitMs(200); { const QVariantMap mt = engine.meterAt(2); if (!mt.contains("rideDb") || !mt.contains("rideLufs") || !mt.contains("rideGateDb")) { std::fprintf(stderr, "amixos --smoke: loudness manager meters\n"); return 824; } }
+        engine.setLoudAll(QStringLiteral("ride"), true); if (engine.loudState().value("rides").toInt() != engine.shownStrips()) { std::fprintf(stderr, "amixos --smoke: loudness manager ALL AUTO ON\n"); return 825; }
+        engine.setLoudAll(QStringLiteral("ride"), false); engine.setLoudAll(QStringLiteral("gate"), false); engine.setLoud({{"masterOn", false}, {"preset", "STREAMING"}, {"speed", "medium"}}); engine.setLoudStrip(2, {{"cls", -1}}); engine.setGain(2, 0);
+        L = engine.loudState(); if (L.value("rides").toInt() || L.value("gates").toInt() || L.value("masterOn").toBool()) { std::fprintf(stderr, "amixos --smoke: loudness manager off\n"); return 826; } }
       // OSC: a /ch/5/fader -12 packet through the parser, then one over UDP to the server on 127.0.0.1
       auto pkt = [](const QByteArray& addr, float v) { QByteArray o = addr; o.append('\0'); while (o.size() % 4) o.append('\0'); o += QByteArray(",f\0\0", 4); quint32 b; std::memcpy(&b, &v, 4); char be[4]; qToBigEndian(b, be); o.append(be, 4); return o; };
       if (!osc.handle(pkt("/ch/5/fader", -12.f)) || std::fabs(engine.stripState()[4].toMap()["db"].toDouble() + 12) > 1e-6) { std::fprintf(stderr, "amixos --smoke: OSC parse\n"); return 103; }

@@ -144,7 +144,7 @@ class Daemon {
   void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)
   void loadRack(Runtime& rt, int strip);   // the same for one strip
   bool racksFromConsole_ = false;          // the last rack change came from the console itself (op rack): it does not take it back
-  struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; } set_;
+  struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; bool loudMaster = false, loudRide = false, loudGate = false; double loudTarget = -14; std::string loudPreset = "STREAMING"; } set_;   // loud*: the console's LOUDNESS MANAGER (the console applies it; shown and switched by the remotes)
   std::atomic<int> winVol_{-1}; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; std::thread volWatch_;
   double outTrim() const;    // GAIN MODE's listening trim, dB (0 = none, -120 = silent)
   void applyMaster(Runtime& rt) const;   // the master fader and the trim to the engine (m_ held)
