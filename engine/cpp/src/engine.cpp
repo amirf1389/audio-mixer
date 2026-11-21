@@ -204,7 +204,10 @@ S16Snapshot S16Meter::snapshot() {
 
 // ───────── mixer ─────────
 Mixer::Mixer(int strips, double sampleRate)
-    : n_(std::max(1, std::min(strips, kMaxStrips))), fs_(sampleRate), strips_(static_cast<std::size_t>(n_)), limCeil_(linOf(-0.5)), master_{Meter(clip_), Meter(clip_)}, loudness_(sampleRate) {}
+    : n_(std::max(1, std::min(strips, kMaxStrips))), fs_(sampleRate), strips_(static_cast<std::size_t>(n_)), limCeil_(linOf(-0.5)), master_{Meter(clip_), Meter(clip_)}, loudness_(sampleRate) {
+  duckRole_.assign(static_cast<std::size_t>(n_), 0); ana_.resize(static_cast<std::size_t>(n_)); for (auto& a : ana_) a.reset(fs_); duck_.set(DuckParams{}, fs_); }
+void Mixer::setDuckRole(int s, int role) { if (s < 0 || s >= n_) return; duckRole_[static_cast<std::size_t>(s)] = static_cast<unsigned char>(role == 1 || role == 2 ? role : 0); duckAny_ = false; for (unsigned char r : duckRole_) duckAny_ = duckAny_ || r != 0; }
+void Mixer::setAnalysis(bool on) { if (on && !anaOn_) for (auto& a : ana_) a.reset(fs_); anaOn_ = on; }
 
 void Mixer::setGainDb(int s, double db) { if (s < 0 || s >= n_) return; db = std::min(db, 10.0); strips_[s].gainDb = db; strips_[s].gainLin = db <= -60.0 ? 0.0 : linOf(db); }
 void Mixer::setPan(int s, double p) { if (s >= 0 && s < n_) strips_[s].pan = clampd(p, -1.0, 1.0); }
@@ -299,6 +302,16 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       for (int s = 0; s < n_; ++s) { Strip& st = strips_[static_cast<std::size_t>(s)]; if (!st.automix) continue; double e = 0; for (std::size_t i = 0; i < n; ++i) { const double x = in[s][done + i]; e += x * x; } const double lvl = std::sqrt(e / static_cast<double>(n)) * st.amWeight; st.amLevel += (lvl - st.amLevel) * (lvl > st.amLevel ? attack : release); sum += st.amLevel; }
       for (int s = 0; s < n_; ++s) { Strip& st = strips_[static_cast<std::size_t>(s)]; if (!st.automix) continue; const double share = sum > 1e-9 ? st.amLevel / sum : 1.0 / automixN_; const double target = std::max(0.01, std::min(1.0, share * automixN_ > 1.0 ? 1.0 : share * automixN_)); st.amGain += (target - st.amGain) * (target > st.amGain ? attack : release); }
     }
+    static thread_local float duckG[kChunk], liftG[kChunk];   // DUCKER: the targets' and the keys' gain of each sample of this chunk
+    const bool ducking = duckAny_ && duck_.params().on; const bool lifting = ducking && duck_.params().liftDb > 0;
+    if (ducking) {
+      for (std::size_t i = 0; i < n; ++i) duckG[i] = 0.0f;   // the loudest unmuted key's input, sample by sample
+      for (int s = 0; s < n_; ++s) { if (duckRole_[static_cast<std::size_t>(s)] != 1 || strips_[static_cast<std::size_t>(s)].mute || !in[s] || (idle && idle[s])) continue;
+        const float* x = in[s] + done; for (std::size_t i = 0; i < n; ++i) { const float a = std::fabs(x[i]); if (a > duckG[i]) duckG[i] = a; } }
+      for (std::size_t i = 0; i < n; ++i) { duckG[i] = static_cast<float>(duck_.process(duckG[i])); liftG[i] = static_cast<float>(duck_.lift()); }
+    }
+    if (anaOn_) for (int s = 0; s < n_; ++s) { const bool live = in[s] && !(idle && idle[s]); const int p = s ^ 1; const bool pl = p < n_ && in[p] && !(idle && idle[p]);
+      ana_[static_cast<std::size_t>(s)].add(live ? in[s] + done : nullptr, n, live && pl ? in[p] + done : nullptr); }
     for (int s = 0; s < n_; ++s) {
       Strip& st = strips_[static_cast<std::size_t>(s)];
       if (idle && idle[s] && !st.sp.on && std::fabs(st.anLp) < 1e-9) { st.anLp = 0; st.inPk = 0; continue; }   // silence in, nothing ringing: nothing to add (the meter decays in end())
@@ -309,6 +322,8 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
         for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x);
           const double sat = (std::tanh(k * (x + b)) - tb) * norm; st.anLp += a * (sat - st.anLp); tmp[i] = static_cast<float>(st.anLp * g); }
       } else { const double p = simd::kernels().gainPeak(in[s] + done, n, g, tmp); if (p > ipk) ipk = p; }   // post-fader signal: what the strip meter shows
+      if (ducking) { const unsigned char r = duckRole_[static_cast<std::size_t>(s)];
+        if (r == 2) for (std::size_t i = 0; i < n; ++i) tmp[i] *= duckG[i]; else if (r == 1 && lifting) for (std::size_t i = 0; i < n; ++i) tmp[i] *= liftG[i]; }
       st.inPk = ipk; st.meter.add(tmp, n);
       if (st.sp.on) {   // 360 audio: the ring always runs (so un-muting does not click), the ears are summed when audible
         Spatial& sp = st.sp;

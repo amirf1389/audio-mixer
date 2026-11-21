@@ -252,6 +252,18 @@ class RemoteActivity : FitActivity() {
             col.addView(fader); col.addView(db)
             strips.addView(col); faders.add(fader); dbLabels.add(db); nameLabels.add(name); mutes.add(mute); solos.add(solo); clipFlags.add(false)
         }
+        // DCA GROUP CHANNELS of the console: a group in use is a strip after the channels (its fader moves its members' level, not their faders)
+        for (g in s.dcas.filter { it.members.isNotEmpty() }) {
+            val tint = ConsoleUi.AMBER; val col = ConsoleUi.strip(this, tint, stripW).apply { tag = "dcaStrip${g.id}" }
+            col.addView(TextView(this).apply { text = getString(R.string.rc_dca_title, g.id, g.name, g.members.size); setTextColor(tint); textSize = 10f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD })
+            val mute = ConsoleUi.compact(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = g.mute; contentDescription = "dcaMute${g.id}"; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); buzz(b); io.execute { runCatching { client?.dca(g.id, mute = on) } } } }, ConsoleUi.KEY_DP, 12)
+            mute.setTextColor(if (g.mute) Color.parseColor("#EF4444") else Color.WHITE); ConsoleUi.styleToggle(mute, ConsoleUi.RED); col.addView(mute)
+            val db = ConsoleUi.dbReadout(this).apply { text = DaemonClient.fmtDb(if (g.db <= -60) -120.0 else g.db) }
+            col.addView(FaderView(this, tint).apply { progress = (DaemonClient.dbToPos(if (g.db <= -60) -120.0 else g.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f); contentDescription = "dcaFader${g.id}"
+                onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
+                onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0).coerceIn(-60.0, 10.0); db.text = DaemonClient.fmtDb(if (v <= -60) -120.0 else v); live.submit("dca${g.id}") { client?.dca(g.id, db = v) } } })
+            col.addView(db); strips.addView(col)
+        }
         masterFader.progress = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); masterDb.text = DaemonClient.fmtDb(s.masterDb)
     }
 

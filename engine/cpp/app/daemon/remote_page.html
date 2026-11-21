@@ -23,7 +23,7 @@ button.on.m,button.on.red{background:var(--red);border-color:var(--red)}button.o
 #strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cw),1fr));gap:8px}
 .ch{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .ch.master{border-color:var(--accent)}
-#strips.scroll{display:flex;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;padding-bottom:6px}#strips.scroll .ch{flex:0 0 var(--cw);scroll-snap-align:start}
+#strips .ch.dca .nm{color:#fbbf24}#strips.scroll{display:flex;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;padding-bottom:6px}#strips.scroll .ch{flex:0 0 var(--cw);scroll-snap-align:start}
 .paddle{position:sticky;display:flex;gap:6px;align-items:center}.paddle button{min-width:44px;font-size:16px}
 .ks{display:flex;flex-direction:column;gap:2px;width:100%;align-items:center}.ks .eqb{width:100%;padding:3px 0;min-height:24px;font-size:10px}
 .kb{display:flex;flex-direction:column;align-items:center;cursor:ns-resize;touch-action:none;user-select:none}
@@ -206,7 +206,7 @@ async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET"
  const j=await r.json().catch(()=>({}));if(r.status===401&&token&&path!=="/api/pair"){forget("this device was signed out on the computer");throw new Error("signed out")}if(!r.ok)throw new Error(j.error||("HTTP "+r.status));return j}
 function setSt(t,bad){const s=$("#st");s.textContent=t;s.style.color=bad?"var(--red)":"var(--cyan)"}
 let sendT={};function send(key,cmd){clearTimeout(sendT[key]);sendT[key]=setTimeout(()=>api("/api/control",cmd).catch(e=>setSt(e.message,true)),25)}   // a moving fader sends at most 40 times a second
-const els=[];
+const els=[],dEls=[];
 // ---- MIXER
 function pages(){const n=state?state.strips.length:0,per=Math.min(opt.per,n||opt.per),k=Math.max(1,Math.ceil(n/per));if(page>=k)page=k-1;const box=$("#pages");box.textContent="";
  for(let p=0;p<k;++p){const b=document.createElement("button");b.textContent="CH "+(p*per+1)+"–"+Math.min(n,(p+1)*per);b.className=p===page?"pri":"";
@@ -234,20 +234,24 @@ function stripKnobs(i,s){const w=document.createElement("div");w.className="ks";
  w.upd=x=>{const u=Object.assign({low:0,mid:0,midHz:1000,high:0,on:true},x.tone||{});g.update(x.trim||0);hi.update(u.high);mi.update(u.mid);fq.update(u.midHz);lo.update(u.low);if(!b.matches(":active")){t.on=u.on;b.className="eqb"+(t.on?" on acc":"");[hi,mi,fq,lo].forEach(k=>k.classList.toggle("off",!t.on))}Object.assign(t,u)};return w}
 function build(){const box=$("#strips");box.textContent="";els.length=0;if(!state)return;box.classList.toggle("scroll",!!opt.scroll);$("#paddle").style.display=opt.scroll?"":"none";
  $("#knobsB").className="sm"+(opt.knobs?" on acc":"");$("#scrollB").className="sm"+(opt.scroll?" on acc":"");pages();const per=opt.scroll?state.strips.length:opt.per,from=opt.scroll?0:page*per,to=Math.min(state.strips.length,from+per);
- const add=(name,db,mute,solo,onF,onM,onS,master)=>{const c=document.createElement("div");c.className="ch"+(master?" master":"");
+ const add=(name,db,mute,solo,onF,onM,onS,master,dca)=>{const c=document.createElement("div");c.className="ch"+(master?" master":"")+(dca?" dca":"");
   c.innerHTML='<div class="nm"></div><div class="fz"><input type="range" class="f" min="0" max="1000"><div class="mt"><i></i></div></div><div class="db"></div><div class="ms"></div>';
-  c.querySelector(".nm").textContent=name;if(onM){const idx=els.length;c.querySelector(".nm").onclick=()=>openChannel(Math.max(0,(opt.scroll?0:page*opt.per)+idx))}const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
+  c.querySelector(".nm").textContent=name;if(onM&&!dca){const idx=els.length;c.querySelector(".nm").onclick=()=>openChannel(Math.max(0,(opt.scroll?0:page*opt.per)+idx))}const f=c.querySelector(".f"),d=c.querySelector(".db");f.value=Math.round(dbToPos(db)*1000);d.textContent=fmt(db);f.setAttribute("aria-label",name+" fader");
   f.oninput=()=>{const v=posToDb(f.value/1000);d.textContent=fmt(v);onF(v)};const ms=c.querySelector(".ms");
   if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{buzz();const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
   if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{buzz();const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
-  if(onM&&opt.knobs){c.ks=stripKnobs(from+els.length,state.strips[from+els.length]);c.insertBefore(c.ks,c.querySelector(".fz"))}
+  if(onM&&opt.knobs&&!dca){c.ks=stripKnobs(from+els.length,state.strips[from+els.length]);c.insertBefore(c.ks,c.querySelector(".fz"))}
   box.appendChild(c);f.onpointerdown=()=>{drag=f};return {ks:c.ks,bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
  for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add((opt.num?(i+1)+" · ":"")+(s.name||("CH "+(i+1))),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
+ // DCA GROUP CHANNELS: each group in use is a strip after the channels (its fader moves its members' level, not their faders)
+ dEls.length=0;for(const g of (state.dcas||[])){if(!g.members||!g.members.length)continue;const e=add("DCA "+g.id+" · "+g.name+" ("+g.members.length+")",g.db,g.mute,false,v=>{g.db=v;send("d"+g.id,{op:"dca",group:g.id,db:v})},on=>{g.mute=on;send("dm"+g.id,{op:"dca",group:g.id,mute:on})},null,false,true);e.g=g.id;dEls.push(e)}
  els.push(Object.assign({i:-1},add("MASTER",state.master.db,false,false,v=>{state.master.db=v;send("master",{op:"master",db:v})},null,null,true)))}
 // LIVE SYNC: the service pushes {"state":...} the moment any remote or the console changes something: move what changed in place
 // (a control under a finger or the mouse is left alone; a different number of strips builds the page again)
 const free=e=>e!==drag&&e!==document.activeElement;
-function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length){state=s;build();panels();return}
+const dSig=s=>JSON.stringify((s.dcas||[]).filter(g=>g.members&&g.members.length).map(g=>[g.id,g.name,g.members.length]));
+function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.strips.length||dSig(s)!==dSig(state)){state=s;build();panels();return}
+ for(const e of dEls){const g=(s.dcas||[]).find(x=>x.id===e.g);if(!g)continue;if(free(e.f)){const p=Math.round(dbToPos(g.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(g.db)}}if(e.m)e.m.classList.toggle("on",!!g.mute)}
  for(const e of els){const x=e.i<0?s.master:s.strips[e.i];if(!x)continue;
   if(free(e.f)){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
   if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo);if(e.ks)e.ks.upd(x)}}

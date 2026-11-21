@@ -106,6 +106,7 @@ struct Snapshot {
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double monitorPk[2];                       // what the control room hears, after the monitor section
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
+  double duckGrDb;                           // DUCKER: the targets' gain now (<= 0 dB)
   std::uint64_t blocks, frames, xruns;
   double ampPk[64], ampGrDb[64];             // the amplifier stage of each output: its peak after processing and the limiter's gain reduction (dB)
   double loadPct, blockUs, maxBlockUs, jitterUs;   // DSP time of the last block as % of its duration, its microseconds, the worst since start, the period jitter
@@ -167,6 +168,16 @@ class Runtime {
   void setMasterProcessor(BusProcessor* p);          // the master chain; the caller keeps it alive while set
   void setWidth(double w);                           // master stereo width 0..2
   void setAutomix(int strip, bool on, double weight);   // gain-sharing automixer membership
+  // DUCKER · VOICE OVER MUSIC (audiomixer/ducker.hpp, Mixer::setDucker): role 1 = key (voice), 2 = target (music), 0 = neither
+  void setDucker(const DuckParams& p);
+  void setDuckRole(int strip, int role);
+  // AUTO DCA analysis (audiomixer/classify.hpp): startAnalysis() measures every strip's input from the next block; stopAnalysis() ends
+  // it, and once the audio thread has stopped writing, analysisReady() is true and analysisFeatures() may be read (from any thread)
+  void startAnalysis();
+  void stopAnalysis();
+  bool analysisReady() const { return anaReady_.load(std::memory_order_acquire); }
+  FeatureSummary analysisFeatures(int strip) const { return analysisReady() && strip >= 0 && strip < mixer_.strips() ? mixer_.features(strip).summary() : FeatureSummary{}; }
+  Mixer& mixerForTest() { return mixer_; }
   // AUTO PHASE: the strip is compared with the rest of the mix (correlation, ~1 s); when it stays out of phase (below -0.35 for 1 s,
   // both carrying signal) its polarity is flipped, then left alone for 3 s. The current polarity is in the strip's meter (polInv).
   void setAutoPolarity(int strip, bool on);
@@ -247,6 +258,7 @@ class Runtime {
   void publish();
   static void stripJob(void* self, int k);
   void runStrip(int s, std::size_t frames);
+  std::atomic<bool> anaReady_{false};
   bool fast_ = false; std::atomic<bool> fastWanted_{false}, fastOnAudio_{false}; int fastHelpersWanted_ = -1; WorkerPool pool_;   // FAST (fast_: audio thread)
   int jobs_[kMaxStrips] = {}; const float* jobSrc_[kMaxStrips] = {}; bool jobFx_[kMaxStrips] = {}; std::size_t jobFrames_ = 0; std::size_t quiet_[kMaxStrips] = {}; unsigned pubSkip_ = 0;
   std::shared_ptr<const InsertChain> held_[kMaxStrips];   // the chains a parallel block runs (kept until the strip's next block)

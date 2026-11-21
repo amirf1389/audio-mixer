@@ -225,6 +225,11 @@ int main() {
     CHECK(ctl("{\"op\":\"tone\",\"strip\":2,\"high\":-3,\"on\":false}") == 200);
     { const Value t = d.state()["strips"].at(2)["tone"]; CHECK(t["low"].asNumber() == 4 && t["high"].asNumber() == -3 && !t["on"].asBool()); }
     CHECK(ctl("{\"op\":\"tone\",\"strip\":99,\"low\":1}") == 400);
+    // DCA GROUP CHANNELS: kept and shared with every remote (the console applies them to its mix), clamped, members checked
+    CHECK(ctl("{\"op\":\"dca\",\"group\":2,\"db\":30,\"mute\":true,\"name\":\"VOICES\",\"color\":3,\"members\":[0,1,999]}") == 200);
+    { const Value g = d.state()["dcas"].at(1); CHECK(g["id"].asInt() == 2 && g["db"].asNumber() == 10 && g["mute"].asBool() && g["name"].asString() == "VOICES" && g["color"].asInt() == 3 && g["members"].size() == 2); }
+    CHECK(d.state()["dcas"].size() == 8 && d.state()["dcas"].at(0)["name"].asString() == "DCA 1");
+    CHECK(ctl("{\"op\":\"dca\",\"group\":9,\"db\":0}") == 400);
     // MASTERING from a remote: clamped, kept in the state, the master version moves (the console takes it); the SAMPLE PADS list
     { const double mv = d.state()["masterV"].asNumber();
       CHECK(ctl("{\"op\":\"mastering\",\"on\":true,\"thr\":-60,\"low\":3,\"makeup\":40}") == 200);

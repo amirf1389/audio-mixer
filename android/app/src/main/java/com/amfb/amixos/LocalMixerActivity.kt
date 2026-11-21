@@ -398,6 +398,7 @@ class LocalMixerActivity : FitActivity() {
         for (d in 0 until DECKS) { val l = deckStrip(d); val db = p.getFloat("deckDb$d", 0f).toDouble(); val mu = p.getBoolean("deckMute$d", false)   // a deck: its left and right on their own strips
             e.setGain(l, db); e.setGain(l + 1, db); e.setPan(l, -1.0); e.setPan(l + 1, 1.0); e.setMute(l, mu); e.setMute(l + 1, mu) }
         for (ch in (0 until INPUTS) + (0 until DECKS).map { 100 + it }) { applyLevel(e, ch); applyEq(e, ch) }   // each channel with its group fader and group mute, and its EQ
+        PhoneDucker.apply(e, PhoneDucker.load(p), duckRoles())   // DUCKER: CH (voice) over the DECKS (music)
         e.setMaster(p.getFloat("masterDb", 0f).toDouble()); e.setLimiter(p.getBoolean("limiter", true), -0.5, 100.0)
         for (s in listOf(-1) + (0 until INPUTS) + (0 until DECKS).map { deckStrip(it) }) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty()) for (t in mates(s)) if (e.insert(t, slot, k) == 0)
             p.getString(paramKey(s, slot), "").orEmpty().split(';').filter { '=' in it }.forEach { e.insertSet(t, slot, it.substringBefore('='), it.substringAfter('=').toDoubleOrNull() ?: 0.0) } }
@@ -636,7 +637,28 @@ class LocalMixerActivity : FitActivity() {
         sectionTitle(box, getString(R.string.lm_level_title))
         box.addView(TextView(this).apply { text = getString(R.string.lm_level_help, p.getInt("splCal", 120)); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
         lvlViews = listOf("lvlMaster", "lvlInput", "lvlSpl").map { t -> TextView(this).apply { tag = t; setTextColor(Color.WHITE); textSize = 18f; typeface = Typeface.MONOSPACE; setPadding(0, 4, 0, 4) }.also { box.addView(it) } }
+        duckSection(box)
         showLevels()
+    }
+    // ---- DUCKER · VOICE OVER MUSIC (see [PhoneDucker]): the CH inputs key, the decks go down
+    internal fun duckRoles(): IntArray = PhoneDucker.roles(INPUTS, (0 until DECKS).map { deckStrip(it) }, STRIPS)
+    private var duckNow: TextView? = null
+    private fun duckSection(box: LinearLayout) {
+        val p = prefs(); sectionTitle(box, getString(R.string.lm_duck_title))
+        box.addView(TextView(this).apply { text = getString(R.string.lm_duck_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
+        box.addView(PadButton(this, getString(if (PhoneDucker.load(p).on) R.string.lm_duck_on else R.string.lm_duck_off), ConsoleUi.GREEN, 12f).apply { on = PhoneDucker.load(p).on; contentDescription = "duckToggle"
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84)
+            setOnClickListener { val v = PhoneDucker.load(p).let { it.copy(on = !it.on) }; PhoneDucker.save(p, v); PhoneDucker.apply(engine, v, duckRoles()); on = v.on; text = getString(if (v.on) R.string.lm_duck_on else R.string.lm_duck_off) } })
+        for ((k, from, to) in PhoneDucker.controls) {
+            val label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 12f }
+            fun show(x: Double) { label.text = getString(when (k) { "thresholdDb" -> R.string.lm_duck_thresholdDb; "depthDb" -> R.string.lm_duck_depthDb; "attackMs" -> R.string.lm_duck_attackMs; "holdMs" -> R.string.lm_duck_holdMs; "releaseMs" -> R.string.lm_duck_releaseMs; else -> R.string.lm_duck_liftDb }, x) }
+            val now = PhoneDucker.get(PhoneDucker.load(p), k); show(now); box.addView(label)
+            box.addView(SeekBar(this).apply { contentDescription = "duck_$k"; max = 1000; progress = ((now - from) / (to - from) * 1000).toInt()
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar, v: Int, user: Boolean) { if (!user) return; val x = from + (to - from) * v / 1000.0; val nv = PhoneDucker.with(PhoneDucker.load(p), k, x); PhoneDucker.save(p, nv); PhoneDucker.apply(engine, nv, duckRoles()); show(PhoneDucker.get(nv, k)) }
+                    override fun onStartTrackingTouch(sb: SeekBar) {}; override fun onStopTrackingTouch(sb: SeekBar) {} }) })
+        }
+        duckNow = TextView(this).apply { tag = "duckNow"; setTextColor(cyan); textSize = 14f; typeface = Typeface.MONOSPACE; setPadding(0, 4, 0, 8) }.also { box.addView(it) }
     }
     private fun tuneTone() { tone?.gen?.let { g -> synchronized(g) { g.kind = toneKind; g.levelDb = toneDb } } }
     /** TONE ON / OFF; true = it is now on. It needs the running mixer and DECK D free. */
@@ -652,7 +674,8 @@ class LocalMixerActivity : FitActivity() {
         val master = pk?.let { maxOf(it.getOrElse(STRIPS) { 0f }, it.getOrElse(STRIPS + 1) { 0f }) } ?: 0f
         lvlViews[0].text = getString(R.string.lm_level_master, MixerTools.fmt(MixerTools.dbfs(master), "dBFS"))
         lvlViews[1].text = getString(R.string.lm_level_input, MixerTools.fmt(MixerTools.dbfs(inPk), "dBFS"))
-        lvlViews[2].text = getString(R.string.lm_level_spl, MixerTools.fmt(MixerTools.spl(inPk, prefs().getInt("splCal", 120)), "dB SPL")) }
+        lvlViews[2].text = getString(R.string.lm_level_spl, MixerTools.fmt(MixerTools.spl(inPk, prefs().getInt("splCal", 120)), "dB SPL"))
+        duckNow?.text = getString(R.string.lm_duck_now, PhoneDucker.reductionDb(engine, PhoneDucker.load(prefs()))) }
 
     private fun deckStripView(d: Int): View {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)

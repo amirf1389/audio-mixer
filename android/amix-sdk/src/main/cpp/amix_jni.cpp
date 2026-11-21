@@ -37,6 +37,9 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_destroy(JNIEnv*, jclass, jlon
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setGain(JNIEnv*, jclass, jlong h, jint s, jdouble db) { amix_mixer_set_gain(mixerOf(h), s, db); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setPan(JNIEnv*, jclass, jlong h, jint s, jdouble pan) { amix_mixer_set_pan(mixerOf(h), s, pan); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setMute(JNIEnv*, jclass, jlong h, jint s, jboolean on) { amix_mixer_set_mute(mixerOf(h), s, on ? 1 : 0); }
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setDucker(JNIEnv*, jclass, jlong h, jboolean on, jdouble thr, jdouble depth, jdouble att, jdouble hold, jdouble rel, jdouble lift) { amix_mixer_set_ducker(mixerOf(h), on ? 1 : 0, thr, depth, att, hold, rel, lift); }
+JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setDuckRole(JNIEnv*, jclass, jlong h, jint s, jint role) { amix_mixer_set_duck_role(mixerOf(h), s, role); }
+JNIEXPORT jdouble JNICALL Java_com_amfb_amixos_Engine_duckGainDb(JNIEnv*, jclass, jlong h) { return amix_mixer_duck_gain_db(mixerOf(h)); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setSolo(JNIEnv*, jclass, jlong h, jint s, jboolean on) { amix_mixer_set_solo(mixerOf(h), s, on ? 1 : 0); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setMaster(JNIEnv*, jclass, jlong h, jdouble db) { amix_mixer_set_master(mixerOf(h), db); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setLimiter(JNIEnv*, jclass, jlong h, jboolean on, jdouble ceil, jdouble rel) { amix_mixer_set_limiter(mixerOf(h), on ? 1 : 0, ceil, rel); }
