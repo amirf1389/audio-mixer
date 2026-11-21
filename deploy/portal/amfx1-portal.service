@@ -1,0 +1,36 @@
+# Without Docker: runs deploy/portal/start.js (licence server + OTA server) as an unprivileged user, restarted if it stops.
+#   sudo useradd --system --home /opt/audio-mixer --shell /usr/sbin/nologin amfx1
+#   sudo cp deploy/portal/amfx1-portal.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now amfx1-portal
+# Caddy runs as its own service (apt install caddy) with this folder's Caddyfile and the domain variables in /etc/default/caddy.
+[Unit]
+Description=AmF X1 portal (licence server + OTA server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=amfx1
+Group=amfx1
+WorkingDirectory=/opt/audio-mixer
+ExecStart=/usr/bin/node deploy/portal/start.js --env /opt/audio-mixer/deploy/portal/.env
+Restart=on-failure
+RestartSec=5
+UMask=0077
+# hardening: the code is read-only, only the data folder can be written
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+ReadWritePaths=/opt/audio-mixer/deploy/portal/data
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

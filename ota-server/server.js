@@ -176,7 +176,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', po
     try {
       for await (const c of req) { n += c.length; if (n > MAX_FILE) throw Object.assign(new Error('file too large'), { status: 413 }); h.update(c); if (!out.write(c)) await new Promise(r => out.once('drain', r)); }
       await new Promise((r, e) => out.end(err => (err ? e(err) : r())));
-    } catch (e) { out.destroy(); try { fs.unlinkSync(part); } catch (_) { /* gone */ } return fail(res, e.status || 400, e.message); }
+    } catch (e) { out.destroy(); try { fs.unlinkSync(part); } catch (_) { /* gone */ } log({ event: 'upload-error', message: String(e && e.message) }); return fail(res, e.status || 500, e.status ? e.message : 'the upload could not be stored'); }   // a disk error's text (with its path) stays in the log
     const got = h.digest('hex');
     if (got !== want) { fs.unlinkSync(part); return fail(res, 400, 'checksum mismatch: the upload is damaged (server computed ' + got + ')'); }
     fs.renameSync(part, target);
@@ -398,10 +398,20 @@ async function seed(ota, from, log = console.log) {
   fs.copyFileSync(m, path.join(ota.dirs.manifests, 'stable.json')); log('seeded files and update.json (version ' + v.manifest.version + ') from ' + from);
 }
 
+function loadPublicJwk(file) {
+  if (!file) return require('../bridge/license').PUBLIC_JWK;
+  const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!j || j.kty !== 'EC' || j.crv !== 'P-256' || typeof j.x !== 'string' || typeof j.y !== 'string' || j.d) throw new Error('OTA_PUBLIC_KEY_FILE must hold a P-256 PUBLIC key as JWK (no "d")');
+  return { kty: 'EC', crv: 'P-256', x: j.x, y: j.y };
+}
+
 function start(opts = {}) {
   const a = process.argv.slice(2), arg = (n, d) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : d; };
   const port = Number(arg('--port', process.env.OTA_PORT || 8780)), host = arg('--host', process.env.OTA_HOST || '127.0.0.1'), dataDir = path.resolve(arg('--data', process.env.OTA_DATA || path.join(__dirname, '..', 'ota-data')));
-  const jwk = require('../bridge/license').PUBLIC_JWK;
+  // the PUBLIC key manifests are checked with: the shipped vendor key, or OTA_PUBLIC_KEY_FILE (a JWK file, e.g. a test key). Never a private key.
+  const jwk = loadPublicJwk(process.env.OTA_PUBLIC_KEY_FILE);
+  const tok = process.env.OTA_ADMIN_TOKEN || '';
+  if (tok && tok.length < 32) throw new Error('OTA_ADMIN_TOKEN must be at least 32 characters (deploy/portal/init.sh makes one)');
   const ota = createOta({ dataDir, jwk, token: process.env.OTA_ADMIN_TOKEN || '', portalDb: process.env.PORTAL_DB || '', portalSecret: process.env.PORTAL_JWT_SECRET || '', publicUrl: process.env.OTA_PUBLIC_URL || '', rate: Number(process.env.OTA_RATE) || 120, trustProxy: process.env.OTA_TRUST_PROXY === '1', allowHttp: process.env.OTA_ALLOW_HTTP === '1', log: o => console.log(JSON.stringify({ t: new Date().toISOString(), ...o })), ...opts });
   const cert = process.env.OTA_TLS_CERT, key = process.env.OTA_TLS_KEY;
   const server = cert && key ? https.createServer({ cert: fs.readFileSync(cert), key: fs.readFileSync(key) }, ota.handler) : http.createServer(ota.handler);
@@ -417,4 +427,4 @@ function start(opts = {}) {
 }
 
 if (require.main === module) start().catch(e => { console.error('Error: ' + e.message); process.exit(1); });
-module.exports = { createOta, seed, start };
+module.exports = { createOta, seed, start, loadPublicJwk };

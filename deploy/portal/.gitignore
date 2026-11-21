@@ -1,0 +1,5 @@
+.env
+secrets/
+data/
+backups/
+site-releases/

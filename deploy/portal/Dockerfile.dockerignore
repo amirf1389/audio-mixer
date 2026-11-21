@@ -1,0 +1,19 @@
+# Only what the Dockerfile copies is sent to the build: never .env, secrets/, data or the releases.
+*
+!bridge/license.js
+!bridge/edition.js
+!bridge/diagnostics.js
+!bridge/update.js
+!bridge/security.js
+!bridge/osdetect.js
+!bridge/mail.js
+!bridge/license-public.json
+!bridge/package.json
+!bridge/license-server/**
+!bridge/portal-auth/**
+!ota-server/**
+!management/customer/**
+!management/inline-page.js
+!deploy/portal/start.js
+!deploy/portal/package.json
+!deploy/portal/tools/**

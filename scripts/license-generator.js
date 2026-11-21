@@ -701,9 +701,9 @@ function main(argv) {
     const url = `http://127.0.0.1:${server.address().port}/`;
     console.log(`Audio Mixer license key generator (${KINDS[kind].label}) on ${url} — open it in a browser on this computer. Ctrl+C to stop.`);
     if (argv.includes('--open') && !server.opened) { server.opened = true;
-      const { spawn } = require('node:child_process');
-      const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
-      try { const ch = spawn(cmd, args, { stdio: 'ignore', detached: true }); ch.on('error', () => console.log('Open ' + url + ' in a browser.')); ch.unref(); } catch (_) { /* open it by hand */ }
+      const opener = browserCommand(url);
+      if (!opener) console.log('Open ' + url + ' in a browser.');
+      else try { const ch = require('node:child_process').spawn(opener[0], opener[1], { stdio: 'ignore', detached: true, shell: false, windowsHide: true }); ch.on('error', () => console.log('Open ' + url + ' in a browser.')); ch.unref(); } catch (_) { /* open it by hand */ }
     }
   });
   server.listen(port, '127.0.0.1');
@@ -714,4 +714,12 @@ if (require.main === module) {
   const code = main(process.argv.slice(2));
   if (code !== 0) process.exit(code);   // 0 means the server is listening (asynchronously): exiting now would kill it before it ever serves a request
 }
-module.exports = { buildEditionToken, readSales, waDigits, readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+// The program that opens this generator's own page in a browser, or null. Only http://127.0.0.1:<port>/ is ever opened, and never through a
+// shell: on Windows not "cmd /c start" (cmd would read & | ^ in the text as commands) but the URL handler of rundll32, given the URL as one argument.
+function browserCommand(url, platform = process.platform) {
+  if (typeof url !== 'string' || !/^http:\/\/127\.0\.0\.1:\d{1,5}\/$/.test(url)) return null;
+  if (platform === 'win32') return ['rundll32.exe', ['url.dll,FileProtocolHandler', url]];
+  return platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+}
+
+module.exports = { browserCommand, buildEditionToken, readSales, waDigits, readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };

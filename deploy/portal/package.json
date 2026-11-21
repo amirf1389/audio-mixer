@@ -1,0 +1,12 @@
+{
+  "name": "amfx1-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AmF X1 OTA update server + licence server, customer portal and staff dashboard, deployable together.",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node start.js",
+    "test": "node --test --test-force-exit test/e2e.test.js"
+  }
+}

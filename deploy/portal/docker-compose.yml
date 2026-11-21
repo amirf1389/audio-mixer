@@ -1,0 +1,114 @@
+# AmF X1 portal: Caddy (HTTPS) -> licence server + OTA server. From this folder, after init.sh:
+#   docker compose up -d --build
+# Only Caddy publishes ports (80, 443). The two servers listen on the internal network only.
+name: amfx1-portal
+
+x-hardening: &hardening
+  read_only: true                    # the root file system is read-only; only the volumes and /tmp can be written
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  user: "1000:1000"
+  restart: unless-stopped
+  logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+services:
+  licence:
+    <<: *hardening
+    build: { context: ../.., dockerfile: deploy/portal/Dockerfile }
+    image: amfx1-portal:local
+    command: ["node", "bridge/license-server/server.js"]
+    environment:
+      LICENSE_HOST: 0.0.0.0
+      LICENSE_PORT: "8787"
+      LICENSE_TRUST_PROXY: "1"
+      LICENSE_ADMIN_TOKEN: ${LICENSE_ADMIN_TOKEN:?run init.sh first}
+      LICENSE_PRIVATE_KEY_FILE: /run/keys/vendor-private.pem
+      LICENSE_DATA_KEY_FILE: /run/keys/licence-data.key
+      LICENSE_DATA_FILE: /data/licence/licenses.json
+      LICENSE_RELEASES_DIR: /data/site-releases
+      LICENSE_UPDATE_URL: ${LICENSE_UPDATE_URL:-https://${PUBLIC_DOMAIN}/update.json}
+      PORTAL_DB: /data/staff/portal.db
+      PORTAL_JWT_SECRET: ${PORTAL_JWT_SECRET:?run init.sh first}
+      PORTAL_CRM_SECRET: ${PORTAL_CRM_SECRET:?run init.sh first}
+    volumes:
+      - ./secrets/vendor-private.pem:/run/keys/vendor-private.pem:ro
+      - ./secrets/licence-data.key:/run/keys/licence-data.key:ro
+      - licence-data:/data/licence
+      - staff-data:/data/staff
+      - ./site-releases:/data/site-releases:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  ota:
+    <<: *hardening
+    build: { context: ../.., dockerfile: deploy/portal/Dockerfile }   # the same image as the licence service (the build cache makes it once)
+    image: amfx1-portal:local
+    command: ["node", "ota-server/server.js"]
+    environment:
+      OTA_HOST: 0.0.0.0
+      OTA_PORT: "8780"
+      OTA_DATA: /data/ota
+      OTA_TRUST_PROXY: "1"
+      OTA_ADMIN_TOKEN: ${OTA_ADMIN_TOKEN:?run init.sh first}
+      OTA_PUBLIC_URL: ${OTA_PUBLIC_URL:-https://${PUBLIC_DOMAIN}}
+      OTA_RATE: ${OTA_RATE:-120}
+      PORTAL_DB: /data/staff/portal.db
+      PORTAL_JWT_SECRET: ${PORTAL_JWT_SECRET:?run init.sh first}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - ota-data:/data/ota
+      - staff-data:/data/staff
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8780/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on: [licence, ota]
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?set ADMIN_DOMAIN in .env}
+      OTA_ADMIN_DOMAIN: ${OTA_ADMIN_DOMAIN:?set OTA_ADMIN_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      ADMIN_ALLOW_IPS: ${ADMIN_ALLOW_IPS:-0.0.0.0/0 ::/0}
+      LICENCE_UPSTREAM: licence:8787
+      OTA_UPSTREAM: ota:8780
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    networks: [backend, public]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+networks:
+  backend: {}     # not internal: the licence server reads the public update list, the OTA server may send mail
+  public: {}
+
+volumes:
+  licence-data:
+  staff-data:
+  ota-data:
+  caddy-data:
+  caddy-config:
