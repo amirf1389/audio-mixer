@@ -6,7 +6,8 @@
   "private": true,
   "license": "MIT",
   "bin": {
-    "audio-mixer": "client/cli.js"
+    "audio-mixer": "client/cli.js",
+    "amfx1-license-generator": "scripts/license-generator.js"
   },
   "scripts": {
     "start": "node client/cli.js",

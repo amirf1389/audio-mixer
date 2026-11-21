@@ -703,7 +703,7 @@ function main(argv) {
     if (argv.includes('--open') && !server.opened) { server.opened = true;
       const { spawn } = require('node:child_process');
       const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
-      try { spawn(cmd, args, { stdio: 'ignore', detached: true }).unref(); } catch (_) { /* open it by hand */ }
+      try { const ch = spawn(cmd, args, { stdio: 'ignore', detached: true }); ch.on('error', () => console.log('Open ' + url + ' in a browser.')); ch.unref(); } catch (_) { /* open it by hand */ }
     }
   });
   server.listen(port, '127.0.0.1');
