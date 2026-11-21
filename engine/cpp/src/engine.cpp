@@ -1,6 +1,7 @@
 // Audio Mixer engine (C++17): see include/audiomixer/engine.hpp.
 #include "audiomixer/frame.hpp"
 #include "audiomixer/engine.hpp"
+#include "audiomixer/simd.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -16,13 +17,8 @@ double roundHalfUp(double v) { return std::floor(v + 0.5); }
 // ───────── meter ─────────
 ClipConfig ClipConfig::fromDb(double db) { ClipConfig c; c.lin = linOf(clampd(db, -12.0, 0.0)); return c; }
 
-void Meter::add(const float* x, std::size_t n) {
-  for (std::size_t i = 0; i < n; ++i) {
-    const double v = x[i], a = std::fabs(v);
-    if (a > wPk_) wPk_ = a;
-    wSs_ += v * v;
-    if (a >= cfg_.lin) { if (++run_ > maxRun_) maxRun_ = run_; } else run_ = 0;
-  }
+void Meter::add(const float* x, std::size_t n) {   // peak, sum of squares and the clip runs (the SIMD kernel: see simd.hpp)
+  simd::kernels().meter(x, n, cfg_.lin, &wPk_, &wSs_, &run_, &maxRun_);
   wN_ += n;
 }
 void Meter::end(double nowMs) {
@@ -266,6 +262,7 @@ const double (&TruePeak4x::coeffs())[3][TruePeak4x::kTaps] {
       for (int k = 0; k < kTaps; ++k) c[p][k] /= sum; } } };
   static const C c; return c.c;
 }
+void TruePeak4x::pushBlock(const double* x, std::size_t n, double* pk, double* delayed) { simd::kernels().truePeak(h_, &w_, &coeffs()[0][0], x, n, pk, delayed); }
 void Mixer::setTruePeakLimiter(bool on) { if (on == tpOn_) return; tpOn_ = on; tpL_.reset(); tpR_.reset(); tpPrevNeed_ = 1; }
 void Mixer::setLimiter(bool on, double ceilingDb, double releaseMs) { limOn_ = on; limCeil_ = linOf(clampd(ceilingDb, -24.0, 0.0)); limReleaseMs_ = std::max(1.0, releaseMs); }
 void Mixer::setClipDb(double db) { const double hold = clip_.holdMs; clip_ = ClipConfig::fromDb(db); clip_.holdMs = hold; for (auto& s : strips_) s.meter.setClip(clip_); master_[0].setClip(clip_); master_[1].setClip(clip_); for (auto& b : buses_) b.meter.setClip(clip_); }
@@ -311,8 +308,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
         const double a = 1.0 - std::exp(-2.0 * kPi * 20000.0 / fs_), k = 0.55, b = 0.04, tb = std::tanh(k * b), norm = 1.0 / (k * (1.0 - tb * tb));
         for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x);
           const double sat = (std::tanh(k * (x + b)) - tb) * norm; st.anLp += a * (sat - st.anLp); tmp[i] = static_cast<float>(st.anLp * g); }
-      } else
-      for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x); tmp[i] = static_cast<float>(x * g); }   // post-fader signal: what the strip meter shows
+      } else { const double p = simd::kernels().gainPeak(in[s] + done, n, g, tmp); if (p > ipk) ipk = p; }   // post-fader signal: what the strip meter shows
       st.inPk = ipk; st.meter.add(tmp, n);
       if (st.sp.on) {   // 360 audio: the ring always runs (so un-muting does not click), the ears are summed when audible
         Spatial& sp = st.sp;
@@ -322,7 +318,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
           sp.lpL += (tap(sp.dL) - sp.lpL) * sp.aL; sp.lpR += (tap(sp.dR) - sp.lpR) * sp.aR; sp.rrL += (sp.lpL - sp.rrL) * sp.aRear; sp.rrR += (sp.lpR - sp.rrR) * sp.aRear; ++sp.w;
           if (audible) { outL[done + i] += static_cast<float>(sp.rrL * sp.gL); outR[done + i] += static_cast<float>(sp.rrR * sp.gR); }
         }
-      } else if (audible) for (std::size_t i = 0; i < n; ++i) { outL[done + i] += static_cast<float>(tmp[i] * gl); outR[done + i] += static_cast<float>(tmp[i] * gr); }
+      } else if (audible) simd::kernels().panAdd(tmp, n, gl, gr, outL + done, outR + done);
       if (anySend_) for (int k = 0; k < kMaxBuses; ++k) {
         const Send& sd = sends_[s][k]; if (sd.lin <= 0) continue;
         if (sd.pre) { for (std::size_t i = 0; i < n; ++i) { const double v = static_cast<double>(in[s][done + i]) * sd.lin; busL[k][i] += static_cast<float>(v * gl); busR[k][i] += static_cast<float>(v * gr); } }
@@ -356,11 +352,16 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       if (autoSec_ >= 3.0 && st > -70 && st < -1) { const double want = std::max(-12.0, std::min(autoMax_, autoDb_ + (autoTarget_ - st))); autoDb_ += want > autoDb_ ? std::min(want - autoDb_, 1.0 * step) : std::max(want - autoDb_, -6.0 * step); }
     } else { autoDb_ = 0; autoSec_ = 0; }
     const double autoLin = autoOn_ ? linOf(autoDb_) : 1.0;
+    static thread_local double tpIn[2][kChunk], tpPk[2][kChunk], tpDl[2][kChunk];   // TRUE PEAK: the detector runs over the chunk first (SIMD kernel)
+    if (limOn_ && tpOn_) {
+      for (std::size_t i = 0; i < n; ++i) { tpIn[0][i] = static_cast<double>(outL[done + i]) * masterLin_ * autoLin; tpIn[1][i] = static_cast<double>(outR[done + i]) * masterLin_ * autoLin; }
+      tpL_.pushBlock(tpIn[0], n, tpPk[0], tpDl[0]); tpR_.pushBlock(tpIn[1], n, tpPk[1], tpDl[1]);
+    }
     for (std::size_t i = 0; i < n; ++i) {
       double l = static_cast<double>(outL[done + i]) * masterLin_ * autoLin, r = static_cast<double>(outR[done + i]) * masterLin_ * autoLin;
       if (limOn_ && tpOn_) {   // TRUE PEAK: the gain for the sample 6 behind, from its own peak and the inter-sample peaks on both sides of it
-        const double pk = std::max(tpL_.push(l), tpR_.push(r)), now = pk > limCeil_ ? limCeil_ / pk : 1.0, need = std::min(now, tpPrevNeed_); tpPrevNeed_ = now;
-        l = tpL_.delayed(); r = tpR_.delayed();
+        const double pk = std::max(tpPk[0][i], tpPk[1][i]), now = pk > limCeil_ ? limCeil_ / pk : 1.0, need = std::min(now, tpPrevNeed_); tpPrevNeed_ = now;
+        l = tpDl[0][i]; r = tpDl[1][i];
         if (need < limGain_) limGain_ = need; else limGain_ += (1.0 - limGain_) * rel;
         if (limGain_ > need) limGain_ = need;
         l *= limGain_; r *= limGain_; if (limGain_ < limMin) limMin = limGain_;

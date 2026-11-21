@@ -29,6 +29,7 @@ static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/sysopt.hpp"
+#include "audiomixer/simd.hpp"
 #include "audiomixer/latency.hpp"
 static void warmSystemInfo();   // SYSTEM OPTIMIZATION: looks the hardware up on a background thread (defined with systemInfo)
 static const am::sysopt::CpuInfo& cpuOnce();
@@ -1812,7 +1813,7 @@ QVariantMap Engine::systemInfo() const {
   auto q = [](const std::string& s) { return QString::fromStdString(s); };
   QVariantMap r;
   r["cpuName"] = q(c.name.empty() ? std::string("Unknown processor") : c.name); r["cpuVendor"] = q(c.vendor); r["arch"] = q(c.arch); r["buildArch"] = q(c.buildArch); r["emulated"] = c.emulated;
-  r["avx2"] = c.avx2; r["fma"] = c.fma; r["avx512"] = c.avx512; r["neon"] = c.neon;
+  r["avx2"] = c.avx2; r["fma"] = c.fma; r["avx512"] = c.avx512; r["neon"] = c.neon; r["simd"] = q(am::simd::describe());   // the mixing kernels picked for this processor at start
   r["logical"] = c.topo.logical; r["classes"] = c.topo.classes; r["hybrid"] = c.topo.classes > 1; r["perfCores"] = c.topo.perfCores; r["effCores"] = c.topo.effCores; r["lowPowerCores"] = c.topo.lowPowerCores;
   r["npuFound"] = n.found; r["npuName"] = q(n.name); r["npuVendor"] = q(n.vendor);
   r["ramTotalMb"] = static_cast<qulonglong>(m.totalMb); r["ramFreeMb"] = static_cast<qulonglong>(m.availMb); r["ramLoadPct"] = m.loadPct;

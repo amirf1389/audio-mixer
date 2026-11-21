@@ -41,6 +41,7 @@ class TruePeak4x {
     return pk;
   }
   double delayed() const { return h_[w_ + 5]; }                        // the sample push() just answered for (kDelay behind)
+  void pushBlock(const double* x, std::size_t n, double* pk, double* delayed);   // push() for each of x (the SIMD kernel): pk[i], delayed[i]
   static const double (&coeffs())[3][kTaps];
  private:
   double h_[2 * kTaps]; int w_ = 0;

@@ -8,8 +8,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)   # the static libs also go into libamix.so (the C SDK)
 
-add_library(audiomixer_engine STATIC src/engine.cpp)
+add_library(audiomixer_engine STATIC src/engine.cpp src/simd.cpp src/simd_base.cpp)
 target_include_directories(audiomixer_engine PUBLIC include)
+# SIMD (include/audiomixer/simd.hpp): the build stays generic; only simd_avx2.cpp is compiled for AVX2 + FMA, and it runs only where CPUID says so
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|x64)$" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+  target_sources(audiomixer_engine PRIVATE src/simd_avx2.cpp)
+  target_compile_definitions(audiomixer_engine PRIVATE AM_SIMD_AVX2)
+  if(MSVC)
+    set_source_files_properties(src/simd_avx2.cpp PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+  elseif(MINGW)   # 64-bit Windows GCC does not align the stack for 32-byte AVX spills: every aligned vector move is assembled as an unaligned one
+    set_source_files_properties(src/simd_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-Wa,-muse-unaligned-vector-move")
+  else()
+    set_source_files_properties(src/simd_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
+  endif()
+endif()
 
 set(RUNTIME_SRC src/runtime.cpp src/worker_pool.cpp src/backend_null.cpp src/devices.cpp src/driver_intel.cpp src/bluetooth.cpp src/sysopt.cpp src/app_sound.cpp src/app_capture.cpp src/latency.cpp)
 set(RUNTIME_LIBS Threads::Threads)
@@ -323,7 +335,7 @@ add_executable(bus_test test/bus_test.cpp)
 target_link_libraries(bus_test audiomixer_engine)
 add_test(NAME buses COMMAND bus_test)
 add_executable(dsp_test test/dsp_test.cpp)
-target_include_directories(dsp_test PRIVATE include)
+target_link_libraries(dsp_test audiomixer_engine)   # the channel DSP calls the SIMD kernels
 add_test(NAME dsp COMMAND dsp_test)
 # engine_bench: the engine's cost per block on this processor (not a test: it prints numbers)
 add_executable(engine_bench test/engine_bench.cpp)
@@ -331,6 +343,11 @@ target_link_libraries(engine_bench audiomixer_runtime)
 add_executable(fast_test test/fast_test.cpp)
 target_link_libraries(fast_test audiomixer_runtime)
 add_test(NAME fast COMMAND fast_test)
+add_executable(simd_test test/simd_test.cpp)   # every SIMD kernel against the scalar code, on every level this processor runs
+target_link_libraries(simd_test audiomixer_engine)
+add_test(NAME simd COMMAND simd_test)
+add_executable(kernel_bench test/kernel_bench.cpp)   # us per block of each hot loop: kernel_bench [blocks]
+target_link_libraries(kernel_bench audiomixer_engine)
 add_executable(fast_bench test/fast_bench.cpp)   # DSP MODE DIGITAL vs FAST: fast_bench digital|fast [seconds]
 target_link_libraries(fast_bench audiomixer_runtime)
 if(WIN32)
