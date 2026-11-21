@@ -18,6 +18,9 @@
 #include <limits>
 #include <vector>
 
+#include "audiomixer/classify.hpp"
+#include "audiomixer/ducker.hpp"
+
 namespace am {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
@@ -189,6 +192,17 @@ class Mixer {
   // open microphone that is spoken into takes the gain and the quiet ones fall back (10 ms attack, 300 ms release, -40 dB floor)
   void setAutomix(int strip, bool on, double weight);        // weight 0.25 .. 4 (1 = equal)
   double automixGainDb(int strip) const;
+  // DUCKER · VOICE OVER MUSIC (audiomixer/ducker.hpp): role 1 = KEY (its input opens the ducker, it gets the voice lift), 2 = TARGET
+  // (lowered by the depth), 0 = neither. The gain is applied to the post-fader signal sample by sample (meters and post sends follow).
+  void setDucker(const DuckParams& p) { duck_.set(p, fs_); }
+  const DuckParams& ducker() const { return duck_.params(); }
+  void setDuckRole(int strip, int role);
+  int duckRole(int strip) const { return strip >= 0 && strip < n_ ? duckRole_[static_cast<std::size_t>(strip)] : 0; }
+  double duckGainDb() const { return duck_.gainDb(); }   // <= 0: the targets' reduction now
+  // AUTO DCA analysis (audiomixer/classify.hpp): while on, every strip's input is measured; switching it on starts afresh
+  void setAnalysis(bool on);
+  bool analysis() const { return anaOn_; }
+  const ChannelFeatures& features(int strip) const { return ana_[static_cast<std::size_t>(strip)]; }
   // AUTO LEVEL ("no low, but loud"): a slow gain after the width stage that steers the short-term loudness toward a target (LUFS),
   // never above maxGainDb, +1 dB/s up and -6 dB/s down; the brick-wall limiter after it keeps the true peak in check
   void setAutoLevel(bool on, double targetLufs, double maxGainDb);
@@ -232,6 +246,7 @@ class Mixer {
   double trimLin_ = 1, trimTarget_ = 1;   // the output trim now and where it ramps to
   double width_ = 1.0;   // master stereo width
   bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12, autoDb_ = 0, autoSec_ = 0; int automixN_ = 0;
+  Ducker duck_; std::vector<unsigned char> duckRole_; bool duckAny_ = false; bool anaOn_ = false; std::vector<ChannelFeatures> ana_;
   bool analog_ = false; int outBits_ = 0; bool dcOn_ = false; double dcX_[2] = {0, 0}, dcY_[2] = {0, 0}; std::uint32_t rng_ = 0x2545F491u;
   bool limOn_ = false; double limCeil_, limGain_ = 1, limReleaseMs_ = 100, limGrDb_ = 0;
   bool tpOn_ = false; TruePeak4x tpL_, tpR_; double tpPrevNeed_ = 1;   // the true-peak detector of the master limiter (FAST)

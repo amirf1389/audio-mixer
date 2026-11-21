@@ -478,6 +478,10 @@ json::Value Daemon::state() const {
   json::Value buses = json::Value::array();
   for (int k = 0; k < kMaxBuses; ++k) { json::Value v = json::Value::object(); v.set("id", k); v.set("db", buses_[k].db); v.set("returnDb", buses_[k].returnDb); v.set("mute", buses_[k].mute); buses.push(v); }
   o.set("buses", buses);
+  { json::Value dcas = json::Value::array();
+    for (int g = 0; g < 8; ++g) { const Dca& d = dcas_[g]; json::Value v = json::Value::object(); v.set("id", g + 1); v.set("name", d.name.empty() ? "DCA " + std::to_string(g + 1) : d.name); v.set("db", d.db); v.set("mute", d.mute); v.set("color", d.color);
+      json::Value m = json::Value::array(); for (int x : d.members) m.push(x); v.set("members", m); dcas.push(v); }
+    o.set("dcas", dcas); }
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
@@ -697,6 +701,14 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     return ok; }
   if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }
   if (op == "send") { if (!strip(s) || !bus(b)) return {}; if (!need()) return {}; rt_->setSend(s, b, clampDb(cmd["db"].asNumber(-120)), cmd["pre"].asBool(false)); return ok; }
+  if (op == "dca") {   // a DCA group strip: {group 1..8, db, mute, name, color, members}; every field optional but the group
+    const int g = cmd["group"].asInt(0); if (g < 1 || g > 8) { err = "group: 1..8"; return {}; } Dca& d = dcas_[g - 1];
+    if (cmd.has("db")) d.db = std::max(-60.0, std::min(10.0, cmd["db"].asNumber(0)));
+    if (cmd.has("mute")) d.mute = cmd["mute"].asBool(false);
+    if (cmd.has("name")) { std::string n = cmd["name"].asString(); if (n.size() > 16) n.resize(16); d.name = n; }
+    if (cmd.has("color")) d.color = std::max(0, std::min(7, cmd["color"].asInt(0)));
+    if (cmd["members"].isArray()) { d.members.clear(); const json::Value& m = cmd["members"]; for (std::size_t i = 0; i < m.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) { const int x = m.at(i).asInt(-1); if (x >= 0 && x < opt_.strips) d.members.push_back(x); } }
+    return ok; }
   if (op == "busLevel") { if (!bus(b)) return {}; buses_[b].db = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setBusLevel(b, buses_[b].db); return ok; }
   if (op == "busMute") { if (!bus(b)) return {}; buses_[b].mute = cmd["on"].asBool(); if (rt_) rt_->setBusMute(b, buses_[b].mute); return ok; }
   if (op == "busReturn") { if (!bus(b)) return {}; buses_[b].returnDb = clampDb(cmd["db"].asNumber(-120)); if (rt_) rt_->setBusReturn(b, buses_[b].returnDb); return ok; }

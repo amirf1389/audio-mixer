@@ -110,6 +110,8 @@ qt_add_qml_module(amixos
         qml/DynCurve.qml
         qml/SendToPage.qml
         qml/GroupFadersPage.qml
+        qml/DcaStrip.qml
+        qml/DcaPanels.qml
         qml/ScenesPage.qml
         qml/PresetsPage.qml
         qml/ConnectionsPage.qml

@@ -58,6 +58,11 @@ AMIX_API void        amix_mixer_set_gain(amix_mixer*, int strip, double db);    
 AMIX_API void        amix_mixer_set_pan(amix_mixer*, int strip, double pan);        /* -1 .. +1 */
 AMIX_API void        amix_mixer_set_mute(amix_mixer*, int strip, int on);
 AMIX_API void        amix_mixer_set_solo(amix_mixer*, int strip, int on);
+/* DUCKER - VOICE OVER MUSIC: while a key strip (role 1) is above threshold_db the target strips (role 2) go down by depth_db (-40..0),
+   attack / hold / release in ms, smooth per sample; key strips are lifted by up to lift_db (0..6) while ducked. role 0 = neither. */
+AMIX_API void        amix_mixer_set_ducker(amix_mixer*, int on, double threshold_db, double depth_db, double attack_ms, double hold_ms, double release_ms, double lift_db);
+AMIX_API void        amix_mixer_set_duck_role(amix_mixer*, int strip, int role);
+AMIX_API double      amix_mixer_duck_gain_db(const amix_mixer*);   /* the targets' gain now, <= 0 dB */
 AMIX_API void        amix_mixer_set_master(amix_mixer*, double db);
 AMIX_API void        amix_mixer_set_limiter(amix_mixer*, int on, double ceiling_db, double release_ms);
 AMIX_API void        amix_mixer_set_send(amix_mixer*, int strip, int bus, double db, int pre);

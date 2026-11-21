@@ -1,0 +1,106 @@
+# AmF X1 portal: HTTPS in front of the licence server and the OTA server. Caddy gets and renews the certificates by itself.
+# Every value comes from the environment (docker-compose.yml passes .env; without Docker export them before `caddy run`):
+#   PUBLIC_DOMAIN, ADMIN_DOMAIN, OTA_ADMIN_DOMAIN, ACME_EMAIL, ADMIN_ALLOW_IPS,
+#   LICENCE_UPSTREAM (default 127.0.0.1:8787), OTA_UPSTREAM (default 127.0.0.1:8780)
+# Plain http:// is only ever answered with a redirect to https:// (Caddy does that for every site below).
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+		max_header_size 16KB
+	}
+}
+
+# Headers for every site. The servers send their own Content-Security-Policy per page; "?" only adds a header the server did not send.
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		?Content-Security-Policy "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+		?Permissions-Policy "camera=(), microphone=(), geolocation=(), usb=(), bluetooth=()"
+		-Server
+		-X-Powered-By
+	}
+	encode zstd gzip
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Staff hosts: only the allowed addresses, never framed, never cached, never indexed.
+(staff) {
+	@outsider not remote_ip {$ADMIN_ALLOW_IPS:0.0.0.0/0 ::/0}
+	respond @outsider "not found" 404
+	header {
+		X-Frame-Options "DENY"
+		Cache-Control "no-store"
+		X-Robots-Tag "noindex, nofollow"
+	}
+}
+
+# ── PUBLIC: the apps and customers. Staff routes do not exist here. ──
+{$PUBLIC_DOMAIN} {
+	import security
+
+	# (handle blocks with a named matcher are tried in the order written; the bare handle last)
+	@staffonly path /admin /admin/* /issue
+	handle @staffonly {
+		respond "not found" 404
+	}
+
+	# the licence API, the customer portal and My account -> licence server (requests are small JSON: 64 KB is plenty)
+	@licence path /health /activate /deactivate /status /activate-online /trial /revocations /redeem /portal /portal/* /account /account/*
+	handle @licence {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy {$LICENCE_UPSTREAM:127.0.0.1:8787}
+	}
+
+	# everything else -> OTA server: /update.json, /<channel>/update.json, /releases/<file>, /latest, /api/latest, /driver, /healthz, /request-license, /
+	handle {
+		request_body {
+			max_size 16KB
+		}
+		reverse_proxy {$OTA_UPSTREAM:127.0.0.1:8780} {
+			flush_interval -1
+		}
+	}
+}
+
+# ── STAFF: the licence dashboard (/admin/login, /admin/, CRM, website, presets, system, backup) ──
+{$ADMIN_DOMAIN} {
+	import security
+	import staff
+	redir / /admin/login 302
+	@notadmin not path /admin /admin/* /health
+	respond @notadmin "not found" 404
+	request_body {
+		max_size 5MB
+	}
+	reverse_proxy {$LICENCE_UPSTREAM:127.0.0.1:8787}
+}
+
+# ── STAFF: the OTA dashboard and the upload API scripts/ota.js uses (release files up to 400 MB) ──
+{$OTA_ADMIN_DOMAIN} {
+	import security
+	import staff
+	redir / /admin/ 302
+	@notadmin not path /admin /admin/* /healthz
+	respond @notadmin "not found" 404
+	request_body {
+		max_size 450MB
+	}
+	reverse_proxy {$OTA_UPSTREAM:127.0.0.1:8780} {
+		flush_interval -1
+		transport http {
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
+}

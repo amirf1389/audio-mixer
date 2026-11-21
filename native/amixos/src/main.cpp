@@ -1500,6 +1500,41 @@ int main(int argc, char* argv[]) {
       engine.setAutoLevelOn(true); engine.setAutoLevelTarget(-18); if (!engine.autoLevelOn() || std::fabs(engine.autoLevelTarget() + 18) > 1e-9) { std::fprintf(stderr, "amixos --smoke: auto level props\n"); return 101; }
       waitMs(300); if (!engine.meters()[0].toMap().contains("amGainDb") || !engine.telemetry().contains("autoLevelDb")) { std::fprintf(stderr, "amixos --smoke: automix / auto level telemetry\n"); return 102; }
       engine.setAutoLevelOn(false); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
+      // DCA GROUP CHANNELS: a group's fader is an offset on its members (their faders stay), its mute mutes them; colour and count
+      { engine.setGain(2, -10); engine.setDca(2, 3); engine.setDca(3, 3); engine.setDcaLevel(3, -6); engine.setDcaColor(3, 4);
+        const QVariantMap g = engine.dcaState()[2].toMap();
+        if (g.value("count").toInt() != 2 || g.value("color").toInt() != 4 || std::fabs(engine.effectiveDb(2) + 16) > 1e-9 || std::fabs(engine.stripState()[2].toMap()["db"].toDouble() + 10) > 1e-9) { std::fprintf(stderr, "amixos --smoke: DCA strip state\n"); return 800; }
+        engine.setGain(3, 0); engine.setDcaLevel(3, 20); if (std::fabs(engine.effectiveDb(3) - 10) > 1e-9) { std::fprintf(stderr, "amixos --smoke: DCA offset clamp\n"); return 801; }
+        engine.setDcaMute(3, true); if (!engine.effectiveMute(2) || !engine.effectiveMute(3) || engine.effectiveMute(4)) { std::fprintf(stderr, "amixos --smoke: DCA mute\n"); return 802; }
+        engine.setDcaMute(3, false); engine.setDcaLevel(3, 0); engine.setDca(2, 0); engine.setDca(3, 0); engine.setGain(2, 0); engine.setDcaColor(3, 0); }
+      // AUTO DCA: the proposal from features (speech-like, broadband music, silence), APPLY makes the groups, CANCEL leaves the console
+      { am::FeatureSummary voice; voice.seconds = 4; voice.rmsDb = -28; voice.activity = 0.7; voice.voiceRatio = 0.9; voice.lowRatio = 0.02; voice.highRatio = 0.08; voice.centroidHz = 1800; voice.zcr = 0.05; voice.pauseFrac = 0.4; voice.crestDb = 15;
+        am::FeatureSummary music = voice; music.voiceRatio = 0.33; music.lowRatio = 0.43; music.highRatio = 0.24; music.pauseFrac = 0; music.zcr = 0.27; music.activity = 1; music.crestDb = 10;
+        const am::FeatureSummary silent;
+        const QVariantList prop = engine.classifyStrips({voice, music, silent, voice});
+        auto cls = [&](int i) { return prop.value(i).toMap().value("cls").toString(); };
+        if (prop.size() < 4 || cls(0) != "VOICE" || cls(1) != "MUSIC" || cls(2) != "SILENT" || cls(3) != "VOICE" || prop[0].toMap().value("why").toString().isEmpty()) { std::fprintf(stderr, "amixos --smoke: AUTO DCA classes %s %s %s\n", qPrintable(cls(0)), qPrintable(cls(1)), qPrintable(cls(2))); return 803; }
+        engine.startAutoDca(0.5); for (int k = 0; k < 100 && engine.autoDcaBusy(); ++k) waitMs(50);
+        if (engine.autoDcaBusy() || engine.autoDcaProposal().isEmpty()) { std::fprintf(stderr, "amixos --smoke: AUTO DCA listen did not finish\n"); return 804; }
+        engine.cancelAutoDca(); for (int i = 0; i < 4; ++i) if (engine.stripState()[i].toMap()["dca"].toInt() != 0) { std::fprintf(stderr, "amixos --smoke: CANCEL changed a group\n"); return 805; }
+        engine.startAutoDca(0.5); for (int k = 0; k < 100 && engine.autoDcaBusy(); ++k) waitMs(50);
+        // the measured proposal replaced by the synthetic one through the same rows (setAutoDcaClass), then APPLY
+        for (int i = 0; i < engine.autoDcaProposal().size(); ++i) engine.setAutoDcaClass(i, i < 4 ? cls(i) : QStringLiteral("SILENT"));
+        engine.applyAutoDca(true);
+        const int gv = engine.stripState()[0].toMap()["dca"].toInt(), gm = engine.stripState()[1].toMap()["dca"].toInt();
+        if (gv <= 0 || gm <= 0 || gv == gm || engine.stripState()[3].toMap()["dca"].toInt() != gv || engine.dcaState()[gv - 1].toMap()["name"].toString() != "VOICES" || engine.dcaState()[gm - 1].toMap()["name"].toString() != "MUSIC"
+            || !engine.stripState()[2].toMap()["mute"].toBool() || engine.stripState()[2].toMap()["dca"].toInt() != 0 || !engine.autoDcaProposal().isEmpty()) { std::fprintf(stderr, "amixos --smoke: AUTO DCA apply\n"); return 806; }
+        // DUCKER: APPLY set the key (voices) and the target (music) but did not switch it on; the roles reach the engine; saved and loaded
+        QVariantMap d = engine.duckState(); if (d.value("on").toBool() || d.value("keyDca").toInt() != gv || d.value("targetDca").toInt() != gm) { std::fprintf(stderr, "amixos --smoke: ducker set up by AUTO DCA\n"); return 807; }
+        engine.setDuck({{"on", true}, {"depth", -15.0}, {"attack", 25.0}, {"lift", 9.0}, {"targetStrips", QVariantList{5}}});
+        d = engine.duckState(); if (!d.value("on").toBool() || std::fabs(d.value("depth").toDouble() + 15) > 1e-9 || std::fabs(d.value("lift").toDouble() - 6) > 1e-9 || engine.duckRole(0) != 1 || engine.duckRole(1) != 2 || engine.duckRole(5) != 2 || engine.duckRole(2) != 0) { std::fprintf(stderr, "amixos --smoke: ducker state\n"); return 808; }
+        waitMs(200); if (engine.duckGrDb() > 0) { std::fprintf(stderr, "amixos --smoke: ducker meter\n"); return 809; }
+        if (engine.dcaState()[gm - 1].toMap()["duck"].toInt() != 1 || engine.dcaState()[gv - 1].toMap()["duck"].toInt() != 2) { std::fprintf(stderr, "amixos --smoke: ducker on the DCA strips\n"); return 810; }
+        { const QJsonObject saved = engine.consoleExport(); const QJsonObject dk = saved.value("ducker").toObject(); const QJsonArray dc = saved.value("dcas").toArray();
+          if (!dk.value("on").toBool() || dk.value("keyDca").toInt() != gv || std::fabs(dk.value("depth").toDouble() + 15) > 1e-9 || dc.size() < gm || dc[gm - 1].toObject().value("color").toInt() != 5) { std::fprintf(stderr, "amixos --smoke: ducker / DCA colour in the saved console\n"); return 811; } }
+        engine.setDuck({{"on", false}, {"keyDca", 0}, {"targetDca", 0}, {"targetStrips", QVariantList{}}, {"depth", -12.0}, {"attack", 20.0}, {"lift", 0.0}});
+        for (int i = 0; i < 6; ++i) { engine.setDca(i, 0); engine.setMute(i, false); }
+        for (int g = 1; g <= 8; ++g) engine.setDcaName(g, QStringLiteral("DCA %1").arg(g)); }
       // OSC: a /ch/5/fader -12 packet through the parser, then one over UDP to the server on 127.0.0.1
       auto pkt = [](const QByteArray& addr, float v) { QByteArray o = addr; o.append('\0'); while (o.size() % 4) o.append('\0'); o += QByteArray(",f\0\0", 4); quint32 b; std::memcpy(&b, &v, 4); char be[4]; qToBigEndian(b, be); o.append(be, 4); return o; };
       if (!osc.handle(pkt("/ch/5/fader", -12.f)) || std::fabs(engine.stripState()[4].toMap()["db"].toDouble() + 12) > 1e-6) { std::fprintf(stderr, "amixos --smoke: OSC parse\n"); return 103; }

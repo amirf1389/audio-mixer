@@ -69,6 +69,10 @@ class Engine : public QObject {
   Q_PROPERTY(int licensedChannels READ licensedChannels NOTIFY licenseChanged)   // strips beyond this are locked (muted in the engine)
   Q_PROPERTY(QVariantList busState READ busState NOTIFY busesChanged)
   Q_PROPERTY(QVariantList dcaState READ dcaState NOTIFY groupsChanged)
+  Q_PROPERTY(QVariantMap duckState READ duckState NOTIFY duckChanged)
+  Q_PROPERTY(double duckGrDb READ duckGrDb NOTIFY metersChanged)
+  Q_PROPERTY(QVariantList autoDcaProposal READ autoDcaProposal NOTIFY autoDcaChanged)
+  Q_PROPERTY(bool autoDcaBusy READ autoDcaBusy NOTIFY autoDcaChanged)
   Q_PROPERTY(QVariantList muteGroupState READ muteGroupState NOTIFY groupsChanged)
   Q_PROPERTY(QVariantList busMeters READ busMeters NOTIFY metersChanged)
   Q_PROPERTY(QVariantList scenes READ scenes NOTIFY scenesChanged)
@@ -732,6 +736,22 @@ class Engine : public QObject {
   Q_INVOKABLE void setDcaLevel(int group, double db);
   Q_INVOKABLE void setDcaMute(int group, bool on);
   Q_INVOKABLE void setDcaName(int group, const QString& name);
+  Q_INVOKABLE void setDcaColor(int group, int color);           // 0..7, the strip palette
+  // DUCKER · VOICE OVER MUSIC (audiomixer/ducker.hpp, in the engine sample by sample): KEY = a DCA (1..8) and / or strips, TARGET the same;
+  // keys: on, keyDca, targetDca, keyStrips, targetStrips, threshold, depth, attack, hold, release, lift
+  QVariantMap duckState() const;
+  Q_INVOKABLE void setDuck(const QVariantMap& changes);
+  double duckGrDb() const;                                      // the targets' gain now (<= 0 dB)
+  Q_INVOKABLE int duckRole(int strip) const;                    // 1 key, 2 target, 0 neither
+  // AUTO DCA: listens to every strip for `seconds`, classifies it (audiomixer/classify.hpp: fixed rules, no network) and proposes groups.
+  // The proposal is only shown: applyAutoDca() assigns VOICES / MUSIC / INSTRUMENTS (and, if asked, mutes the SILENT strips); cancel drops it.
+  QVariantList autoDcaProposal() const { return autoProp_; }   // [{strip, name, cls, why, voice, music, instrument, group}]
+  bool autoDcaBusy() const { return autoBusy_; }
+  Q_INVOKABLE void startAutoDca(double seconds = 4);
+  Q_INVOKABLE void applyAutoDca(bool muteSilent);
+  Q_INVOKABLE void cancelAutoDca();
+  Q_INVOKABLE void setAutoDcaClass(int strip, const QString& cls);   // the user corrects one row before APPLY
+  QVariantList classifyStrips(const std::vector<am::FeatureSummary>& f);   // the proposal from measured features (also the smoke test's way in)
   Q_INVOKABLE void setMuteGroupMember(int strip, int group, bool member);
   Q_INVOKABLE void setMuteGroupActive(int group, bool on);
   Q_INVOKABLE double effectiveDb(int strip) const;
@@ -771,6 +791,8 @@ class Engine : public QObject {
   void metersChanged();
   void busesChanged();
   void groupsChanged();
+  void duckChanged();
+  void autoDcaChanged();
   void scenesChanged();
   void selectedStripChanged();
   void presetsChanged();
@@ -823,7 +845,10 @@ class Engine : public QObject {
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
   std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0; bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
-  struct DcaUi { QString name; double db = 0; bool mute = false; };
+  struct DcaUi { QString name; double db = 0; bool mute = false; int color = 0; };
+  struct DuckUi { bool on = false; int keyDca = 0, targetDca = 0; QList<int> keyStrips, targetStrips; double thr = -40, depth = -12, att = 20, hold = 300, rel = 600, lift = 0; } duckUi_;
+  void pushDuck(); QJsonObject duckJson() const; void duckFromJson(const QJsonObject& o);
+  QVariantList autoProp_; bool autoBusy_ = false; int autoWait_ = 0;
   struct MuteGroupUi { QString name; bool active = false; };
   void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime
   static constexpr int kScenes = 16;

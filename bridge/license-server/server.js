@@ -44,6 +44,11 @@ const RELEASES_DIR = process.env.LICENSE_RELEASES_DIR || path.join(__dirname, '.
 function loadPrivateKey() {
   const file = process.env.LICENSE_PRIVATE_KEY_FILE;
   if (!file) throw new Error('LICENSE_PRIVATE_KEY_FILE is not set');
+  // the key file must be readable by this server only (0600 or 0400): a key others on the machine can read is refused, not just warned about
+  if (process.platform !== 'win32' && process.env.LICENSE_ALLOW_OPEN_KEY_FILE !== '1') {
+    const mode = fs.statSync(file).mode & 0o077;
+    if (mode) throw new Error('LICENSE_PRIVATE_KEY_FILE can be read by other users: chmod 600 it (or 400)');
+  }
   const pem = fs.readFileSync(file, 'utf8');
   return crypto.createPrivateKey(pem);
 }
@@ -394,7 +399,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   app.post('/redeem', limit('pub', 30), async c => { const b = await c.body(); const r = redeemProductKey({ code: b.code, file: dataFile, secret });
     if (!r.ok) { audit.add('license.redeem.refused', '-', c.ip, r.error); return c.json(r.status, { ok: false, error: r.error }); }
     audit.add('license.redeem', r.id, c.ip, r.payload.plan); return c.json(200, { ok: true, id: r.id, plan: r.payload.plan, key: signKey(r.payload, privateKey) }); });
-  app.post('/issue', admin, issue);
+  app.post('/issue', admin, limit('issue', 60), issue);
   // ── staff sign-in, staff accounts and the CRM (every enabled staff account may edit) ──
   const who = c => c.state.staff ? c.state.staff.email : 'admin-token';
   app.post('/admin/auth/login', limit('login', 10), async c => {
@@ -595,7 +600,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   return http.createServer(app.handler);
 }
 
-module.exports = { activateOnline, startTrial, revocationList, signToken, renewProductKey, newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
+module.exports = { loadPrivateKey, activateOnline, startTrial, revocationList, signToken, renewProductKey, newProductKey, normProductKey, redeemProductKey, buildPayload, createServer, authorized, activateDevice, deactivateDevice, keyStatus, listLicenses, setRevoked, removeDevice, recordIssue, MAX_DEVICES };
 
 if (require.main === module) {
   const token = process.env.LICENSE_ADMIN_TOKEN;
@@ -605,5 +610,8 @@ if (require.main === module) {
   }
   let dataSecret; if (process.env.LICENSE_DATA_KEY_FILE) { dataSecret = fs.readFileSync(process.env.LICENSE_DATA_KEY_FILE, 'utf8').trim(); if (dataSecret.length < 32) { console.error('LICENSE_DATA_KEY_FILE must hold at least 32 characters.'); process.exit(1); } }
   const privateKey = loadPrivateKey();
+  // the apps trust bridge/license-public.json only: a different key here issues keys no installed app accepts (fine for a test server only)
+  const shipped = require('../license-public.json'), mine = crypto.createPublicKey(privateKey).export({ format: 'jwk' });
+  if (shipped.x !== mine.x || shipped.y !== mine.y) console.warn('WARNING: this private key is not the one whose public key ships in the apps (bridge/license-public.json): keys issued here will not activate installed apps.');
   createServer({ privateKey, token, dataSecret }).listen(PORT, HOST, () => console.log(`license server on http://${HOST}:${PORT}  (management page: /admin/)`));
 }

@@ -2,7 +2,7 @@
 'use strict';
 // Vendor tool for the Audio Mixer OTA server (ota-server/server.js): builds the manifest of the current version, signs it with the vendor key
 // ON THIS MACHINE (the key never goes to the server), uploads the release files that the server does not have yet, then publishes the manifest.
-//   node scripts/ota.js publish --server https://ota.example.com --token T [--channel stable] [--notes "a|b|c"] [--dir <vendor key dir>] [--releases <folder>] [--force]
+//   node scripts/ota.js publish --server https://ota.example.com --token T [--base https://updates.example.com/releases] [--channel stable] [--notes "a|b|c"] [--dir <vendor key dir>] [--releases <folder>] [--force]
 //   node scripts/ota.js status  --server https://ota.example.com --token T          files and versions held by the server, downloads per day
 //   node scripts/ota.js sign    --base https://ota.example.com/releases [--out file] writes the signed manifest only (no upload)
 // The token can also be given as OTA_ADMIN_TOKEN, the server as OTA_SERVER. Plain http is only accepted for localhost (testing).
@@ -59,7 +59,7 @@ async function main(a) {
     return 0;
   }
   if (cmd === 'publish') {
-    const { manifest, channel } = manifestFor(rest, s + '/releases');
+    const { manifest, channel } = manifestFor(rest, trim(arg(rest, '--base', '')) || s + '/releases');   // --base: the PUBLIC address when uploads go to a separate staff host (deploy/portal)
     const env = signManifest(manifest, loadPrivate(vendorDir(rest)));
     const have = Object.fromEntries((await call(s + '/admin/files', { headers: auth })).files.map(x => [x.name, x.sha256]));
     for (const f of Object.values(manifest.files)) {

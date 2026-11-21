@@ -277,7 +277,7 @@ void Engine::pushAll() {
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].autoPol) rt_->setAutoPolarity(i, true);
-  pushAutoLevel(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setFast(fastMode()); rt_->setOutputBits(effectiveOutputBits());
+  pushAutoLevel(); pushDuck(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setFast(fastMode()); rt_->setOutputBits(effectiveOutputBits());
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -331,7 +331,7 @@ void Engine::setBusName(int k, const QString& n) { if (k < 0 || k >= kBuses) ret
 // ── group faders ──
 QVariantList Engine::dcaState() const {
   QVariantList l;
-  for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = dcas_[g].name; m["db"] = dcas_[g].db; m["mute"] = dcas_[g].mute; QVariantList mem; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g + 1) mem << i; m["members"] = mem; l << m; }
+  for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = dcas_[g].name; m["db"] = dcas_[g].db; m["mute"] = dcas_[g].mute; QVariantList mem; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g + 1) mem << i; m["members"] = mem; m["count"] = mem.size(); m["color"] = dcas_[g].color; m["duck"] = duckUi_.on && duckUi_.targetDca == g + 1 ? 1 : duckUi_.on && duckUi_.keyDca == g + 1 ? 2 : 0; l << m; }
   return l;
 }
 QVariantList Engine::muteGroupState() const {
@@ -339,10 +339,92 @@ QVariantList Engine::muteGroupState() const {
   for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = muteGroups_[g].name; m["active"] = muteGroups_[g].active; QVariantList mem; for (int i = 0; i < kStrips; ++i) if ((strips_[static_cast<std::size_t>(i)].muteGroups >> g) & 1u) mem << i; m["members"] = mem; l << m; }
   return l;
 }
-void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
+void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); if (rt_ && duckUi_.on) rt_->setDuckRole(i, duckRole(i)); emit stripsChanged(); emit groupsChanged(); }
 void Engine::setDcaLevel(int g, double db) { if (g < 1 || g > kGroups) return; dcas_[g - 1].db = std::clamp(db, -60.0, 10.0); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
 void Engine::setDcaMute(int g, bool on) { if (g < 1 || g > kGroups) return; dcas_[g - 1].mute = on; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
 void Engine::setDcaName(int g, const QString& n) { if (g < 1 || g > kGroups) return; dcas_[g - 1].name = n.left(16); emit groupsChanged(); }
+void Engine::setDcaColor(int g, int c) { if (g < 1 || g > kGroups) return; dcas_[g - 1].color = std::clamp(c, 0, 7); emit groupsChanged(); }
+// ---- DUCKER · VOICE OVER MUSIC: the roles go to the engine strip by strip; the envelope runs there (audiomixer/ducker.hpp)
+int Engine::duckRole(int i) const {
+  if (i < 0 || i >= kStrips) return 0; const int d = strips_[static_cast<std::size_t>(i)].dca;
+  if ((duckUi_.keyDca > 0 && d == duckUi_.keyDca) || duckUi_.keyStrips.contains(i)) return 1;
+  if ((duckUi_.targetDca > 0 && d == duckUi_.targetDca) || duckUi_.targetStrips.contains(i)) return 2;
+  return 0;
+}
+void Engine::pushDuck() {
+  if (!rt_) return; am::DuckParams p; p.on = duckUi_.on; p.thresholdDb = duckUi_.thr; p.depthDb = duckUi_.depth; p.attackMs = duckUi_.att; p.holdMs = duckUi_.hold; p.releaseMs = duckUi_.rel; p.liftDb = duckUi_.lift;
+  rt_->setDucker(p); for (int i = 0; i < kStrips; ++i) rt_->setDuckRole(i, duckUi_.on ? duckRole(i) : 0);
+}
+QVariantMap Engine::duckState() const {
+  auto ints = [](const QList<int>& l) { QVariantList v; for (int x : l) v << x; return v; };
+  QVariantList keys, targets; for (int i = 0; i < kStrips; ++i) { const int r = duckRole(i); if (r == 1) keys << i; else if (r == 2) targets << i; }
+  return {{"on", duckUi_.on}, {"keyDca", duckUi_.keyDca}, {"targetDca", duckUi_.targetDca}, {"keyStrips", ints(duckUi_.keyStrips)}, {"targetStrips", ints(duckUi_.targetStrips)}, {"threshold", duckUi_.thr}, {"depth", duckUi_.depth},
+          {"attack", duckUi_.att}, {"hold", duckUi_.hold}, {"release", duckUi_.rel}, {"lift", duckUi_.lift}, {"keys", keys}, {"targets", targets}};
+}
+void Engine::setDuck(const QVariantMap& c) {
+  auto strips = [](const QVariant& v) { QList<int> l; for (const QVariant& x : v.toList()) { const int i = x.toInt(); if (i >= 0 && i < kStrips && !l.contains(i)) l << i; } return l; };
+  if (c.contains("on")) duckUi_.on = c.value("on").toBool();
+  if (c.contains("keyDca")) duckUi_.keyDca = std::clamp(c.value("keyDca").toInt(), 0, kGroups);
+  if (c.contains("targetDca")) duckUi_.targetDca = std::clamp(c.value("targetDca").toInt(), 0, kGroups);
+  if (c.contains("keyStrips")) duckUi_.keyStrips = strips(c.value("keyStrips"));
+  if (c.contains("targetStrips")) duckUi_.targetStrips = strips(c.value("targetStrips"));
+  if (c.contains("threshold")) duckUi_.thr = std::clamp(c.value("threshold").toDouble(), -80.0, 0.0);
+  if (c.contains("depth")) duckUi_.depth = std::clamp(c.value("depth").toDouble(), -40.0, 0.0);
+  if (c.contains("attack")) duckUi_.att = std::clamp(c.value("attack").toDouble(), 1.0, 500.0);
+  if (c.contains("hold")) duckUi_.hold = std::clamp(c.value("hold").toDouble(), 0.0, 5000.0);
+  if (c.contains("release")) duckUi_.rel = std::clamp(c.value("release").toDouble(), 10.0, 5000.0);
+  if (c.contains("lift")) duckUi_.lift = std::clamp(c.value("lift").toDouble(), 0.0, 6.0);
+  if (duckUi_.keyDca > 0 && duckUi_.keyDca == duckUi_.targetDca) duckUi_.targetDca = 0;   // a group is not its own key
+  pushDuck(); emit duckChanged(); emit groupsChanged();
+}
+double Engine::duckGrDb() const { if (!rt_ || !duckUi_.on) return 0; return std::min(0.0, rt_->snapshot().duckGrDb); }
+QJsonObject Engine::duckJson() const { QJsonObject o; const QVariantMap st = duckState(); for (auto it = st.cbegin(); it != st.cend(); ++it) if (it.key() != QLatin1String("keys") && it.key() != QLatin1String("targets")) o[it.key()] = QJsonValue::fromVariant(it.value()); return o; }
+void Engine::duckFromJson(const QJsonObject& o) { duckUi_ = DuckUi{}; if (!o.isEmpty()) setDuck(o.toVariantMap()); else { pushDuck(); emit duckChanged(); } }
+// ---- AUTO DCA (see Engine.h, audiomixer/classify.hpp)
+void Engine::startAutoDca(double seconds) {
+  if (autoBusy_) return; autoProp_.clear(); autoBusy_ = true; emit autoDcaChanged();
+  const int ms = static_cast<int>(std::clamp(seconds, 0.5, 20.0) * 1000);
+  if (!rt_) { autoBusy_ = false; autoProp_ = classifyStrips({}); emit autoDcaChanged(); return; }
+  rt_->startAnalysis();
+  QTimer::singleShot(ms, this, [this] { if (!rt_) { autoBusy_ = false; emit autoDcaChanged(); return; } rt_->stopAnalysis(); autoWait_ = 0;
+    auto* t = new QTimer(this); t->setInterval(30);   // the audio thread takes the stop at its next block
+    connect(t, &QTimer::timeout, this, [this, t] {
+      if (rt_ && !rt_->analysisReady() && ++autoWait_ < 70) return;
+      t->stop(); t->deleteLater(); std::vector<am::FeatureSummary> f; if (rt_ && rt_->analysisReady()) for (int i = 0; i < licensedChannels_ && i < kStrips; ++i) f.push_back(rt_->analysisFeatures(i));
+      autoProp_ = classifyStrips(f); autoBusy_ = false; emit autoDcaChanged(); });
+    t->start(); });
+}
+QVariantList Engine::classifyStrips(const std::vector<am::FeatureSummary>& f) {
+  QVariantList out; const bool mic = isMicrophoneInput(QString::fromStdString(curIn_));
+  const int n = std::min(kStrips, std::max(licensedChannels_, static_cast<int>(f.size())));
+  for (int i = 0; i < n && i < licensedChannels_; ++i) {
+    const StripUi& s = strips_[static_cast<std::size_t>(i)]; am::ChannelHints h; h.name = s.name.toStdString(); h.linked = s.link; h.microphone = mic && inRoute_[i] >= 0;
+    const am::ChannelVerdict v = am::classifyChannel(i < static_cast<int>(f.size()) ? f[static_cast<std::size_t>(i)] : am::FeatureSummary{}, h);
+    QVariantMap m; m["strip"] = i; m["name"] = s.name.isEmpty() ? QStringLiteral("CH %1").arg(i + 1) : s.name; m["cls"] = QString::fromLatin1(am::channelClassName(v.cls));
+    m["why"] = QString::fromStdString(v.why); m["voice"] = v.voice; m["music"] = v.music; m["instrument"] = v.instrument; out << m; }
+  return out;
+}
+void Engine::setAutoDcaClass(int strip, const QString& cls) {
+  for (QVariant& r : autoProp_) { QVariantMap m = r.toMap(); if (m.value("strip").toInt() != strip) continue; m["cls"] = cls; m["why"] = QStringLiteral("set by hand"); r = m; }
+  emit autoDcaChanged();
+}
+void Engine::cancelAutoDca() { autoProp_.clear(); emit autoDcaChanged(); }
+void Engine::applyAutoDca(bool muteSilent) {
+  if (autoProp_.isEmpty()) return;
+  struct G { const char* cls; const char* name; int color; int group = 0; };
+  G gs[3] = {{"VOICE", "VOICES", 2}, {"MUSIC", "MUSIC", 5}, {"INSTRUMENT", "INSTRUMENTS", 3}};
+  for (G& g : gs) {   // a group of that name is used again; otherwise the first DCA with no members
+    bool any = false; for (const QVariant& r : autoProp_) any = any || r.toMap().value("cls").toString() == QLatin1String(g.cls); if (!any) continue;
+    for (int d = 1; d <= kGroups && !g.group; ++d) if (dcas_[d - 1].name == QLatin1String(g.name)) g.group = d;
+    for (int d = 1; d <= kGroups && !g.group; ++d) { bool used = false; for (const G& o : gs) used = used || o.group == d; if (used) continue;
+      bool empty = true; for (int i = 0; i < kStrips && empty; ++i) empty = strips_[static_cast<std::size_t>(i)].dca != d; if (empty) g.group = d; }
+    if (g.group) { dcas_[g.group - 1].name = QString::fromLatin1(g.name); dcas_[g.group - 1].color = g.color; } }
+  for (const QVariant& r : autoProp_) { const QVariantMap m = r.toMap(); const int i = m.value("strip").toInt(); const QString c = m.value("cls").toString(); if (i < 0 || i >= kStrips) continue;
+    if (c == QLatin1String("SILENT")) { if (muteSilent) { strips_[static_cast<std::size_t>(i)].mute = true; pushStrip(i); } continue; }
+    for (const G& g : gs) if (c == QLatin1String(g.cls) && g.group) { strips_[static_cast<std::size_t>(i)].dca = g.group; pushStrip(i); } }
+  if (gs[0].group && gs[1].group && duckUi_.keyDca == 0 && duckUi_.targetDca == 0) { duckUi_.keyDca = gs[0].group; duckUi_.targetDca = gs[1].group; }   // the ducker is set up, not switched on
+  autoProp_.clear(); pushDuck(); emit stripsChanged(); emit groupsChanged(); emit duckChanged(); emit autoDcaChanged();
+}
 void Engine::setMuteGroupMember(int i, int g, bool member) { if (i < 0 || i >= kStrips || g < 1 || g > kGroups) return; unsigned& m = strips_[static_cast<std::size_t>(i)].muteGroups; if (member) m |= 1u << (g - 1); else m &= ~(1u << (g - 1)); pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
 void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].active = on; for (int i = 0; i < kStrips; ++i) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
 // effective = the strip's own fader + its DCA's fader (in dB), muted when the strip, its DCA or an active mute group it belongs to is muted
@@ -1060,7 +1142,7 @@ void Engine::factoryReset() {
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.dsp.setSampleRate(48000); }
   factoryLayout();
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
-  for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1);
+  for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); autoProp_.clear();
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
@@ -1931,9 +2013,9 @@ int Engine::stripFromJson(StripUi& s, const QJsonObject& o) {
 QJsonObject Engine::consoleJson() const {
   const int nSave = std::min(kStrips, std::max(shownStrips(), keepStrips_)); QJsonArray arr; for (int i = 0; i < nSave; ++i) arr << stripJson(strips_[static_cast<std::size_t>(i)]);
   QJsonArray buses; for (const BusUi& b : buses_) { QJsonObject o; o["name"] = b.name; o["db"] = b.db; o["returnDb"] = b.returnDb; o["mute"] = b.mute; o["fx"] = b.fxKind; o["fxMix"] = b.fxMix; o["fxBypass"] = b.fxBypass; QJsonObject fv; for (const auto& [id, v] : b.fxValues) fv[id] = v; o["fxValues"] = fv; buses << o; }
-  QJsonArray dcas; for (const DcaUi& d : dcas_) { QJsonObject o; o["name"] = d.name; o["db"] = d.db; o["mute"] = d.mute; dcas << o; }
+  QJsonArray dcas; for (const DcaUi& d : dcas_) { QJsonObject o; o["name"] = d.name; o["db"] = d.db; o["mute"] = d.mute; o["color"] = d.color; dcas << o; }
   QJsonArray mgs; for (const MuteGroupUi& g : muteGroups_) { QJsonObject o; o["name"] = g.name; o["active"] = g.active; mgs << o; }
-  QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterRel"] = masterRel_; { QJsonObject pg; QJsonArray eq; for (const auto& b : mp_.eq) { QJsonObject e; e["type"] = static_cast<int>(b.type); e["freq"] = b.freq; e["q"] = b.q; e["gain"] = b.gainDb; eq.append(e); } pg["eq"] = eq; pg["eqOn"] = mp_.eqOn; pg["mastering"] = QJsonObject::fromVariantMap(mastering()); root["program"] = pg; } root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["autoLevelOn"] = autoOn_; root["autoLevelTarget"] = autoTarget_; root["autoLevelMax"] = autoMax_; root["width"] = width_; root["v"] = 2;
+  QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterRel"] = masterRel_; { QJsonObject pg; QJsonArray eq; for (const auto& b : mp_.eq) { QJsonObject e; e["type"] = static_cast<int>(b.type); e["freq"] = b.freq; e["q"] = b.q; e["gain"] = b.gainDb; eq.append(e); } pg["eq"] = eq; pg["eqOn"] = mp_.eqOn; pg["mastering"] = QJsonObject::fromVariantMap(mastering()); root["program"] = pg; } root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["autoLevelOn"] = autoOn_; root["autoLevelTarget"] = autoTarget_; root["autoLevelMax"] = autoMax_; root["width"] = width_; root["ducker"] = duckJson(); root["v"] = 2;
   QJsonObject mon; mon["source"] = mon_.source; mon["db"] = mon_.db; mon["dim"] = mon_.dim; mon["mono"] = mon_.mono; mon["mute"] = mon_.mute; mon["sync"] = mon_.sync; root["monitor"] = mon; { QJsonArray amps; for (int o = 0; o < 64; ++o) if (!ampUi_[o].isEmpty()) { QJsonObject a = QJsonObject::fromVariantMap(ampUi_[o]); a["out"] = o; amps << a; } root["amps"] = amps; }
   QJsonArray ir; for (int i = 0; i < nSave; ++i) ir << inRoute_[i]; QJsonArray orr; for (int o = 0; o < kOutputs; ++o) orr << outRoute_[o]; root["inputRoutes"] = ir; root["outputRoutes"] = orr;
   return root;
@@ -1951,7 +2033,8 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && recallSafe_.test(static_cast<std::size_t>(i))) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
-  const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); }
+  const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); dcas_[g].color = std::clamp(o.value("color").toInt(0), 0, 7); }
+  duckFromJson(root.value("ducker").toObject());
   const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
   for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst) { if (!p.state.isEmpty()) p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
   if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }

@@ -42,6 +42,12 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
     v << s; }
   return v;
 }
+// the part of a DCA group the remotes share: level, mute, name, colour, members (numbers compared as the service sends them back)
+QVariantList Remote::dcaSync(const QVariantList& st) {
+  QVariantList out; for (const QVariant& v : st) { const QVariantMap m = v.toMap(); QVariantList mem; for (const QVariant& x : m.value("members").toList()) mem << x.toInt();
+    out << QVariantMap{{"db", std::round(m.value("db").toDouble() * 100) / 100}, {"mute", m.value("mute").toBool()}, {"name", m.value("name").toString()}, {"color", m.value("color").toInt()}, {"members", mem}}; }
+  return out;
+}
 QVariantList Remote::eqList(const SyncStrip& s) { QVariantList l; for (const auto& e : s.eq) l << QVariant(QVariantList{e.type, e.freq, e.q, e.gain}); return l; }
 QVariantMap Remote::mastNow() const {   // MASTERING as LIVE SYNC carries it (the keys the service knows)
   const QVariantMap m = engine_->mastering(); QVariantMap o; for (const char* k : {"on", "low", "air", "thr", "ratio", "attack", "release", "makeup", "drive", "gain"}) if (m.contains(k)) o[k] = m.value(k); o["preset"] = m.value("preset").toString(); return o; }
@@ -114,6 +120,10 @@ void Remote::syncTick() {
     for (int i = 0; i < in.size(); ++i) if (i >= baseIn_.size() || in[i].toInt() != baseIn_[i].toInt()) post({{"op", "inRoute"}, {"strip", i}, {"input", in[i].toInt()}});
     for (int k = 0; k < out.size() && k < 32; ++k) if (k >= baseOut_.size() || out[k].toInt() != baseOut_[k].toInt()) post({{"op", "outRoute"}, {"out", k}, {"source", out[k].toInt()}});
     baseIn_ = in; baseOut_ = out; }
+  {   // DCA GROUP CHANNELS moved on the console: out to the service (and so to the phones and browsers)
+    const QVariantList now = dcaSync(engine_->dcaState());
+    for (int g = 0; g < now.size(); ++g) if (g >= baseDca_.size() || now[g] != baseDca_[g]) { QVariantMap c = now[g].toMap(); c["op"] = "dca"; c["group"] = g + 1; post(c); }
+    baseDca_ = now; }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
     for (auto it = cs.constBegin(); it != cs.constEnd(); ++it) { const QVariant b = baseSet_.value(it.key());
@@ -144,6 +154,17 @@ void Remote::syncTick() {
       for (int i = 0; i < in.size() && i < baseIn_.size(); ++i) if (in[i].toInt() != baseIn_[i].toInt()) { engine_->setInputRoute(i, in[i].toInt()); moved = true; }
       for (int k = 0; k < out.size() && k < baseOut_.size(); ++k) if (out[k].toInt() != baseOut_[k].toInt()) { engine_->setOutputRoute(k, out[k].toInt()); moved = true; }
       if (moved) { baseIn_ = engine_->inputRoutes(); baseOut_ = engine_->outputRoutes(); } }
+    if (!baseDca_.isEmpty() && o.contains("dcas")) {   // a remote moved a DCA group strip: onto the console (members too)
+      const QVariantList rd = dcaSync(o.value("dcas").toList());
+      for (int g = 0; g < rd.size() && g < baseDca_.size(); ++g) { const QVariantMap r = rd[g].toMap(), b = baseDca_[g].toMap(); if (r == b) continue;
+        if (std::abs(r.value("db").toDouble() - b.value("db").toDouble()) > 0.05) engine_->setDcaLevel(g + 1, r.value("db").toDouble());
+        if (r.value("mute").toBool() != b.value("mute").toBool()) engine_->setDcaMute(g + 1, r.value("mute").toBool());
+        if (r.value("name").toString() != b.value("name").toString() && !r.value("name").toString().isEmpty()) engine_->setDcaName(g + 1, r.value("name").toString());
+        if (r.value("color").toInt() != b.value("color").toInt()) engine_->setDcaColor(g + 1, r.value("color").toInt());
+        if (r.value("members") != b.value("members")) { const QVariantList was = b.value("members").toList(), want = r.value("members").toList();
+          for (const QVariant& x : was) if (!want.contains(x)) engine_->setDca(x.toInt(), 0);
+          for (const QVariant& x : want) engine_->setDca(x.toInt(), g + 1); } }
+      baseDca_ = dcaSync(engine_->dcaState()); }
     v_ = o.value("v").toULongLong(); const QVariantList l = o.value("strips").toList(); int n = 0;
     for (int i = 0; i < l.size() && i < base_.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip& b = base_[i];
       const double db = m.value("db").toDouble(), pan = m.value("pan").toDouble(); const bool mu = m.value("mute").toBool(), so = m.value("solo").toBool(); const QString nm = m.value("name").toString();

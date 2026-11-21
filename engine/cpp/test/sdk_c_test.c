@@ -27,6 +27,10 @@ int main(void) {
   CHECK(fabsf(pk - 0.177f) < 0.01f);
   amix_levels lv; amix_mixer_levels(m, &lv); CHECK(lv.master[0].peak > 0.15 && lv.master[0].peak < 0.2 && lv.strips[0].peak > 0.2);
   amix_mixer_set_mute(m, 0, 1); for (int k = 0; k < 5; ++k) amix_mixer_process(m, in, 256, outL, outR); CHECK(fabsf(outL[100]) < 1e-6f);
+  /* the DUCKER: the tone on strip 1 as the key (voice), strip 0 as the target: down by the depth within a few attack times */
+  { const float* in2[4] = {tone, tone, NULL, NULL}; amix_mixer_set_mute(m, 0, 0); amix_mixer_set_ducker(m, 1, -40, -12, 20, 300, 600, 0); amix_mixer_set_duck_role(m, 1, 1); amix_mixer_set_duck_role(m, 0, 2);
+    for (int k = 0; k < 40; ++k) amix_mixer_process(m, in2, 256, outL, outR); CHECK(amix_mixer_duck_gain_db(m) < -11.5);
+    amix_mixer_set_ducker(m, 0, -40, -12, 20, 300, 600, 0); amix_mixer_process(m, in2, 256, outL, outR); CHECK(amix_mixer_duck_gain_db(m) == 0.0); }
   amix_mixer_destroy(m);
   amix_rt* rt = amix_rt_create(8); CHECK(rt);
   amix_config cfg; memset(&cfg, 0, sizeof cfg); cfg.backend = "null"; cfg.in_device = ""; cfg.out_device = ""; cfg.sample_rate = 48000; cfg.frames = 128; cfg.in_channels = 2; cfg.out_channels = 2;

@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
@@ -143,6 +143,10 @@ void Runtime::runStrip(int s, std::size_t frames) {   // one strip's trim, chann
 }
 void Runtime::resetProfiler() { post({kProfReset, 0, 0, 0, 0}); }
 void Runtime::setAutomix(int s, bool on, double w) { post({kAutomix, s, on ? 1.0 : 0.0, w, 0}); }
+void Runtime::setDucker(const DuckParams& p) { Cmd c{kDuck, p.on ? 1 : 0, p.thresholdDb, p.depthDb, p.attackMs}; c.w = p.holdMs; c.v = p.releaseMs; c.u = p.liftDb; post(c); }
+void Runtime::setDuckRole(int s, int role) { post({kDuckRole, s, static_cast<double>(role), 0, 0}); }
+void Runtime::startAnalysis() { anaReady_.store(false, std::memory_order_release); post({kAnalysis, 1, 0, 0, 0}); }
+void Runtime::stopAnalysis() { post({kAnalysis, 0, 0, 0, 0}); }
 std::string Runtime::sampleFormat() const { return backend_ ? backend_->sampleFormat() : std::string(); }
 std::vector<std::string> Runtime::outputNames() const { return backend_ ? backend_->outputNames() : std::vector<std::string>(); }
 double Runtime::inputSilentSeconds() const { return backend_ ? backend_->inputSilentSeconds() : 0.0; }
@@ -209,6 +213,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kBusFx: mixer_.setBusProcessor(c.a, static_cast<BusProcessor*>(c.p)); break;
       case kWidth: mixer_.setWidth(c.x); break;
       case kAutomix: mixer_.setAutomix(c.a, c.x != 0, c.y); break;
+      case kDuck: { DuckParams p; p.on = c.a != 0; p.thresholdDb = c.x; p.depthDb = c.y; p.attackMs = c.z; p.holdMs = c.w; p.releaseMs = c.v; p.liftDb = c.u; mixer_.setDucker(p); } break;
+      case kDuckRole: mixer_.setDuckRole(c.a, static_cast<int>(c.x)); break;
+      case kAnalysis: mixer_.setAnalysis(c.a != 0); if (c.a == 0) anaReady_.store(true, std::memory_order_release); break;
       case kAutoPol: if (c.a >= 0 && c.a < kMaxStrips) { autoPol_[c.a] = c.x != 0; apXY_[c.a] = apXX_[c.a] = apYY_[c.a] = apBad_[c.a] = apHold_[c.a] = apCorr_[c.a] = 0; } break;
       case kAutoLevel: mixer_.setAutoLevel(c.a != 0, c.x, c.y); break;
       case kOutBits: mixer_.setOutputBits(c.a); break;
@@ -337,7 +344,7 @@ void Runtime::publish() {
   for (int i = 0; i < mixer_.strips(); ++i) { const MeterState& m = mixer_.strip(i).meter.state(); const std::size_t k = static_cast<std::size_t>(i); s.strips[i] = {m.pk, m.rms, m.hold, m.clipN, k < ch_.size() ? ch_[k].compressor().gainReductionDb() : 0.0, k < ch_.size() ? ch_[k].gate().gainDb() : 0.0, mixer_.strip(i).inPk, mixer_.automixGainDb(i), apCorr_[i], k < ch_.size() && ch_[k].params().polarityInvert}; }
   for (int c = 0; c < 2; ++c) { const MeterState& m = mixer_.masterMeter(c); s.master[c] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
   for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false}; }
-  s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb();
+  s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb(); s.duckGrDb = mixer_.duckGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
   for (int o = 0; o < kMaxOutputs; ++o) { s.ampPk[o] = amp_[o].peak(); s.ampGrDb[o] = amp_[o].gainReductionDb(); }
   s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.in12Corr = in12Corr_; s.in12DiffDb = in12DiffDb_; s.in12LevelDb = in12LevelDb_; s.in12Windows = in12Windows_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;

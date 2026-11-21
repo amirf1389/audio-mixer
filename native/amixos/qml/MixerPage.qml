@@ -267,6 +267,12 @@ Item {
                     Text { id: iuT; anchors.centerIn: parent; text: parent.said !== "" ? parent.said : i18n.t("AUTO -INF", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { parent.said = engine.infUnused() + i18n.t(" TO -INF", i18n.lang); iuR.restart() } } Timer { id: iuR; interval: 2000; onTriggered: parent.said = "" }
                     ToolTip.visible: iuH.hovered && settings.tooltips; ToolTip.text: i18n.t("Pulls the fader of every channel that has no input on this sound card down to -inf, so unused channels add no noise.", i18n.lang); HoverHandler { id: iuH } }
+                Repeater {   // the group tools: DCA ASSIGN, AUTO DCA (proposes groups from what each channel plays), the DUCKER
+                    model: [["dcaAssignKey", "DCA ASSIGN", "Put channels in DCA groups: a group is a strip on this page"], ["autoDcaKey", "AUTO DCA", "Listen to every channel and propose VOICES / MUSIC / INSTRUMENTS groups; unused channels are flagged"], ["duckerKey", "DUCKER", "DUCKER · VOICE OVER MUSIC: the music goes down while someone speaks"]]
+                    delegate: Rectangle { objectName: modelData[0]; readonly property bool lit: modelData[0] === "duckerKey" && engine.duckState.on; implicitWidth: dkT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: lit ? Theme.emerald : Theme.ov(0.06); border.color: Theme.lineSoft
+                        Text { id: dkT; anchors.centerIn: parent; text: i18n.t(modelData[1], i18n.lang); color: parent.lit ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: index === 0 ? dcaPanels.openAssign(page.selSt && page.selSt.dca > 0 ? page.selSt.dca : 1, page.sel) : index === 1 ? dcaPanels.openAuto() : dcaPanels.openDucker() }
+                        ToolTip.visible: dkH.hovered && settings.tooltips; ToolTip.text: i18n.t(modelData[2], i18n.lang); HoverHandler { id: dkH } } }
                 Rectangle { width: 1; implicitHeight: 20; color: Theme.lineSoft }
                 // RECORD: master + armed strips to WAV (Settings: folder, format)
                 Rectangle { id: gb97; implicitWidth: recT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: engine.recording ? Theme.danger : Qt.rgba(1, 0.165, 0.373, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb97.color) } GradientStop { position: 1; color: Theme.btnBottom(gb97.color) } } border.color: Theme.danger
@@ -316,6 +322,7 @@ Item {
             }
             // generic parameter panel for a VST3 plug-in (no plug-in GUI is opened): one slider per parameter, the plug-in's own value text
             PluginEditor { id: plugEd; parent: Overlay.overlay }
+            DcaPanels { id: dcaPanels }
             Popup { id: paramsPop; property int slot: 0; property string title: ""; property var model: []; x: (parent.width - width) / 2; y: 80; width: 460; height: Math.min(520, 70 + model.length * 30); modal: true; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                 background: Rectangle { radius: 8; color: Theme.cardRaised; border.color: "#a78bfa" }
                 Connections { target: engine; function onStripsChanged() { if (paramsPop.visible) paramsPop.model = engine.pluginParams(page.sel, paramsPop.slot) } }
@@ -631,6 +638,7 @@ Item {
                                             MenuItem { text: i18n.t("Paste channel (DSP, sends, pan)", i18n.lang); enabled: engine.channelClipboard; onTriggered: engine.pasteChannel(index) }
                                             MenuSeparator {}
                                             MenuItem { text: (engine.recallSafe(index) ? "✓ " : "") + i18n.t("Recall safe (scenes skip it)", i18n.lang); onTriggered: engine.setRecallSafe(index, !engine.recallSafe(index)) }
+                                            MenuItem { text: i18n.t("DCA group…", i18n.lang) + (stripItem.st && stripItem.st.dca > 0 ? "  (" + stripItem.st.dca + ")" : ""); onTriggered: dcaPanels.openAssign(stripItem.st && stripItem.st.dca > 0 ? stripItem.st.dca : 1, index) }
                                             MenuItem { text: i18n.t("Listen here: monitor = master", i18n.lang); onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
                                             MenuItem { text: (st && st.armed ? "✓ " : "") + i18n.t("Arm for recording (pre-fader WAV)", i18n.lang); onTriggered: engine.setArmed(index, !(st && st.armed)) }
                                         } } } } }   // the menu, its loader, the ⋯ button and the AI row end here: the VU meter, the sends and the fader belong to the strip
@@ -695,6 +703,10 @@ Item {
                                 }
                                 } } }
                             }
+                        }
+                        Repeater {   // DCA GROUP CHANNELS: each group in use is a strip of its own, after the inputs and before the master
+                            model: engine.dcaState
+                            delegate: DcaStrip { d: modelData; tick: page.tick; visible: modelData.count > 0; width: visible ? 96 : 0; height: strips.height; onAssign: function (g) { dcaPanels.openAssign(g, -1) } }
                         }
                     }
                 }

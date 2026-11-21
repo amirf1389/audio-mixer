@@ -119,6 +119,9 @@ class Daemon {
     Band eq[8]; };
   void pushTone(Runtime& rt, int i) const;
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
+  // DCA GROUP CHANNELS as the console has them (the console applies them to its own mix; the service keeps them so every remote shows the
+  // same group strips, and a remote's move of one reaches the console): id 1..8, members = strip numbers
+  struct Dca { std::string name; double db = 0; bool mute = false; int color = 0; std::vector<int> members; };
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
   httpd::Response handle(const httpd::Request& r);
   json::Value apply(const json::Value& cmd, std::string& err);
@@ -154,7 +157,7 @@ class Daemon {
   std::atomic<int> refused_{0}, refusedNow_{0}; std::atomic<long long> refusedSince_{0};
   std::atomic<int> pairFails_{0}; std::atomic<long long> pairMinute_{0};
   rec::Recorder rec_; double rate_ = 48000;   // RECORD from the remote: the master to <data>/recordings (the folder is fixed: a remote never names a path)
-  mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
+  mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; Dca dcas_[8]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
   std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now(); std::atomic<bool> running_{false};
 };
 

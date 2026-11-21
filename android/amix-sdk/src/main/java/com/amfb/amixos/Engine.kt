@@ -10,6 +10,11 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     fun setGain(strip: Int, db: Double) = setGain(handle, strip, db)
     fun setPan(strip: Int, pan: Double) = setPan(handle, strip, pan)
     fun setMute(strip: Int, on: Boolean) = setMute(handle, strip, on)
+    /** DUCKER · VOICE OVER MUSIC (sample by sample in the engine): role 1 = key (voice), 2 = target (music), 0 = neither */
+    fun setDucker(on: Boolean, thresholdDb: Double, depthDb: Double, attackMs: Double, holdMs: Double, releaseMs: Double, liftDb: Double) = setDucker(handle, on, thresholdDb, depthDb, attackMs, holdMs, releaseMs, liftDb)
+    fun setDuckRole(strip: Int, role: Int) = setDuckRole(handle, strip, role)
+    /** the targets' gain now (<= 0 dB) */
+    fun duckGainDb(): Double = duckGainDb(handle)
     fun setSolo(strip: Int, on: Boolean) = setSolo(handle, strip, on)
     fun setMaster(db: Double) = setMaster(handle, db)
     fun setLimiter(on: Boolean, ceilingDb: Double = -0.5, releaseMs: Double = 100.0) = setLimiter(handle, on, ceilingDb, releaseMs)
@@ -82,6 +87,9 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
         @JvmStatic private external fun setGain(handle: Long, strip: Int, db: Double)
         @JvmStatic private external fun setPan(handle: Long, strip: Int, pan: Double)
         @JvmStatic private external fun setMute(handle: Long, strip: Int, on: Boolean)
+        @JvmStatic private external fun setDucker(handle: Long, on: Boolean, thr: Double, depth: Double, att: Double, hold: Double, rel: Double, lift: Double)
+        @JvmStatic private external fun setDuckRole(handle: Long, strip: Int, role: Int)
+        @JvmStatic private external fun duckGainDb(handle: Long): Double
         @JvmStatic private external fun setSolo(handle: Long, strip: Int, on: Boolean)
         @JvmStatic private external fun setMaster(handle: Long, db: Double)
         @JvmStatic private external fun setLimiter(handle: Long, on: Boolean, ceilingDb: Double, releaseMs: Double)

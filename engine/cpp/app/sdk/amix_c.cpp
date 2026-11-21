@@ -76,6 +76,10 @@ int amix_mixer_strips(const amix_mixer* m) { return m ? m->mixer.strips() : 0; }
 void amix_mixer_set_gain(amix_mixer* m, int s, double db) { if (m) m->mixer.setGainDb(s, db); }
 void amix_mixer_set_pan(amix_mixer* m, int s, double pan) { if (m) m->mixer.setPan(s, pan); }
 void amix_mixer_set_mute(amix_mixer* m, int s, int on) { if (m) m->mixer.setMute(s, on != 0); }
+void amix_mixer_set_ducker(amix_mixer* m, int on, double thr, double depth, double att, double hold, double rel, double lift) {
+  if (!m) return; am::DuckParams p; p.on = on != 0; p.thresholdDb = thr; p.depthDb = depth; p.attackMs = att; p.holdMs = hold; p.releaseMs = rel; p.liftDb = lift; m->mixer.setDucker(p); }
+void amix_mixer_set_duck_role(amix_mixer* m, int s, int role) { if (m) m->mixer.setDuckRole(s, role); }
+double amix_mixer_duck_gain_db(const amix_mixer* m) { return m ? m->mixer.duckGainDb() : 0.0; }
 void amix_mixer_set_solo(amix_mixer* m, int s, int on) { if (m) m->mixer.setSolo(s, on != 0); }
 void amix_mixer_set_master(amix_mixer* m, double db) { if (m) m->mixer.setMasterDb(db); }
 void amix_mixer_set_limiter(amix_mixer* m, int on, double ceil, double rel) { if (m) m->mixer.setLimiter(on != 0, ceil, rel); }

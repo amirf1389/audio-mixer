@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rc_dca_title">DCA %1$d · %2$s\n%3$d CH</string>
+    <string name="lm_duck_title">DUCKER · VOICE OVER MUSIC</string>
+    <string name="lm_duck_help">While someone speaks on a CH input, the DECKS go down by the depth and come back after the hold and release. Smooth, in the engine.</string>
+    <string name="lm_duck_on">DUCKER ON</string>
+    <string name="lm_duck_off">DUCKER OFF</string>
+    <string name="lm_duck_thresholdDb">THRESHOLD %1$.0f dBFS</string>
+    <string name="lm_duck_depthDb">DEPTH %1$.0f dB</string>
+    <string name="lm_duck_attackMs">ATTACK %1$.0f ms</string>
+    <string name="lm_duck_holdMs">HOLD %1$.0f ms</string>
+    <string name="lm_duck_releaseMs">RELEASE %1$.0f ms</string>
+    <string name="lm_duck_liftDb">VOICE LIFT +%1$.1f dB</string>
+    <string name="lm_duck_now">MUSIC NOW %1$.1f dB</string>
+</resources>
