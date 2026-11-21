@@ -21,6 +21,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp ${CMAKE_BINARY_DIR
 qt_add_executable(amixos
     src/main.cpp
     src/Engine.cpp src/Engine.h
+    src/Graphics.cpp src/Graphics.h
     src/Arrange.cpp src/Arrange.h
     src/Settings.cpp src/Settings.h
     src/Access.cpp src/Access.h

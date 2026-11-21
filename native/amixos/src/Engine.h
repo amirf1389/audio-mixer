@@ -162,6 +162,7 @@ class Engine : public QObject {
   bool uiAwake() const { return uiLevel_ >= 2; }
   bool ecoUi() const { return ecoUi_; }
   void setEcoUi(bool on);
+  void setMeterHz(int hz) { meterMs_ = std::clamp(hz > 0 ? 1000 / hz : 33, 8, 100); applyUiRate(); }   // GRAPHICS: the meters follow the display (30 / 60 fps)
   Q_INVOKABLE int uiFps() const { return timer_.interval() > 0 ? 1000 / timer_.interval() : 0; }
   Q_INVOKABLE void refreshLicense();            // re-reads the stored key / edition (also after the date changes)
   // for the Settings system
@@ -900,7 +901,7 @@ class Engine : public QObject {
   struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; } mon_;   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
-  int uiLevel_ = 2; bool ecoUi_ = false; void applyUiRate();
+  int uiLevel_ = 2, meterMs_ = 33; bool ecoUi_ = false; void applyUiRate();
   QVariantMap lastRoundTrip_; std::shared_ptr<struct RoundTripProbe> rtProbe_; void finishRoundTrip(int tries);
   bool sysFast_ = true, sysEco_ = true, sysTrim_ = true; QString lastTrim_; void minimisedTrim();
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away

@@ -67,6 +67,10 @@ canvas.eq{width:100%;height:150px;background:#05080c;border:1px solid var(--line
 table.dv{width:100%;border-collapse:collapse;font-size:12px}table.dv td,table.dv th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}table.dv th{color:var(--dim);font-size:10px;letter-spacing:.08em}
 .chsel{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.chsel select{flex:1;min-width:140px}
 kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+/* COMPACT: tighter cards and rows; the explanation under a setting opens with a tap on the card's title (i) */
+main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radius:8px}h2{margin:0 0 6px;font-size:11px}.row{padding:6px 0;gap:8px}
+.card:not(.more) .row small{display:none}.card:has(.row small)>h2{cursor:pointer}.card:has(.row small)>h2::after{content:" \24D8";color:var(--dim);font-weight:400}.card.more:has(.row small)>h2::after{content:" \25BE"}
+.grid{gap:8px}.bar{gap:6px;margin-bottom:8px}
 </style></head><body>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
 <nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
@@ -561,4 +565,5 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden){if(token&
 (()=>{const m=/(?:^#|&)pin=(\d{6})(?:&|$)/.exec(location.hash||"");if(!m)return;try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
  if(token)return;$("#pin").value=m[1];const ua=navigator.userAgent||"";$("#who").value=/iPhone|iPad/.test(ua)?"iPhone / iPad (browser)":/Android/.test(ua)?"Android (browser)":"Browser";setSt("pairing…");$("#go").click()})();
 applyOpts();showLock();wake();show();
-</script></body></html>
+</script><script>document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('.card>h2');if(h&&h.parentNode.querySelector('.row small'))h.parentNode.classList.toggle('more')});</script>
+</body></html>

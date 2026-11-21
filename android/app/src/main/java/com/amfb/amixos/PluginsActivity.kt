@@ -74,7 +74,7 @@ class PluginsActivity : FitActivity() {
         l.addView(t); if (badge.isNotEmpty()) l.addView(TextView(this).apply { text = badge; setTextColor(badgeColor); typeface = Typeface.MONOSPACE; textSize = 12f })
         body.addView(l)
     }
-    private fun section(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(accent); typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, 24, 0, 4) })
+    private fun section(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(accent); typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, 14, 0, 4) })
     private fun empty(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(dim); setPadding(0, 16, 0, 0) })
     fun tabTo(i: Int) { tab = i; render() }
     fun render() {

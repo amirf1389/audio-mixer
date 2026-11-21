@@ -72,6 +72,12 @@ object ConsoleUi {
     // COMPACT KEYS (the AmF X1 app, not the AmF X1 Mixer app): smaller keys that still take a finger: at least KEY_DP tall (PRIMARY_DP
     // for the main ones), tight padding, one line, and on a key of fixed size the text shrinks to fit instead of being cut off
     const val KEY_DP = 40f; const val PRIMARY_DP = 44f
+    /** COMPACT: a long explanation shows as one line ending in " ⓘ"; a tap opens it in full (and closes it again) */
+    fun <T : android.widget.TextView> moreLine(v: T): T = v.apply {
+        val full = text; if (full.length < 70) return@apply
+        maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; contentDescription = full; isClickable = true; isFocusable = true
+        minHeight = dp(context, 40f); gravity = Gravity.CENTER_VERTICAL
+        setOnClickListener { maxLines = if (maxLines == 1) Int.MAX_VALUE else 1 } }
     fun dp(c: Context, v: Float): Int = (v * c.resources.displayMetrics.density + 0.5f).toInt()
     /** a key made compact: [hDp] tall at least, [maxSp] text that shrinks (down to 8 sp) when [fit] and the key's width is fixed */
     fun <T : android.widget.TextView> compact(v: T, hDp: Float = KEY_DP, maxSp: Int = 12, fit: Boolean = true): T = v.apply {

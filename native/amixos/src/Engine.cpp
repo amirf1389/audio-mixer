@@ -1903,7 +1903,7 @@ QVariantList Engine::pages() const {
   return l;
 }
 
-void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : fastMode() ? 50 : 33) : uiLevel_ == 1 ? 250 : 1000); }
+void Engine::applyUiRate() { timer_.setTimerType(meterMs_ < 25 ? Qt::PreciseTimer : Qt::CoarseTimer); timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : fastMode() ? std::max(50, meterMs_) : meterMs_) : uiLevel_ == 1 ? 250 : 1000); }
 void Engine::setUiActivity(int level) {
   level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged();
   if (sysEco_) am::sysopt::setThreadEco(level < 2);   // ECO IN THE BACKGROUND: the interface thread only; the sound has its own (HighQoS) thread

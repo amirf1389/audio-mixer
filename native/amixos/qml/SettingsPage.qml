@@ -7,8 +7,11 @@ import QtQuick.Layouts
 Flickable {
     id: page
     contentHeight: col.implicitHeight + 24; clip: true
-    component Opt: RowLayout { property string label: ""; property string hint: ""; Layout.fillWidth: true; spacing: 10
-        ColumnLayout { Layout.preferredWidth: 260; spacing: 1; Text { text: i18n.t(label, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } Text { visible: hint.length > 0; text: hint; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 260 } } }
+    component Opt: RowLayout { id: optRow; property string label: ""; property string hint: ""; property bool more: false; Layout.fillWidth: true; spacing: 8
+        ColumnLayout { Layout.preferredWidth: 260; spacing: 1
+            Text { text: i18n.t(label, i18n.lang) + (optRow.hint.length > 0 ? (optRow.more ? "  ▾" : "  ⓘ") : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                MouseArea { anchors.fill: parent; enabled: optRow.hint.length > 0; onClicked: optRow.more = !optRow.more } }
+            Text { visible: optRow.more && hint.length > 0; text: hint; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 260 } } }
     component Line: RowLayout { property string k: ""; property string v: ""; Layout.fillWidth: true; spacing: 10
         Text { Layout.preferredWidth: 120; text: k; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
         Text { Layout.fillWidth: true; text: v; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.Wrap } }
@@ -34,6 +37,25 @@ Flickable {
                 Choice { options: [{t: "AUTO", v: 0}, {t: "RESPONSIVE", v: -1}, {t: "150 %", v: 150}, {t: "125 %", v: 125}, {t: "110 %", v: 110}, {t: "100 %", v: 100}, {t: "90 %", v: 90}, {t: "80 %", v: 80}, {t: "75 %", v: 75}]; value: settings.uiZoom; onPicked: function (v) { settings.uiZoom = v } } }
             Opt { label: i18n.t("ECO interface (low CPU)", i18n.lang); hint: i18n.t("Meters redraw at 15 fps instead of 30 in front. Behind another app (Chrome, a game) they always drop to 4 fps, minimised to 1 fps; the sound is never slowed.", i18n.lang); Toggle { on: engine.ecoUi; onToggled: function (v) { engine.ecoUi = v } } }
             Opt { label: i18n.t("Tooltips", i18n.lang); hint: i18n.t("Short help when the pointer rests on a control", i18n.lang); Toggle { on: settings.tooltips; onToggled: function (v) { settings.tooltips = v } } }
+        }
+        Panel {
+            id: gfxPanel
+            objectName: "gfxPanel"
+            Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
+            title: i18n.t("GRAPHICS", i18n.lang)
+            subtitle: graphics.note
+            Opt { label: i18n.t("Graphics", i18n.lang); hint: i18n.t("Applied at the next start. AUTO picks what works on this card.", i18n.lang) + (graphics.restartNeeded ? "  ·  " + i18n.t("Restart to apply", i18n.lang) : "")
+                Choice { options: graphics.choices; value: graphics.choice; onPicked: function (v) { graphics.choice = v } } }
+            Opt { label: i18n.t("Performance", i18n.lang); hint: graphics.perfNote
+                Choice { options: [{t: "AUTO", v: "auto"}, {t: "SMOOTH", v: "smooth"}, {t: "BATTERY", v: "battery"}]; value: graphics.perfMode; onPicked: function (v) { graphics.perfMode = v } } }
+            Line { k: i18n.t("GPU", i18n.lang); v: graphics.gpu !== "" ? graphics.gpu : "—" }
+            Line { k: i18n.t("DRIVER", i18n.lang); v: graphics.driver !== "" ? graphics.driver : "—" }
+            Line { k: i18n.t("BACK END", i18n.lang); v: ({d3d11: "DIRECT3D 11", d3d12: "DIRECT3D 12", vulkan: "VULKAN", opengl: "OPENGL", software: "SOFTWARE", "default": "AUTO"}[graphics.inUse] || graphics.inUse.toUpperCase()) + (graphics.safeMode ? "  ·  " + i18n.t("SAFE MODE", i18n.lang) : "") + "  ·  " + graphics.renderLoop }
+            Line { k: i18n.t("DISPLAY", i18n.lang); v: graphics.refreshHz.toFixed(0) + " Hz  ·  " + Math.round(graphics.dpr * 100) + " %  ·  " + i18n.t("meters %1 fps", i18n.lang).arg(graphics.meterHz) }
+            Line { k: i18n.t("NOW", i18n.lang); v: i18n.t("%1 frames/s, frame %2 ms (95 %: %3, worst %4)", i18n.lang).arg(graphics.fps.toFixed(0)).arg(graphics.frameMs.toFixed(1)).arg(graphics.frameP95.toFixed(1)).arg(graphics.frameMax.toFixed(1)) }
+            RowLayout { spacing: 6
+                Button { text: i18n.t("SAFE MODE", i18n.lang); onClicked: graphics.safeModeNextStart() }
+                Button { text: i18n.t("RESTART", i18n.lang); enabled: graphics.restartNeeded; onClicked: graphics.restartNow() } }
         }
         Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop

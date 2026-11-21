@@ -70,6 +70,7 @@
 #include "Frame.h"
 #include "measure/measure.hpp"
 #include "Engine.h"
+#include "Graphics.h"
 #include "license/license.hpp"
 #include "I18n.h"
 
@@ -124,7 +125,7 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);   // COM for the main thread before Qt starts: the ASIO driver objects (CoCreateInstance) and the WASAPI enumerator are created from here
 #endif
-  for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--software") QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); else if (a == "--opengl") QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL); }
+  QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);   // 125 % / 175 % drawn as such, per monitor (the manifest: per-monitor DPI awareness v2)
   // AUTO ZOOM (AutoZoom.h): before Qt starts, a zoom that fits the screen; Windows only (the screen and its scale are read here)
   QString zoomNote;
 #ifdef _WIN32
@@ -142,6 +143,8 @@ int main(int argc, char* argv[]) {
   }
 #endif
   QGuiApplication app(argc, argv);
+  { bool testRun = false; for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--smoke" || a == "--bench" || a == "--shots" || a == "--film" || a == "--big" || a == "--dump-presets") testRun = true; }
+    Graphics::choose(testRun, app.arguments()); }   // GRAPHICS: the back end for this computer, before any window (Graphics.h)
   // One explicit palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Fusion style draws
   // them from the application palette, which Windows and macOS hand over in their own colours. The values are Theme.qml's (every one an
   // explicit #RRGGBB), for the dark and the light look; applied now and again whenever SETTINGS flips the theme.
@@ -227,6 +230,8 @@ int main(int argc, char* argv[]) {
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, &Engine::restoreSystemSound);   // a Windows mute set by the fader at -inf is taken back on exit
   if (!smoke && update.checkAtStart() && settings.setupDone()) QTimer::singleShot(3000, &update, &Update::check);
   qml.rootContext()->setContextProperty("i18n", &i18n);
+  Graphics graphics; graphics.onMeterHz = [&](int hz) { engine.setMeterHz(hz); }; engine.setMeterHz(qEnvironmentVariableIsSet("AMIX_METER_HZ") ? qEnvironmentVariableIntValue("AMIX_METER_HZ") : graphics.startedWith() == QLatin1String("default") ? 30 : graphics.meterHz());   // AMIX_METER_HZ: the bench compares 30 / 60
+  qml.rootContext()->setContextProperty("graphics", &graphics);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   qml.rootContext()->setContextProperty("buildStamp", QStringLiteral(AMIX_BUILD_STAMP));   // when this build was made (UTC)
   qml.rootContext()->setContextProperty("noBoot", smoke);
@@ -235,6 +240,7 @@ int main(int argc, char* argv[]) {
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.addImportPath(QStringLiteral("qrc:/qt/qml"));   // the console's own module (AmixOS, with the Theme singleton) lives in the resources: Qt 6.4 on Windows does not search there by itself, and every Theme.* colour came out undefined (black on white)
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
+  if (!qml.rootObjects().isEmpty()) graphics.attach(qobject_cast<QQuickWindow*>(qml.rootObjects().first()));
   if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
   // AUTO AUDIO INTERFACE: when an interface is plugged in (hot-plug) and the engine is idle, start it (the remembered device if it is the one, else AUTO DETECT)
   QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& what) { if (!added || engine.running() || !settings.autoStart()) return; QTimer::singleShot(1500, &app, [&] { if (!engine.running()) settings.startLastDevice(); }); qInfo("hot-plug: %s", qPrintable(what)); });
@@ -325,6 +331,17 @@ int main(int argc, char* argv[]) {
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_FRAMES")) {   // FRAME TIME: every page with the meters running, AMIX_BENCH_FRAMES ms each (default 3000)
+      const int ms = std::max(500, qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") > 1 ? qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") : 3000);
+      double sumMean = 0, worstP95 = 0, worstMax = 0; long frames = 0; int n = 0; QString worstId;
+      std::printf("amixos --bench: FRAMES back end %s, %d ms per page (frames drawn; gap = time between frames; work = sync to shown)\n", qPrintable(graphics.inUse()), ms);
+      for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", id); waitMs(400); graphics.resetFrames(); waitMs(ms);
+        const QVariantMap f = graphics.frameStats(); const double p95 = f["workP95Ms"].toDouble();
+        std::printf("amixos --bench: FRAMES %-12s %4d frames (%5.1f/s), gap mean %6.1f / 95%% %6.1f ms, work mean %5.2f / 95%% %5.2f / max %6.2f ms\n", qPrintable(id), f["frames"].toInt(), f["frames"].toInt() * 1000.0 / ms, f["gapMeanMs"].toDouble(), f["gapP95Ms"].toDouble(), f["workMeanMs"].toDouble(), p95, f["workMaxMs"].toDouble());
+        sumMean += f["workMeanMs"].toDouble(); frames += f["frames"].toInt(); ++n; if (p95 > worstP95) { worstP95 = p95; worstId = id; } worstMax = std::max(worstMax, f["workMaxMs"].toDouble()); }
+      std::printf("amixos --bench: FRAMES %d pages, %.1f frames/s on average, work mean %.2f ms, worst 95%% %.2f ms (%s), worst frame %.2f ms\n", n, frames * 1000.0 / ms / std::max(1, n), sumMean / std::max(1, n), worstP95, qPrintable(worstId), worstMax);
+      engine.stop(); return 0;
+    }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_MEM")) {   // memory: every page opened in turn, five rounds; the resident size after each round (a leak grows)
       auto rssMb = [] { QFile f("/proc/self/statm"); if (!f.open(QIODevice::ReadOnly)) return 0.0; const QList<QByteArray> v = f.readAll().split(' '); return v.size() > 1 ? v[1].toDouble() * 4096.0 / 1048576.0 : 0.0; };
       std::printf("amixos --bench: memory at start %.0f MB\n", rssMb());
@@ -1539,7 +1556,7 @@ int main(int argc, char* argv[]) {
         engine.setLoud({{"preset", "BROADCAST"}, {"masterOn", true}, {"speed", "slow"}});
         QVariantMap L = engine.loudState(); if (!L.value("masterOn").toBool() || std::fabs(L.value("masterTarget").toDouble() + 23) > 1e-9 || std::fabs(L.value("up").toDouble() - 1.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager master preset\n"); return 820; }
         engine.setLoudStrip(2, {{"ride", true}, {"gate", true}});
-        L = engine.loudState(); { const QVariantMap s2 = L.value("strips").toList().value(2).toMap(); if (!s2.value("ride").toBool() || !s2.value("gate").toBool() || !engine.stripState()[2].toMap().value("loudRide").toBool() || L.value("rides").toInt() != 1) { std::fprintf(stderr, "amixos --smoke: loudness manager strip switches\n"); return 821; } }
+        L = engine.loudState(); { const QVariantMap s2 = L.value("strips").toList().value(2).toMap(); if (!s2.value("ride").toBool() || !s2.value("gate").toBool() || !engine.stripState()[2].toMap().value("loudRide").toBool() || L.value("rides").toInt() != (engine.linked(2) ? 2 : 1)) { std::fprintf(stderr, "amixos --smoke: loudness manager strip switches\n"); return 821; } }
         if (std::fabs(engine.loudTargetOf(2) + 18) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager voice target\n"); return 822; }
         engine.setLoudStrip(2, {{"cls", 1}}); if (std::fabs(engine.loudTargetOf(2) + 20) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager music target\n"); return 822; }
         { const QJsonObject lo = engine.consoleExport().value("loudness").toObject(); const QJsonArray ls = lo.value("strips").toArray();

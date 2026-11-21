@@ -2287,5 +2287,16 @@
 "TP",
 "RANGE ±",
 "ON/OFF BELOW",
-"LOUDNESS MANAGER: auto faders that ride each channel toward its loudness target, auto on/off for unused channels, and the master target"
+"LOUDNESS MANAGER: auto faders that ride each channel toward its loudness target, auto on/off for unused channels, and the master target",
+"GRAPHICS",
+"Graphics",
+"Applied at the next start. AUTO picks what works on this card.",
+"Restart to apply",
+"Performance",
+"GPU",
+"BACK END",
+"DISPLAY",
+"meters %1 fps",
+"NOW",
+"%1 frames/s, frame %2 ms (95 %: %3, worst %4)"
 ]

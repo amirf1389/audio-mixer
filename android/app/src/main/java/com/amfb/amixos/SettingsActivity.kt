@@ -95,8 +95,8 @@ class SettingsActivity : FitActivity() {
     }
 
     private fun title(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD); setPadding(0, 0, 0, 16) })
-    private fun section(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); textSize = 13f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, 36, 0, 8); letterSpacing = 0.1f })
-    private fun note(t: String) = TextView(this).apply { text = t; setTextColor(dim); textSize = 12f }
+    private fun section(t: String) = box.addView(TextView(this).apply { text = t; setTextColor(accent); textSize = 13f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, 20, 0, 4); letterSpacing = 0.1f })
+    private fun note(t: String) = ConsoleUi.moreLine(TextView(this).apply { text = t; setTextColor(dim); textSize = 12f })
     private fun info(label: String, value: String) {
         if (label.isNotEmpty()) box.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 15f; setPadding(0, 12, 0, 0) })
         box.addView(note(value))
