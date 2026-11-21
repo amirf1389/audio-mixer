@@ -12,6 +12,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
+
+#include "audiomixer/simd.hpp"
 
 namespace am::dsp {
 
@@ -82,6 +85,8 @@ struct Biquad {
     return 10.0 * std::log10(m2 + 1e-30);
   }
 };
+// the SIMD cascade kernel reads a section as {b0, b1, b2, a1, a2, z1, z2}
+static_assert(std::is_standard_layout_v<Biquad> && sizeof(Biquad) == 7 * sizeof(double), "Biquad layout");
 
 struct EqBand { FilterType type = FilterType::Off; double freq = 1000, q = 1.0, gainDb = 0; };
 
@@ -110,6 +115,7 @@ class Crossover {
   [[nodiscard]] int order() const noexcept { return order_; }
   [[nodiscard]] double tick(double x) noexcept { for (int i = 0; i < nsec_; ++i) x = s_[static_cast<std::size_t>(i)].tick(x); return x; }
   void reset() noexcept { for (auto& s : s_) s.reset(); }
+  int sections(double** out) noexcept { for (int i = 0; i < nsec_; ++i) out[i] = &s_[static_cast<std::size_t>(i)].b0; return nsec_; }   // for the cascade kernel
   [[nodiscard]] double gainDbAt(double fs, double f) const noexcept { double g = 0; for (int i = 0; i < nsec_; ++i) g += s_[static_cast<std::size_t>(i)].gainDbAt(fs, f); return g; }
 
  private:
@@ -161,30 +167,33 @@ class Limiter {
 class Compressor {
  public:
   void set(bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb, double fs) noexcept {
-    on_ = on; thr_ = thresholdDb; ratio_ = ratio < 1 ? 1 : ratio; knee_ = kneeDb < 0 ? 0 : kneeDb; makeup_ = makeupDb;
-    kneeLin_ = std::pow(10.0, (thr_ - knee_ / 2) / 20.0); gLinAt_ = 1e300;   // below the knee nothing is computed in dB
-    att_ = 1.0 - std::exp(-1.0 / ((attackMs < 0.05 ? 0.05 : attackMs) * 0.001 * fs)); rel_ = 1.0 - std::exp(-1.0 / ((releaseMs < 1 ? 1 : releaseMs) * 0.001 * fs));
-    det_ = 1.0 - std::exp(-1.0 / (0.02 * fs));   // peak detector: instant rise, 20 ms fall, so a steady sine reads its peak
+    on_ = on; k_.thr = thresholdDb; k_.ratio = ratio < 1 ? 1 : ratio; k_.knee = kneeDb < 0 ? 0 : kneeDb; k_.makeup = makeupDb;
+    k_.kneeLin = std::pow(10.0, (k_.thr - k_.knee / 2) / 20.0); k_.gLinAt = 1e300;   // below the knee nothing is computed in dB
+    k_.att = 1.0 - std::exp(-1.0 / ((attackMs < 0.05 ? 0.05 : attackMs) * 0.001 * fs)); k_.rel = 1.0 - std::exp(-1.0 / ((releaseMs < 1 ? 1 : releaseMs) * 0.001 * fs));
+    k_.det = 1.0 - std::exp(-1.0 / (0.02 * fs));   // peak detector: instant rise, 20 ms fall, so a steady sine reads its peak
   }
   // the static transfer: output level for an input level (dB), without make-up; what the page draws
   [[nodiscard]] double computeDb(double inDb) const noexcept {
-    const double over = inDb - thr_;
-    if (knee_ > 0 && std::fabs(over) <= knee_ / 2) { const double t = over + knee_ / 2; return inDb + (1.0 / ratio_ - 1.0) * t * t / (2.0 * knee_); }
-    return over > 0 ? thr_ + over / ratio_ : inDb;
+    const double over = inDb - k_.thr;
+    if (k_.knee > 0 && std::fabs(over) <= k_.knee / 2) { const double t = over + k_.knee / 2; return inDb + (1.0 / k_.ratio - 1.0) * t * t / (2.0 * k_.knee); }
+    return over > 0 ? k_.thr + over / k_.ratio : inDb;
   }
+  // one sample: the scalar reference of the SIMD kernel (process() below; test/simd_test.cpp compares the two)
   [[nodiscard]] double tick(double x) noexcept {
     if (!on_) return x;
-    const double a = std::fabs(x); env_ = a > env_ ? a : env_ + (a - env_) * det_;   // peak follower
-    double want = 0.0; if (env_ + 1e-9 > kneeLin_) { const double inDb = fastm::dbOf(env_ + 1e-9); want = computeDb(inDb) - inDb; }   // <= 0: how much to turn down
-    gr_ += (want - gr_) * (want < gr_ ? att_ : rel_); if (std::fabs(want - gr_) < 1e-7) gr_ = want;   // settled: the same gain as before, exactly
-    const double g = gr_ + makeup_; if (g != gLinAt_) { gLinAt_ = g; gLin_ = fastm::linOf(g); }      // the factor only when the gain moved
-    return x * gLin_;
+    const double a = std::fabs(x); k_.env = a > k_.env ? a : k_.env + (a - k_.env) * k_.det;   // peak follower
+    double want = 0.0; if (k_.env + 1e-9 > k_.kneeLin) { const double inDb = fastm::dbOf(k_.env + 1e-9); want = computeDb(inDb) - inDb; }   // <= 0: how much to turn down
+    k_.gr += (want - k_.gr) * (want < k_.gr ? k_.att : k_.rel); if (std::fabs(want - k_.gr) < 1e-7) k_.gr = want;   // settled: the same gain as before, exactly
+    const double g = k_.gr + k_.makeup; if (g != k_.gLinAt) { k_.gLinAt = g; k_.gLin = fastm::linOf(g); }      // the factor only when the gain moved
+    return x * k_.gLin;
   }
-  [[nodiscard]] double gainReductionDb() const noexcept { return on_ ? gr_ : 0; }
+  // a block in place: tick() for every sample, the dB maths several samples at a time (the SIMD kernel of this processor)
+  void process(double* x, std::size_t n) noexcept { if (on_) simd::kernels().compressor(&k_, x, n); }
+  [[nodiscard]] double gainReductionDb() const noexcept { return on_ ? k_.gr : 0; }
   [[nodiscard]] bool on() const noexcept { return on_; }
-  void reset() noexcept { env_ = 0; gr_ = 0; }
+  void reset() noexcept { k_.env = 0; k_.gr = 0; }
  private:
-  bool on_ = false; double thr_ = -20, ratio_ = 4, knee_ = 6, makeup_ = 0, att_ = 0.01, rel_ = 0.001, det_ = 0.05, env_ = 0, gr_ = 0, kneeLin_ = 0.07, gLinAt_ = 1e300, gLin_ = 1;
+  bool on_ = false; simd::CompK k_{};
 };
 
 // noise gate: opens above the threshold, closes 3 dB below it (hysteresis) after the hold time; attenuates by `range` when closed
@@ -200,12 +209,12 @@ class Gate {
   [[nodiscard]] double computeDb(double inDb) const noexcept { return inDb >= thr_ ? inDb : inDb + range_; }
   [[nodiscard]] double tick(double x) noexcept {
     if (!on_) return x;
-    const double a = std::fabs(x); env_ = a > env_ ? a : env_ + (a - env_) * det_;
+    const double a = std::fabs(x), fall = env_ + (a - env_) * det_; env_ = a > env_ ? a : fall;   // both sides first: a select, not a branch
     const double lvl = env_ + 1e-9;
     if (lvl >= thrLin_) { open_ = true; hold_ = holdSamples_; }
     else if (open_ && lvl < closeLin_) { if (hold_ > 0) --hold_; else open_ = false; }
     const double target = open_ ? 0.0 : range_;
-    g_ += (target - g_) * (target > g_ ? att_ : rel_); if (std::fabs(target - g_) < 1e-7) g_ = target;   // settled: exactly open or closed
+    const double c = target > g_ ? att_ : rel_; g_ += (target - g_) * c; g_ = std::fabs(target - g_) < 1e-7 ? target : g_;   // settled: exactly open or closed
     if (g_ != gLinAt_) { gLinAt_ = g_; gLin_ = fastm::linOf(g_); }
     return x * gLin_;
   }
@@ -259,21 +268,28 @@ class Channel {
       if (!silent) zeroRun_ = 0; else { zeroRun_ += n; if (lastOut_ < 1e-7 && zeroRun_ > static_cast<std::size_t>(delaySamples_) + 2 * n) { idle_ = true; return; } } }
     idle_ = false; double outPk = 0;
     const double pol = p_.polarityInvert ? -1.0 : 1.0; const bool dl = delaySamples_ > 0;
-    for (std::size_t i = 0; i < n; ++i) {
-      double v = static_cast<double>(x[i]) * pol;
-      if (dl) {
-        buf_[w_] = v;
-        double rp = static_cast<double>(w_) - delaySamples_; if (rp < 0) rp += static_cast<double>(kMaxDelayFrames);
-        const std::size_t i0 = static_cast<std::size_t>(rp), i1 = (i0 + 1) % kMaxDelayFrames; const double fr = rp - static_cast<double>(i0);
-        v = buf_[i0] + (buf_[i1] - buf_[i0]) * fr;
-        w_ = (w_ + 1) % kMaxDelayFrames;
+    // STAGE BY STAGE over runs of kRun samples (each stage still sees its samples in order, so the result is the per-sample chain's):
+    // polarity, delay and gate per sample; the crossover and the EQ bands as one biquad cascade and the compressor as SIMD kernels
+    // (simd.hpp); the limiter per sample.
+    double* sec[2 * kMaxXoverOrder + kEqBands]; int nsec = hp_.sections(sec); nsec += lp_.sections(sec + nsec);
+    for (int k = 0; k < nEqOn_; ++k) sec[nsec++] = &eq_[static_cast<std::size_t>(eqOn_[static_cast<std::size_t>(k)])].b0;   // only the bands that change the sound
+    const simd::Kernels& kr = simd::kernels(); constexpr std::size_t kRun = 256; double v[kRun];
+    for (std::size_t base = 0; base < n; base += kRun) {
+      const std::size_t m = n - base < kRun ? n - base : kRun; float* xs = x + base;
+      for (std::size_t i = 0; i < m; ++i) {
+        double s = static_cast<double>(xs[i]) * pol;
+        if (dl) {
+          buf_[w_] = s;
+          double rp = static_cast<double>(w_) - delaySamples_; if (rp < 0) rp += static_cast<double>(kMaxDelayFrames);
+          const std::size_t i0 = static_cast<std::size_t>(rp), i1 = (i0 + 1) % kMaxDelayFrames; const double fr = rp - static_cast<double>(i0);
+          s = buf_[i0] + (buf_[i1] - buf_[i0]) * fr;
+          w_ = (w_ + 1) % kMaxDelayFrames;
+        }
+        v[i] = gate_.tick(s);
       }
-      v = gate_.tick(v);
-      v = hp_.tick(v); v = lp_.tick(v);
-      for (int k = 0; k < nEqOn_; ++k) v = eq_[static_cast<std::size_t>(eqOn_[static_cast<std::size_t>(k)])].tick(v);   // only the bands that change the sound
-      v = comp_.tick(v);
-      v = lim_.tick(v);
-      x[i] = static_cast<float>(v); const double av = v < 0 ? -v : v; if (av > outPk) outPk = av;
+      if (nsec > 0) kr.cascade(sec, nsec, v, m);
+      comp_.process(v, m);
+      for (std::size_t i = 0; i < m; ++i) { const double o = lim_.tick(v[i]); xs[i] = static_cast<float>(o); const double av = o < 0 ? -o : o; if (av > outPk) outPk = av; }
     }
     lastOut_ = outPk;
   }

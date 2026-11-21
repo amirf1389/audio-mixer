@@ -27,7 +27,7 @@ const has = n => spawnSync('which', [n]).status === 0;
 function compileWindows(arch, exe, opts = {}) {
   const t = arch === 'x64' ? 'x86_64-w64-mingw32' : 'i686-w64-mingw32';
   if (!has(t + '-g++')) throw new Error(`mingw-w64 (${t}-g++) is needed to build the native program (Debian / Ubuntu: apt install mingw-w64)`);
-  const src = ['engine.cpp', 'runtime.cpp', 'backend_null.cpp', 'devices.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp', 'backend_dsound.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
+  const src = ['engine.cpp', 'simd.cpp', 'simd_base.cpp', 'runtime.cpp', 'backend_null.cpp', 'devices.cpp', 'backend_wasapi.cpp', 'backend_asio.cpp', 'backend_dsound.cpp'].map(f => path.join(ROOT, 'engine/cpp/src', f));
   fs.mkdirSync(path.dirname(exe), { recursive: true });
   // A clean program for Windows Defender / SmartScreen: nothing packed, nothing embedded that is written out and registered at run time, a
   // version resource (company, product, description, version) and a manifest. The ASIO driver DLL is built next to the program as its own

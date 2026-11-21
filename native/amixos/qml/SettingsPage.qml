@@ -125,6 +125,7 @@ Flickable {
                     : i18n.t("%1 performance cores + %2 efficiency cores", i18n.lang).arg(sysPanel.sys.perfCores).arg(sysPanel.sys.effCores))
                    + "  ·  " + i18n.t("%1 processor threads", i18n.lang).arg(sysPanel.sys.logical) }
             Line { k: i18n.t("Instruction sets", i18n.lang).toUpperCase(); v: [sysPanel.sys.avx2 ? "AVX2" : "", sysPanel.sys.fma ? "FMA" : "", sysPanel.sys.avx512 ? "AVX-512" : "", sysPanel.sys.neon ? "NEON" : ""].filter(function (x) { return x !== "" }).join(" · ") || "—" }
+            Line { k: i18n.t("DSP kernels", i18n.lang).toUpperCase(); v: (sysPanel.sys.simd || "—") + "  ·  " + i18n.t("chosen at start for this processor", i18n.lang) }
             // PROCESSOR NOW: load, clock, temperature and power, only what Windows exposes on this computer (never a guess, no driver touched)
             Line { k: i18n.t("Processor now", i18n.lang).toUpperCase()
                 v: (sysPanel.sys.loadOk ? i18n.t("load %1 %", i18n.lang).arg(sysPanel.sys.cpuLoadPct.toFixed(0)) : i18n.t("load: measuring…", i18n.lang))

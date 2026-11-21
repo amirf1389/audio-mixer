@@ -29,7 +29,7 @@ function buildCpp({ out = path.join(ENGINE, 'cpp', 'build') } = {}) {
   const cxx = which('g++') || which('clang++'); if (!cxx) return { skipped: 'no C++ compiler' };
   fs.mkdirSync(out, { recursive: true });
   const exe = path.join(out, 'engine_test'), c = path.join(ENGINE, 'cpp');
-  let r = run(cxx, ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O2', '-I' + path.join(c, 'include'), '-o', exe, path.join(c, 'src', 'engine.cpp'), path.join(c, 'test', 'engine_test.cpp')]);
+  let r = run(cxx, ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O2', '-I' + path.join(c, 'include'), '-o', exe, path.join(c, 'src', 'engine.cpp'), path.join(c, 'src', 'simd.cpp'), path.join(c, 'src', 'simd_base.cpp'), path.join(c, 'test', 'engine_test.cpp')]);
   if (!r.ok) return { ok: false, detail: r.out.slice(-800) };
   r = run(exe, [VECTORS]);
   return { ok: r.ok, detail: r.out };
@@ -71,7 +71,7 @@ function buildNode({ out = path.join(ENGINE, 'node', 'build', 'Release') } = {})
   if (!inc) return { skipped: 'the Node.js headers (node_api.h) were not found: set NODE_INCLUDE to <node>/include/node' };
   fs.mkdirSync(out, { recursive: true });
   const so = path.join(out, 'am_engine.node'), n = path.join(ENGINE, 'node'), c = path.join(ENGINE, 'cpp');
-  const r = run(cxx, ['-std=c++17', '-O2', '-Wall', '-Wextra', '-fPIC', '-shared', '-I' + inc, '-I' + path.join(c, 'include'), '-o', so, path.join(n, 'am_engine_node.cc'), path.join(c, 'src', 'engine.cpp')].concat(process.platform === 'darwin' ? ['-undefined', 'dynamic_lookup'] : []));
+  const r = run(cxx, ['-std=c++17', '-O2', '-Wall', '-Wextra', '-fPIC', '-shared', '-I' + inc, '-I' + path.join(c, 'include'), '-o', so, path.join(n, 'am_engine_node.cc'), path.join(c, 'src', 'engine.cpp'), path.join(c, 'src', 'simd.cpp'), path.join(c, 'src', 'simd_base.cpp')].concat(process.platform === 'darwin' ? ['-undefined', 'dynamic_lookup'] : []));
   return r.ok ? { ok: true, detail: so, file: so } : { ok: false, detail: r.out.slice(-800) };
 }
 
@@ -83,7 +83,7 @@ function buildIo({ out = path.join(ENGINE, 'cpp', 'build') } = {}) {
   // the runtime's portable sources, read from the engine's own CMake list (set(RUNTIME_SRC ...)) so this check never falls behind it
   const cm = fs.readFileSync(path.join(c, 'CMakeLists.txt'), 'utf8'), m = /set\(RUNTIME_SRC([^)]*)\)/.exec(cm);
   const portable = m ? m[1].trim().split(/\s+/).filter(Boolean) : ['src/runtime.cpp', 'src/backend_null.cpp'];
-  const srcs = [path.join(c, 'src', 'engine.cpp'), ...portable.map(f => path.join(c, f)), path.join(c, 'app', 'paths', 'paths.cpp'), path.join(c, 'test', 'runtime_test.cpp')];   // the runtime links the paths library (driver_intel)
+  const srcs = [path.join(c, 'src', 'engine.cpp'), path.join(c, 'src', 'simd.cpp'), path.join(c, 'src', 'simd_base.cpp'), ...portable.map(f => path.join(c, f)), path.join(c, 'app', 'paths', 'paths.cpp'), path.join(c, 'test', 'runtime_test.cpp')];   // the runtime links the paths library (driver_intel)
   if (hasAlsa) srcs.push(path.join(c, 'src', 'backend_alsa.cpp'));
   let r = run(cxx, ['-std=c++17', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O2', '-pthread', inc, '-I' + path.join(c, 'app'), ...(hasAlsa ? ['-DAM_HAVE_ALSA'] : []), '-o', exe, ...srcs, ...(hasAlsa ? ['-lasound'] : [])]);
   if (!r.ok) return { ok: false, detail: r.out.slice(-1200) };
