@@ -1,12 +1,15 @@
 'use strict';
 // INLINE PAGES (management/vendor/index.html, management/customer/index.html): one HTML file each, its script and its Tailwind component
-// styles written inside it, the Tailwind Play CDN (pinned to one version) for the utility classes. The Content-Security-Policy still lets
-// no other script run: each inline <script> is allowed by its SHA-256 hash (worked out here from the file itself), the CDN by its exact
-// address. Tailwind's Play CDN writes its styles into the page at run time, hence 'unsafe-inline' for styles only (never for scripts).
+// styles written inside it, the Tailwind Play CDN build (one pinned version, a copy in bridge/license-server/dashboard/vendor/ served by
+// the same server as tailwind.js: no script is ever fetched from a third party at run time) for the utility classes. The Content-Security-
+// Policy lets no other script run: each inline <script> is allowed by its SHA-256 hash (worked out here from the file itself), tailwind.js
+// by 'self'. Tailwind's Play CDN writes its styles into the page at run time, hence 'unsafe-inline' for styles only (never for scripts).
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const path = require('node:path');
 
-const TAILWIND = 'https://cdn.tailwindcss.com/3.4.16';
+const TAILWIND = "'self'";
+const TAILWIND_FILE = path.join(__dirname, '..', 'bridge', 'license-server', 'dashboard', 'vendor', 'tailwindcss-play-3.4.16.js');
 
 function scriptHashes(html) {
   const out = []; const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi; let m;
@@ -19,4 +22,4 @@ function cspFor(html, { connect = "'self'" } = {}) {
 // read once (the files are part of the release); { body, csp }
 function inlinePage(file) { const html = fs.readFileSync(file, 'utf8'); return { body: Buffer.from(html, 'utf8'), csp: cspFor(html) }; }
 
-module.exports = { inlinePage, cspFor, scriptHashes, TAILWIND };
+module.exports = { inlinePage, cspFor, scriptHashes, TAILWIND, TAILWIND_FILE };

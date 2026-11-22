@@ -59,11 +59,12 @@ const rawHost = (port, p, host) => new Promise((ok, bad) => { const q = http.req
   await req(LIC, '/admin/crm/customers', { method: 'POST', headers: adm, body: { name: 'Studio Nord', email: 'desk@studionord.example', company: 'Studio Nord AB', status: 'customer' } });
   await req(LIC, '/admin/crm/customers', { method: 'POST', headers: adm, body: { name: 'Maya Lindqvist', email: 'maya@example.com', status: 'lead' } });
 
-  // ---- the MANAGER: one inline page, its script allowed by hash only, Tailwind from its pinned address
+  // ---- the MANAGER: one inline page, its script allowed by hash only, Tailwind from the local pinned copy (never the CDN)
   const page = await req(MGR, '/');
   assert.strictEqual(page.status, 200);
   const csp = page.headers.get('content-security-policy');
-  assert.ok(/script-src 'sha256-[A-Za-z0-9+/=]+' https:\/\/cdn\.tailwindcss\.com\/3\.4\.16;/.test(csp), 'script-src: the inline script hash and Tailwind only: ' + csp);
+  assert.ok(/script-src 'sha256-[A-Za-z0-9+/=]+' 'self';/.test(csp), 'script-src: the inline script hash and the local Tailwind only: ' + csp);
+  assert.ok(!/cdn\.tailwindcss\.com/.test(page.text), 'no third-party script'); assert.strictEqual((await req(MGR, '/tailwind.js')).status, 200);
   assert.ok(!/script-src[^;]*unsafe-inline/.test(csp) && /frame-ancestors 'none'/.test(csp), 'no unsafe-inline scripts, no framing');
   assert.deepStrictEqual(scriptHashes(page.text).length, 1, 'one inline script');
   // only this computer's own name: a made-up host pointed at 127.0.0.1 is refused (DNS rebinding)
@@ -91,7 +92,8 @@ const rawHost = (port, p, host) => new Promise((ok, bad) => { const q = http.req
 
   // ---- MY ACCOUNT on the licence server: one inline page; a key shows its computers and frees one
   const acc = await req(LIC, '/account/'); assert.strictEqual(acc.status, 200);
-  const acsp = acc.headers.get('content-security-policy'); assert.ok(/script-src 'sha256-[^']+' https:\/\/cdn\.tailwindcss\.com\/3\.4\.16;/.test(acsp) && !/script-src[^;]*unsafe-inline/.test(acsp), 'account CSP: ' + acsp);
+  const acsp = acc.headers.get('content-security-policy'); assert.ok(/script-src 'sha256-[^']+' 'self';/.test(acsp) && !/script-src[^;]*unsafe-inline/.test(acsp), 'account CSP: ' + acsp);
+  assert.strictEqual((await req(LIC, '/account/tailwind.js')).status, 200);
   assert.strictEqual((await req(LIC, '/account')).status, 301);
   const st = await req(LIC, '/status', { method: 'POST', body: { key: issued[0].key, list: true } });
   assert.deepStrictEqual(st.json.computers, ['A1B2-C3D4-E5F6-0718', '9F8E-7D6C-5B4A-3921']); assert.strictEqual(st.json.limit, 3);

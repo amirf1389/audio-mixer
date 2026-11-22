@@ -13,12 +13,13 @@
 //
 //   node management/vendor/server.js            then open http://127.0.0.1:8790/   (Windows: management/windows/AmF X1 Manager.cmd)
 //   MANAGER_PORT=8790  LICENSE_SERVER=https://licence.example  OTA_SERVER=https://ota.example   (an SSH tunnel to 127.0.0.1 is the safe way)
+const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
 const HOST = '127.0.0.1';   // fixed: the manager is never reachable from another computer
 const MAX_BODY = 1024 * 1024, MAX_REPLY = 8 * 1024 * 1024, TIMEOUT_MS = 15000;
-const { inlinePage } = require('../inline-page');   // the page is one file (Tailwind Play CDN + its inline script, allowed by hash)
+const { inlinePage, TAILWIND_FILE } = require('../inline-page');   // the page is one file (its inline script allowed by hash) + the local copy of Tailwind
 // what may pass: the administration of each server, its sign-in, and its health check
 const ALLOW = { lic: /^\/(admin\/[A-Za-z0-9_./:%-]*|health)$/, ota: /^\/(admin\/[A-Za-z0-9_./:%-]*|healthz)$/ };
 
@@ -28,7 +29,7 @@ function upstreams(env = process.env) {
 }
 
 function createManager({ port = 8790, up = upstreams(), dir = __dirname } = {}) {
-  const page = inlinePage(path.join(dir, 'index.html'));
+  const page = inlinePage(path.join(dir, 'index.html')), tailwind = fs.readFileSync(TAILWIND_FILE);
   const sec = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY', 'Cache-Control': 'no-store', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin' };
   const send = (res, status, body, headers = {}) => { const b = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...sec, ...headers }); res.end(b); };
@@ -46,6 +47,7 @@ function createManager({ port = 8790, up = upstreams(), dir = __dirname } = {}) 
       const url = new URL(req.url, 'http://x'), p = url.pathname;
       if ((p === '/' || p === '/index.html') && (req.method === 'GET' || req.method === 'HEAD'))
         return send(res, 200, req.method === 'HEAD' ? '' : page.body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': page.csp });
+      if (p === '/tailwind.js' && (req.method === 'GET' || req.method === 'HEAD')) return send(res, 200, req.method === 'HEAD' ? '' : tailwind, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
       if (p === '/config' && req.method === 'GET') return send(res, 200, { ok: true, licenseServer: up.lic, otaServer: up.ota });
       const m = /^\/(lic|ota)(\/.*)$/.exec(p);
       if (!m || !ALLOW[m[1]].test(m[2])) return send(res, 404, { ok: false, error: 'not found' });

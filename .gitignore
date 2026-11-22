@@ -147,3 +147,7 @@ android/.robolectric/
 
 # website zip packages: made at release time by scripts/make-zips.js
 releases/zip/
+
+# security audit output (node scripts/security/audit.js)
+security-report.md
+security-report.json

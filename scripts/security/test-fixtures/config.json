@@ -1,0 +1,11 @@
+{
+  "_comment": "audit configuration for the unit-test fixture tree only",
+  "publicKeys": [ { "name": "fixture vendor key", "x": "KNOWNKNOWNKNOWNKNOWNKNOWNKNOWNKNOWNKNOWNKNO", "y": "KNOWNYKNOWNYKNOWNYKNOWNYKNOWNYKNOWNYKNOWNYK", "mustBePinnedIn": ["keys/known.json"] } ],
+  "secretAllow": [ { "path": "allowed/**", "reason": "fixture: allow-listed upstream demo material" } ],
+  "signatureVerifiers": [ { "file": "server/safe.js", "title": "fixture: a verifier that is missing its calls", "must": ["crypto\\.verify\\("] } ],
+  "signers": [],
+  "vendored": [ { "path": "third/libfoo", "name": "libfoo", "licence": "MIT" } ],
+  "networkFiles": { "cpp": [] },
+  "publicWebRoots": ["site"],
+  "clangTidyFocus": []
+}
