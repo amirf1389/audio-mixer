@@ -672,6 +672,14 @@ class Engine : public QObject {
   Q_INVOKABLE QString pluginUiState(int strip, int slot) const;
   Q_INVOKABLE void setPluginUiState(int strip, int slot, const QString& ui);
   Q_INVOKABLE QVariantMap wshapeInfo(int strip, int slot) const;
+  // AmF DYNAMIC EQ (fx:dyneq): its bands (normalized values, as the parameters), what the dynamics add now, the curve at `points` log-spaced
+  // frequencies 20 Hz .. 20 kHz (static and with the dynamics) and the pre / post spectrum at the same points (dBFS)
+  Q_INVOKABLE QVariantMap dynEqInfo(int strip, int slot, int points) const;
+  Q_INVOKABLE void setDynEqBand(int strip, int slot, int band, int key, double normalized);   // = setPluginParam(band * 13 + key)
+  // FABFILTER QUICK-LOAD: the user's own installed Pro-Q from the last plug-in scan ({found, name, vendor, kind}); nothing is bundled or
+  // downloaded. addProQ puts it into the channel's rack and returns the slot (-1 rack full, -2 not installed).
+  Q_INVOKABLE QVariantMap proQ() const;
+  Q_INVOKABLE int addProQ(int strip);
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;

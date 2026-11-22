@@ -48,6 +48,7 @@ qt_add_qml_module(amixos
         qml/MoreText.qml
         qml/Fader.qml
         qml/MSlider.qml
+        qml/DynEqEditor.qml
         qml/MeterBar.qml
         qml/VuMeter.qml
         qml/RoutingPage.qml

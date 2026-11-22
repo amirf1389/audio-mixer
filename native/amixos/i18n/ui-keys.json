@@ -2321,5 +2321,19 @@
 "AIR FREQ",
 "LOUD COMP",
 "GAIN MATCH",
-"TRAIN"
+"TRAIN",
+"Add Pro-Q (your installed FabFilter plug-in)",
+"FabFilter and Pro-Q are trademarks of FabFilter; not affiliated",
+"FabFilter Pro-Q not found — install it from fabfilter.com",
+"zero latency",
+"Double-click the display to add a band · drag a node for frequency / gain · wheel for Q · right-click removes",
+"Choose a band on the display",
+"BAND",
+"HIGH SHELF",
+"HIGH CUT",
+"BAND PASS",
+"BELL",
+"DYNAMIC",
+"Dynamic EQ",
+"AmF DYNAMIC EQ"
 ]

@@ -55,7 +55,7 @@ void Builder::setPreviewBypass(bool b) { pvBypass_ = b; if (pv_) pv_->setBypass(
 void Builder::setPreviewGainDb(double db) { pvGain_ = qBound(-30.0, db, 6.0); if (pv_) pv_->setGainDb(pvGain_); emit previewChanged(); }
 
 QVariantList Builder::catalog() const {
-  QVariantList l; for (const auto& [k, n] : am::fx::catalog()) { if (k == "sampler" || k == "iamfrender" || k == "logic") continue;   // need the console around them
+  QVariantList l; for (const auto& [k, n] : am::fx::catalog()) { if (k == "sampler" || k == "iamfrender" || k == "logic" || k == "dyneq") continue;   // need the console around them (the dynamic EQ: its own editor)
     QVariantMap m; m["kind"] = QString::fromStdString(k); m["name"] = QString::fromStdString(n); l << m; }
   return l;
 }

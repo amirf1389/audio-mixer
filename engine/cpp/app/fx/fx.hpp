@@ -519,4 +519,57 @@ class LogicObject final : public Simple { public: explicit LogicObject(double fs
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
  protected: int count() const override { return 5; } const char* knobId(int i) const override; const char* knobTitle(int i) const override; double knobDef(int i) const override;
  private: double env_ = 0, g_ = 1; long hold_ = 0; };
+// AmF DYNAMIC EQ: up to 24 bands, each BELL, LOW / HIGH SHELF, LOW / HIGH CUT (6 .. 96 dB/oct, Butterworth cascades), NOTCH or BAND PASS,
+// on STEREO, MID, SIDE, LEFT or RIGHT. A bell or shelf may be DYNAMIC: the band's own band-passed signal (its side chain) is followed with
+// ATTACK / RELEASE, and above THRESHOLD its gain moves by (level - threshold) * (1 - 1 / RATIO), at most RANGE dB (negative = cut, positive =
+// lift). Zero latency (minimum phase only, no look-ahead). Parameters per band "b<N>_<key>" (N = 1 .. 24, keys in kDynEqKeys), then OUTPUT.
+// The audio thread never allocates: coefficients are recomputed every 16 samples from atomics; the pre / post spectrum taps are fixed rings.
+class DynEq final : public Effect {
+ public:
+  static constexpr int kBands = 24, kKeys = 13, kSections = 8, kRing = 4096;
+  enum Key { On, Type, Freq, Gain, Q, Slope, Stereo, Dyn, Thresh, Ratio, Range, Attack, Release };
+  enum BandType { Bell, LowShelf, HighShelf, LowCut, HighCut, Notch, BandPass };
+  enum Chan { StereoMode, MidMode, SideMode, LeftMode, RightMode };
+  explicit DynEq(double fs);
+  const char* kind() const override { return "dyneq"; } const char* name() const override { return "AmF DYNAMIC EQ"; }
+  std::vector<Param> params() const override;
+  void set(const std::string& id, double v) override;
+  std::string text(const std::string& id, double v) const override;
+  void setSampleRate(double fs) override;
+  void reset() override;
+  void process(float* L, float* R, std::size_t n) override;
+  // UI thread helpers (no effect on the audio thread)
+  void setBand(int band, int key, double v);                    // normalized 0..1
+  double band(int band, int key) const;
+  double dynamicDb(int band) const { return band >= 0 && band < kBands ? dynDb_[band].load(std::memory_order_relaxed) : 0; }   // what the dynamics add now
+  double responseDb(double hz, bool withDynamics) const;        // the summed curve (stereo / mid / left bands; side / right counted alike)
+  double bandResponseDb(int band, double hz, bool withDynamics) const;
+  void spectrum(bool post, float* outDb, int bins, double loHz, double hiHz) const;   // log-spaced magnitudes in dBFS of the last 2048 samples
+  // the plain values behind the normalized ones
+  static double freqHz(double v) { return 20.0 * std::pow(1000.0, v); }
+  static double gainDb(double v) { return (v - 0.5) * 60.0; }
+  static double qOf(double v) { return 0.1 * std::pow(300.0, v); }
+  static int slopeDb(double v);
+  static int typeOf(double v) { const int t = static_cast<int>(v * 6 + 0.5); return t < 0 ? 0 : t > 6 ? 6 : t; }
+  static int chanOf(double v) { const int t = static_cast<int>(v * 4 + 0.5); return t < 0 ? 0 : t > 4 ? 4 : t; }
+  static double threshDb(double v) { return -60.0 * (1 - v); }
+  static double ratioOf(double v) { return std::pow(20.0, v); }
+  static double rangeDb(double v) { return (v - 0.5) * 60.0; }
+  static double attackMs(double v) { return 0.1 * std::pow(3000.0, v); }
+  static double releaseMs(double v) { return 5.0 * std::pow(600.0, v); }
+  struct Coef { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; };
+  // designs one band into its sections (returns how many are used); gainDbNow includes the dynamics
+  static int design(int type, double fs, double hz, double q, double gainDbNow, int slope, Coef* out);
+  static double magnitudeDb(const Coef* c, int n, double fs, double hz);
+ private:
+  struct Snap { bool on, dyn; int type, slope, chan; double f, g, q, thr, ratio, range, att, rel; };
+  Snap snap(int b) const;
+  double fs_; std::atomic<float> k_[kBands][kKeys]; std::atomic<float> out_{0.5f};
+  // audio-thread state, structure of arrays: per band, per section, per channel (0 / 1 of the band's pair)
+  alignas(32) double z1_[kBands][kSections][2] = {}, z2_[kBands][kSections][2] = {};
+  Coef c_[kBands][kSections]; int used_[kBands] = {}; double env_[kBands] = {}, d1_[kBands][2] = {}, d2_[kBands][2] = {}; bool was_[kBands] = {};
+  double gNow_[kBands] = {};   // the dynamic gain last designed (dB)
+  std::atomic<float> dynDb_[kBands];
+  std::atomic<float> ring_[2][kRing]; std::atomic<std::uint32_t> w_{0};
+};
 }  // namespace am::fx

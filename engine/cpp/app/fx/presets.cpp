@@ -1,6 +1,7 @@
 #include "presets.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 namespace am::fx {
@@ -91,6 +92,24 @@ std::vector<Preset> build() {
       {"STRONG", 1.0, 0.8, 0.6, 0.6, 0.6, 0.7, 0.4, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0}};
     for (const W& w : ws) add(w.name, "wshape", "W-Shape", {{"amount", w.amount}, {"bass", w.bass}, {"lowmid", w.lowmid}, {"presence", w.presence}, {"upper", w.upper}, {"air", w.air}, {"smooth", w.smooth}, {"output", 0.5},
       {"fbass", w.fbass}, {"flowmid", w.flowmid}, {"fpresence", w.fpres}, {"fupper", w.fupper}, {"fair", w.fair}, {"loudcomp", w.loud}, {"gainmatch", 1.0}, {"stereo", 0.0}, {"train", 0.0}}, 1.0);
+  }
+  // ---- AmF DYNAMIC EQ: a few starting points (bands as {type, freq Hz, gain dB, Q, dynamic, threshold dB, range dB, slope dB/oct})
+  {
+    struct B { int type; double hz, db, q; bool dyn; double thr, range; int slope; };
+    struct D { const char* name; std::vector<B> bands; };
+    const D ds[] = {
+      {"DYN EQ VOCAL DE-HARSH", {{3, 80, 0, 0.7, false, 0, 0, 24}, {0, 3200, 0, 2.5, true, -30, -6, 24}, {0, 7000, 0, 3.0, true, -32, -8, 24}, {2, 11000, 1.5, 0.7, false, 0, 0, 24}}},
+      {"DYN EQ KICK / BASS CLEAR", {{3, 30, 0, 0.7, false, 0, 0, 36}, {0, 250, 0, 1.5, true, -24, -6, 24}, {0, 60, 2, 1.0, false, 0, 0, 24}}},
+      {"DYN EQ MIX GLUE", {{1, 120, 0, 0.7, true, -20, -3, 24}, {0, 500, -1, 1.0, false, 0, 0, 24}, {2, 9000, 0, 0.7, true, -26, -3, 24}}},
+      {"DYN EQ SPEECH CLEAN", {{3, 100, 0, 0.7, false, 0, 0, 48}, {0, 300, -2, 1.2, false, 0, 0, 24}, {0, 6500, 0, 4.0, true, -34, -10, 24}, {4, 15000, 0, 0.7, false, 0, 0, 24}}},
+      {"DYN EQ GUITAR TAME", {{3, 90, 0, 0.7, false, 0, 0, 18}, {0, 2500, 0, 2.0, true, -28, -5, 24}, {5, 4200, 0, 8.0, false, 0, 0, 24}}},
+    };
+    const auto lg = [](double x, double base) { return std::log(x) / std::log(base); };
+    for (const D& d : ds) { std::vector<std::pair<std::string, double>> v; int n = 0;
+      for (const B& b : d.bands) { const std::string p = "b" + std::to_string(++n) + "_"; int si = 0; const int sl[] = {6, 12, 18, 24, 30, 36, 48, 72, 96}; for (int i = 0; i < 9; ++i) if (sl[i] == b.slope) si = i;
+        v.insert(v.end(), {{p + "on", 1.0}, {p + "type", b.type / 6.0}, {p + "freq", lg(b.hz / 20, 1000)}, {p + "gain", b.db / 60 + 0.5}, {p + "q", lg(b.q / 0.1, 300)}, {p + "slope", si / 8.0},
+          {p + "dyn", b.dyn ? 1.0 : 0.0}, {p + "thresh", 1 + b.thr / 60}, {p + "range", b.range / 60 + 0.5}}); }
+      add(d.name, "dyneq", "Dynamic EQ", std::move(v), 1.0); }
   }
   return out;
 }

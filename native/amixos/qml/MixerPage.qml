@@ -66,6 +66,12 @@ Item {
         for (const k in d) { if (k === "stripW") { const w = Number(o.stripW); if (isFinite(w) && w >= 96 && w <= 180) d.stripW = Math.round(w) } else if (typeof o[k] === "boolean") d[k] = o[k] } return d }
     function setLay(k, v) { const o = Object.assign({}, lay); o[k] = v; settings.mixerLayout = JSON.stringify(o) }
     // STRIP ZOOM: wider or narrower channel strips (more or fewer channels on the screen): Ctrl+Shift + / - , or the − / + keys on the toolbar
+    // FABFILTER QUICK-LOAD: the user's own installed Pro-Q (from the plug-in scan) into this channel's rack, its own editor opened; nothing is
+    // bundled or downloaded. slot < 0: the first free slot. FabFilter and Pro-Q are trademarks of FabFilter; not affiliated.
+    function addProQ(strip, slot) { const q = engine.proQ(); if (!q.found) { page.note = i18n.t("FabFilter Pro-Q not found — install it from fabfilter.com", i18n.lang); return }
+        let k = slot; if (k < 0) k = engine.addToRack(strip, q.kind); else engine.setPlugin(strip, k, q.kind)
+        if (k < 0) { page.note = i18n.t("The rack of this channel is full.", i18n.lang); return }
+        engine.selectedStrip = strip; if (!engine.openPluginWindow(strip, k)) plugEd.openFor(strip, k, q.kind, q.name) }
     function stripZoom(d) { setLay("stripW", Math.max(96, Math.min(180, lay.stripW + d))) }
     Shortcut { sequences: ["Ctrl+Shift+=", "Ctrl+Shift++"]; enabled: page.visible; onActivated: page.stripZoom(8) }
     Shortcut { sequences: ["Ctrl+Shift+-", "Ctrl+Shift+_"]; enabled: page.visible; onActivated: page.stripZoom(-8) }
@@ -340,6 +346,8 @@ Item {
             Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: chooser; property int slot: 0; width: 300
                 Repeater { model: { engine.vstCount; return engine.pluginCatalog() } delegate: MenuItem { text: (modelData.builtIn ? "" : modelData.fx ? i18n.t("FX · ", i18n.lang) : (modelData.format || "VST3") + " · ") + i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? "  — " + modelData.vendor : ""); onTriggered: { engine.setPlugin(page.sel, chooser.slot, modelData.kind); if (!modelData.builtIn) plugEd.openFor(page.sel, chooser.slot, modelData.kind, modelData.name) } } }   // a VST or an effect opens in the AMFB panel at once
                 MenuItem { visible: engine.vstCount === 0; enabled: false; text: engine.vstScanning ? i18n.t("Looking for VST plug-ins …", i18n.lang) : i18n.t("No VST3 / VST2 plug-ins found: add folders on PLUGINS", i18n.lang) }
+                MenuItem { objectName: "rackProQ"; text: i18n.t("Add Pro-Q (your installed FabFilter plug-in)", i18n.lang); onTriggered: page.addProQ(page.sel, chooser.slot) }
+                MenuItem { enabled: false; text: i18n.t("FabFilter and Pro-Q are trademarks of FabFilter; not affiliated", i18n.lang) }
                 MenuItem { text: i18n.t("Rescan VST plug-ins", i18n.lang) + "  (" + engine.vstCount + ")"; onTriggered: settings.rescanVst() }
                 MenuSeparator {}
                 MenuItem { text: i18n.t("Bypass / enable", i18n.lang); onTriggered: { var p = engine.plugins(page.sel)[chooser.slot]; if (p.kind) engine.setPluginBypass(page.sel, chooser.slot, !p.bypass) } }
@@ -591,6 +599,8 @@ Item {
                                             MenuItem { text: i18n.t("Channel panel ›", i18n.lang); onTriggered: { page.sidePanel = true } }
                                             MenuItem { text: i18n.t("Plugin rack ›", i18n.lang); onTriggered: { engine.selectedStrip = index; page.rack = true } }
                                             MenuItem { text: i18n.t("Open EQ / tone", i18n.lang); onTriggered: page.go("dsp") }
+                                            MenuItem { objectName: "stripProQ" + index; text: i18n.t("Add Pro-Q (your installed FabFilter plug-in)", i18n.lang); onTriggered: page.addProQ(index, -1) }
+                                            MenuItem { enabled: false; text: i18n.t("FabFilter and Pro-Q are trademarks of FabFilter; not affiliated", i18n.lang) }
                                             MenuItem { text: i18n.t("Match the stereo partner (processing + rack)", i18n.lang); onTriggered: engine.matchStereoPair(index) }
                                             MenuItem { text: i18n.t("Open compressor", i18n.lang); onTriggered: page.go("dyn") }
                                             MenuItem { text: i18n.t("Open gate", i18n.lang); onTriggered: page.go("gate") }
@@ -603,7 +613,7 @@ Item {
                                             Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
                                                 palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim; id: fxMenu; objectName: "stripFxMenu" + index; property int strip: index; title: i18n.t("Add an effect", i18n.lang)
                                                 // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
-                                                readonly property var groups: ({ "EQ / TONE": ["dualeq", "automiceq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "peakremover", "barrier", "rider", "clean", "antifeedback"],
+                                                readonly property var groups: ({ "EQ / TONE": ["dyneq", "dualeq", "automiceq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "peakremover", "barrier", "rider", "clean", "antifeedback"],
                                                     "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
                                                     "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay", "pingpong"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
                                                 function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
