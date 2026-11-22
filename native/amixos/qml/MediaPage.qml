@@ -90,7 +90,7 @@ Item {
                             Btn { label: i18n.t("REMOVE", i18n.lang); onClicked: media.remove(index) } }
                         MouseArea { anchors.fill: parent; z: -1; onClicked: media.select(index) } }
                     Text { visible: media.playlist.length === 0; anchors.centerIn: parent; text: i18n.t("Empty. Type the path of a WAV or a folder and press ADD. The player feeds the master before its fader; mix it with LEVELS and the master.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; width: parent.width - 40; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap } }
-                Text { Layout.fillWidth: true; text: i18n.t("WAV, FLAC and AIFF are read by the console itself; M4A, MP3, WMA and ALAC by Windows; OGG, Opus, WavPack, APE, DSD, AC-3, DTS and more by the FFmpeg decoders installed with it. Other rates are resampled to the engine rate. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                MoreText { Layout.fillWidth: true; text: i18n.t("WAV, FLAC and AIFF are read by the console itself; M4A, MP3, WMA and ALAC by Windows; OGG, Opus, WavPack, APE, DSD, AC-3, DTS and more by the FFmpeg decoders installed with it. Other rates are resampled to the engine rate. The SOUND CARD page has DC removal and dither for the output, so the player never needs the OS mixer.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
     }
     }
 }

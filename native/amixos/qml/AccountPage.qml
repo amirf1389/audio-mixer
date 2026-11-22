@@ -39,7 +39,7 @@ Item {
                         MouseArea { anchors.fill: parent; onClicked: { if (!access.setRole(modelData.id, "")) page.wantRole = modelData.id; else page.wantRole = "" } } } }
                     Text { visible: page.wantRole !== ""; text: i18n.t("Enter the PIN on the pad to switch to ", i18n.lang) + page.roleName(page.wantRole); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
                     Item { Layout.fillHeight: true }
-                    Text { Layout.fillWidth: true; text: i18n.t("Switching down (fewer rights) is free; switching up asks for the PIN. The pages a profile may not use disappear from the rail; ACCESS shows and edits the matrix.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
+                    MoreText { Layout.fillWidth: true; text: i18n.t("Switching down (fewer rights) is free; switching up asks for the PIN. The pages a profile may not use disappear from the rail; ACCESS shows and edits the matrix.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } }
             // pin
             Rectangle { Layout.preferredWidth: 230; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line
                 ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8

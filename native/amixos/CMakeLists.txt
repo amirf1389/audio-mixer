@@ -45,6 +45,7 @@ qt_add_qml_module(amixos
         qml/Theme.qml
         qml/NavRail.qml
         qml/Panel.qml
+        qml/MoreText.qml
         qml/Fader.qml
         qml/MSlider.qml
         qml/MeterBar.qml

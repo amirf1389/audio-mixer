@@ -62,7 +62,7 @@ Item {
                                     color: on ? (avail ? Theme.cyan : Theme.amber) : (avail ? Theme.ov(0.05) : Theme.ov(0.015)); border.color: on ? "transparent" : Theme.lineSoft
                                     Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: "#000"; visible: on }
                                     MouseArea { anchors.fill: parent; onClicked: engine.setInputRoute(strip, index) } } } } }
-                    Text { text: i18n.t("A dot on an unavailable input (amber) is kept and becomes live when a device with that many inputs opens. One input may feed several strips (a mic to two channels with different processing).", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
+                    MoreText { text: i18n.t("A dot on an unavailable input (amber) is kept and becomes live when a device with that many inputs opens. One input may feed several strips (a mic to two channels with different processing).", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
                 }
             }
         }
@@ -90,7 +90,7 @@ Item {
                                     Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: "#000"; visible: on && modelData.group !== "off" }
                                     Text { anchors.centerIn: parent; text: "—"; color: "#000"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; visible: on && modelData.group === "off" }
                                     MouseArea { anchors.fill: parent; onClicked: engine.setOutputRoute(out, modelData.index) } } } } }
-                    Text { text: i18n.t("MONITOR is the control-room signal (master or a bus, after the monitor level, DIM, MONO and MUTE). Put MASTER on the outputs that feed the PA or recorder and MONITOR on the speakers: muting the monitor then never mutes the show. A source may go to several outputs.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
+                    MoreText { text: i18n.t("MONITOR is the control-room signal (master or a bus, after the monitor level, DIM, MONO and MUTE). Put MASTER on the outputs that feed the PA or recorder and MONITOR on the speakers: muting the monitor then never mutes the show. A source may go to several outputs.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
                 }
             }
         }

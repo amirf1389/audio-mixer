@@ -53,6 +53,6 @@ Item {
                     Flow { Layout.fillWidth: true; spacing: 4
                         Repeater { model: page.builtIns; delegate: Btn { label: i18n.t(modelData.name ?? "", i18n.lang); onClicked: page.insert(modelData.kind) } } }
                     Item { Layout.fillHeight: true }
-                    Text { Layout.fillWidth: true; text: i18n.t("INSERT puts the plug-in into the first free slot of the selected strip (pick the strip on the MIXER). A plug-in that fails to load shows red in the rack with the reason. VST2 .dll / .so and VST3 bundles are both hosted; no plug-in editor window yet, parameters appear as generic controls.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } } }
+                    MoreText { Layout.fillWidth: true; text: i18n.t("INSERT puts the plug-in into the first free slot of the selected strip (pick the strip on the MIXER). A plug-in that fails to load shows red in the rack with the reason. VST2 .dll / .so and VST3 bundles are both hosted; no plug-in editor window yet, parameters appear as generic controls.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap } } } }
     }
 }

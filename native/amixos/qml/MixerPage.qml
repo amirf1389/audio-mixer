@@ -743,7 +743,7 @@ Item {
                             MSlider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -24; to: 24; stepSize: 0.5; value: page.selSt ? page.selSt.trimDb : 0; onMoved: engine.setTrim(page.sel, value) }
                             Text { text: (page.selSt && page.selSt.trimDb > 0 ? "+" : "") + (page.selSt ? page.selSt.trimDb.toFixed(1) : "0.0") + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 40 }
                             Rectangle { implicitWidth: 16; implicitHeight: 14; radius: 2; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "0"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setTrim(page.sel, 0) } } }
-                        Text { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: sideFlick.width }
+                        MoreText { text: i18n.t("Gain staging before the gate / EQ / compressor and the IN meter: bring a quiet source up or a hot one down here, keep the fader near 0 dB.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: sideFlick.width }
                         SectHead { title: "DYNAMICS" }
                         // gate
                         RowLayout { Layout.fillWidth: true

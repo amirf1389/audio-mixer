@@ -61,7 +61,7 @@ Item {
                 ColumnLayout { id: fc; anchors.fill: parent; anchors.margins: 12; spacing: 4
                     Head { text: i18n.t("WHERE THINGS LIVE", i18n.lang) }
                     Text { Layout.fillWidth: true; text: i18n.t("Console, scenes, presets, arrangement, autosave and exported CSVs: ", i18n.lang) + settings.dataFolder + i18n.t(".  Recordings: ", i18n.lang) + engine.recordFolder + i18n.t(".  Settings file: ", i18n.lang) + settings.settingsFile() + i18n.t(".  A backup of everything: CALIBRATE > SESSION > BACKUP CONSOLE.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
-                    Text { Layout.fillWidth: true; text: i18n.t("Licence and editions: LICENSE. Languages: the box at the top right. The console never sends anything over the network on its own; the remote app and the daemon are separate programs you start yourself.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap } } }
+                    MoreText { Layout.fillWidth: true; text: i18n.t("Licence and editions: LICENSE. Languages: the box at the top right. The console never sends anything over the network on its own; the remote app and the daemon are separate programs you start yourself.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap } } }
         }
     }
 }

@@ -109,7 +109,7 @@ Flickable {
             Layout.fillWidth: true
             title: i18n.t("HOW IT IS CHECKED", i18n.lang)
             subtitle: "Offline, in this program, with the vendor's public key " + engine.vendorKeyFingerprint() + " (ECDSA P-256 / SHA-256). The Key Generator that signs keys stays on the vendor's computer and is protected by a one-time code (TOTP) there."
-            Text { text: i18n.t("A key can be bound to one machine code, or valid on any computer within its seats. An edition token (Pro / Studio Master installer) activates once and is recorded in ~/.amixos/edition.json for this computer only. Nothing here phones home.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            MoreText { text: i18n.t("A key can be bound to one machine code, or valid on any computer within its seats. An edition token (Pro / Studio Master installer) activates once and is recorded in ~/.amixos/edition.json for this computer only. Nothing here phones home.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         }
     }
 }
