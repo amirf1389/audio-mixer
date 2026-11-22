@@ -45,7 +45,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis, kRide, kRideTouch, kAutoLimits };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis, kRide, kRideTouch, kAutoLimits, kMonDual, kMonEqOn, kMonEqF };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
@@ -68,6 +68,11 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
   ch_.assign(static_cast<std::size_t>(mixer_.strips()), dsp::Channel(cfg.sampleRate)); chBuf_.assign(ch_.size(), std::vector<float>(n, 0.0f)); sumBuf_.assign(n, 0.0f);
   busBuf_.assign(2 * kMaxBuses, std::vector<float>(n, 0.0f)); mono_.assign(n, 0.0f);
   for (int o = 0; o < kMaxOutputs; ++o) { amp_[o].prepare(cfg.sampleRate); amp_[o].set(ampUi_[o]); }   // the delay lines sized at the device rate, the settings kept
+  for (int k = 0; k < kMonBands; ++k) {   // the monitor analysis: one-octave band passes (RBJ, 0 dB peak) at the device rate
+    dsp::Biquad& b = monAna_[k]; b.reset(); const double f = monitorBandHz(k); if (f >= cfg.sampleRate * 0.45) { b.b0 = b.b1 = b.b2 = b.a1 = b.a2 = 0; monBand_[k] = 0; continue; }
+    const double w0 = 2.0 * 3.141592653589793 * f / cfg.sampleRate, alpha = std::sin(w0) * std::sinh(std::log(2.0) / 2.0 * w0 / std::sin(w0)), a0 = 1 + alpha;
+    b.b0 = alpha / a0; b.b1 = 0; b.b2 = -alpha / a0; b.a1 = -2 * std::cos(w0) / a0; b.a2 = (1 - alpha) / a0; monBand_[k] = 0; }
+  for (auto& f : monEq_) { f[0].reset(); f[1].reset(); }
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
   if (!backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err)) { backend_.reset(); return false; }   // a device that did not open is not kept: start() then says "open() first"
   return true;
@@ -173,6 +178,15 @@ void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) 
   post({kMonitor, std::clamp(source, 0, kMaxBuses), lin, 0, 0, mono ? 1 : 0});
 }
 
+void Runtime::setMonitorDual(bool on, int sourceB, double blend, int listen) { Cmd c{kMonDual, std::clamp(sourceB, 0, kMaxBuses), std::clamp(blend, 0.0, 1.0), 0, 0, on ? 1 : 0}; c.w = std::clamp(listen, 0, 2); post(c); }
+void Runtime::dualGains(double blend, int listen, double& ga, double& gb) noexcept {
+  if (listen == 1) { ga = 1; gb = 0; return; } if (listen == 2) { ga = 0; gb = 1; return; }
+  const double b = std::clamp(blend, 0.0, 1.0) * 1.5707963267948966; ga = std::cos(b); gb = std::sin(b);   // equal power: the sum keeps its loudness
+  if (ga < 1e-9) ga = 0; if (gb < 1e-9) gb = 0;
+}
+void Runtime::setMonitorEqOn(bool on) { post({kMonEqOn, 0, 0, 0, 0, on ? 1 : 0}); }
+void Runtime::setMonitorEqFilter(int i, double freq, double q, double gainDb) { if (i < 0 || i >= kMonEqMax) return; post({kMonEqF, i, std::clamp(freq, 20.0, 20000.0), std::clamp(q, 0.3, 12.0), std::clamp(gainDb, -15.0, 6.0)}); }
+
 void Runtime::onBlock(const float* const* in, float* const* out, std::size_t frames) {
   am::denormalsOff();   // per thread; cheap, so every callback (a backend may move the callback to another thread)
   const std::int64_t t0 = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -204,6 +218,9 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kBusMute: mixer_.setBusMute(c.a, c.x != 0); break;
       case kBusReturn: mixer_.setBusReturn(c.a, c.x); break;
       case kMonitor: monSrc_ = c.a; monGainTarget_ = c.x; monMono_ = c.b != 0; break;
+      case kMonDual: monDual_ = c.b != 0; monSrcB_ = c.a; if (monDual_) dualGains(c.x, static_cast<int>(c.w), monGaT_, monGbT_); else { monGaT_ = 1; monGbT_ = 0; } break;
+      case kMonEqOn: monEqOn_ = c.b != 0; if (!monEqOn_) for (auto& f : monEq_) { f[0].reset(); f[1].reset(); } break;
+      case kMonEqF: monEqGain_[c.a] = c.z; for (int k = 0; k < 2; ++k) monEq_[c.a][k].design(std::fabs(c.z) < 0.05 ? dsp::FilterType::Off : dsp::FilterType::Peaking, mixer_.sampleRate(), c.x, c.y, c.z); break;
       case kInRoute: inRoute_[c.a] = c.b; break;
       case kOutRoute: outRoute_[c.a] = c.b; break;
       case kAmp: if (c.a >= 0 && c.a < kMaxOutputs) { AmpParams p; p.on = c.b & 1; p.mute = c.b & 2; p.invert = c.b & 4; p.limitOn = c.b & 8; p.hpOrder = (c.b >> 4) & 15; p.lpOrder = (c.b >> 8) & 15;
@@ -315,19 +332,31 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
   { float* ch[2] = {left_.data(), right_.data()}; mixer_.applyOutputTrim(ch, 2, frames); }   // GAIN MODE's listening level: after the meters and the taps
   // the monitor section: source, level (smoothed over the block, no clicks), mono, mute -> outputs 0 / 1, with its own peak
   { const float* ml = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1)] : left_.data(); const float* mr = monSrc_ > 0 ? busOut[2 * (monSrc_ - 1) + 1] : right_.data();
+    const float* bl = monSrcB_ > 0 ? busOut[2 * (monSrcB_ - 1)] : left_.data(); const float* br = monSrcB_ > 0 ? busOut[2 * (monSrcB_ - 1) + 1] : right_.data();
+    const double ga0 = monGa_, gb0 = monGb_; monGa_ = monGaT_; monGb_ = monGbT_; const double inv = frames ? 1.0 / static_cast<double>(frames) : 0;
+    const bool dualPath = monDual_ || gb0 > 0 || monGb_ > 0; int nEq = 0; if (monEqOn_) for (int k = 0; k < kMonEqMax; ++k) if (std::fabs(monEqGain_[k]) >= 0.05) nEq = k + 1;
+    double bandAcc[kMonBands] = {};
     const double g0 = monGain_, g1 = monGainTarget_; monGain_ = g1; const double step = frames ? (g1 - g0) / static_cast<double>(frames) : 0; double pl = 0, pr = 0;
     float* ol = monL_.data(); float* or_ = monR_.data();
     long tone = toneLeft_.load(); const long tone0 = tone, toneAll = toneTotal_.load(); const double toneStep = 6.283185307179586 * 1000.0 / mixer_.sampleRate();
     for (std::size_t i = 0; i < frames; ++i) {
       const float g = static_cast<float>(g0 + step * static_cast<double>(i));
-      float l = ml[i] * g, r = mr[i] * g; if (monMono_) { l = r = 0.5f * (l + r); }
+      float l = ml[i] * g, r = mr[i] * g;
+      if (dualPath) {   // DUAL LISTEN: A and B with their (smoothed) gains; the analysis hears the mix before the monitor EQ
+        const double t = static_cast<double>(i) * inv, ga = ga0 + (monGa_ - ga0) * t, gb = gb0 + (monGb_ - gb0) * t;
+        const double sl = ga * ml[i] + gb * bl[i], sr = ga * mr[i] + gb * br[i];
+        if (monDual_) { const double m = 0.5 * (sl + sr); for (int k = 0; k < kMonBands; ++k) { const double y = monAna_[k].tick(m); bandAcc[k] += y * y; } }
+        l = static_cast<float>(sl) * g; r = static_cast<float>(sr) * g; }
+      for (int k = 0; k < nEq; ++k) { l = static_cast<float>(monEq_[k][0].tick(l)); r = static_cast<float>(monEq_[k][1].tick(r)); }   // the monitor EQ: control room only
+      if (monMono_) { l = r = 0.5f * (l + r); }
       if (tone > 0) { const long done = toneAll - tone; const long edge = std::min<long>(480, toneAll / 4 + 1); const float env = done < edge ? static_cast<float>(done) / static_cast<float>(edge) : tone < edge ? static_cast<float>(tone) / static_cast<float>(edge) : 1.f;
         const float t = 0.1f * env * static_cast<float>(std::sin(tonePhase_)); tonePhase_ += toneStep; if (tonePhase_ > 6.283185307179586) tonePhase_ -= 6.283185307179586; l += t; r += t; --tone; }
       ol[i] = l; or_[i] = r;
       pl = std::max(pl, static_cast<double>(std::fabs(l))); pr = std::max(pr, static_cast<double>(std::fabs(r)));
     }
     if (tone0 > 0) { long expect = tone0; toneLeft_.compare_exchange_strong(expect, tone); }   // a new testTone() during the block wins
-    monPk_[0] = std::max(pl, monPk_[0] * 0.8); monPk_[1] = std::max(pr, monPk_[1] * 0.8); }
+    monPk_[0] = std::max(pl, monPk_[0] * 0.8); monPk_[1] = std::max(pr, monPk_[1] * 0.8);
+    if (monDual_ && frames) for (int k = 0; k < kMonBands; ++k) monBand_[k] += (bandAcc[k] * inv - monBand_[k]) * 0.02; }
   // the output matrix: every device output carries one source
   for (int c = 0; c < nOut_; ++c) {
     if (!out || !out[c]) continue;
@@ -352,6 +381,7 @@ void Runtime::publish() {
   for (int k = 0; k < kMaxBuses; ++k) { const MeterState& m = mixer_.bus(k).meter.state(); s.buses[k] = {m.pk, m.rms, m.hold, m.clipN, 0.0, 0.0, 0.0, 0.0, 0.0, false, 0.0, 0.0, -120.0, false}; }
   s.momentary = mixer_.loudness().momentary(); s.shortTerm = mixer_.loudness().shortTerm(); s.integrated = mixer_.loudness().integrated(); s.lra = mixer_.loudness().range(); s.truePeak = mixer_.loudness().truePeak(); s.autoLevelDb = mixer_.autoLevelGainDb(); s.duckGrDb = mixer_.duckGainDb();
   s.monitorPk[0] = monPk_[0]; s.monitorPk[1] = monPk_[1];
+  for (int k = 0; k < kMonBands; ++k) s.monitorBandDb[k] = monBand_[k] > 1e-14 ? 10.0 * std::log10(monBand_[k]) : -140.0;
   for (int o = 0; o < kMaxOutputs; ++o) { s.ampPk[o] = amp_[o].peak(); s.ampGrDb[o] = amp_[o].gainReductionDb(); }
   s.correlation = mixer_.phase().corr; s.blocks = blocks_; s.frames = frames_; s.loadPct = loadPct_; s.in12Corr = in12Corr_; s.in12DiffDb = in12DiffDb_; s.in12LevelDb = in12LevelDb_; s.in12Windows = in12Windows_; s.blockUs = blockUs_; s.maxBlockUs = maxBlockUs_; s.jitterUs = jitterUs_; s.xruns = backend_ ? backend_->xruns() : 0;
   const unsigned q = seq_.load(std::memory_order_relaxed);

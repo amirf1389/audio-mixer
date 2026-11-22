@@ -497,6 +497,10 @@ int main(int argc, char* argv[]) {
     engine.copyChannel(1); if (!engine.channelClipboard() || !engine.pasteChannel(2) || !engine.channelParams(2).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: copy / paste channel failed\n"); return 9; }
     engine.resetStrip(2); if (engine.channelParams(2).value("compOn").toBool()) { std::fprintf(stderr, "amixos --smoke: reset channel left the compressor on\n"); return 10; }
     engine.setMonitor(0, 0, false, false, false);
+    { // DUAL LISTEN captures the monitor's EQ mode as AI EQ AUTO, and off restores it (the show path has no part in it)
+      const int was = engine.monitor().value("eqMode").toInt(); engine.setMonitorDual(true, 3, 0.25, 0); const QVariantMap on = engine.monitor();
+      engine.setMonitorDual(false, 3, 0.25, 0); const QVariantMap off = engine.monitor();
+      if (!on.value("dual").toBool() || !on.value("aiEq").toBool() || on.value("sourceB").toInt() != 3 || off.value("dual").toBool() || off.value("aiEq").toBool() || off.value("eqMode").toInt() != was) { std::fprintf(stderr, "amixos --smoke: DUAL LISTEN / AI EQ AUTO capture and restore\n"); return 52; } }
     // the licence: this test machine has no key, so BASIC with 10 channels; a malformed key is refused without storing anything
     if (engine.license().value("state").toString() != "basic" && engine.license().value("source").toString().isEmpty()) { std::fprintf(stderr, "amixos --smoke: licence state unexpected\n"); return 13; }
     if (engine.checkKey("not a key").value("valid").toBool() || engine.activateKey("AMIX1.x.y").value("ok").toBool()) { std::fprintf(stderr, "amixos --smoke: a bad key was accepted\n"); return 14; }
@@ -1596,6 +1600,10 @@ int main(int argc, char* argv[]) {
             if (f) { QQuickItem* ci = f->property("contentItem").value<QQuickItem*>(); const QPointF at = panel->mapToItem(ci, QPointF(0, 0)); f->setProperty("contentY", std::max(0.0, at.y() - 8)); settle(600); win->grabWindow().save(shots + "/settings-processor.png"); f->setProperty("contentY", 0); } }
           measure.roomCorrection(5, 4, 2.7, 0.5, 1, 1, 1.2, 2.5, 3, 1.2, 6, 12); win->setProperty("current", "acoustics"); settle(700);
           if (QObject* ap = win->findChild<QObject*>("acousticsPage")) { ap->setProperty("tab", 3); settle(800); win->grabWindow().save(shots + "/acoustics-room-correction.png"); ap->setProperty("tab", 0); }
+          if (QQuickItem* ms = win->findChild<QQuickItem*>("monitorStrip")) {   // the MONITOR strip with DUAL LISTEN and AI EQ AUTO on
+            win->setProperty("current", "mixer"); engine.setMonitor(0, -12, false, false, false); engine.setMonitorDual(true, 2, 0.4, 0); settle(900);
+            if (ms->isVisible()) { const QPointF at = ms->mapToScene(QPointF(0, 0)); const qreal dpr = win->devicePixelRatio(); win->grabWindow().copy(QRectF(at.x() * dpr - 4, at.y() * dpr - 4, (ms->width() + 8) * dpr, (ms->height() + 8) * dpr).toRect()).save(shots + "/monitor-dual-listen.png"); }
+            engine.setMonitorDual(false, 2, 0.4, 0); engine.setMonitor(0, 0, false, false, false); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
           win->setProperty("current", "update"); settle(900); win->grabWindow().save(shots + "/software-update.png");
           engine.startLive(0); settle(900); win->grabWindow().save(shots + "/live-mode.png"); engine.stopLive(); settle(300);

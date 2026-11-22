@@ -193,6 +193,23 @@ std::vector<Filter> autoEq(const Response& measured, const Response& target, con
   }
   return out;
 }
+std::vector<Filter> monitorAutoEq(const double* bandDb, int bands, int maxFilters, double maxBoostDb, double maxCutDb) {
+  if (!bandDb || bands < 3 || maxFilters <= 0) return {};
+  double mean = 0; int n = 0; for (int k = 0; k < bands; ++k) if (bandDb[k] > -90) { mean += bandDb[k]; ++n; }
+  if (n < 3) return {};
+  mean /= n;
+  Response m; int first = -1, last = -1; for (int k = 0; k < bands; ++k) if (bandDb[k] > -90) { if (first < 0) first = k; last = k; }
+  constexpr int ppo = 12;
+  for (int i = first * ppo; i <= last * ppo; ++i) {   // between band centres: linear in dB over log frequency (a band that is silent is bridged)
+    const double pos = static_cast<double>(i) / ppo; int k0 = static_cast<int>(pos); if (k0 >= last) k0 = last;
+    int a = k0; while (a > first && bandDb[a] <= -90) --a; int b = std::min(last, k0 + 1); while (b < last && bandDb[b] <= -90) ++b;
+    const double da = bandDb[a] > -90 ? bandDb[a] : mean, db = bandDb[b] > -90 ? bandDb[b] : mean;
+    const double t = b > a ? std::max(0.0, std::min(1.0, (pos - a) / (b - a))) : 0;
+    m.freq.push_back(31.25 * std::pow(2.0, pos)); m.magDb.push_back(da + (db - da) * t); m.phaseDeg.push_back(0);
+  }
+  AutoEqOptions o; o.maxFilters = maxFilters; o.fLo = m.freq.front(); o.fHi = m.freq.back(); o.maxBoostDb = maxBoostDb; o.maxCutDb = maxCutDb; o.minDb = 1.5; o.qMin = 0.5; o.qMax = 3;
+  return autoEq(m, flatTarget(m, mean), o);
+}
 std::vector<Filter> roomCorrection(const Room& r, int maxFilters, double maxCutDb, double fHi) {
   const double hi = std::max(40.0, std::min(400.0, fHi)), rt = std::max(0.1, std::min(5.0, r.rt60)), cutMax = std::max(1.0, std::min(24.0, maxCutDb));
   const int nMax = std::max(1, std::min(10, maxFilters));

@@ -845,13 +845,14 @@ Item {
             // The master mix and its meters are not touched: muting the monitor does not mute the show.
             ModPanel {
                 visible: page.monitorPanel
-                Layout.preferredWidth: 134; Layout.fillHeight: true; tint: Theme.emerald
+                objectName: "monitorStrip"
+                Layout.preferredWidth: 150; Layout.fillHeight: true; tint: Theme.emerald
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Lamp { tint: page.mon.mute ? Theme.danger : Theme.emerald; lit: engine.running }
                     Text { text: i18n.t("MONITOR", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 2 }
                     Item { Layout.fillWidth: true }
                     Text { text: "◖◗"; font.pixelSize: 12 } }
-                Text { text: i18n.t("CONTROL ROOM · SOURCE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 }
+                Text { Layout.fillWidth: true; elide: Text.ElideRight; text: page.mon.dual ? i18n.t("CONTROL ROOM · SOURCE A", i18n.lang) : i18n.t("CONTROL ROOM · SOURCE", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 }
                 GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 3; rowSpacing: 3
                     Repeater { model: 9
                         delegate: Rectangle { Layout.columnSpan: index === 0 ? 4 : 1; Layout.fillWidth: true; implicitHeight: 18; radius: 9
@@ -859,11 +860,52 @@ Item {
                             color: lit ? Theme.emerald : Theme.ov(0.07); border.color: lit ? Qt.lighter(Theme.emerald, 1.3) : Qt.rgba(0.063, 0.725, 0.506, 0.35)
                             Text { anchors.centerIn: parent; text: index === 0 ? i18n.t("MASTER", i18n.lang) : "B" + index; color: parent.lit ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMonitor(index, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) } } } }
-                RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 6
-                    Fader { showLevels: false; Layout.fillHeight: true; value: page.mon.db; outDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", page.tick), engine.telv("monitorRDb", page.tick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
-                    MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : engine.telv("monitorLDb", page.tick); rmsDb: -120 }
-                    MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: engine.telv("monitorRDb", page.tick) === undefined ? -120 : engine.telv("monitorRDb", page.tick); rmsDb: -120 } }
-                ReadPill { tint: Theme.amber; text: Theme.dbText(page.mon.db) + i18n.t(" dB", i18n.lang) + (page.mon.dim ? i18n.t(" · DIM", i18n.lang) : "") }
+                // DUAL LISTEN: the control room hears A (above) and B together, with a blend and an A / B switch. The show is not affected.
+                ModKey { objectName: "monDualBtn"; Layout.fillWidth: true; implicitHeight: 20; label: "DUAL LISTEN"; tint: Theme.cyan; lit: page.mon.dual === true
+                    onClicked: engine.setMonitorDual(!page.mon.dual, page.mon.sourceB === undefined ? 1 : page.mon.sourceB, page.mon.blend === undefined ? 0.5 : page.mon.blend, 0) }
+                ColumnLayout { visible: page.mon.dual === true; Layout.fillWidth: true; spacing: 3
+                    Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t("SOURCE B", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; font.letterSpacing: 1 }
+                    GridLayout { Layout.fillWidth: true; columns: 5; columnSpacing: 2; rowSpacing: 2
+                        Repeater { model: 9
+                            delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 15; radius: 7
+                                readonly property bool lit: page.mon.sourceB === index
+                                color: lit ? Theme.cyan : Theme.ov(0.07); border.color: lit ? Qt.lighter(Theme.cyan, 1.3) : Qt.rgba(0.13, 0.83, 0.93, 0.3)
+                                Text { anchors.centerIn: parent; text: index === 0 ? i18n.t("M", i18n.lang) : "B" + index; color: parent.lit ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMonitorDual(true, index, page.mon.blend, page.mon.listen) } } } }
+                    // A / A+B / B: the A/B switch (A+B = the blend)
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: Theme.ov(0.05); border.color: Theme.lineSoft
+                        RowLayout { anchors.fill: parent; anchors.margins: 2; spacing: 2
+                            Repeater { model: [{ l: 1, t: "A" }, { l: 0, t: "A+B" }, { l: 2, t: "B" }]
+                                delegate: Rectangle { objectName: "monListen" + modelData.l; Layout.fillWidth: true; Layout.fillHeight: true; radius: 8
+                                    readonly property bool lit: page.mon.listen === modelData.l
+                                    color: lit ? Theme.cyan : "transparent"
+                                    Text { anchors.centerIn: parent; text: i18n.t(modelData.t, i18n.lang); color: parent.lit ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMonitorDual(true, page.mon.sourceB, page.mon.blend, modelData.l) } } } } }
+                    RowLayout { Layout.fillWidth: true; spacing: 3; opacity: page.mon.listen === 0 ? 1 : 0.45
+                        Text { text: "A"; color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                        MSlider { id: monBlend; objectName: "monBlend"; Layout.fillWidth: true; tint: Theme.cyan; from: 0; to: 1; stepSize: 0.05; value: page.mon.blend === undefined ? 0.5 : page.mon.blend; enabled: page.mon.listen === 0
+                            onMoved: engine.setMonitorDual(true, page.mon.sourceB, value, 0)
+                            ToolTip.visible: hovered && settings.tooltips; ToolTip.text: i18n.t("BLEND: how much of A and B the control room hears (equal loudness)", i18n.lang) }
+                        Text { text: "B"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
+                    // AI EQ AUTO: under DUAL LISTEN the monitor EQ listens to the two sources and corrects itself (control room only)
+                    Rectangle { objectName: "monAiEq"; Layout.fillWidth: true; implicitHeight: 20; radius: 10; color: page.mon.aiEq ? Qt.rgba(0.96, 0.62, 0.04, 0.16) : Theme.ov(0.05); border.color: page.mon.aiEq ? Theme.amber : Theme.lineSoft
+                        RowLayout { anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 2; spacing: 3
+                            Lamp { tint: Theme.amber; lit: page.mon.aiEq === true }
+                            Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t("AI EQ AUTO", i18n.lang) + (page.mon.aiEq && page.mon.eqFilters ? " · " + page.mon.eqFilters.length : ""); color: page.mon.aiEq ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
+                            Rectangle { objectName: "monAiEqOn"; implicitWidth: 22; Layout.fillHeight: true; Layout.topMargin: 2; Layout.bottomMargin: 2; radius: 6; color: page.mon.aiEq ? Theme.amber : Theme.ov(0.08)
+                                Text { anchors.centerIn: parent; text: page.mon.aiEq ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); color: page.mon.aiEq ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setMonitorAiEq(!page.mon.aiEq) } }
+                            Rectangle { objectName: "monAiEqReset"; implicitWidth: 18; Layout.fillHeight: true; Layout.topMargin: 2; Layout.bottomMargin: 2; radius: 6; color: Theme.ov(0.08); opacity: page.mon.aiEq ? 1 : 0.4
+                                Text { anchors.centerIn: parent; text: "↺"; color: Theme.ink; font.pixelSize: 9 }
+                                MouseArea { anchors.fill: parent; enabled: page.mon.aiEq === true; cursorShape: Qt.PointingHandCursor; onClicked: engine.resetMonitorAiEq() }
+                                ToolTip.visible: rstH.hovered && settings.tooltips; ToolTip.text: i18n.t("RESET: the AI EQ back to flat; it learns again", i18n.lang); HoverHandler { id: rstH } } }
+                        ToolTip.visible: aiH.hovered && settings.tooltips; ToolTip.text: i18n.t("AI EQ AUTO: the control room's EQ measures what you listen to and corrects it. The show is not affected; off puts the previous EQ back.", i18n.lang); HoverHandler { id: aiH } } }
+                // the fader and its two meters on one scale: 0 dBFS on the meters sits on the fader's 0 dB mark, -60 at the fader's floor
+                RowLayout { Layout.fillHeight: true; Layout.preferredHeight: 80; Layout.minimumHeight: 80; Layout.alignment: Qt.AlignHCenter; spacing: 6
+                    Fader { id: monFader; objectName: "monFader"; showLevels: false; Layout.fillHeight: true; Layout.preferredHeight: 80; Layout.minimumHeight: 80; value: page.mon.db; outDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", page.tick), engine.telv("monitorRDb", page.tick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
+                    MeterBar { Layout.fillHeight: true; Layout.preferredHeight: 40; Layout.minimumHeight: 0; Layout.topMargin: monFader.pos(0) + 20; Layout.bottomMargin: 20; implicitWidth: 9; peakDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : engine.telv("monitorLDb", page.tick); rmsDb: -120 }
+                    MeterBar { Layout.fillHeight: true; Layout.preferredHeight: 40; Layout.minimumHeight: 0; Layout.topMargin: monFader.pos(0) + 20; Layout.bottomMargin: 20; implicitWidth: 9; peakDb: engine.telv("monitorRDb", page.tick) === undefined ? -120 : engine.telv("monitorRDb", page.tick); rmsDb: -120 } }
+                ReadPill { objectName: "monReadout"; tint: Theme.amber; text: (page.mon.db <= -59.95 ? "-∞" : Theme.dbText(page.mon.db)) + i18n.t(" dB", i18n.lang) + (page.mon.dim ? i18n.t(" · DIM", i18n.lang) : "") }
                 // DIM / MONO / SYNC: one segmented row
                 Rectangle { Layout.fillWidth: true; implicitHeight: 24; radius: 12; color: Theme.ov(0.05); border.color: Theme.lineSoft
                     RowLayout { anchors.fill: parent; anchors.margins: 2; spacing: 2
