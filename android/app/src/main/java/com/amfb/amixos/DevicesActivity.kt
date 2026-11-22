@@ -45,7 +45,7 @@ class DevicesActivity : FitActivity() {
     override fun onDestroy() { io.shutdownNow(); super.onDestroy() }
 
     private fun head(t: String, sub: String) {
-        box.addView(TextView(this).apply { text = t; setTextColor(getColor(R.color.accent)); textSize = 18f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f; setPadding(0, 24, 0, 2) })
+        box.addView(TextView(this).apply { text = t; setTextColor(getColor(R.color.accent)); textSize = 14f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f; setPadding(0, 24, 0, 2) })
         box.addView(TextView(this).apply { text = sub; setTextColor(getColor(R.color.dim)); textSize = 12f; setPadding(0, 0, 0, 14) })
     }
     private fun card(): LinearLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.card_bg); setPadding(28, 20, 28, 20)
@@ -55,7 +55,7 @@ class DevicesActivity : FitActivity() {
 
     private fun render() {
         box.removeAllViews()
-        box.addView(TextView(this).apply { text = getString(R.string.dev_title); setTextColor(getColor(R.color.accent)); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f })
+        box.addView(TextView(this).apply { text = getString(R.string.dev_title); setTextColor(getColor(R.color.accent)); textSize = 14f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f })
         audioSection(); halSection(); networkSection()
     }
 
@@ -91,7 +91,7 @@ class DevicesActivity : FitActivity() {
             fun pickRow(id: Int, name: String, detail: String) {
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 6, 0, 6); isClickable = true
                     setOnClickListener { Prefs.local(this@DevicesActivity).edit().putInt(if (isOut) "outDevice" else "inDevice", id).apply(); render() } }
-                row.addView(TextView(this).apply { text = if (id == sel) "●" else "○"; setTextColor(if (id == sel) getColor(R.color.accent) else getColor(R.color.dim)); textSize = 16f; setPadding(0, 0, 20, 0) })
+                row.addView(TextView(this).apply { text = if (id == sel) "●" else "○"; setTextColor(if (id == sel) getColor(R.color.accent) else getColor(R.color.dim)); textSize = 13f; setPadding(0, 0, 20, 0) })
                 val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
                 col.addView(TextView(this).apply { text = name; setTextColor(Color.WHITE); textSize = 14f; typeface = Typeface.DEFAULT_BOLD })
                 if (detail.isNotEmpty()) col.addView(TextView(this).apply { text = detail; setTextColor(getColor(R.color.dim)); textSize = 11f; typeface = Typeface.MONOSPACE })

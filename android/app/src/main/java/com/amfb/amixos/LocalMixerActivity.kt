@@ -147,7 +147,7 @@ class LocalMixerActivity : FitActivity() {
         body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear()
         val modeBar = Nav.modeBar(this, true)   // DUAL MODE: THIS PHONE | CONSOLE (upright: on top; on its side: in SETUP, so the faders get the height)
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        head.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
+        head.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
         startBtn = PadButton(this, getString(if (loop == null) R.string.start else R.string.stop), ConsoleUi.GREEN, 14f).apply { on = loop != null; layoutParams = LinearLayout.LayoutParams(300, 96); setOnClickListener { if (loop == null) startAudio() else stopAudio() } }
         recBtn = PadButton(this, getString(if (recWriter != null) R.string.lm_rec_stop else R.string.lm_rec), ConsoleUi.RED, 14f).apply { on = recWriter != null; layoutParams = LinearLayout.LayoutParams(220, 96).apply { setMargins(0, 0, 12, 0) }; setOnClickListener { toggleRec() } }
         // THREE SECTIONS, one at a time, so the faders get the whole screen: FADERS (the desk), MEDIA (the decks and the picture of a video)
@@ -355,13 +355,13 @@ class LocalMixerActivity : FitActivity() {
         val names = rack(s)
         // THE PRESET PACK on this channel: any factory effect preset into the rack's first free slot (the last slot when it is full)
         val pack = PresetPack.current(this)?.effects.orEmpty()
-        if (pack.isNotEmpty()) box.addView(Button(this).apply { text = getString(R.string.lm_fx_pack); contentDescription = "fxPack"; setOnClickListener {
+        if (pack.isNotEmpty()) box.addView(Button(this).apply { text = getString(R.string.lm_fx_pack_s); contentDescription = "fxPack"; setOnClickListener {
             AlertDialog.Builder(this@LocalMixerActivity).setTitle(R.string.fx_presets).setItems(pack.map { "${it.category} · ${it.name}" }.toTypedArray()) { _, w -> applyEffectPreset(s, pack[w]); changed() }.show() } })
         for (slot in 0 until Engine.MAX_INSERTS) {
             val c = card(); box.addView(c)
             val kind = names[slot]
             if (kind.isEmpty()) {
-                c.addView(Button(this).apply { text = getString(R.string.lm_slot_add, slot + 1); setOnClickListener {
+                c.addView(Button(this).apply { text = getString(R.string.lm_slot_add_s, slot + 1); setOnClickListener {
                     if (cat.isEmpty()) return@setOnClickListener
                     AlertDialog.Builder(this@LocalMixerActivity).setTitle(R.string.lm_pick_fx).setItems(cat.map { it.second }.toTypedArray()) { _, w ->
                         val k = cat[w].first; if (engine == null || mates(s).map { engine?.insert(it, slot, k) }.all { it == 0 }) { val l = rack(s); l[slot] = k; saveRack(s, l); prefs().edit().remove(paramKey(s, slot)).apply() }; changed() }.show() } })
@@ -599,7 +599,7 @@ class LocalMixerActivity : FitActivity() {
     private fun sectionTitle(box: LinearLayout, t: String) = box.addView(TextView(this).apply { text = t; setTextColor(dim); textSize = 10f; letterSpacing = 0.15f; setPadding(0, 10, 0, 6) })
     private fun dcaSetup(box: LinearLayout) {
         sectionTitle(box, getString(R.string.lm_dca_title))
-        box.addView(TextView(this).apply { text = getString(R.string.lm_dca_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
+        box.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.lm_dca_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) }))
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "dcaRow" }
         for (ch in dcaChannels()) { val g = Dca.groupOf(prefs(), ch)
             row.addView(PadButton(this, chName(ch) + "  ·  " + (if (g < 0) getString(R.string.lm_dca_none) else getString(R.string.lm_dca, g + 1)), ConsoleUi.AMBER, 11f).apply { on = g >= 0; contentDescription = "dcaAssign_$ch"; setPadding(22, 0, 22, 0)
@@ -649,7 +649,7 @@ class LocalMixerActivity : FitActivity() {
     private var duckNow: TextView? = null
     private fun duckSection(box: LinearLayout) {
         val p = prefs(); sectionTitle(box, getString(R.string.lm_duck_title))
-        box.addView(TextView(this).apply { text = getString(R.string.lm_duck_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
+        box.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.lm_duck_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) }))
         box.addView(PadButton(this, getString(if (PhoneDucker.load(p).on) R.string.lm_duck_on else R.string.lm_duck_off), ConsoleUi.GREEN, 12f).apply { on = PhoneDucker.load(p).on; contentDescription = "duckToggle"
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84)
             setOnClickListener { val v = PhoneDucker.load(p).let { it.copy(on = !it.on) }; PhoneDucker.save(p, v); PhoneDucker.apply(engine, v, duckRoles()); on = v.on; text = getString(if (v.on) R.string.lm_duck_on else R.string.lm_duck_off) } })
@@ -693,7 +693,7 @@ class LocalMixerActivity : FitActivity() {
     }
     private fun loudSection(box: LinearLayout) {
         val p = prefs(); sectionTitle(box, getString(R.string.lm_loud_title)); loudKeys.clear()
-        box.addView(TextView(this).apply { text = getString(R.string.lm_loud_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
+        box.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.lm_loud_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) }))
         box.addView(PadButton(this, getString(if (PhoneLoudness.load(p).masterOn) R.string.lm_loud_master_on else R.string.lm_loud_master_off), ConsoleUi.GREEN, 12f).apply { on = PhoneLoudness.load(p).masterOn; contentDescription = "loudMaster"
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84)
             setOnClickListener { val nv = PhoneLoudness.load(p).let { it.copy(masterOn = !it.masterOn) }; PhoneLoudness.save(p, nv); if (nv.masterOn && !p.getBoolean("limiter", true)) { p.edit().putBoolean("limiter", true).apply(); engine?.setLimiter(true, -0.5, 100.0) }   // the limiter is the safety

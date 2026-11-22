@@ -62,7 +62,7 @@ class MixdownActivity : FitActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 40, 32, 32) }
-        box.addView(TextView(this).apply { text = getString(R.string.mix_title); setTextColor(getColor(R.color.accent)); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f })
+        box.addView(TextView(this).apply { text = getString(R.string.mix_title); setTextColor(getColor(R.color.accent)); textSize = 14f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f })
         box.addView(TextView(this).apply { text = getString(R.string.mix_intro); setTextColor(getColor(R.color.dim)); textSize = 12f; setPadding(0, 6, 0, 20) })
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         row.addView(Button(this).apply { text = getString(R.string.mix_add); setOnClickListener { pick.launch(arrayOf("audio/*")) } })

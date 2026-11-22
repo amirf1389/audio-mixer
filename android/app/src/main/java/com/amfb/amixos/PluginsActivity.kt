@@ -35,7 +35,7 @@ class PluginsActivity : FitActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(R.string.plugins_title); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(R.string.plugins_title); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         head = TextView(this).apply { setTextColor(dim); textSize = 12f; text = getString(R.string.connecting) }; root.addView(head)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(R.string.plugins_racks, R.string.plugins_vst, R.string.plugins_ext).forEachIndexed { i, r -> row.addView(Button(this).apply { text = getString(r); setOnClickListener { tab = i; render() } }.also { tabs.add(it) }) }
@@ -69,7 +69,7 @@ class PluginsActivity : FitActivity() {
         val l = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(card); setPadding(20, 14, 20, 14)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 8 } }
         val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
-        t.addView(TextView(this).apply { text = title; setTextColor(Color.WHITE); textSize = 15f })
+        t.addView(TextView(this).apply { text = title; setTextColor(Color.WHITE); textSize = 13f })
         if (sub.isNotEmpty()) t.addView(TextView(this).apply { text = sub; setTextColor(dim); textSize = 12f })
         l.addView(t); if (badge.isNotEmpty()) l.addView(TextView(this).apply { text = badge; setTextColor(badgeColor); typeface = Typeface.MONOSPACE; textSize = 12f })
         body.addView(l)
@@ -99,12 +99,12 @@ class PluginsActivity : FitActivity() {
                     for (e in l) item(s(e, "name"), s(e, "note"), if (e["installed"] != true) "NOT INSTALLED" else if (e["on"] == true) "ON" else "OFF",
                         if (e["installed"] != true) dim else if (e["on"] == true) Color.parseColor("#34D399") else Color.parseColor("#FBBF24")) } }
         }
-        if (!(tab == 0 && live)) body.addView(TextView(this).apply { text = getString(R.string.plugins_note); setTextColor(dim); textSize = 11f; setPadding(0, 24, 0, 0) })   // the read-only note, not under the live racks
+        if (!(tab == 0 && live)) body.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.plugins_note); setTextColor(dim); textSize = 11f; setPadding(0, 24, 0, 0) }))   // the read-only note, not under the live racks
     }
     // ---- LIVE RACKS: tap a plug-in to open its face; every knob, the power LED and the presets act on the computer at once
     @Suppress("UNCHECKED_CAST")
     private fun renderLive() {
-        body.addView(TextView(this).apply { text = getString(R.string.plugins_live_note); setTextColor(Color.parseColor("#34D399")); textSize = 12f; setPadding(0, 12, 0, 4) })
+        body.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.plugins_live_note); setTextColor(Color.parseColor("#34D399")); textSize = 12f; setPadding(0, 12, 0, 4) }))
         for (r in (liveRacks!!["racks"] as List<Map<String, Any?>>)) { val strip = (r["strip"] as? Number)?.toInt() ?: 0
             val slots = (r["slots"] as? List<Map<String, Any?>>).orEmpty().filter { match(s(it, "name"), s(it, "kind"), s(it, "vendor")) }; if (slots.isEmpty()) continue
             section(String.format("CH %02d  %s", strip + 1, s(r, "name")))

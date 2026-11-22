@@ -36,7 +36,7 @@ abstract class ConsoleSection : FitActivity() {
         val p = Prefs.remote(this); val host = p.getString("host", "").orEmpty()
         if (host.isNotEmpty()) client = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), p.getString("token", "").orEmpty()))
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(titleRes); setTextColor(accent); textSize = 18f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(titleRes); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         note = TextView(this).apply { setTextColor(dim); textSize = 12f; setPadding(0, 6, 0, 10); text = if (client == null) getString(R.string.eq_offline) else "" }
         root.addView(note)
         build()
@@ -158,7 +158,7 @@ class MasteringActivity : ConsoleSection() {
         onBtn = ToggleButton(this).apply { textOn = getString(R.string.mast_on); textOff = getString(R.string.mast_off); setOnCheckedChangeListener { b, on -> if (b.tag == null) send { it.mastering(mapOf("on" to on)) } } }
         root.addView(onBtn)
         // the owner's MASTERING PRESETS (the preset pack): a preset goes to the console by NAME and the console applies its own tuned values
-        root.addView(Button(this).apply { text = getString(R.string.mast_presets); setOnClickListener { showMasteringPresets() } })
+        root.addView(Button(this).apply { text = getString(R.string.mast_presets_s); setOnClickListener { showMasteringPresets() } })
         root.addView(Button(this).apply { text = getString(R.string.presets_all); setOnClickListener { showAllPresets() } })
         if (android.os.Build.FINGERPRINT != "robolectric") io.execute { PresetPack.refresh(applicationContext) }   // a newer pack, if the owner signed one (not in the unit tests)
         gr = label("", cyan, 13f).apply { typeface = Typeface.MONOSPACE }; root.addView(gr)

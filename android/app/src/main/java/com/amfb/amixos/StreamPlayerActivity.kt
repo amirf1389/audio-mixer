@@ -27,7 +27,7 @@ class StreamPlayerActivity : FitActivity() {
         super.onCreate(savedInstanceState)
         service = runCatching { StreamLinks.Service.valueOf(Prefs.local(this).getString("playerService", "") ?: "") }.getOrDefault(StreamLinks.Service.YOUTUBE)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36, 36, 36, 24) }
-        box.addView(TextView(this).apply { text = getString(R.string.players_title); setTextColor(getColor(R.color.accent)); textSize = 22f; typeface = Typeface.DEFAULT_BOLD })
+        box.addView(TextView(this).apply { text = getString(R.string.players_title); setTextColor(getColor(R.color.accent)); textSize = 14f; typeface = Typeface.DEFAULT_BOLD })
         box.addView(TextView(this).apply { text = getString(R.string.players_intro); setTextColor(getColor(R.color.dim)); textSize = 13f; setPadding(0, 6, 0, 20) })
         chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; contentDescription = "playerServices" }; box.addView(chips)
         field = EditText(this).apply { setSingleLine(); textSize = 14f; setTextColor(getColor(R.color.md_on_surface)); contentDescription = "playerLink"
