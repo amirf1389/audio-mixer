@@ -127,40 +127,108 @@ void Doubler::process(float* L, float* R, std::size_t n) {
 // ---------------------------------------------------------------- W-SHAPE TUNER
 namespace am::fx {
 namespace {
-const Multi::Def kW[] = {{"amount", "AMOUNT", 0.6}, {"bass", "BASS", 0.55}, {"lowmid", "LOW-MID DIP", 0.4}, {"presence", "PRESENCE", 0.4}, {"upper", "UPPER DIP", 0.4}, {"air", "AIR", 0.5}, {"smooth", "SMOOTH", 0.6}, {"output", "OUTPUT", 0.5}};
+// the first eight are the original controls (ids, order and defaults unchanged); the rest are appended with defaults that sound exactly as before
+const Multi::Def kW[] = {{"amount", "AMOUNT", 0.6}, {"bass", "BASS", 0.55}, {"lowmid", "LOW-MID DIP", 0.4}, {"presence", "PRESENCE", 0.4}, {"upper", "UPPER DIP", 0.4}, {"air", "AIR", 0.5}, {"smooth", "SMOOTH", 0.6}, {"output", "OUTPUT", 0.5},
+  {"fbass", "BASS FREQ", 0.5}, {"flowmid", "LOW-MID FREQ", 0.5}, {"fpresence", "PRESENCE FREQ", 0.5}, {"fupper", "UPPER FREQ", 0.5}, {"fair", "AIR FREQ", 0.5},
+  {"loudcomp", "LOUD COMP", 0.0}, {"gainmatch", "GAIN MATCH", 1.0}, {"stereo", "STEREO", 0.0}, {"train", "TRAIN", 0.0}, {"learn", "LEARN", 0.0}};
 double wGain(double b) { return std::pow(10.0, b / 20.0); }
 // |H(f)| of one biquad in dB
 double magDb(const Biquad& q, double f, double fs) { const double w = 2 * 3.14159265358979 * f / fs, cr = std::cos(w), ci = -std::sin(w), c2r = std::cos(2 * w), c2i = -std::sin(2 * w);
   const double nr = q.b0 + q.b1 * cr + q.b2 * c2r, ni = q.b1 * ci + q.b2 * c2i, dr = 1 + q.a1 * cr + q.a2 * c2r, di = q.a1 * ci + q.a2 * c2i; return 10 * std::log10((nr * nr + ni * ni) / (dr * dr + di * di) + 1e-12); }
+// the travel of each band's FREQ knob: lowest, the old fixed place (the knob's centre), highest
+const double kRange[5][3] = {{40, 90, 200}, {200, 350, 800}, {1000, 1800, 4000}, {3000, 5000, 8000}, {6000, 10000, 16000}};
+const char* kBandName[6] = {"OFF", "BASS", "LOW-MID", "PRESENCE", "UPPER", "AIR"};
+constexpr int kLoudBlock = 64;           // LOUD COMP works at the control rate: every 64 samples
+constexpr double kLoudRef = -20.0;       // dBFS RMS where LOUD COMP leaves the curve as set
+constexpr double kLoudMaxDb = 15.0;      // the most a lift may reach with LOUD COMP
 }  // namespace
+double WShape::bandHz(int b, double v) { if (b < 0 || b > 4) return 1000; v = v < 0 ? 0 : v > 1 ? 1 : v; const double* r = kRange[b];
+  return v < 0.5 ? r[1] * std::pow(r[1] / r[0], 2 * v - 1) : r[1] * std::pow(r[2] / r[1], 2 * v - 1); }   // exactly the old place at 0.5
+double WShape::bandKnob(int b, double hz) { if (b < 0 || b > 4) return 0.5; const double* r = kRange[b]; hz = std::clamp(hz, r[0], r[2]);
+  return hz < r[1] ? 0.5 + 0.5 * std::log(hz / r[1]) / std::log(r[1] / r[0]) : 0.5 + 0.5 * std::log(hz / r[1]) / std::log(r[2] / r[1]); }
 void WShape::bands(const double* k, Band o[5]) {
   const double a = k[0], wide = k[6];   // SMOOTH: 0 -> Q 1.4 (tighter), 1 -> Q 0.5 (very wide)
   const double q = 1.4 - wide * 0.9;
-  o[0] = {Biquad::LowShelf, 90, 0.6, a * k[1] * 9};           // BASS   0 .. +9 dB
-  o[1] = {Biquad::Peak, 350, q, -a * k[2] * 6};                // LOW-MID DIP  0 .. -6 dB
-  o[2] = {Biquad::Peak, 1800, q, a * k[3] * 6};                // PRESENCE  0 .. +6 dB
-  o[3] = {Biquad::Peak, 5000, q * 1.2, -a * k[4] * 6};         // UPPER DIP  0 .. -6 dB
-  o[4] = {Biquad::HighShelf, 10000, 0.6, a * k[5] * 9};        // AIR  0 .. +9 dB
+  o[0] = {Biquad::LowShelf, bandHz(0, k[8]), 0.6, a * k[1] * 9};           // BASS   0 .. +9 dB
+  o[1] = {Biquad::Peak, bandHz(1, k[9]), q, -a * k[2] * 6};                // LOW-MID DIP  0 .. -6 dB
+  o[2] = {Biquad::Peak, bandHz(2, k[10]), q, a * k[3] * 6};                // PRESENCE  0 .. +6 dB
+  o[3] = {Biquad::Peak, bandHz(3, k[11]), q * 1.2, -a * k[4] * 6};         // UPPER DIP  0 .. -6 dB
+  o[4] = {Biquad::HighShelf, bandHz(4, k[12]), 0.6, a * k[5] * 9};        // AIR  0 .. +9 dB
 }
-WShape::WShape(double fs) : Multi(fs, kW, 8) { reset(); }
+WShape::WShape(double fs) : Multi(fs, kW, kParams) { reset(); }
 std::string WShape::text(const std::string& id, double v) const { v = v < 0 ? 0 : v > 1 ? 1 : v; char b[40]; const int i = index(id);
   const double a = k_[0]; switch (i) {
     case 1: std::snprintf(b, sizeof b, "%+.1f dB", a * v * 9); break; case 2: std::snprintf(b, sizeof b, "%+.1f dB", -a * v * 6); break; case 3: std::snprintf(b, sizeof b, "%+.1f dB", a * v * 6); break;
     case 4: std::snprintf(b, sizeof b, "%+.1f dB", -a * v * 6); break; case 5: std::snprintf(b, sizeof b, "%+.1f dB", a * v * 9); break; case 6: std::snprintf(b, sizeof b, "Q %.2f", 1.4 - v * 0.9); break;
-    case 7: std::snprintf(b, sizeof b, "%+.1f dB", (v - 0.5) * 24); break; default: std::snprintf(b, sizeof b, "%.0f %%", v * 100); }
+    case 7: std::snprintf(b, sizeof b, "%+.1f dB", (v - 0.5) * 24); break;
+    case 8: case 9: case 10: case 11: case 12: return hz(bandHz(i - 8, v));
+    case 13: if (v <= 0) return "OFF"; std::snprintf(b, sizeof b, "%.0f %%", v * 100); break;
+    case 14: return v >= 0.5 ? "ON" : "OFF";
+    case 15: { static const char* m[] = {"STEREO", "MID", "SIDE"}; return m[stereoOf(v)]; }
+    case 16: return kBandName[trainOf(v)];
+    case 17: return v > 0.5 ? "LISTENING" : "LEARN";
+    default: std::snprintf(b, sizeof b, "%.0f %%", v * 100); }
   return b; }
-void WShape::reset() { for (auto& c : f_) for (auto& q : c) q.clear(); dirty_ = true; }
+void WShape::reset() { for (auto& c : f_) for (auto& q : c) q.clear(); for (auto& q : an_) q.clear(); ms_ = 0; lfNow_ = 1; lf_ = 1; wasLearning_ = false; learnPos_ = 0; dirty_ = true; }
 void WShape::design() {
-  double k[8]; for (int i = 0; i < 8; ++i) k[i] = k_[i].load(); Band b[5]; bands(k, b);
-  for (int c = 0; c < 2; ++c) for (int i = 0; i < 5; ++i) f_[c][i].design(b[i].kind, fs_, b[i].f, b[i].q, b[i].db);
-  // loudness compensation: the curve's average power gain over 1/3-octave bands 40 Hz .. 16 kHz (a pink spectrum), taken back out
-  double sum = 0; int n = 0; for (double f = 40; f <= 16000; f *= std::pow(2.0, 1.0 / 3)) { double d = 0; for (int i = 0; i < 5; ++i) d += magDb(f_[0][i], f, fs_); sum += std::pow(10.0, d / 10); ++n; }
-  comp_ = -10 * std::log10(sum / n);
+  double k[kParams]; for (int i = 0; i < kParams; ++i) k[i] = k_[i].load(); Band b[5]; bands(k, b);
+  base_[0] = b[0].db; base_[1] = b[4].db;
+  // loudness compensation: the curve's average power gain over 1/3-octave bands 40 Hz .. 16 kHz (a pink spectrum), taken back out.
+  // Worked out on the curve as set (LOUD COMP's level-dependent part stays audible, as equal-loudness intends).
+  Biquad t[5]; for (int i = 0; i < 5; ++i) t[i].design(b[i].kind, fs_, b[i].f, b[i].q, b[i].db);
+  if (k[14] >= 0.5) { double sum = 0; int n = 0; for (double f = 40; f <= 16000; f *= std::pow(2.0, 1.0 / 3)) { double d = 0; for (int i = 0; i < 5; ++i) d += magDb(t[i], f, fs_); sum += std::pow(10.0, d / 10); ++n; }
+    comp_ = -10 * std::log10(sum / n); } else comp_ = 0;
+  const double lf = k[13] > 0 ? lfNow_ : 1.0;
+  for (int c = 0; c < 2; ++c) for (int i = 0; i < 5; ++i) { double db = b[i].db; if ((i == 0 || i == 4) && lf != 1.0) db = std::min(db * lf, kLoudMaxDb); f_[c][i].design(b[i].kind, fs_, b[i].f, b[i].q, db); }
+  const int tr = trainOf(k[16]); trainOn_ = tr > 0;
+  if (trainOn_) { const Band& x = b[tr - 1]; for (int c = 0; c < 2; ++c) f_[c][5].design(x.kind, fs_, x.f, x.kind == Biquad::Peak ? 1.0 : 0.6, 6.0); }
+}
+void WShape::designLoud(double lf) {   // only the bass and air bands follow the level; the other three keep their coefficients (and their state)
+  double k[kParams]; for (int i = 0; i < kParams; ++i) k[i] = k_[i].load(); Band b[5]; bands(k, b);
+  for (int c = 0; c < 2; ++c) for (int i : {0, 4}) f_[c][i].design(b[i].kind, fs_, b[i].f, b[i].q, std::min(b[i].db * lf, kLoudMaxDb));
+  lf_ = lf;
+}
+void WShape::finishLearn() {
+  // AUTO W: each region's long-term level against the five's average. A neutral (pink) programme has the same energy in every
+  // constant-Q band, so the difference is what the curve should correct: lift a region that is short (BASS, PRESENCE, AIR), dip one
+  // that is too strong (LOW-MID, UPPER), within each control's range at the present AMOUNT.
+  k_[17] = 0; wasLearning_ = false; learnPos_ = 0; dirty_ = true;
+  if (anN_ < 1) return;
+  double lv[5], mean = 0, tot = 0; for (int b = 0; b < 5; ++b) { tot += anE_[b] / anN_; lv[b] = 10 * std::log10(anE_[b] / anN_ + 1e-20); mean += lv[b] / 5; }
+  if (tot < 1e-8) return;   // nothing played (under about -80 dBFS): keep the gains
+  const double a = std::max(k_[0].load(), 0.05);
+  k_[1] = clamp01(-(lv[0] - mean) / (a * 9)); k_[2] = clamp01((lv[1] - mean) / (a * 6)); k_[3] = clamp01(-(lv[2] - mean) / (a * 6));
+  k_[4] = clamp01((lv[3] - mean) / (a * 6)); k_[5] = clamp01(-(lv[4] - mean) / (a * 9));
+  learned_.fetch_add(1);
 }
 void WShape::process(float* L, float* R, std::size_t n) {
   if (bypass_.load()) return;
   if (dirty_.exchange(false)) design();
+  // AUTO W: listen to the input (before the curve) for kLearnSeconds
+  if (k_[17] > 0.5) {
+    if (!wasLearning_) { for (int b = 0; b < 5; ++b) { an_[b].clear(); an_[b].design(Biquad::BandPass, fs_, bandHz(b, k_[8 + b]), 1.0, 0); anE_[b] = 0; } anN_ = 0; wasLearning_ = true; }
+    for (std::size_t i = 0; i < n; ++i) { const float m = 0.5f * (L[i] + R[i]); for (int b = 0; b < 5; ++b) { const double y = an_[b].run(m); anE_[b] += y * y; } }
+    anN_ += static_cast<double>(n); learnPos_ = std::min(1.0, anN_ / (kLearnSeconds * fs_));
+    if (anN_ >= kLearnSeconds * fs_) { finishLearn(); design(); dirty_ = false; }
+  } else if (wasLearning_) { wasLearning_ = false; learnPos_ = 0; }
   const double g = wGain(comp_.load() + (k_[7] - 0.5) * 24), wet = mix_.load(); float* ch[2] = {L, R};
-  for (int c = 0; c < 2; ++c) for (std::size_t i = 0; i < n; ++i) { const float d = ch[c][i]; float x = d; for (int b = 0; b < 5; ++b) x = f_[c][b].run(x); ch[c][i] = static_cast<float>(d + (x * g - d) * wet); }
+  const double lc = k_[13].load(); const int mode = stereoOf(k_[15]); const int nb = trainOn_ ? 6 : 5;
+  if (lc <= 0 && lfNow_ != 1.0) { lfNow_ = 1.0; lf_ = 1.0; designLoud(1.0); }
+  const double aMs = 1 - std::exp(-1.0 / (1.5 * fs_)), aLf = 1 - std::exp(-static_cast<double>(kLoudBlock) / (0.3 * fs_));
+  for (std::size_t o = 0; o < n; o += kLoudBlock) {
+    const std::size_t e = std::min(n, o + kLoudBlock);
+    if (lc > 0) {   // LOUD COMP: the programme's level (1.5 s RMS) moves the bass and air lifts, smoothed again (0.3 s) so nothing pumps or zips
+      for (std::size_t i = o; i < e; ++i) ms_ += aMs * (0.5 * (static_cast<double>(L[i]) * L[i] + static_cast<double>(R[i]) * R[i]) - ms_);
+      const double lvl = 10 * std::log10(ms_ + 1e-20);
+      if (lvl > -70) { const double want = std::clamp(1 + lc * std::clamp((kLoudRef - lvl) / 20.0, -1.0, 1.0), 0.0, 2.0); lfNow_ += (want - lfNow_) * aLf; }   // under -70 dBFS: hold (no lift of the noise floor)
+      if (std::fabs(lfNow_ - lf_.load()) > 0.002) designLoud(lfNow_);
+    }
+    if (mode == 0) {
+      for (int c = 0; c < 2; ++c) for (std::size_t i = o; i < e; ++i) { const float d = ch[c][i]; float x = d; for (int b = 0; b < nb; ++b) x = f_[c][b].run(x); ch[c][i] = static_cast<float>(d + (x * g - d) * wet); }
+    } else {        // M/S: the curve on the MID (what both sides share) or on the SIDE (what differs); the other is left exactly as it came
+      for (std::size_t i = o; i < e; ++i) { const float m = 0.5f * (L[i] + R[i]), s = 0.5f * (L[i] - R[i]); const float d = mode == 1 ? m : s; float x = d; for (int b = 0; b < nb; ++b) x = f_[0][b].run(x);
+        const float y = static_cast<float>(d + (x * g - d) * wet); const float mm = mode == 1 ? y : m, ss = mode == 1 ? s : y; L[i] = mm + ss; R[i] = mm - ss; }
+    }
+  }
 }
 }  // namespace am::fx

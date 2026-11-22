@@ -449,12 +449,30 @@ class IamfRenderer final : public Multi { public: explicit IamfRenderer(double f
 // at 5 kHz, which takes the edge off harshness). AMOUNT scales the whole curve, SMOOTH widens every band (wide = smooth, no peaky
 // resonances). The level is kept the same when the curve changes (automatic loudness compensation on a pink spectrum), so a louder W
 // never just sounds "better" because it is louder; OUTPUT trims after that.
+// The additions, each appended after OUTPUT with a default that leaves the old sound exactly as it was (an old saved state loads the same):
+//   BASS / LOW-MID / PRESENCE / UPPER / AIR FREQ  move each band (40-200 Hz, 200-800 Hz, 1-4 kHz, 3-8 kHz, 6-16 kHz; centre = the old place)
+//   LOUD COMP   the bass and air lifts follow the programme level (1.5 s RMS): more W when it plays quietly, flatter when loud (0 = off)
+//   GAIN MATCH  the automatic loudness compensation above (on = as before; off = the curve's own level)
+//   STEREO      STEREO / MID / SIDE: the curve on both sides, on what they share only, or on what differs only
+//   TRAIN       the ear trainer's boost: +6 dB on one band (OFF / BASS / LOW-MID / PRESENCE / UPPER / AIR), outside AMOUNT
+//   LEARN       AUTO W: listens 8 s, measures the five regions against a neutral (pink) balance and sets the five gains, then switches off
 class WShape final : public Multi { public: explicit WShape(double fs); const char* kind() const override { return "wshape"; } const char* name() const override { return "W-SHAPE TUNER"; }
   std::string text(const std::string& id, double v) const override; void reset() override; void process(float* L, float* R, std::size_t n) override;
   double compensationDb() const { return comp_.load(); }
+  double loudFactor() const { return lf_.load(); }    // LOUD COMP: how much of the bass / air lift is applied now (1 = as set)
+  double learnProgress() const { return learnPos_.load(); }   // 0 .. 1 while AUTO W listens
+  int learnCount() const { return learned_.load(); }  // how many times AUTO W has set the gains
   struct Band { Biquad::Kind kind; double f, q, db; };
-  static void bands(const double* k, Band out[5]);     // the five bands for the knobs k[0..6]
- private: void design(); Biquad f_[2][5]; std::atomic<double> comp_{0}; };
+  static constexpr int kParams = 18;
+  static constexpr double kLearnSeconds = 8.0;
+  static double bandHz(int b, double v);               // a band's frequency for its FREQ knob (0.5 = the old fixed place)
+  static double bandKnob(int b, double hz);            // and back
+  static void bands(const double* k, Band out[5]);     // the five bands for the knobs k[0..kParams-1]
+  static int stereoOf(double v) { return v < 0.25 ? 0 : v < 0.75 ? 1 : 2; }
+  static int trainOf(double v) { const int t = static_cast<int>((v < 0 ? 0 : v > 1 ? 1 : v) * 5 + 0.5); return t; }
+ private: void design(); void designLoud(double f); void finishLearn();
+  Biquad f_[2][6]; Biquad an_[5]; double anE_[5] = {0, 0, 0, 0, 0}, anN_ = 0, ms_ = 0, lfNow_ = 1; double base_[2] = {0, 0}; bool trainOn_ = false, wasLearning_ = false;
+  std::atomic<double> comp_{0}, lf_{1}, learnPos_{0}; std::atomic<int> learned_{0}; };
 
 // CONVERTER CLIP: the last stage before the file: the colour of an analog-to-digital and a digital-to-analog converter around a soft
 // clipper. ADC and DAC (on / off) each add the faint harmonics and the gentle top-end band limit of a converter's analog stage; INPUT and

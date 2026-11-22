@@ -155,12 +155,12 @@ int main() {
         CHECK(loud > 0.2f && loud < 0.95f);               // rounded off, not clipped hard and not silent
         for (std::size_t i = 0; i < n; ++i) CHECK(std::isfinite(l[i]) && std::fabs(l[i]) < 4.f); } }
     std::printf("fx_test: twenty-three effects as rack plug-ins (sample player, de-squash, reverb, delay, analog channel, pitch shifter, dual listen eq, sound barrier, sync delay, feedback killer, chorus, drive, flanger, phaser, tremolo, auto wah, bit crusher, exciter, tube amp, pre amp, post amp, hall, room): audible, finite, bypass, state\n"); }
-  { const auto& all = am::fx::presets(); CHECK(all.size() == 600); std::set<std::string> names; int perKind[5] = {0, 0, 0, 0, 0};
+  { const auto& all = am::fx::presets(); CHECK(all.size() == 609); std::set<std::string> names; int perKind[6] = {0, 0, 0, 0, 0, 0};
     for (const auto& p : all) { names.insert(p.name); auto e = am::fx::make(p.kind, 48000); CHECK(e); for (const auto& [id, v] : p.values) { CHECK(v >= 0 && v <= 1); e->set(id, v); } e->setMix(p.mix); bool known = false; for (const auto& prm : e->params()) for (const auto& [id, v] : p.values) if (prm.id == id) known = true; CHECK(known);
-      perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : p.kind == "pingpong" ? 4 : 3]++; if (p.kind == "pingpong") CHECK(p.id > 300 && p.category == "Ping-Pong"); else CHECK(p.id <= 300); }
-    CHECK(names.size() == 600 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && perKind[4] == 300 && am::fx::preset(1) && am::fx::preset(301) && am::fx::preset(600) && !am::fx::preset(601));
+      perKind[p.kind == "reverb" ? 0 : p.kind == "delay" ? 1 : p.kind == "chorus" ? 2 : p.kind == "pingpong" ? 4 : p.kind == "wshape" ? 5 : 3]++; if (p.kind == "pingpong") CHECK(p.id > 300 && p.id <= 600 && p.category == "Ping-Pong"); else if (p.kind == "wshape") CHECK(p.id > 600 && p.category == "W-Shape"); else CHECK(p.id <= 300); }
+    CHECK(names.size() == 609 && perKind[0] == 110 && perKind[1] == 100 && perKind[2] == 50 && perKind[3] == 40 && perKind[4] == 300 && perKind[5] == 9 && am::fx::preset(1) && am::fx::preset(301) && am::fx::preset(600) && am::fx::preset(609) && !am::fx::preset(610) && am::fx::preset(600)->kind == "pingpong" && am::fx::preset(601)->name == "SPEECH");
     CHECK(am::fx::preset(120)->kind == "delay");   // the first 300 keep their numbers: a saved console still loads the same preset
-    std::printf("fx_test: 600 presets (300 + 300 ping-pong), unique names, every parameter known to its effect\n"); }
+    std::printf("fx_test: 609 presets (300 + 300 ping-pong + 9 W-SHAPE), unique names, every parameter known to its effect\n"); }
   {   // AUTO MIC EQ: a dull voice is opened and a boomy one is thinned towards the TARGET, within RANGE; AMOUNT 0 leaves the sound alone; silence holds
     using am::fx::AutoMicEq; const std::size_t n = 48000 * 6, blk = 256;
     auto voice = [&](double lowDb, double highDb, std::vector<float>& l, std::vector<float>& r) {   // a tone in every band, as loud as a natural voice has it there; lowDb / highDb move the two bottom / two top bands

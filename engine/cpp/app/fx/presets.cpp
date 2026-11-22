@@ -78,6 +78,20 @@ std::vector<Preset> build() {
     for (int k = 0; k < 20; ++k) { const double c = k / 19.0; char b[48]; if (k == 0) std::snprintf(b, sizeof b, "Bounce Full Range"); else std::snprintf(b, sizeof b, "Bounce Low Cut %d Hz", static_cast<int>(20.0 + c * 780.0 + 0.5)); pp(b, 250, 250, 0.5, 0.6, 1.0, c, 0.35); }   // 20: thin .. full
     (void)first;
   }
+  // ---- W-SHAPE TUNER: 9 (ids 601 .. 609), after everything else so every older preset keeps its number
+  { struct W { const char* name; double amount, bass, lowmid, presence, upper, air, smooth, fbass, flowmid, fpres, fupper, fair, loud; };
+    const W ws[] = {{"SPEECH", 0.5, 0.2, 0.65, 0.7, 0.45, 0.3, 0.6, 0.55, 0.45, 0.5, 0.5, 0.45, 0.0},
+      {"PODCAST", 0.55, 0.45, 0.6, 0.6, 0.55, 0.4, 0.65, 0.45, 0.45, 0.45, 0.5, 0.5, 0.0},
+      {"MUSIC", 0.6, 0.6, 0.4, 0.4, 0.4, 0.55, 0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0},
+      {"LIVE PA", 0.55, 0.35, 0.7, 0.5, 0.65, 0.3, 0.5, 0.6, 0.5, 0.5, 0.45, 0.4, 0.0},
+      {"SMALL SPEAKER", 0.7, 0.8, 0.5, 0.5, 0.3, 0.4, 0.6, 0.75, 0.55, 0.5, 0.5, 0.4, 0.0},
+      {"CAR", 0.65, 0.4, 0.65, 0.55, 0.45, 0.6, 0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5},
+      {"BACKGROUND (LOW LEVEL)", 0.6, 0.7, 0.3, 0.35, 0.3, 0.7, 0.7, 0.5, 0.5, 0.5, 0.5, 0.5, 0.8},
+      {"GENTLE", 0.3, 0.55, 0.4, 0.4, 0.4, 0.5, 0.9, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0},
+      {"STRONG", 1.0, 0.8, 0.6, 0.6, 0.6, 0.7, 0.4, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0}};
+    for (const W& w : ws) add(w.name, "wshape", "W-Shape", {{"amount", w.amount}, {"bass", w.bass}, {"lowmid", w.lowmid}, {"presence", w.presence}, {"upper", w.upper}, {"air", w.air}, {"smooth", w.smooth}, {"output", 0.5},
+      {"fbass", w.fbass}, {"flowmid", w.flowmid}, {"fpresence", w.fpres}, {"fupper", w.fupper}, {"fair", w.fair}, {"loudcomp", w.loud}, {"gainmatch", 1.0}, {"stereo", 0.0}, {"train", 0.0}}, 1.0);
+  }
   return out;
 }
 }  // namespace

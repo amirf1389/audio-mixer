@@ -2,7 +2,7 @@
   "product": "audio-mixer",
   "version": "1.25.0.0",
   "channel": "stable",
-  "released": "2026-11-21",
+  "released": "2026-11-22",
   "notes": [],
   "features": [
     {
@@ -263,35 +263,35 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.25.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 28134124,
-      "sha256": "7cce64ef388d67f7839b9d517a7592986319b140d0bad99c235bee91e0a7d4df"
+      "size": 28216706,
+      "sha256": "2735a4a1d5e7733261d808fa7f338880f6580d9a5433133ea3067f0c6fdbf558"
     },
     "android-apk": {
-      "name": "AmF-X1-1.25.0.0-b6-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b6-android.apk",
-      "size": 14828544,
-      "sha256": "609cc44e8990989d86ae66b15922e41a7d5409c48e5ff417f1212c738d29920b",
+      "name": "AmF-X1-1.25.0.0-b7-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b7-android.apk",
+      "size": 14885668,
+      "sha256": "4b9bfd25e0f18f6b1ba0e820c29eea8c6940269c0047086d00a6b7446fa487aa",
       "package": "com.amfb.amixos",
-      "build": 6,
-      "versionCode": 125000006,
-      "versionName": "1.25.0.0 (build 6)"
+      "build": 7,
+      "versionCode": 125000007,
+      "versionName": "1.25.0.0 (build 7)"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.25.0.0-b6-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b6-android.apk",
-      "size": 14815738,
-      "sha256": "964f70186f8981bc4794bdde8f81bb56f00d7bc63ffb78c90458936bf8d37bc3",
+      "name": "AmF-X1-Mixer-1.25.0.0-b7-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b7-android.apk",
+      "size": 14872418,
+      "sha256": "22134f01118fa69e02c923fce108ad33e4ce91391808d26780ece8cd91540144",
       "package": "com.amfb.amixos.mixer",
-      "build": 6,
-      "versionCode": 125000006,
-      "versionName": "1.25.0.0 (build 6)"
+      "build": 7,
+      "versionCode": 125000007,
+      "versionName": "1.25.0.0 (build 7)"
     }
   },
   "plugins": [],
   "presets": {
-    "version": "2026.11.20",
+    "version": "2026.11.22",
     "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/presets/presets-pack.json",
-    "size": 161120,
-    "sha256": "81e4f2f3ffa527ea6d1acb9cbac2f883db582606acf1b961768912b929eb3b86"
+    "size": 165128,
+    "sha256": "bdac8fe4c13f92bda0b73fcb6b4587736f74a2cb7e62cda26b90704a6e7a89cd"
   }
 }

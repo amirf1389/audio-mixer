@@ -27,13 +27,23 @@ class PresetPackTest {
 
     @Test fun builtInPackParsesWithTheOwnersPresets() {
         val p = PresetPack.builtIn(ctx); assertNotNull("the pack is bundled as an asset", p); p!!
-        assertEquals(10, p.mastering.size); assertEquals(600, p.effects.size); assertTrue(p.tone.size >= 25)
+        assertEquals(10, p.mastering.size); assertEquals(609, p.effects.size); assertTrue(p.tone.size >= 25)
         assertEquals(listOf("AMFB SIGNATURE", "TRANSPARENT", "STREAMING", "WARM", "PUNCH", "LOUD", "BROADCAST VOICE", "SHORT VIDEO / LIVE", "METAL", "HARD ROCK"), p.mastering.map { it.name })
         assertEquals(2.5, (p.mastering.first { it.name == "WARM" }.params["low"] as Number).toDouble(), 0.0)
-        assertEquals(setOf("reverb", "delay", "chorus", "drive", "pingpong"), p.effects.map { it.kind }.toSet())
+        assertEquals(setOf("reverb", "delay", "chorus", "drive", "pingpong", "wshape"), p.effects.map { it.kind }.toSet())
         assertEquals(PresetPack.sha256(repoPack()), PresetPack.sha256(ctx.assets.open("presets-pack.json").readBytes()))   // the asset is the repository's pack, byte for byte
         assertNull(PresetPack.parse("{}")); assertNull(PresetPack.parse("not json"))
         assertTrue(PresetPack.newer("2026.11.20", "2026.11.3")); assertTrue(!PresetPack.newer("2026.1.1", "2026.1.1"))
+    }
+
+    @Test fun wShapePresetsAreOnThePhone() {
+        // the phone's rack offers a W-SHAPE TUNER's factory presets from the pack (PluginFace's PRESETS menu: effectsOf(kind)), with the new controls
+        val w = PresetPack.builtIn(ctx)!!.effectsOf("wshape")
+        assertEquals(listOf("SPEECH", "PODCAST", "MUSIC", "LIVE PA", "SMALL SPEAKER", "CAR", "BACKGROUND (LOW LEVEL)", "GENTLE", "STRONG"), w.map { it.name })
+        assertEquals((601..609).toList(), w.map { it.id }); assertTrue(w.all { it.category == "W-Shape" })
+        for (e in w) { for (k in listOf("amount", "bass", "lowmid", "presence", "upper", "air", "smooth", "output", "fbass", "flowmid", "fpresence", "fupper", "fair", "loudcomp", "gainmatch", "stereo")) assertTrue("${e.name} $k", e.values.containsKey(k))
+            assertTrue(e.values.values.all { it in 0.0..1.0 }); assertEquals(1.0, e.values["gainmatch"]!!, 0.0) }
+        assertEquals(0.8, w.first { it.name == "BACKGROUND (LOW LEVEL)" }.values["loudcomp"]!!, 1e-9)   // the low-level preset follows the playback level
     }
 
     @Test fun masteringScreenListsEveryPreset() {
@@ -41,7 +51,7 @@ class PresetPackTest {
         a.showMasteringPresets(); var d = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
         assertEquals(10, d.listView.adapter.count); assertEquals("AMFB SIGNATURE", d.listView.adapter.getItem(0))
         a.showAllPresets(); d = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
-        assertEquals(3, d.listView.adapter.count); assertTrue(d.listView.adapter.getItem(1).toString().contains("600"))
+        assertEquals(3, d.listView.adapter.count); assertTrue(d.listView.adapter.getItem(1).toString().contains("609"))
     }
 
     @Test fun aDownloadedPackNeedsTheSignedSha() {

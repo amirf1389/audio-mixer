@@ -668,6 +668,10 @@ class Engine : public QObject {
   Q_INVOKABLE int rescanVst(const QStringList& extraDirs);   // scans the platform folders + extraDirs; returns the plug-in count
   Q_INVOKABLE QVariantList pluginParams(int strip, int slot) const;   // [{id, title, units, value (normalized), text, stepCount, bypass, hidden, readOnly}]
   Q_INVOKABLE void setPluginParam(int strip, int slot, int id, double normalized);
+  // an effect's editor state saved with it (the W-SHAPE's A / B slots) and the W-SHAPE's live readings {learn 0..1, learning, learned, loud, comp}
+  Q_INVOKABLE QString pluginUiState(int strip, int slot) const;
+  Q_INVOKABLE void setPluginUiState(int strip, int slot, const QString& ui);
+  Q_INVOKABLE QVariantMap wshapeInfo(int strip, int slot) const;
   Q_INVOKABLE QString pluginError(int strip, int slot) const;
   Q_INVOKABLE QString pluginParamText(int strip, int slot, int id, double normalized) const;   // what the plug-in calls that position ("250 ms", "+12 dB"): for a knob's printed scale
   Q_INVOKABLE int pluginCount(int strip) const;

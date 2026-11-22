@@ -1548,6 +1548,12 @@ void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i 
     st.spAz = p.vst->param(0) * 360 - 180; st.spEl = p.vst->param(1) * 180 - 90; st.spDist = 0.5 * std::pow(40.0, p.vst->param(2)); st.spSpread = p.vst->param(3); if (spkOn_) feedSpeakers(i); emit spatialMoved(); }
   if (linked(i) && !mirror_ && partner(i) >= 0 && strips_[static_cast<std::size_t>(partner(i))].plugins[slot].kind == p.kind) { mirror_ = true; setPluginParam(partner(i), slot, id, v); mirror_ = false; }
   emit stripsChanged(); }
+QString Engine::pluginUiState(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {}; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get()); return fp ? QString::fromStdString(fp->uiState()) : QString(); }
+void Engine::setPluginUiState(int i, int slot, const QString& ui) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; auto* fp = dynamic_cast<am::fx::FxPlugin*>(p.vst.get()); if (!fp) return;
+  fp->setUiState(ui.toStdString()); p.state = QString::fromStdString(fp->state()); save(); }
+QVariantMap Engine::wshapeInfo(int i, int slot) const { QVariantMap m; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return m; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get());
+  auto* w = fp ? dynamic_cast<am::fx::WShape*>(fp->effect()) : nullptr; if (!w) return m;
+  m["learn"] = w->learnProgress(); m["learning"] = w->params()[17].value > 0.5; m["learned"] = w->learnCount(); m["loud"] = w->loudFactor(); m["comp"] = w->compensationDb(); return m; }
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
 QVariantList Engine::plugins(int i) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
