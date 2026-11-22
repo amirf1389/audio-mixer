@@ -263,8 +263,8 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.25.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 28298917,
-      "sha256": "453df780b12fcddee48e695d4853077fa6d7e09ee500c14b1802acf33a9b6401"
+      "size": 28322555,
+      "sha256": "97b75130b477e3349384d27920d6113af2cc29f15b21c13755b10bb7c6dacd16"
     },
     "android-apk": {
       "name": "AmF-X1-1.25.0.0-b8-android.apk",
