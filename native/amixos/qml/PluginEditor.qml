@@ -62,13 +62,13 @@ Popup {
         tape: [["RECORD", [0]], ["TRANSPORT", [1, 3]], ["ALIGNMENT", [2]], ["REPRO", [4]]], transient: [["SHAPE", [0, 1]], ["OUTPUT", [2]]], deesser: [["DETECT", [0, 1]], ["REDUCE", [2]], ["MONITOR", [3]]],
         maximizer: [["LOUDNESS", [0]], ["CEILING", [1]], ["RELEASE", [2]]], multiband: [["CROSSOVER", [0, 1]], ["BANDS", [2, 3, 4]], ["DYNAMICS", [5, 6]]], imager: [["WIDTH", [0, 1]], ["SPLIT", [2]], ["OUTPUT", [3]]], autopan: [["MOTION", [0, 1]], ["WAVE", [2]]], doubler: [["VOICES", [0, 1]], ["STEREO", [2]], ["TONE", [3]]],
         iamfelement: [["DIRECTION", [0, 1]], ["DISTANCE", [2, 3]], ["RENDER", [4]]], iamfrender: [["MONITOR", [0]], ["LOUDNESS", [1, 2]], ["OUTPUT", [3]]],
-        wshape: [["SHAPE", [0, 6]], ["LOW", [1, 2]], ["MID", [3, 4]], ["TOP", [5]], ["OUTPUT", [7]]],
+        wshape: [["SHAPE", [0, 6]], ["LOW", [1, 8, 2, 9]], ["MID", [3, 10, 4, 11]], ["TOP", [5, 12]], ["LEVEL", [13, 14, 7]], ["STEREO", [15]]],
         convclip: [["CONVERTERS", [0, 1]], ["GAIN", [2, 5]], ["COLOUR", [3, 4, 6]], ["CLIP", [7, 10]], ["WORD LENGTH", [8, 9]], ["MONITOR", [11]]] })
     readonly property var sections: { const n = params.length; if (!n) return []; const l = layouts[fx]; if (l) return l
         const out = [], m = Math.min(n, 24); for (let i = 0; i < m; i += 4) { const idx = []; for (let j = i; j < Math.min(m, i + 4); j++) idx.push(j); out.push([(i + 1) + " – " + Math.min(m, i + 4), idx]) } return out }
     readonly property int mixIndex: fx && params.length ? params.length - 1 : -1
     property string nativeNote: ""
-    function openFor(strip_, slot_, kind_, title_) { nativeNote = ""; strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; reload(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
+    function openFor(strip_, slot_, kind_, title_) { nativeNote = ""; strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; wTrainStop(); quizScore = 0; quizTotal = 0; quizNote = ""; reload(); abLoad(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
     function recentre() { if (visible && parent) { x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2) } }
     onWidthChanged: recentre(); onHeightChanged: recentre()
     function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++ }
@@ -79,7 +79,38 @@ Popup {
         const strip_ = function (t) { return t.replace(/^\+/, "+").replace(/\.0(?=\D|$)/, "").replace(/ ?(dBFS|dB|Hz|ms|%|s|bit)$/, "") }; const t = hi ? up.replace(/\.0(?=\D|$)/, "") : strip_(lo); return !/\d/.test(t) && t.length > 5 ? t.substring(0, 4) + "." : t }   // a word-switch (CONSTANT, VIBRATO ...) is shortened so the two ends do not run into each other
     function snapshot() { const a = []; for (let i = 0; i < params.length; i++) a.push(params[i].value); return a }
     function restore(a) { if (!a) return; for (let i = 0; i < params.length && i < a.length; i++) engine.setPluginParam(strip, slot, params[i].id, a[i]); reload() }
-    function pick(s) { if (s === side) return; if (side === "A") stateA = snapshot(); else stateB = snapshot(); side = s; restore(s === "A" ? stateA : stateB) }
+    function pick(s) { if (s === side) return; if (side === "A") stateA = snapshot(); else stateB = snapshot(); side = s; restore(s === "A" ? stateA : stateB); abSave() }
+    // A / B kept with the effect (its state, ui=...): both slots and which one is heard, so a saved console opens with the same compare
+    function abSave() { if (!fx) return; const cur = snapshot(), enc = function (x) { return x ? x.map(function (v) { return Number(v).toFixed(4) }).join(",") : "" }
+        engine.setPluginUiState(strip, slot, "A," + enc(side === "A" ? cur : stateA) + "|B," + enc(side === "B" ? cur : stateB) + "|" + side) }
+    function abLoad() { if (!fx) return; const u = engine.pluginUiState(strip, slot); if (!u) return; const p = u.split("|")
+        const dec = function (t) { const a = (t || "").split(",").slice(1).filter(function (x) { return x !== "" }).map(Number); return a.length ? a : null }
+        stateA = dec(p[0]); stateB = dec(p[1]); side = p[2] === "B" ? "B" : "A" }
+    onClosed: { if (fx === "wshape") wTrainStop(); if (fx && (stateA || stateB)) abSave() }
+    // ---- W-SHAPE: the bands (as the engine places them), AUTO W, and the EAR TRAINING (4 RAW EQ, 4 RANDOM EQ)
+    readonly property var wNames: ["BASS", "LOW-MID", "PRESENCE", "UPPER", "AIR"]
+    function wBandHz(b, v) { const r = [[40, 90, 200], [200, 350, 800], [1000, 1800, 4000], [3000, 5000, 8000], [6000, 10000, 16000]][b]; return v < 0.5 ? r[1] * Math.pow(r[1] / r[0], 2 * v - 1) : r[1] * Math.pow(r[2] / r[1], 2 * v - 1) }
+    function wBandKnob(b, hz) { const r = [[40, 90, 200], [200, 350, 800], [1000, 1800, 4000], [3000, 5000, 8000], [6000, 10000, 16000]][b]; hz = Math.max(r[0], Math.min(r[2], hz)); return hz < r[1] ? 0.5 + 0.5 * Math.log(hz / r[1]) / Math.log(r[1] / r[0]) : 0.5 + 0.5 * Math.log(hz / r[1]) / Math.log(r[2] / r[1]) }
+    // each band's point on the display: its frequency and its gain (lifts up, dips down); index of its gain knob and the most it can do
+    function wPoints() { rev; if (fx !== "wshape" || params.length < 18) return []; const A = pv(0, 0.6), out = []
+        const g = [[1, 9], [2, -6], [3, 6], [4, -6], [5, 9]]; for (let b = 0; b < 5; b++) out.push({ b: b, f: wBandHz(b, pv(8 + b, 0.5)), db: A * pv(g[b][0], 0) * g[b][1], gi: g[b][0], max: g[b][1] }); return out }
+    function wDrag(b, hz, db) { const pts = wPoints(); if (!pts.length) return; const p = pts[b], A = Math.max(0.05, pv(0, 0.6))
+        engine.setPluginParam(strip, slot, params[8 + b].id, wBandKnob(b, hz)); engine.setPluginParam(strip, slot, params[p.gi].id, Math.max(0, Math.min(1, db / (A * p.max)))); const t = engine.pluginParams(strip, slot); if (t.length === params.length) params = t; presetAt = -1; rev++ }
+    property var wInfo: ({})
+    readonly property bool wTrainLocked: engine.liveMode   // LIVE MODE (a show is on): no test tones in the programme
+    onWTrainLockedChanged: if (wTrainLocked) wTrainStop()
+    property int rawStep: 0          // 4 RAW EQ: 1 .. 5 the band boosted now, 0 off
+    property int quizBand: 0         // 4 RANDOM EQ: the hidden band (1 .. 5), 0 off
+    property int quizScore: 0
+    property int quizTotal: 0
+    property string quizNote: ""
+    function wTrain(b) { if (fx !== "wshape" || params.length < 18) return; engine.setPluginParam(strip, slot, params[16].id, wTrainLocked ? 0 : b / 5); reload() }
+    function wTrainStop() { rawStep = 0; quizBand = 0; rawTimer.stop(); if (fx === "wshape" && params.length >= 18 && params[16].value > 0) { engine.setPluginParam(strip, slot, params[16].id, 0); reload() } }
+    function wTrainRaw() { if (wTrainLocked) return; quizBand = 0; rawStep = 1; wTrain(1); rawTimer.restart() }
+    function wQuizNext(pickBand) { if (wTrainLocked) return; rawStep = 0; rawTimer.stop(); quizBand = pickBand > 0 ? pickBand : 1 + Math.floor(Math.random() * 5); wTrain(quizBand) }
+    function wQuizAnswer(b) { if (quizBand <= 0) return; quizTotal++; if (b === quizBand) { quizScore++; quizNote = i18n.t("RIGHT", i18n.lang) + ": " + i18n.t(wNames[quizBand - 1], i18n.lang) } else quizNote = i18n.t("IT WAS", i18n.lang) + " " + i18n.t(wNames[quizBand - 1], i18n.lang); wQuizNext(0) }
+    function wLearn() { if (fx === "wshape" && params.length >= 18) { engine.setPluginParam(strip, slot, params[17].id, 1); reload() } }
+    Timer { id: rawTimer; interval: 2500; repeat: true; onTriggered: { if (ed.rawStep >= 5) { ed.wTrainStop(); return } ed.rawStep++; ed.wTrain(ed.rawStep) } }
     function preset(step) { if (!presets.length) return; presetAt = (presetAt + step + presets.length) % presets.length; engine.applyRackPreset(strip, slot, presets[presetAt].id); const at = presetAt; reload(); presetAt = at }
     readonly property int ear: 30   // the rack ears, left and right of every unit
     readonly property real fit: Math.min(1, (parent ? parent.width - 12 : 1200) / wood.width, (parent ? parent.height - 8 : 900) / wood.height)
@@ -107,9 +138,11 @@ Popup {
         if (fx === "isoeq" && params.length >= 13) { const prop = v(10) >= 0.5, F = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000], ks = []
             for (let b = 0; b < 10; b++) { const g = db(v(b)); ks.push(biq("peak", F[b], prop ? 0.6 + 2.2 * Math.abs(g) / 12 : 1.414, g)) }
             const out = db(v(12)); return [{ name: "RESPONSE", color: "#e8f4ff", width: 2.2, db: function (f) { let d = out; for (const k of ks) d += magDb(k, f); return d } }] }
-        if (fx === "wshape" && params.length >= 9) { const A = v(0), q = 1.4 - v(6) * 0.9
-            const ks = [biq("ls", 90, 0.6, A * v(1) * 9), biq("peak", 350, q, -A * v(2) * 6), biq("peak", 1800, q, A * v(3) * 6), biq("peak", 5000, q * 1.2, -A * v(4) * 6), biq("hs", 10000, 0.6, A * v(5) * 9)]
-            let sum = 0, n = 0; for (let f = 40; f <= 16000; f *= Math.pow(2, 1 / 3)) { let d = 0; for (const k of ks) d += magDb(k, f); sum += Math.pow(10, d / 10); n++ } const comp = -10 * Math.log10(sum / n) + (v(7) - 0.5) * 24
+        if (fx === "wshape" && params.length >= 9) { const A = v(0), q = 1.4 - v(6) * 0.9, F = function (b) { return ed.wBandHz(b, v(8 + b, 0.5)) }, lf = v(13, 0) > 0 && ed.wInfo.loud !== undefined ? ed.wInfo.loud : 1
+            const ks = [biq("ls", F(0), 0.6, A * v(1) * 9), biq("peak", F(1), q, -A * v(2) * 6), biq("peak", F(2), q, A * v(3) * 6), biq("peak", F(3), q * 1.2, -A * v(4) * 6), biq("hs", F(4), 0.6, A * v(5) * 9)]
+            let sum = 0, n = 0; for (let f = 40; f <= 16000; f *= Math.pow(2, 1 / 3)) { let d = 0; for (const k of ks) d += magDb(k, f); sum += Math.pow(10, d / 10); n++ } const comp = (v(14, 1) >= 0.5 ? -10 * Math.log10(sum / n) : 0) + (v(7) - 0.5) * 24
+            if (lf !== 1) { ks[0] = biq("ls", F(0), 0.6, Math.min(15, A * v(1) * 9 * lf)); ks[4] = biq("hs", F(4), 0.6, Math.min(15, A * v(5) * 9 * lf)) }   // LOUD COMP as it plays now
+            const tr = Math.round(v(16, 0) * 5); if (tr > 0) ks.push(biq(tr === 1 ? "ls" : tr === 5 ? "hs" : "peak", F(tr - 1), tr === 1 || tr === 5 ? 0.6 : 1.0, 6))   // the ear trainer's boost
             return [{ name: "W CURVE", color: "#e8f4ff", width: 2.4, db: function (f) { let d = comp; for (const k of ks) d += magDb(k, f); return d } }] }
         return [] }
     readonly property int rowH: 262
@@ -120,6 +153,7 @@ Popup {
     Overlay.modeless: Rectangle { color: "#b3000000" }   // the console steps back while a plug-in is open: the unit is seen against dark, not against the mixer
     Timer { interval: engine.uiAwake ? 40 : 500; running: ed.visible; repeat: true; onTriggered: { const m = engine.meterAt(ed.strip); const l = m ? (m.inDb !== undefined ? m.inDb : m.peakDb) : -120; ed.level = l; const tgt = ed.bypass ? -20 : Math.max(-20, Math.min(3, l + 12)); ed.needle += (tgt - ed.needle) * (tgt > ed.needle ? 0.35 : 0.12); vu.requestPaint()
         ed.inDb += ((m ? (m.inDb !== undefined ? m.inDb : -120) : -120) - ed.inDb) * 0.4; ed.outDb += ((m ? m.peakDb : -120) - ed.outDb) * 0.4
+        if (ed.fx === "wshape") { const was = ed.wInfo.learning === true; ed.wInfo = engine.wshapeInfo(ed.strip, ed.slot); if (was && ed.wInfo.learning !== true) ed.reload() }   // AUTO W finished: show the gains it set
         if (++tick % 2 === 0) { engine.setScopeStrip(ed.strip); ed.spec = engine.spectrum(2); disp.requestPaint() } } property int tick: 0 }
     background: Item {}
     component Section: Rectangle { property string head; default property alias body: inner.data; height: ed.panelH - 16; radius: 12; border.color: "#05060a"; border.width: 1.5   // a dark inset panel in the brushed plate
@@ -149,6 +183,10 @@ Popup {
         Rectangle { anchors.fill: parent; anchors.margins: -4; radius: 7; color: "transparent"; border.color: lk.litColor; border.width: 2; opacity: lk.lit ? 0.45 : 0 }
         Text { anchors.centerIn: parent; text: lk.label; color: "#14171a"; font.pixelSize: 13; font.bold: true }
         MouseArea { id: lka; anchors.fill: parent; enabled: lk.enabled; cursorShape: Qt.PointingHandCursor; onClicked: lk.clicked() } }
+    // a W-SHAPE tool key: outlined, lit when its drill runs
+    component WKey: Rectangle { property string t; property bool on: false; signal hit(); width: 76; height: 26; radius: 4; color: on ? ed.accent : "transparent"; border.color: ed.accent; border.width: 1.5; opacity: enabled ? 1 : 0.35
+        Text { anchors.centerIn: parent; text: i18n.t(parent.t, i18n.lang); color: parent.on ? ed.onInk : ed.accent; font.family: ed.face1; font.pixelSize: 10; font.bold: true }
+        MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: Qt.PointingHandCursor; onClicked: parent.hit() } }
     component Key: Item { property string label; signal clicked(); width: 30; height: 26
         Image { anchors.fill: parent; source: ka.pressed ? "qrc:/qt/qml/AmixOS/skin/key-down.png" : "qrc:/qt/qml/AmixOS/skin/key.png"; smooth: true }
         Text { anchors.horizontalCenter: parent.horizontalCenter; y: (ka.pressed ? 4.5 : 3) + (parent.label === "✕" ? 2.5 : 0); text: i18n.t(parent.label, i18n.lang); color: "#ece8dc"; font.pixelSize: parent.label === "✕" ? 9 : 14; font.bold: true }
@@ -201,6 +239,26 @@ Popup {
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                         onClicked: { const k = parent.modelData.k; if (k === "browse") smpFile.browse(); else if (k === "load") smpFile.load(smpPath.text.trim()); else if (smpFile.current !== "") { engine.loadSampleFile(ed.strip, ed.slot, ""); smpFile.note = ""; ed.rev++ } } } } } }
                     }
+                    // W-SHAPE: AUTO W (LEARN) and the EAR TRAINING: 4 RAW EQ boosts each band in turn, 4 RANDOM EQ hides a +6 dB band to be named
+                    Section { id: wsx; objectName: "wshapeTools"; visible: ed.fx === "wshape" && ed.params.length >= 18; head: "AUTO W · EAR TRAINING"; width: 262
+                        Row { x: 10; y: 2; spacing: 8
+                            WKey { objectName: "wsLearn"; t: ed.wInfo.learning ? "LISTENING" : "LEARN"; on: ed.wInfo.learning === true; width: 96; onHit: ed.wLearn() }
+                            Text { anchors.verticalCenter: parent.verticalCenter; width: 140; wrapMode: Text.WordWrap; color: ed.ink; font.family: ed.face1; font.pixelSize: 8
+                                text: ed.wInfo.learning ? i18n.t("Listening to the programme", i18n.lang) + " " + Math.round((ed.wInfo.learn || 0) * 100) + " %" : i18n.t("AUTO W: plays 8 s, then sets the five gains", i18n.lang) } }
+                        Rectangle { x: 10; y: 34; width: 242; height: 1; color: ed.rule }
+                        Text { x: 10; y: 40; visible: ed.wTrainLocked; width: 242; wrapMode: Text.WordWrap; text: i18n.t("Ear training is off in LIVE MODE", i18n.lang); color: ed.accent; font.family: ed.face1; font.pixelSize: 9; font.bold: true }
+                        Row { x: 10; y: 54; spacing: 6; enabled: !ed.wTrainLocked
+                            WKey { objectName: "wsRaw"; t: "4 RAW EQ"; on: ed.rawStep > 0; onHit: ed.rawStep > 0 ? ed.wTrainStop() : ed.wTrainRaw() }
+                            WKey { objectName: "wsQuiz"; t: "4 RANDOM EQ"; width: 90; on: ed.quizBand > 0; onHit: ed.quizBand > 0 ? ed.wTrainStop() : ed.wQuizNext(0) }
+                            WKey { t: "STOP"; width: 52; enabled: ed.rawStep > 0 || ed.quizBand > 0; onHit: ed.wTrainStop() } }
+                        Text { x: 10; y: 86; width: 242; color: ed.ink; font.family: ed.face1; font.pixelSize: 10; font.bold: true
+                            text: ed.rawStep > 0 ? i18n.t("NOW BOOSTED", i18n.lang) + ": " + i18n.t(ed.wNames[ed.rawStep - 1], i18n.lang) : ed.quizBand > 0 ? i18n.t("WHICH BAND IS BOOSTED?", i18n.lang) : i18n.t("Pick a drill", i18n.lang) }
+                        Flow { x: 10; y: 104; width: 242; spacing: 4; enabled: ed.quizBand > 0 && !ed.wTrainLocked
+                            Repeater { model: 5; delegate: WKey { required property int index; objectName: "wsAnswer" + index; t: ed.wNames[index]; width: 76; height: 24; onHit: ed.wQuizAnswer(index + 1) } } }
+                        Text { objectName: "wsScore"; x: 10; y: 162; width: 242; color: ed.accent; font.family: Theme.mono; font.pixelSize: 12; font.bold: true
+                            text: i18n.t("SCORE", i18n.lang) + " " + ed.quizScore + " / " + ed.quizTotal + (ed.quizNote !== "" ? "   " + ed.quizNote : "") }
+                        Text { x: 10; y: 182; width: 242; wrapMode: Text.WordWrap; opacity: 0.7; color: ed.ink; font.family: ed.face1; font.pixelSize: 8
+                            text: i18n.t("Drag a point on the display: left / right moves the band, up / down sets its gain", i18n.lang) } }
                     Section { id: dly; objectName: "delayTime"; visible: ed.fx === "syncdelay" && ed.params.length >= 3; head: "DELAY TIME"; width: 236
                         readonly property real bpm: ed.params[0] ? 60 + ed.params[0].value * 140 : 120
                         readonly property int note: ed.params[1] ? Math.min(5, Math.floor(ed.params[1].value * 5.999)) : 1
@@ -327,7 +385,16 @@ Popup {
                                 c.lineTo(w, h); c.closePath(); const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "#5a7f9c"); g.addColorStop(1, "#0d151c"); c.fillStyle = g; c.globalAlpha = 0.55; c.fill(); c.globalAlpha = 1 }
                             const curves = ed.curves(); for (let k = 0; k < curves.length; k++) { const cv = curves[k]; c.strokeStyle = cv.color; c.lineWidth = cv.width; c.beginPath()
                                 for (let i = 0; i <= 160; i++) { const f = 20 * Math.pow(1000, i / 160), y = fy(Math.max(-18, Math.min(18, cv.db(f)))); if (i) c.lineTo(i / 160 * w, y); else c.moveTo(0, y) } c.stroke() }
-                            for (let k = 0; k < curves.length; k++) { c.fillStyle = curves[k].color; c.fillText(curves[k].name, w - 70, 14 + k * 13) } } }
+                            for (let k = 0; k < curves.length; k++) { c.fillStyle = curves[k].color; c.fillText(curves[k].name, w - 70, 14 + k * 13) }
+                            const pts = ed.wPoints(); for (const p of pts) { const px = fx(p.f), py = fy(Math.max(-18, Math.min(18, p.db)))   // W-SHAPE: a point per band, to drag
+                                c.beginPath(); c.arc(px, py, wDragArea.held === p.b ? 7 : 5.5, 0, 2 * Math.PI); c.fillStyle = wDragArea.held === p.b ? "#ff6b5a" : "#e8f4ff"; c.fill(); c.strokeStyle = "#06080b"; c.lineWidth = 1.5; c.stroke()
+                                c.fillStyle = "#9fb7c9"; c.fillText(["B", "L", "P", "U", "A"][p.b], px - 3, py - 9) } }
+                        MouseArea { id: wDragArea; objectName: "wshapeDrag"; anchors.fill: parent; enabled: ed.fx === "wshape"; visible: enabled; property int held: -1; cursorShape: held >= 0 ? Qt.SizeAllCursor : Qt.CrossCursor
+                            function hz(x) { return 20 * Math.pow(1000, Math.max(0, Math.min(1, x / width))) } function db(y) { return (height / 2 - y) / (height / 2 - 8) * 18 }
+                            onPressed: function (m) { const pts = ed.wPoints(); let best = -1, bd = 1e9; for (const p of pts) { const px = Math.log(p.f / 20) / Math.log(1000) * width, py = height / 2 - Math.max(-18, Math.min(18, p.db)) / 18 * (height / 2 - 8), d = Math.hypot(px - m.x, py - m.y); if (d < bd) { bd = d; best = p.b } }
+                                held = bd < 22 ? best : -1; m.accepted = held >= 0; disp.requestPaint() }
+                            onPositionChanged: function (m) { if (held >= 0) ed.wDrag(held, hz(m.x), db(m.y)) }
+                            onReleased: { held = -1; disp.requestPaint() } } }
                     // the meters: input and output, peak bars with a scale, like the right-hand side of a mastering display
                     Row { x: parent.width - 232; y: 14; spacing: 14
                         Repeater { model: [{ t: i18n.t("INPUT", i18n.lang), k: "in" }, { t: i18n.t("OUTPUT", i18n.lang), k: "out" }]

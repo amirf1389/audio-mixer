@@ -11,6 +11,7 @@
 #include <objbase.h>
 #endif
 #include <QQmlApplicationEngine>
+#include "fx/fx_plugin.hpp"
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -70,6 +71,7 @@
 #include "Frame.h"
 #include "measure/measure.hpp"
 #include "Engine.h"
+#include "Graphics.h"
 #include "license/license.hpp"
 #include "I18n.h"
 
@@ -124,7 +126,7 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);   // COM for the main thread before Qt starts: the ASIO driver objects (CoCreateInstance) and the WASAPI enumerator are created from here
 #endif
-  for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--software") QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); else if (a == "--opengl") QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL); }
+  QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);   // 125 % / 175 % drawn as such, per monitor (the manifest: per-monitor DPI awareness v2)
   // AUTO ZOOM (AutoZoom.h): before Qt starts, a zoom that fits the screen; Windows only (the screen and its scale are read here)
   QString zoomNote;
 #ifdef _WIN32
@@ -142,6 +144,8 @@ int main(int argc, char* argv[]) {
   }
 #endif
   QGuiApplication app(argc, argv);
+  { bool testRun = false; for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--smoke" || a == "--bench" || a == "--shots" || a == "--film" || a == "--big" || a == "--dump-presets") testRun = true; }
+    Graphics::choose(testRun, app.arguments()); }   // GRAPHICS: the back end for this computer, before any window (Graphics.h)
   // One explicit palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Fusion style draws
   // them from the application palette, which Windows and macOS hand over in their own colours. The values are Theme.qml's (every one an
   // explicit #RRGGBB), for the dark and the light look; applied now and again whenever SETTINGS flips the theme.
@@ -227,6 +231,8 @@ int main(int argc, char* argv[]) {
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, &Engine::restoreSystemSound);   // a Windows mute set by the fader at -inf is taken back on exit
   if (!smoke && update.checkAtStart() && settings.setupDone()) QTimer::singleShot(3000, &update, &Update::check);
   qml.rootContext()->setContextProperty("i18n", &i18n);
+  Graphics graphics; graphics.onMeterHz = [&](int hz) { engine.setMeterHz(hz); }; engine.setMeterHz(qEnvironmentVariableIsSet("AMIX_METER_HZ") ? qEnvironmentVariableIntValue("AMIX_METER_HZ") : graphics.startedWith() == QLatin1String("default") ? 30 : graphics.meterHz());   // AMIX_METER_HZ: the bench compares 30 / 60
+  qml.rootContext()->setContextProperty("graphics", &graphics);
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   qml.rootContext()->setContextProperty("buildStamp", QStringLiteral(AMIX_BUILD_STAMP));   // when this build was made (UTC)
   qml.rootContext()->setContextProperty("noBoot", smoke);
@@ -235,6 +241,7 @@ int main(int argc, char* argv[]) {
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.addImportPath(QStringLiteral("qrc:/qt/qml"));   // the console's own module (AmixOS, with the Theme singleton) lives in the resources: Qt 6.4 on Windows does not search there by itself, and every Theme.* colour came out undefined (black on white)
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
+  if (!qml.rootObjects().isEmpty()) graphics.attach(qobject_cast<QQuickWindow*>(qml.rootObjects().first()));
   if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
   // AUTO AUDIO INTERFACE: when an interface is plugged in (hot-plug) and the engine is idle, start it (the remembered device if it is the one, else AUTO DETECT)
   QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& what) { if (!added || engine.running() || !settings.autoStart()) return; QTimer::singleShot(1500, &app, [&] { if (!engine.running()) settings.startLastDevice(); }); qInfo("hot-plug: %s", qPrintable(what)); });
@@ -325,6 +332,17 @@ int main(int argc, char* argv[]) {
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_FRAMES")) {   // FRAME TIME: every page with the meters running, AMIX_BENCH_FRAMES ms each (default 3000)
+      const int ms = std::max(500, qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") > 1 ? qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") : 3000);
+      double sumMean = 0, worstP95 = 0, worstMax = 0; long frames = 0; int n = 0; QString worstId;
+      std::printf("amixos --bench: FRAMES back end %s, %d ms per page (frames drawn; gap = time between frames; work = sync to shown)\n", qPrintable(graphics.inUse()), ms);
+      for (const QVariant& v : engine.pages()) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", id); waitMs(400); graphics.resetFrames(); waitMs(ms);
+        const QVariantMap f = graphics.frameStats(); const double p95 = f["workP95Ms"].toDouble();
+        std::printf("amixos --bench: FRAMES %-12s %4d frames (%5.1f/s), gap mean %6.1f / 95%% %6.1f ms, work mean %5.2f / 95%% %5.2f / max %6.2f ms\n", qPrintable(id), f["frames"].toInt(), f["frames"].toInt() * 1000.0 / ms, f["gapMeanMs"].toDouble(), f["gapP95Ms"].toDouble(), f["workMeanMs"].toDouble(), p95, f["workMaxMs"].toDouble());
+        sumMean += f["workMeanMs"].toDouble(); frames += f["frames"].toInt(); ++n; if (p95 > worstP95) { worstP95 = p95; worstId = id; } worstMax = std::max(worstMax, f["workMaxMs"].toDouble()); }
+      std::printf("amixos --bench: FRAMES %d pages, %.1f frames/s on average, work mean %.2f ms, worst 95%% %.2f ms (%s), worst frame %.2f ms\n", n, frames * 1000.0 / ms / std::max(1, n), sumMean / std::max(1, n), worstP95, qPrintable(worstId), worstMax);
+      engine.stop(); return 0;
+    }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_MEM")) {   // memory: every page opened in turn, five rounds; the resident size after each round (a leak grows)
       auto rssMb = [] { QFile f("/proc/self/statm"); if (!f.open(QIODevice::ReadOnly)) return 0.0; const QList<QByteArray> v = f.readAll().split(' '); return v.size() > 1 ? v[1].toDouble() * 4096.0 / 1048576.0 : 0.0; };
       std::printf("amixos --bench: memory at start %.0f MB\n", rssMb());
@@ -565,7 +583,7 @@ int main(int argc, char* argv[]) {
         if (mm.value("preset").toString() != g || !mm.value("bassMonoOn").toBool() || (mm.value("mid").toDouble() < 0) != (QString(g) == "METAL")) { std::fprintf(stderr, "amixos --smoke: %s preset\n", g); return 77; } }
       { QFile pf(QStringLiteral(AMIX_SOURCE_DIR) + "/../../releases/presets/presets-pack.json"); const QJsonObject pk = pf.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(pf.readAll()).object() : QJsonObject(); const QJsonObject now = engine.presetPack();   // the published pack = the presets in the code
         for (const char* k : {"mastering", "effects", "tone"}) if (pk.value(k).toArray() != now.value(k).toArray()) { std::fprintf(stderr, "amixos --smoke: releases/presets/presets-pack.json %s differs from the code: run node scripts/make-presets.js\n", k); return 253; }
-        if (now.value("mastering").toArray().size() != engine.masteringPresets().size() || now.value("effects").toArray().size() != 600) { std::fprintf(stderr, "amixos --smoke: preset pack counts\n"); return 253; } }
+        if (now.value("mastering").toArray().size() != engine.masteringPresets().size() || now.value("effects").toArray().size() != 609) { std::fprintf(stderr, "amixos --smoke: preset pack counts\n"); return 253; } }
       engine.applyMasteringPreset("AMFB SIGNATURE"); if (engine.mastering().value("preset").toString() != "AMFB SIGNATURE" || !engine.mastering().value("bassMonoOn").toBool()) { std::fprintf(stderr, "amixos --smoke: signature preset\n"); return 77; } QVariantMap so; so["on"] = false; so["preset"] = ""; so["bassMonoOn"] = false; so["exciterOn"] = false; engine.setMastering(so); }
     { // WINDOWS SOUND SYNC on a stand-in for the system volume: -inf mutes it, raising the fader restores what it was, sync off leaves it alone, exit takes the mute back
       bool sysMute = false; int sets = 0; engine.setSystemMuteBackend([&](bool& m) { m = sysMute; return true; }, [&](bool m) { sysMute = m; ++sets; return true; });
@@ -888,7 +906,7 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "amixos --smoke: 1000 PADS + 1000 EFFECTS: pad and effect heard %.1f dBFS, pad changed %d, bad sources refused %d, put back %d\n", pk, set, refused, back);
         if (pk < -40 || !set || !refused || !back) return 126; }
       const QString sdir = QDir::tempPath() + "/amixos-smoke-samples"; QDir(sdir).removeRecursively(); std::string serr; if (!am::samples::writeAll(sdir.toStdString(), 48000, serr) || QDir(sdir).entryList({"*.wav"}, QDir::Files).size() != 100) { std::fprintf(stderr, "amixos --smoke: sample export: %s\n", serr.c_str()); return 123; } QDir(sdir).removeRecursively();
-      if (engine.fxPresets().size() != 600 || !engine.applyFxPreset(8, 301) || engine.busFx(8)["kind"].toString() != "pingpong" || engine.busFx(8)["params"].toList().size() != 6 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
+      if (engine.fxPresets().size() != 609 || !engine.applyFxPreset(8, 301) || engine.busFx(8)["kind"].toString() != "pingpong" || engine.busFx(8)["params"].toList().size() != 6 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
       if (!engine.applyFxPreset(9, 120) || engine.busFx(9)["kind"].toString() != "delay" || engine.applyFxPreset(9, 999)) { std::fprintf(stderr, "amixos --smoke: fx preset kinds\n"); return 125; } engine.setBusFx(8, ""); engine.setBusFx(9, "");
       if (engine.busState().size() != 16 || engine.busState()[0].toMap()["kind"] != "aux" || engine.busState()[8].toMap()["kind"] != "fx") { std::fprintf(stderr, "amixos --smoke: 16 buses (8 AUX + 8 FX)\n"); return 126; }
       // EQ PRESETS: 20 slots, the factory ten locked and named (AmiX W Shape first), apply changes the response, SAVE / CLEAR on a custom slot, locked slots refuse SAVE
@@ -1535,6 +1553,19 @@ int main(int argc, char* argv[]) {
         engine.setDuck({{"on", false}, {"keyDca", 0}, {"targetDca", 0}, {"targetStrips", QVariantList{}}, {"depth", -12.0}, {"attack", 20.0}, {"lift", 0.0}});
         for (int i = 0; i < 6; ++i) { engine.setDca(i, 0); engine.setMute(i, false); }
         for (int g = 1; g <= 8; ++g) engine.setDcaName(g, QStringLiteral("DCA %1").arg(g)); }
+      {  // LOUDNESS MANAGER: master preset, per-channel AUTO FADER / AUTO ON/OFF, class targets, saved with the console, meters, ALL ON / OFF
+        engine.setLoud({{"preset", "BROADCAST"}, {"masterOn", true}, {"speed", "slow"}});
+        QVariantMap L = engine.loudState(); if (!L.value("masterOn").toBool() || std::fabs(L.value("masterTarget").toDouble() + 23) > 1e-9 || std::fabs(L.value("up").toDouble() - 1.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager master preset\n"); return 820; }
+        engine.setLoudStrip(2, {{"ride", true}, {"gate", true}});
+        L = engine.loudState(); { const QVariantMap s2 = L.value("strips").toList().value(2).toMap(); if (!s2.value("ride").toBool() || !s2.value("gate").toBool() || !engine.stripState()[2].toMap().value("loudRide").toBool() || L.value("rides").toInt() != (engine.linked(2) ? 2 : 1)) { std::fprintf(stderr, "amixos --smoke: loudness manager strip switches\n"); return 821; } }
+        if (std::fabs(engine.loudTargetOf(2) + 18) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager voice target\n"); return 822; }
+        engine.setLoudStrip(2, {{"cls", 1}}); if (std::fabs(engine.loudTargetOf(2) + 20) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager music target\n"); return 822; }
+        { const QJsonObject lo = engine.consoleExport().value("loudness").toObject(); const QJsonArray ls = lo.value("strips").toArray();
+          if (!lo.value("masterOn").toBool() || lo.value("preset").toString() != QLatin1String("BROADCAST") || ls.size() < 3 || !ls[2].toObject().value("ride").toBool() || ls[2].toObject().value("cls").toInt() != 1) { std::fprintf(stderr, "amixos --smoke: loudness manager in the saved console\n"); return 823; } }
+        engine.setGain(2, -3); waitMs(200); { const QVariantMap mt = engine.meterAt(2); if (!mt.contains("rideDb") || !mt.contains("rideLufs") || !mt.contains("rideGateDb")) { std::fprintf(stderr, "amixos --smoke: loudness manager meters\n"); return 824; } }
+        engine.setLoudAll(QStringLiteral("ride"), true); if (engine.loudState().value("rides").toInt() != engine.shownStrips()) { std::fprintf(stderr, "amixos --smoke: loudness manager ALL AUTO ON\n"); return 825; }
+        engine.setLoudAll(QStringLiteral("ride"), false); engine.setLoudAll(QStringLiteral("gate"), false); engine.setLoud({{"masterOn", false}, {"preset", "STREAMING"}, {"speed", "medium"}}); engine.setLoudStrip(2, {{"cls", -1}}); engine.setGain(2, 0);
+        L = engine.loudState(); if (L.value("rides").toInt() || L.value("gates").toInt() || L.value("masterOn").toBool()) { std::fprintf(stderr, "amixos --smoke: loudness manager off\n"); return 826; } }
       // OSC: a /ch/5/fader -12 packet through the parser, then one over UDP to the server on 127.0.0.1
       auto pkt = [](const QByteArray& addr, float v) { QByteArray o = addr; o.append('\0'); while (o.size() % 4) o.append('\0'); o += QByteArray(",f\0\0", 4); quint32 b; std::memcpy(&b, &v, 4); char be[4]; qToBigEndian(b, be); o.append(be, 4); return o; };
       if (!osc.handle(pkt("/ch/5/fader", -12.f)) || std::fabs(engine.stripState()[4].toMap()["db"].toDouble() + 12) > 1e-6) { std::fprintf(stderr, "amixos --smoke: OSC parse\n"); return 103; }
@@ -1958,7 +1989,46 @@ int main(int argc, char* argv[]) {
         engine.setPlugin(0, 10, "fx:delay"); const bool eleventhRefused = engine.plugins(0).size() <= 10 || engine.plugins(0)[10].toMap().value("kind").toString().isEmpty();
         engine.setPlugin(0, 9, "");
         std::printf("amixos --smoke: MIXER STRIPS fader, MUTE and SOLO keys %d, 10th plug-in in %d, 11th refused %d (limit %d)\n", keys, tenth, eleventhRefused, engine.pluginSlotLimit());
-        if (!keys || !tenth || !eleventhRefused || engine.pluginSlotLimit() != 10) std::exit(87); }
+        if (!keys || !tenth || !eleventhRefused || engine.pluginSlotLimit() != 10) std::exit(87);
+        // W-SHAPE TUNER EDITOR: the new controls, A / B kept with the effect, dragging a band's point, AUTO W, the ear training (off in LIVE MODE),
+        // the nine presets, and an old saved state (only the first eight controls) loading exactly as before
+        if (QObject* wed = dw->findChild<QObject*>("plugEd")) {
+          auto call = [&](const char* fn, QVariant a = QVariant(), QVariant b = QVariant(), QVariant c = QVariant()) { QVariant r;
+            if (!c.isNull()) QMetaObject::invokeMethod(wed, fn, Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, a), Q_ARG(QVariant, b), Q_ARG(QVariant, c));
+            else if (!b.isNull()) QMetaObject::invokeMethod(wed, fn, Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, a), Q_ARG(QVariant, b));
+            else if (!a.isNull()) QMetaObject::invokeMethod(wed, fn, Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, a)); else QMetaObject::invokeMethod(wed, fn, Q_RETURN_ARG(QVariant, r)); return r; };
+          auto pv = [&](int k) { const QVariantList l = engine.pluginParams(0, 7); return k < l.size() ? l[k].toMap().value("value").toDouble() : -1.0; };
+          engine.setPlugin(0, 7, "fx:wshape"); QVariant r; QMetaObject::invokeMethod(wed, "openFor", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, 0), Q_ARG(QVariant, 7), Q_ARG(QVariant, QStringLiteral("fx:wshape")), Q_ARG(QVariant, QStringLiteral("W-SHAPE TUNER"))); pump();
+          const QVariantList ps = engine.pluginParams(0, 7); const bool params = ps.size() == 19 && ps[8].toMap().value("text").toString() == "90 Hz" && ps[12].toMap().value("text").toString() == "10.0 kHz" && ps[14].toMap().value("text").toString() == "ON" && ps[15].toMap().value("text").toString() == "STEREO";
+          QQuickItem* ci = wed->property("contentItem").value<QQuickItem*>(); const bool tools = ci && find(ci, "wshapeTools") && find(ci, "wshapeTools")->isVisible() && find(ci, "wshapeDrag") && find(ci, "wsLearn") && find(ci, "wsAnswer4");
+          // A / B: B gets its own BASS, A comes back; both kept with the effect (ui=...), and a reopened editor has them again
+          call("setParam", 1, 0.9); call("pick", QStringLiteral("B")); call("setParam", 1, 0.1); const double onB = pv(1); call("pick", QStringLiteral("A")); const double onA = pv(1);
+          const QString ui = engine.pluginUiState(0, 7); QMetaObject::invokeMethod(wed, "close"); pump();
+          QMetaObject::invokeMethod(wed, "openFor", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, 0), Q_ARG(QVariant, 7), Q_ARG(QVariant, QStringLiteral("fx:wshape")), Q_ARG(QVariant, QStringLiteral("W-SHAPE TUNER"))); pump();
+          const QVariantList sb = wed->property("stateB").toList(); const bool ab = std::fabs(onB - 0.1) < 1e-3 && std::fabs(onA - 0.9) < 1e-3 && ui.startsWith("A,") && ui.contains("|B,") && ui.endsWith("|A") && sb.size() == 19 && std::fabs(sb[1].toDouble() - 0.1) < 1e-3;
+          // drag PRESENCE's point to 3 kHz, +2 dB
+          call("wDrag", 2, 3000.0, 2.0); const double A = pv(0); const bool drag = std::fabs(pv(10) - am::fx::WShape::bandKnob(2, 3000)) < 1e-3 && std::fabs(pv(3) - 2.0 / (A * 6)) < 1e-3;
+          // EAR TRAINING: 4 RAW EQ starts on BASS; 4 RANDOM EQ boosts the hidden band, a right and a wrong answer are scored
+          call("wTrainRaw"); const bool raw = std::fabs(pv(16) - 0.2) < 1e-3 && wed->property("rawStep").toInt() == 1; call("wTrainStop"); const bool stopped = pv(16) == 0;
+          call("wQuizNext", 3); const bool hidden = std::fabs(pv(16) - 0.6) < 1e-3; call("wQuizAnswer", 3); const int qb = wed->property("quizBand").toInt(); call("wQuizAnswer", qb % 5 + 1);
+          const bool quiz = hidden && wed->property("quizScore").toInt() == 1 && wed->property("quizTotal").toInt() == 2 && pv(16) > 0; call("wTrainStop");
+          engine.startLive(1); pump(); call("wTrainRaw"); const bool locked = wed->property("wTrainLocked").toBool() && pv(16) == 0 && wed->property("rawStep").toInt() == 0; engine.stopLive(); pump();
+          // AUTO W starts listening; switched off again here (the unit test plays it through)
+          call("wLearn"); pump(); const bool learning = engine.wshapeInfo(0, 7).value("learning").toBool(); engine.setPluginParam(0, 7, 17, 0);
+          // the presets: nine in the editor's PROGRAM window; SPEECH sets its BASS
+          const bool presets = engine.rackPresets("fx:wshape").size() == 9 && engine.applyRackPreset(0, 7, 601) && std::fabs(pv(1) - 0.2) < 1e-3;
+          QMetaObject::invokeMethod(wed, "close"); pump(); const bool trainOff = pv(16) == 0;
+          // an old saved state: the new controls come up at their defaults and it sounds exactly like a fresh default unit
+          auto oldP = am::fx::FxPlugin::make("wshape", 48000), newP = am::fx::FxPlugin::make("wshape", 48000);
+          oldP->setState("amount=0.6000;bass=0.5500;lowmid=0.4000;presence=0.4000;upper=0.4000;air=0.5000;smooth=0.6000;output=0.5000;mix=1.0000;");
+          std::vector<float> a0(4800), a1(4800), b0(4800), b1(4800); for (int i = 0; i < 4800; ++i) a0[i] = a1[i] = static_cast<float>(0.3 * std::sin(i * 0.05) + 0.2 * std::sin(i * 0.9));
+          const float* in[2] = {a0.data(), a1.data()}; float* o1[2] = {b0.data(), b1.data()}; std::vector<float> c0(4800), c1(4800); float* o2[2] = {c0.data(), c1.data()};
+          oldP->process(in, o1, 4800); newP->process(in, o2, 4800); bool same = oldP->state() == newP->state(); for (int i = 0; i < 4800; ++i) if (b0[i] != c0[i] || b1[i] != c1[i]) same = false;
+          engine.setPlugin(0, 7, "");
+          std::printf("amixos --smoke: W-SHAPE editor: 18 controls + MIX %d, tools %d, A / B kept (%s) %d, drag %d, 4 RAW EQ %d stop %d, 4 RANDOM EQ %d, off in LIVE MODE %d, AUTO W %d, 9 presets %d, training off on close %d, old state identical %d\n",
+                      params, tools, qPrintable(ui.left(24)), ab, drag, raw, stopped, quiz, locked, learning, presets, trainOff, same);
+          if (!params || !tools || !ab || !drag || !raw || !stopped || !quiz || !locked || !learning || !presets || !trainOff || !same) std::exit(827);
+        } else { std::fprintf(stderr, "amixos --smoke: no plug-in editor\n"); std::exit(827); } }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());
       arrange.newProject(); QFile::remove(smokeWav); QFile::remove(smokeOut);   // the smoke's demo arrangement is not kept
       for (int k = 0; k < 6; ++k) engine.setPlugin(0, k, "");

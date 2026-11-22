@@ -47,6 +47,7 @@ void kHp(double* c, double fs, double f0, double q) {
   c[0] = 1.0; c[1] = -2.0; c[2] = 1.0; c[3] = 2.0 * (k * k - 1.0) / a0; c[4] = (1.0 - k / q + k * k) / a0;
 }
 }  // namespace
+void kWeightCoeffs(double fs, double* pre, double* hp) { kPre(pre, fs, 1681.974450955533, 3.999843853973347, 0.7071752369554196); kHp(hp, fs, 38.13547087602444, 0.5003270373238773); }
 
 Loudness::Loudness(double sampleRate, std::size_t maxBlocks) : bCount_(kBins, 0u), sCount_(kBins, 0u), bEnergy_(kBins, 0.0), scratch_(11 + 8192), fs_(sampleRate), cap_(maxBlocks), subSize_(static_cast<int>(roundHalfUp(sampleRate * 0.1))) {
   sub_.reserve(32);
@@ -205,7 +206,10 @@ S16Snapshot S16Meter::snapshot() {
 // ───────── mixer ─────────
 Mixer::Mixer(int strips, double sampleRate)
     : n_(std::max(1, std::min(strips, kMaxStrips))), fs_(sampleRate), strips_(static_cast<std::size_t>(n_)), limCeil_(linOf(-0.5)), master_{Meter(clip_), Meter(clip_)}, loudness_(sampleRate) {
-  duckRole_.assign(static_cast<std::size_t>(n_), 0); ana_.resize(static_cast<std::size_t>(n_)); for (auto& a : ana_) a.reset(fs_); duck_.set(DuckParams{}, fs_); }
+  duckRole_.assign(static_cast<std::size_t>(n_), 0); ana_.resize(static_cast<std::size_t>(n_)); for (auto& a : ana_) a.reset(fs_); duck_.set(DuckParams{}, fs_);
+  double pre[5], hp[5]; kWeightCoeffs(fs_, pre, hp); for (auto& st : strips_) st.ride.prepare(fs_, pre, hp); }
+void Mixer::setRide(int s, const RideParams& p) { if (s < 0 || s >= n_) return; strips_[static_cast<std::size_t>(s)].ride.set(p); rideN_ = 0; for (const auto& st : strips_) rideN_ += st.ride.active() ? 1 : 0; }
+void Mixer::rideTouch(int s, double sec) { if (s >= 0 && s < n_) strips_[static_cast<std::size_t>(s)].ride.touch(sec); }
 void Mixer::setDuckRole(int s, int role) { if (s < 0 || s >= n_) return; duckRole_[static_cast<std::size_t>(s)] = static_cast<unsigned char>(role == 1 || role == 2 ? role : 0); duckAny_ = false; for (unsigned char r : duckRole_) duckAny_ = duckAny_ || r != 0; }
 void Mixer::setAnalysis(bool on) { if (on && !anaOn_) for (auto& a : ana_) a.reset(fs_); anaOn_ = on; }
 
@@ -314,6 +318,8 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
       ana_[static_cast<std::size_t>(s)].add(live ? in[s] + done : nullptr, n, live && pl ? in[p] + done : nullptr); }
     for (int s = 0; s < n_; ++s) {
       Strip& st = strips_[static_cast<std::size_t>(s)];
+      double rideA = 1, rideB = 1; const bool riding = rideN_ > 0 && st.ride.active();   // LOUDNESS MANAGER: this block's ride + gate gain, ramped from the last block's
+      if (riding) { const bool live = in[s] && !(idle && idle[s]); st.ride.measure(live ? in[s] + done : nullptr, n); st.ride.step(static_cast<double>(n) / fs_, st.gainDb, st.mute); rideA = st.ride.prevLin; rideB = st.ride.lin(); st.ride.prevLin = rideB; }
       if (idle && idle[s] && !st.sp.on && std::fabs(st.anLp) < 1e-9) { st.anLp = 0; st.inPk = 0; continue; }   // silence in, nothing ringing: nothing to add (the meter decays in end())
       const double ang = (st.pan + 1.0) * kPi * 0.25, gl = std::cos(ang), gr = std::sin(ang); const bool audible = !st.mute && (!anySolo || st.solo);
       double ipk = done == 0 ? 0.0 : st.inPk; const double g = st.gainLin * (st.automix ? st.amGain : 1.0);
@@ -322,6 +328,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
         for (std::size_t i = 0; i < n; ++i) { const double x = static_cast<double>(in[s][done + i]); if (std::fabs(x) > ipk) ipk = std::fabs(x);
           const double sat = (std::tanh(k * (x + b)) - tb) * norm; st.anLp += a * (sat - st.anLp); tmp[i] = static_cast<float>(st.anLp * g); }
       } else { const double p = simd::kernels().gainPeak(in[s] + done, n, g, tmp); if (p > ipk) ipk = p; }   // post-fader signal: what the strip meter shows
+      if (riding && (rideA != 1.0 || rideB != 1.0)) { const double d = (rideB - rideA) / static_cast<double>(n); for (std::size_t i = 0; i < n; ++i) tmp[i] = static_cast<float>(tmp[i] * (rideA + d * static_cast<double>(i + 1))); }
       if (ducking) { const unsigned char r = duckRole_[static_cast<std::size_t>(s)];
         if (r == 2) for (std::size_t i = 0; i < n; ++i) tmp[i] *= duckG[i]; else if (r == 1 && lifting) for (std::size_t i = 0; i < n; ++i) tmp[i] *= liftG[i]; }
       st.inPk = ipk; st.meter.add(tmp, n);
@@ -364,7 +371,7 @@ void Mixer::process(const float* const* in, std::size_t frames, float* outL, flo
     }
     if (autoOn_) {   // steer the short-term loudness toward the target, slowly, within [-12, +max] dB, once the 3 s window has filled
       const double step = static_cast<double>(n) / fs_; autoSec_ += step; const double st = loudness_.shortTerm();
-      if (autoSec_ >= 3.0 && st > -70 && st < -1) { const double want = std::max(-12.0, std::min(autoMax_, autoDb_ + (autoTarget_ - st))); autoDb_ += want > autoDb_ ? std::min(want - autoDb_, 1.0 * step) : std::max(want - autoDb_, -6.0 * step); }
+      if (autoSec_ >= 3.0 && st > -70 && st < -1) { const double want = std::max(autoMin_, std::min(autoMax_, autoDb_ + (autoTarget_ - st))); autoDb_ += want > autoDb_ ? std::min(want - autoDb_, autoUp_ * step) : std::max(want - autoDb_, -autoDown_ * step); }
     } else { autoDb_ = 0; autoSec_ = 0; }
     const double autoLin = autoOn_ ? linOf(autoDb_) : 1.0;
     static thread_local double tpIn[2][kChunk], tpPk[2][kChunk], tpDl[2][kChunk];   // TRUE PEAK: the detector runs over the chunk first (SIMD kernel)

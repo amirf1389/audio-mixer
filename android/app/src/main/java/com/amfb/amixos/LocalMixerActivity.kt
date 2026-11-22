@@ -137,7 +137,7 @@ class LocalMixerActivity : FitActivity() {
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 20, 20, 16); setBackgroundColor(Color.parseColor("#0B0F15")) }
         setContentView(Nav.wrap(this, body, Nav.Tab.MIXER))   // the MIXER tab, THIS PHONE mode
         render()
-        ui.post(object : Runnable { override fun run() { showMeters(); ui.postDelayed(this, 50) } })
+        ui.post(object : Runnable { override fun run() { showMeters(); loudTick(0.05); ui.postDelayed(this, 50) } })
     }
 
     /** builds the whole screen from the saved choices (again after a change of input channels or devices): a header with the INPUT and
@@ -282,7 +282,7 @@ class LocalMixerActivity : FitActivity() {
         val db0 = p.getFloat(key, 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
         col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (master) engine?.setMaster(set) else applyLevel(engine, s) } }.also { faders[s] = it })
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (master) engine?.setMaster(if (set <= -60) set else set + masterRider.gainDb) else { lmTouch(s); applyLevel(engine, s) } } }.also { faders[s] = it })
         col.addView(readout)
         return col
     }
@@ -576,7 +576,9 @@ class LocalMixerActivity : FitActivity() {
     private fun chName(ch: Int) = if (ch >= 100) getString(R.string.lm_deck, deckName(ch - 100)) else getString(R.string.lm_channel, ch + 1, "").trim()
     /** puts one channel's level and mute into the engine: its own fader and MUTE with its group's offset and MUTE */
     internal fun applyLevel(e: Engine?, ch: Int) { e ?: return; val p = prefs()
-        val (db, mu) = channelLevel(p, ch); for (t in chStrips(ch)) { e.setGain(t, db); e.setMute(t, mu) }
+        val (db, mu) = channelLevel(p, ch); val off = lmOffset[ch] ?: 0.0
+        val g = if (off <= PhoneLoudness.FLOOR + 0.1 || db <= -60) -120.0 else minOf(PhoneLoudness.MAX_DB, db + off)   // LOUDNESS MANAGER: fader + DCA, then the ride and auto on/off
+        for (t in chStrips(ch)) { e.setGain(t, g); e.setMute(t, mu) }
     }
     private fun applyGroup(g: Int) { for (ch in dcaChannels()) if (Dca.groupOf(prefs(), ch) == g) applyLevel(engine, ch) }
     private fun dcaStripView(g: Int, n: Int): View {
@@ -639,6 +641,7 @@ class LocalMixerActivity : FitActivity() {
         box.addView(TextView(this).apply { text = getString(R.string.lm_level_help, p.getInt("splCal", 120)); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
         lvlViews = listOf("lvlMaster", "lvlInput", "lvlSpl").map { t -> TextView(this).apply { tag = t; setTextColor(Color.WHITE); textSize = 18f; typeface = Typeface.MONOSPACE; setPadding(0, 4, 0, 4) }.also { box.addView(it) } }
         duckSection(box)
+        loudSection(box)
         showLevels()
     }
     // ---- DUCKER · VOICE OVER MUSIC (see [PhoneDucker]): the CH inputs key, the decks go down
@@ -661,6 +664,70 @@ class LocalMixerActivity : FitActivity() {
         }
         duckNow = TextView(this).apply { tag = "duckNow"; setTextColor(cyan); textSize = 14f; typeface = Typeface.MONOSPACE; setPadding(0, 4, 0, 8) }.also { box.addView(it) }
     }
+    // ---- LOUDNESS MANAGER (see [PhoneLoudness]): AUTO FADER and AUTO ON/OFF per channel, the master target
+    internal val riders = HashMap<Int, PhoneLoudness.Rider>()
+    internal val lmOffset = HashMap<Int, Double>()
+    internal val masterRider = PhoneLoudness.MasterRider()
+    private var loudNow: TextView? = null
+    private val loudKeys = HashMap<String, PadButton>()
+    private fun lmTouch(ch: Int) { val r = riders[ch] ?: return; if (!PhoneLoudness.rideOn(prefs(), ch)) return; r.touch(); lmOffset[ch] = r.gateDb }
+    /** one meter tick: every managed channel's ride / on-off from its input peak (before the fader), the master target from the master's peak */
+    internal fun loudTick(dt: Double, inPeaks: FloatArray? = runCatching { engine?.inputPeaks() }.getOrNull(), masterPeak: Double? = null) {
+        val p = prefs(); val v = PhoneLoudness.load(p)
+        for (ch in dcaChannels()) {
+            val ride = PhoneLoudness.rideOn(p, ch); val gate = PhoneLoudness.gateOn(p, ch)
+            if (!ride && !gate && (lmOffset[ch] ?: 0.0) == 0.0) { riders.remove(ch); continue }
+            val r = riders.getOrPut(ch) { PhoneLoudness.Rider() }
+            val pk = inPeaks?.let { a -> chStrips(ch).maxOf { a.getOrElse(it) { 0f } }.toDouble() } ?: 0.0
+            r.feed(pk, dt); val (db, mu) = channelLevel(p, ch)
+            val off = r.step(dt, db, mu, ride, gate, v)
+            if (lmOffset[ch] == null || kotlin.math.abs(off - (lmOffset[ch] ?: 0.0)) > 0.01) {
+                lmOffset[ch] = off; applyLevel(engine, ch)
+                val user = if (ch >= 100) p.getFloat("deckDb${ch - 100}", 0f).toDouble() else p.getFloat("db$ch", 0f).toDouble()
+                faders[ch]?.progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (user <= -60) -120.0 else minOf(PhoneLoudness.MAX_DB, user + r.rideDb)) * 1000).toInt()   // the fader moves with the ride
+            }
+        }
+        val mp = masterPeak ?: loop?.lastPeaks?.let { maxOf(it.getOrElse(STRIPS) { 0f }, it.getOrElse(STRIPS + 1) { 0f }).toDouble() } ?: 0.0
+        val before = masterRider.gainDb; val g = masterRider.step(mp, dt, v)
+        if (kotlin.math.abs(g - before) > 0.005 || (!v.masterOn && before != 0.0)) { val user = p.getFloat("masterDb", 0f).toDouble(); engine?.setMaster(if (user <= -60) user else user + g) }
+    }
+    private fun loudSection(box: LinearLayout) {
+        val p = prefs(); sectionTitle(box, getString(R.string.lm_loud_title)); loudKeys.clear()
+        box.addView(TextView(this).apply { text = getString(R.string.lm_loud_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) })
+        box.addView(PadButton(this, getString(if (PhoneLoudness.load(p).masterOn) R.string.lm_loud_master_on else R.string.lm_loud_master_off), ConsoleUi.GREEN, 12f).apply { on = PhoneLoudness.load(p).masterOn; contentDescription = "loudMaster"
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84)
+            setOnClickListener { val nv = PhoneLoudness.load(p).let { it.copy(masterOn = !it.masterOn) }; PhoneLoudness.save(p, nv); if (nv.masterOn && !p.getBoolean("limiter", true)) { p.edit().putBoolean("limiter", true).apply(); engine?.setLimiter(true, -0.5, 100.0) }   // the limiter is the safety
+                on = nv.masterOn; text = getString(if (nv.masterOn) R.string.lm_loud_master_on else R.string.lm_loud_master_off) } })
+        val presets = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 6, 0, 6) }
+        for ((name, t) in PhoneLoudness.presets) presets.addView(PadButton(this, getString(R.string.lm_loud_preset, name, t), cyan, 10f).apply { contentDescription = "loudPreset_$name"; on = PhoneLoudness.load(p).masterTarget == t
+            layoutParams = LinearLayout.LayoutParams(0, 76, 1f).apply { setMargins(0, 0, 6, 0) }
+            setOnClickListener { PhoneLoudness.save(p, PhoneLoudness.load(p).copy(masterTarget = t)); for ((k, b) in loudKeys) if (k.startsWith("preset_")) b.on = k == "preset_$name" } }.also { loudKeys["preset_$name"] = it })
+        box.addView(presets)
+        val all = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, 6) }
+        for ((k, t) in listOf("ride" to R.string.lm_loud_all_ride, "gate" to R.string.lm_loud_all_gate)) all.addView(PadButton(this, getString(t), if (k == "ride") cyan else ConsoleUi.AMBER, 11f).apply { contentDescription = "loudAll_$k"
+            on = dcaChannels().all { if (k == "ride") PhoneLoudness.rideOn(p, it) else PhoneLoudness.gateOn(p, it) }
+            layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply { setMargins(0, 0, 6, 0) }
+            setOnClickListener { val nv = !on; for (ch in dcaChannels()) { if (k == "ride") PhoneLoudness.setRide(p, ch, nv) else PhoneLoudness.setGate(p, ch, nv); loudKeys["${k}_$ch"]?.on = nv }; on = nv } })
+        box.addView(all)
+        for ((k, from, to) in PhoneLoudness.controls) {
+            val label = TextView(this).apply { setTextColor(Color.WHITE); textSize = 12f }
+            fun show(x: Double) { label.text = getString(when (k) { "target" -> R.string.lm_loud_target; "rangeDb" -> R.string.lm_loud_rangeDb; "gateDb" -> R.string.lm_loud_gateDb; else -> R.string.lm_loud_holdS }, x) }
+            val now = PhoneLoudness.get(PhoneLoudness.load(p), k); show(now); box.addView(label)
+            box.addView(SeekBar(this).apply { contentDescription = "loud_$k"; max = 1000; progress = ((now - from) / (to - from) * 1000).toInt()
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar, v: Int, user: Boolean) { if (!user) return; val x = from + (to - from) * v / 1000.0; val nv = PhoneLoudness.with(PhoneLoudness.load(p), k, x); PhoneLoudness.save(p, nv); show(PhoneLoudness.get(nv, k)) }
+                    override fun onStartTrackingTouch(sb: SeekBar) {}; override fun onStopTrackingTouch(sb: SeekBar) {} }) })
+        }
+        for (ch in dcaChannels()) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 2, 0, 2) }
+            row.addView(TextView(this).apply { text = chName(ch); setTextColor(Color.WHITE); textSize = 11f; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f) })
+            for ((k, t) in listOf("ride" to R.string.lm_loud_ride, "gate" to R.string.lm_loud_gate)) row.addView(PadButton(this, getString(t), if (k == "ride") cyan else ConsoleUi.AMBER, 10f).apply { contentDescription = "loud_${k}_$ch"
+                on = if (k == "ride") PhoneLoudness.rideOn(p, ch) else PhoneLoudness.gateOn(p, ch); layoutParams = LinearLayout.LayoutParams(0, 70, 1f).apply { setMargins(4, 0, 0, 0) }
+                setOnClickListener { val nv = !on; if (k == "ride") PhoneLoudness.setRide(p, ch, nv) else PhoneLoudness.setGate(p, ch, nv); on = nv } }.also { loudKeys["${k}_$ch"] = it })
+            box.addView(row)
+        }
+        loudNow = TextView(this).apply { tag = "loudNow"; setTextColor(cyan); textSize = 14f; typeface = Typeface.MONOSPACE; setPadding(0, 4, 0, 8) }.also { box.addView(it) }
+    }
     private fun tuneTone() { tone?.gen?.let { g -> synchronized(g) { g.kind = toneKind; g.levelDb = toneDb } } }
     /** TONE ON / OFF; true = it is now on. It needs the running mixer and DECK D free. */
     internal fun toggleTone(status: TextView): Boolean {
@@ -676,7 +743,8 @@ class LocalMixerActivity : FitActivity() {
         lvlViews[0].text = getString(R.string.lm_level_master, MixerTools.fmt(MixerTools.dbfs(master), "dBFS"))
         lvlViews[1].text = getString(R.string.lm_level_input, MixerTools.fmt(MixerTools.dbfs(inPk), "dBFS"))
         lvlViews[2].text = getString(R.string.lm_level_spl, MixerTools.fmt(MixerTools.spl(inPk, prefs().getInt("splCal", 120)), "dB SPL"))
-        duckNow?.text = getString(R.string.lm_duck_now, PhoneDucker.reductionDb(engine, PhoneDucker.load(prefs()))) }
+        duckNow?.text = getString(R.string.lm_duck_now, PhoneDucker.reductionDb(engine, PhoneDucker.load(prefs())))
+        loudNow?.text = getString(R.string.lm_loud_now, MixerTools.fmt(masterRider.shortTerm, "").trim(), masterRider.gainDb) }
 
     private fun deckStripView(d: Int): View {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
@@ -693,7 +761,7 @@ class LocalMixerActivity : FitActivity() {
         val db0 = p.getFloat("deckDb$d", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
         col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat("deckDb$d", set.toFloat()).apply(); show(db); applyLevel(engine, 100 + d) } }.also { faders[100 + d] = it })
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat("deckDb$d", set.toFloat()).apply(); show(db); lmTouch(100 + d); applyLevel(engine, 100 + d) } }.also { faders[100 + d] = it })
         col.addView(readout); return col
     }
 

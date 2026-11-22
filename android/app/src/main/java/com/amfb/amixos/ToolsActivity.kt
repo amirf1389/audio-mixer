@@ -124,7 +124,7 @@ class ToolsActivity : FitActivity() {
                 body.addView(play); body.addView(note(getString(R.string.tools_gen_note))); genLabel() }
         }
     }
-    private fun note(t: String) = TextView(this).apply { text = t; setTextColor(dim); textSize = 12f; setPadding(0, 16, 0, 0) }
+    private fun note(t: String) = ConsoleUi.moreLine(TextView(this).apply { text = t; setTextColor(dim); textSize = 12f; setPadding(0, 8, 0, 0) })
     private fun genLabel() { big.textSize = 44f
         big.text = when (gen.kind) { "sine" -> if (gen.freq >= 1000) String.format("%.2f kHz", gen.freq / 1000) else String.format("%.0f Hz", gen.freq); "sweep" -> "20 Hz → 20 kHz"; else -> gen.kind.uppercase() + " NOISE" }
         small.text = String.format("%.1f dBFS", gen.levelDb) }

@@ -277,7 +277,7 @@ void Engine::pushAll() {
   for (int k = 0; k < kBuses; ++k) { rt_->setBusLevel(k, buses_[k].db); rt_->setBusMute(k, buses_[k].mute); rt_->setBusReturn(k, buses_[k].returnDb); }
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].automix) rt_->setAutomix(i, true, strips_[static_cast<std::size_t>(i)].amWeight);
   for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].autoPol) rt_->setAutoPolarity(i, true);
-  pushAutoLevel(); pushDuck(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setFast(fastMode()); rt_->setOutputBits(effectiveOutputBits());
+  pushAutoLevel(); pushDuck(); pushLoudAll(); rt_->setDcBlock(dcBlock()); rt_->setAnalogChannels(dspMode() == QLatin1String("analog")); rt_->setFast(fastMode()); rt_->setOutputBits(effectiveOutputBits());
   pushMaster(); rt_->setMasterProcessor(&master_);   // the master chain: program EQ (the RTA EQ rack) and mastering
   for (int i = 0; i < kStrips; ++i) {
     const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -310,7 +310,7 @@ bool Engine::anyMute() const { for (const StripUi& s : strips_) if (s.mute) retu
 bool Engine::anySolo() const { for (const StripUi& s : strips_) if (s.solo) return true; return false; }
 // one strip as the interface reads it (any strip the engine holds, also one the console does not show now)
 QVariantMap Engine::stripMap(int i) const {
-  const StripUi& s = strips_[static_cast<std::size_t>(std::clamp(i, 0, kStrips - 1))]; QVariantMap m; m["index"] = i; m["autoPol"] = s.autoPol; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = armed_.test(static_cast<std::size_t>(i)); m["automix"] = s.automix; m["amWeight"] = s.amWeight;
+  const StripUi& s = strips_[static_cast<std::size_t>(std::clamp(i, 0, kStrips - 1))]; QVariantMap m; m["index"] = i; m["autoPol"] = s.autoPol; m["name"] = s.name; m["db"] = s.db; m["pan"] = s.pan; m["mute"] = s.mute; m["solo"] = s.solo; m["dsp"] = s.dsp.active(); m["dca"] = s.dca; m["muteGroups"] = static_cast<int>(s.muteGroups); m["effectiveDb"] = effectiveDb(i); m["effectiveMute"] = effectiveMute(i); m["color"] = s.color; m["plugins"] = pluginCount(i); m["link"] = s.link; m["trimDb"] = s.trimDb; m["armed"] = armed_.test(static_cast<std::size_t>(i)); m["automix"] = s.automix; m["amWeight"] = s.amWeight; m["loudRide"] = loudUi_.strips[std::clamp(i, 0, kStrips - 1)].ride; m["loudGate"] = loudUi_.strips[std::clamp(i, 0, kStrips - 1)].gate;
     const auto& p = s.dsp.params(); bool eqOn = false; for (const auto& b : p.eq) eqOn = eqOn || b.type != am::dsp::FilterType::Off;
     m["gateOn"] = p.gateOn; m["compOn"] = p.compOn; m["limOn"] = p.limiterOn; m["eqOn"] = eqOn; m["xoverOn"] = p.hpOrder > 0 || p.lpOrder > 0; m["delayOn"] = p.delayMs > 0; m["polarity"] = p.polarityInvert;
     QVariantList sb; for (int k = 0; k < kBuses; ++k) if (s.sends[k].db > -60) sb << (k + 1); m["sendsTo"] = sb; return m;
@@ -339,10 +339,10 @@ QVariantList Engine::muteGroupState() const {
   for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = muteGroups_[g].name; m["active"] = muteGroups_[g].active; QVariantList mem; for (int i = 0; i < kStrips; ++i) if ((strips_[static_cast<std::size_t>(i)].muteGroups >> g) & 1u) mem << i; m["members"] = mem; l << m; }
   return l;
 }
-void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); if (rt_ && duckUi_.on) rt_->setDuckRole(i, duckRole(i)); emit stripsChanged(); emit groupsChanged(); }
+void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); pushLoud(i); if (rt_ && duckUi_.on) rt_->setDuckRole(i, duckRole(i)); emit stripsChanged(); emit groupsChanged(); emit loudChanged(); }
 void Engine::setDcaLevel(int g, double db) { if (g < 1 || g > kGroups) return; dcas_[g - 1].db = std::clamp(db, -60.0, 10.0); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
 void Engine::setDcaMute(int g, bool on) { if (g < 1 || g > kGroups) return; dcas_[g - 1].mute = on; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
-void Engine::setDcaName(int g, const QString& n) { if (g < 1 || g > kGroups) return; dcas_[g - 1].name = n.left(16); emit groupsChanged(); }
+void Engine::setDcaName(int g, const QString& n) { if (g < 1 || g > kGroups) return; dcas_[g - 1].name = n.left(16); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushLoud(i); emit groupsChanged(); emit loudChanged(); }
 void Engine::setDcaColor(int g, int c) { if (g < 1 || g > kGroups) return; dcas_[g - 1].color = std::clamp(c, 0, 7); emit groupsChanged(); }
 // ---- DUCKER · VOICE OVER MUSIC: the roles go to the engine strip by strip; the envelope runs there (audiomixer/ducker.hpp)
 int Engine::duckRole(int i) const {
@@ -431,7 +431,7 @@ void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) retu
 double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60; const StripUi& s = strips_[static_cast<std::size_t>(i)]; const double g = s.dca > 0 ? dcas_[s.dca - 1].db : 0; return std::clamp(s.db + g, -60.0, 10.0); }
 bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
 void Engine::pushStrip(int i) { if (!rt_) return; rt_->setGainDb(i, effectiveDb(i)); rt_->setMute(i, effectiveMute(i)); }
-void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); } emit stripsChanged(); }
+void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (rt_ && loudUi_.strips[i].ride) rt_->rideTouch(i, 5); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); if (rt_ && loudUi_.strips[partner(i)].ride) rt_->rideTouch(partner(i), 5); } emit stripsChanged(); }   // a hand on the fader (UI, MIDI, remote): AUTO FADER pauses 5 s and rides from the new position
 // 360 and IAMF are one place: a strip with an IAMF ELEMENT in its rack is placed by that plug-in (the 360 page moves its knobs and reads
 // them back), and the strip's own 360 stage stays off so the sound is never placed twice. Without one, the 360 stage places it as before.
 int Engine::iamfSlot(int i) const { if (i < 0 || i >= kStrips) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -1137,12 +1137,64 @@ void Engine::consoleImport(const QJsonObject& console, const QJsonArray& scenes,
   userPresets_.clear(); for (const QJsonValue& v : presets) { const QJsonObject o = v.toObject(); if (o.value("name").toString().isEmpty()) continue; userPresets_.push_back({o.value("name").toString().left(24), o.value("category").toString().left(16), o.value("dsp").toObject()}); }
   save(); emit scenesChanged(); emit presetsChanged();
 }
+// ───────── LOUDNESS MANAGER ─────────
+double Engine::loudTargetOf(int i) const {
+  if (loudUi_.globalOn) return loudUi_.globalTarget;
+  int c = i >= 0 && i < kStrips ? loudUi_.strips[i].cls : -1;
+  if (c < 0 && i >= 0 && i < kStrips && strips_[static_cast<std::size_t>(i)].dca > 0) {   // auto: from the DCA group's name (AUTO DCA names them VOICES / MUSIC / INSTRUMENTS)
+    const QString n = dcas_[strips_[static_cast<std::size_t>(i)].dca - 1].name.toUpper();
+    c = n.contains(QLatin1String("MUSIC")) ? 1 : n.contains(QLatin1String("INSTR")) ? 2 : 0; }
+  return c == 1 || c == 2 ? -20.0 : -18.0;   // voice -18, music -20, instrument -20
+}
+void Engine::pushLoud(int i) {
+  if (!rt_ || i < 0 || i >= kStrips) return; const LoudStripUi& u = loudUi_.strips[i];
+  am::RideParams p; p.on = u.ride; p.gate = u.gate; p.targetLufs = loudTargetOf(i); p.rangeDb = loudUi_.range; p.upDbS = loudUi_.up; p.downDbS = loudUi_.down; p.gateLufs = loudUi_.gateThr; p.holdS = loudUi_.hold;
+  rt_->setRide(i, p);
+}
+void Engine::pushLoudAll() { for (int i = 0; i < kStrips; ++i) pushLoud(i); pushAutoLevel(); }
+QVariantMap Engine::loudState() const {
+  QVariantList st; int rides = 0, gates = 0; const int n = shownStrips();
+  for (int i = 0; i < n && i < kStrips; ++i) { const LoudStripUi& u = loudUi_.strips[i]; rides += u.ride; gates += u.gate; st << QVariantMap{{"ride", u.ride}, {"gate", u.gate}, {"cls", u.cls}, {"target", loudTargetOf(i)}}; }
+  return {{"masterOn", loudUi_.masterOn}, {"preset", loudUi_.preset}, {"masterTarget", loudUi_.masterTarget}, {"range", loudUi_.range}, {"speed", loudUi_.speed}, {"up", loudUi_.up}, {"down", loudUi_.down},
+          {"gateThr", loudUi_.gateThr}, {"hold", loudUi_.hold}, {"globalOn", loudUi_.globalOn}, {"globalTarget", loudUi_.globalTarget}, {"strips", st}, {"rides", rides}, {"gates", gates}};
+}
+void Engine::setLoud(const QVariantMap& c) {
+  if (c.contains("masterOn")) loudUi_.masterOn = c.value("masterOn").toBool();
+  if (c.contains("preset")) { const QString p = c.value("preset").toString().toUpper();
+    if (p == QLatin1String("STREAMING")) loudUi_.masterTarget = -14; else if (p == QLatin1String("PODCAST")) loudUi_.masterTarget = -16; else if (p == QLatin1String("BROADCAST")) loudUi_.masterTarget = -23;
+    loudUi_.preset = p == QLatin1String("STREAMING") || p == QLatin1String("PODCAST") || p == QLatin1String("BROADCAST") ? p : QStringLiteral("CUSTOM"); }
+  if (c.contains("masterTarget")) { loudUi_.masterTarget = std::clamp(c.value("masterTarget").toDouble(), -30.0, -8.0); if (!c.contains("preset")) loudUi_.preset = QStringLiteral("CUSTOM"); }
+  if (c.contains("range")) loudUi_.range = std::clamp(c.value("range").toDouble(), 0.0, 20.0);
+  if (c.contains("speed")) { const QString sp = c.value("speed").toString().toLower();   // slow 1.5 / 3, medium 3 / 6, fast 6 / 12 dB/s (up / down)
+    const double k = sp == QLatin1String("slow") ? 0.5 : sp == QLatin1String("fast") ? 2.0 : 1.0; loudUi_.speed = k == 0.5 ? QStringLiteral("slow") : k == 2.0 ? QStringLiteral("fast") : QStringLiteral("medium"); loudUi_.up = 3 * k; loudUi_.down = 6 * k; }
+  if (c.contains("up")) loudUi_.up = std::clamp(c.value("up").toDouble(), 0.1, 40.0);
+  if (c.contains("down")) loudUi_.down = std::clamp(c.value("down").toDouble(), 0.1, 40.0);
+  if (c.contains("gateThr")) loudUi_.gateThr = std::clamp(c.value("gateThr").toDouble(), -80.0, -20.0);
+  if (c.contains("hold")) loudUi_.hold = std::clamp(c.value("hold").toDouble(), 0.1, 30.0);
+  if (c.contains("globalOn")) loudUi_.globalOn = c.value("globalOn").toBool();
+  if (c.contains("globalTarget")) loudUi_.globalTarget = std::clamp(c.value("globalTarget").toDouble(), -40.0, -6.0);
+  if (c.contains("strips")) { const QVariantList l = c.value("strips").toList(); for (int i = 0; i < l.size() && i < kStrips; ++i) { const QVariantMap m = l[i].toMap(); LoudStripUi& u = loudUi_.strips[i]; u.ride = m.value("ride").toBool(); u.gate = m.value("gate").toBool(); u.cls = std::clamp(m.value("cls", -1).toInt(), -1, 2); } }
+  pushLoudAll(); emit loudChanged(); emit stripsChanged();
+}
+void Engine::setLoudStrip(int i, const QVariantMap& c) {
+  if (i < 0 || i >= kStrips) return; LoudStripUi& u = loudUi_.strips[i];
+  if (c.contains("ride")) u.ride = c.value("ride").toBool();
+  if (c.contains("gate")) u.gate = c.value("gate").toBool();
+  if (c.contains("cls")) u.cls = std::clamp(c.value("cls").toInt(), -1, 2);
+  pushLoud(i); if (linked(i)) { loudUi_.strips[partner(i)] = u; pushLoud(partner(i)); } emit loudChanged(); emit stripsChanged();
+}
+void Engine::setLoudAll(const QString& what, bool on) {
+  for (int i = 0; i < shownStrips() && i < kStrips; ++i) { if (what == QLatin1String("gate")) loudUi_.strips[i].gate = on; else loudUi_.strips[i].ride = on; pushLoud(i); }
+  emit loudChanged(); emit stripsChanged();
+}
+QJsonObject Engine::loudJson() const { QJsonObject o = QJsonObject::fromVariantMap(loudState()); o.remove("rides"); o.remove("gates"); QJsonArray st; for (int i = 0; i < kStrips; ++i) { const LoudStripUi& u = loudUi_.strips[i]; if (!u.ride && !u.gate && u.cls < 0) { st.append(QJsonObject{}); continue; } st.append(QJsonObject{{"ride", u.ride}, {"gate", u.gate}, {"cls", u.cls}}); } while (!st.isEmpty() && st.last().toObject().isEmpty()) st.removeLast(); o["strips"] = st; return o; }
+void Engine::loudFromJson(const QJsonObject& o) { loudUi_ = LoudUi{}; if (!o.isEmpty()) { const QVariantMap m = o.toVariantMap(); QVariantMap c = m; if (m.value("preset").toString() == QLatin1String("CUSTOM")) c.remove("preset"); else c.remove("masterTarget"); c.remove("speed"); setLoud(c); if (m.value("preset").toString() == QLatin1String("CUSTOM")) loudUi_.preset = QStringLiteral("CUSTOM"); loudUi_.speed = m.value("speed", QStringLiteral("medium")).toString(); emit loudChanged(); } else { pushLoudAll(); emit loudChanged(); } }
 void Engine::factoryReset() {
   keepStrips_ = 32;
   for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; for (PluginUi& p : s.plugins) if (p.vst) graveyard_.push_back(p.vst); s = StripUi{}; s.dsp.setSampleRate(48000); }
   factoryLayout();
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
-  for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); autoProp_.clear();
+  for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); loudUi_ = LoudUi{}; pushLoudAll(); emit loudChanged(); autoProp_.clear();
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
@@ -1496,6 +1548,12 @@ void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i 
     st.spAz = p.vst->param(0) * 360 - 180; st.spEl = p.vst->param(1) * 180 - 90; st.spDist = 0.5 * std::pow(40.0, p.vst->param(2)); st.spSpread = p.vst->param(3); if (spkOn_) feedSpeakers(i); emit spatialMoved(); }
   if (linked(i) && !mirror_ && partner(i) >= 0 && strips_[static_cast<std::size_t>(partner(i))].plugins[slot].kind == p.kind) { mirror_ = true; setPluginParam(partner(i), slot, id, v); mirror_ = false; }
   emit stripsChanged(); }
+QString Engine::pluginUiState(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {}; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get()); return fp ? QString::fromStdString(fp->uiState()) : QString(); }
+void Engine::setPluginUiState(int i, int slot, const QString& ui) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; auto* fp = dynamic_cast<am::fx::FxPlugin*>(p.vst.get()); if (!fp) return;
+  fp->setUiState(ui.toStdString()); p.state = QString::fromStdString(fp->state()); save(); }
+QVariantMap Engine::wshapeInfo(int i, int slot) const { QVariantMap m; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return m; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get());
+  auto* w = fp ? dynamic_cast<am::fx::WShape*>(fp->effect()) : nullptr; if (!w) return m;
+  m["learn"] = w->learnProgress(); m["learning"] = w->params()[17].value > 0.5; m["learned"] = w->learnCount(); m["loud"] = w->loudFactor(); m["comp"] = w->compensationDb(); return m; }
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
 QVariantList Engine::plugins(int i) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -1851,7 +1909,7 @@ QVariantList Engine::pages() const {
   return l;
 }
 
-void Engine::applyUiRate() { timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : fastMode() ? 50 : 33) : uiLevel_ == 1 ? 250 : 1000); }
+void Engine::applyUiRate() { timer_.setTimerType(meterMs_ < 25 ? Qt::PreciseTimer : Qt::CoarseTimer); timer_.setInterval(uiLevel_ >= 2 ? (ecoUi_ ? 66 : fastMode() ? std::max(50, meterMs_) : meterMs_) : uiLevel_ == 1 ? 250 : 1000); }
 void Engine::setUiActivity(int level) {
   level = std::clamp(level, 0, 2); if (level == uiLevel_) return; uiLevel_ = level; applyUiRate(); emit ecoUiChanged();
   if (sysEco_) am::sysopt::setThreadEco(level < 2);   // ECO IN THE BACKGROUND: the interface thread only; the sound has its own (HighQoS) thread
@@ -1949,7 +2007,7 @@ void Engine::tick() {
     bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard
     for (int i = 0; i < kStrips; ++i) { StripUi& su = strips_[static_cast<std::size_t>(i)]; if (su.autoPol && s.strips[i].polInv != su.dsp.params().polarityInvert) { su.dsp.setPolarity(s.strips[i].polInv); polFlipped = true; } }
     if (polFlipped) emit stripsChanged();
-    for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; { int& oc = strips_[static_cast<std::size_t>(i)].overComp; oc = s.strips[i].compGrDb < -12.0 ? std::min(oc + 1, 90) : std::max(oc - 1, 0); x["overComp"] = oc > 15; }   /* OVER-COMPRESSED: more than 12 dB of reduction for half a second */ x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; m << x; }
+    for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; { int& oc = strips_[static_cast<std::size_t>(i)].overComp; oc = s.strips[i].compGrDb < -12.0 ? std::min(oc + 1, 90) : std::max(oc - 1, 0); x["overComp"] = oc > 15; }   /* OVER-COMPRESSED: more than 12 dB of reduction for half a second */ x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; x["rideDb"] = s.strips[i].rideDb; x["rideGateDb"] = s.strips[i].rideGateDb; x["rideLufs"] = s.strips[i].rideLufs; x["rideSusp"] = s.strips[i].rideSusp; m << x; }
     vuMaster_ += (std::max(s.master[0].rms, s.master[1].rms) - vuMaster_) * vuA; t["masterVuDb"] = toDb(vuMaster_);
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
     t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms)); t["masterLRmsDb"] = toDb(s.master[0].rms); t["masterRRmsDb"] = toDb(s.master[1].rms);
@@ -2015,7 +2073,7 @@ QJsonObject Engine::consoleJson() const {
   QJsonArray buses; for (const BusUi& b : buses_) { QJsonObject o; o["name"] = b.name; o["db"] = b.db; o["returnDb"] = b.returnDb; o["mute"] = b.mute; o["fx"] = b.fxKind; o["fxMix"] = b.fxMix; o["fxBypass"] = b.fxBypass; QJsonObject fv; for (const auto& [id, v] : b.fxValues) fv[id] = v; o["fxValues"] = fv; buses << o; }
   QJsonArray dcas; for (const DcaUi& d : dcas_) { QJsonObject o; o["name"] = d.name; o["db"] = d.db; o["mute"] = d.mute; o["color"] = d.color; dcas << o; }
   QJsonArray mgs; for (const MuteGroupUi& g : muteGroups_) { QJsonObject o; o["name"] = g.name; o["active"] = g.active; mgs << o; }
-  QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterRel"] = masterRel_; { QJsonObject pg; QJsonArray eq; for (const auto& b : mp_.eq) { QJsonObject e; e["type"] = static_cast<int>(b.type); e["freq"] = b.freq; e["q"] = b.q; e["gain"] = b.gainDb; eq.append(e); } pg["eq"] = eq; pg["eqOn"] = mp_.eqOn; pg["mastering"] = QJsonObject::fromVariantMap(mastering()); root["program"] = pg; } root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["autoLevelOn"] = autoOn_; root["autoLevelTarget"] = autoTarget_; root["autoLevelMax"] = autoMax_; root["width"] = width_; root["ducker"] = duckJson(); root["v"] = 2;
+  QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterRel"] = masterRel_; { QJsonObject pg; QJsonArray eq; for (const auto& b : mp_.eq) { QJsonObject e; e["type"] = static_cast<int>(b.type); e["freq"] = b.freq; e["q"] = b.q; e["gain"] = b.gainDb; eq.append(e); } pg["eq"] = eq; pg["eqOn"] = mp_.eqOn; pg["mastering"] = QJsonObject::fromVariantMap(mastering()); root["program"] = pg; } root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["autoLevelOn"] = autoOn_; root["autoLevelTarget"] = autoTarget_; root["autoLevelMax"] = autoMax_; root["width"] = width_; root["ducker"] = duckJson(); root["loudness"] = loudJson(); root["v"] = 2;
   QJsonObject mon; mon["source"] = mon_.source; mon["db"] = mon_.db; mon["dim"] = mon_.dim; mon["mono"] = mon_.mono; mon["mute"] = mon_.mute; mon["sync"] = mon_.sync; root["monitor"] = mon; { QJsonArray amps; for (int o = 0; o < 64; ++o) if (!ampUi_[o].isEmpty()) { QJsonObject a = QJsonObject::fromVariantMap(ampUi_[o]); a["out"] = o; amps << a; } root["amps"] = amps; }
   QJsonArray ir; for (int i = 0; i < nSave; ++i) ir << inRoute_[i]; QJsonArray orr; for (int o = 0; o < kOutputs; ++o) orr << outRoute_[o]; root["inputRoutes"] = ir; root["outputRoutes"] = orr;
   return root;
@@ -2034,7 +2092,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); dcas_[g].color = std::clamp(o.value("color").toInt(0), 0, 7); }
-  duckFromJson(root.value("ducker").toObject());
+  duckFromJson(root.value("ducker").toObject()); loudFromJson(root.value("loudness").toObject());
   const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
   for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst) { if (!p.state.isEmpty()) p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
   if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }

@@ -449,6 +449,7 @@ json::Value Daemon::settingsJson() const {
   json::Value s = json::Value::object(); s.set("width", set_.width); s.set("outputBits", set_.outputBits); s.set("dcBlock", set_.dcBlock); s.set("analog", set_.analog);
   s.set("autoLevel", set_.autoLevel); s.set("autoTarget", set_.autoTarget); s.set("autoMax", set_.autoMax); s.set("clipDb", set_.clipDb); s.set("peakHoldMs", set_.peakHoldMs);
   s.set("winGain", set_.winGain); s.set("winMuteSync", set_.winMuteSync); s.set("winVolume", winVol_.load());
+  s.set("loudMaster", set_.loudMaster); s.set("loudPreset", set_.loudPreset); s.set("loudTarget", set_.loudTarget); s.set("loudRide", set_.loudRide); s.set("loudGate", set_.loudGate);
   const int v = winVol_.load(); s.set("winTrimDb", (set_.winGain && v >= 0 && !windowsSetsLevel()) ? trimForLevel(v / 100.0) : 0.0); s.set("winSetsLevel", windowsSetsLevel());
   return s;
 }
@@ -572,7 +573,8 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
     set_.dcBlock = c["dcBlock"].asBool(set_.dcBlock); set_.analog = c["analog"].asBool(set_.analog); set_.autoLevel = c["autoLevel"].asBool(set_.autoLevel);
     set_.autoTarget = std::max(-30.0, std::min(-6.0, c["autoTarget"].asNumber(set_.autoTarget))); set_.autoMax = std::max(0.0, std::min(24.0, c["autoMax"].asNumber(set_.autoMax)));
     set_.clipDb = std::max(-12.0, std::min(0.0, c["clipDb"].asNumber(set_.clipDb))); set_.peakHoldMs = std::max(0.0, std::min(10000.0, c["peakHoldMs"].asNumber(set_.peakHoldMs)));
-    set_.winGain = c["winGain"].asBool(set_.winGain); set_.winMuteSync = c["winMuteSync"].asBool(set_.winMuteSync); }
+    set_.winGain = c["winGain"].asBool(set_.winGain); set_.winMuteSync = c["winMuteSync"].asBool(set_.winMuteSync);
+    set_.loudMaster = c["loudMaster"].asBool(set_.loudMaster); set_.loudRide = c["loudRide"].asBool(set_.loudRide); set_.loudGate = c["loudGate"].asBool(set_.loudGate); set_.loudTarget = std::max(-30.0, std::min(-8.0, c["loudTarget"].asNumber(set_.loudTarget))); { const std::string p = c["loudPreset"].asString(); if (p == "STREAMING" || p == "PODCAST" || p == "BROADCAST" || p == "CUSTOM") set_.loudPreset = p; } }
   ++version_; return true;
 }
 
@@ -694,6 +696,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     else if (k == "peakHoldMs") { set_.peakHoldMs = std::max(0.0, std::min(10000.0, v.asNumber(1500))); if (rt_) rt_->setPeakHoldMs(set_.peakHoldMs); }
     else if (k == "winGain") { set_.winGain = v.asBool(false); if (rt_) applyMaster(*rt_); }
     else if (k == "winMuteSync") set_.winMuteSync = v.asBool(true);   // the console applies this rule (it watches the master)
+    else if (k == "loudMaster") set_.loudMaster = v.asBool(false);   // LOUDNESS MANAGER: the console applies these
+    else if (k == "loudRide") set_.loudRide = v.asBool(false);
+    else if (k == "loudGate") set_.loudGate = v.asBool(false);
+    else if (k == "loudTarget") { set_.loudTarget = std::max(-30.0, std::min(-8.0, v.asNumber(-14))); set_.loudPreset = "CUSTOM"; }
+    else if (k == "loudPreset") { const std::string p = v.asString(); if (p == "STREAMING") set_.loudTarget = -14; else if (p == "PODCAST") set_.loudTarget = -16; else if (p == "BROADCAST") set_.loudTarget = -23; else if (p != "CUSTOM") { err = "loudPreset: STREAMING, PODCAST, BROADCAST or CUSTOM"; return {}; } set_.loudPreset = p; }
     else if (k == "winVolume") { const int lv = std::max(0, std::min(100, v.asInt(-1)));
       if (!volSet_ || v.asInt(-1) < 0 || !volSet_(static_cast<float>(lv / 100.0))) { err = "the Windows volume is not available on this computer"; return {}; }
       winVol_ = lv; if (rt_) applyMaster(*rt_); }

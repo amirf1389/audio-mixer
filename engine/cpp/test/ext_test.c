@@ -1,6 +1,11 @@
 /* Loads an extension library the way the console does and runs it: start, status, stop. */
+#ifndef _WIN32
+#define _DEFAULT_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #ifdef _WIN32
 #include <windows.h>
 #define LOAD(p) LoadLibraryA(p)

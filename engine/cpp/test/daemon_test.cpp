@@ -71,7 +71,7 @@ int main() {
   Value r = Value::parse(body, ok); CHECK(ok && r["ok"].asBool() && r["backend"].asString() == "null");
   // the PRESET PACK built in (releases/presets/presets-pack.json) and a MASTERING PRESET picked by name: the console applies its values
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/presets", "", {}, status, body) && status == 200);
-  { const Value pk = Value::parse(body, ok); CHECK(ok && pk["mastering"].size() >= 10 && pk["effects"].size() == 600 && pk["tone"].size() >= 1 && !pk["version"].asString().empty()); }
+  { const Value pk = Value::parse(body, ok); CHECK(ok && pk["mastering"].size() >= 10 && pk["effects"].size() == 609 && pk["tone"].size() >= 1 && !pk["version"].asString().empty()); }
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mastering\",\"preset\":\"WARM\"}", auth, status, body) && status == 200);
   CHECK(d.state()["mastering"]["preset"].asString() == "WARM");
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":2,\"db\":-6.5}", auth, status, body) && status == 200);
@@ -271,6 +271,8 @@ int main() {
     CHECK(set("analog", "true") == 200 && set("autoLevel", "true") == 200 && set("autoTarget", "-40") == 200 && d.state()["settings"]["autoTarget"].asNumber() == -30);
     CHECK(set("clipDb", "-3") == 200 && set("peakHoldMs", "99999") == 200 && d.state()["settings"]["peakHoldMs"].asNumber() == 10000);
     CHECK(set("nonsense", "1") == 400);
+    CHECK(set("loudPreset", "\"BROADCAST\"") == 200 && d.state()["settings"]["loudTarget"].asNumber() == -23 && set("loudPreset", "\"LOUD\"") == 400);   // LOUDNESS MANAGER from a remote
+    CHECK(set("loudRide", "true") == 200 && d.state()["settings"]["loudRide"].asBool() && set("loudTarget", "-50") == 200 && d.state()["settings"]["loudTarget"].asNumber() == -30 && d.state()["settings"]["loudPreset"].asString() == "CUSTOM");
     CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"setting\",\"key\":\"width\",\"value\":1}", {}, status, body) && (status == 401 || status == 429));   // no token, no settings
     float winLevel = 0.5f; d.setVolumeBackend([&](float& f) { f = winLevel; return true; }, [&](float f) { winLevel = f; return true; });
     d.pollVolume(); CHECK(d.state()["settings"]["winVolume"].asInt() == 50 && d.state()["settings"]["winTrimDb"].asNumber() == 0);   // GAIN MODE off: no trim

@@ -5,6 +5,9 @@
 //                anywhere. Nothing is assigned until APPLY; a row's class can be changed by clicking it first.
 //   DUCKER       VOICE OVER MUSIC: while the KEY (a voice group and / or channels) is above THRESHOLD, the TARGET goes down by DEPTH
 //                (attack / hold / release), and the voices can be lifted a little. Runs in the engine, sample by sample.
+//   LOUDNESS MANAGER  AUTO FADER per channel (rides the fader toward a target within a range, at limited speed; the fader moves and its
+//                own position stays as a ghost), AUTO ON/OFF (a silent channel fades out after the hold, back at once), the master target
+//                (STREAMING -14, PODCAST -16, BROADCAST -23, CUSTOM). Moving a fader pauses its ride for 5 s. Runs in the engine.
 import QtQuick
 import AmixOS
 import QtQuick.Controls
@@ -16,6 +19,7 @@ Item {
     function openAssign(g, strip) { dp.group = g > 0 ? g : 1; assignPop.open() }
     function openAuto() { autoPop.open() }
     function openDucker() { duckPop.open() }
+    function openLoudness() { loudPop.open() }
     readonly property int chans: Math.min(engine.licensedChannels, 64)
     function chName(i) { const s = engine.stripAt(i, engine.stripTick); return s && s.name ? s.name : "CH " + (i + 1) }
     component Chip: Rectangle { id: ch; property string label; property bool on: false; property color tint: Theme.amber; signal hit()
@@ -96,4 +100,71 @@ Item {
                 Text { text: i18n.t("MUSIC NOW", i18n.lang) + "  " + (duckPop.ds.on ? engine.duckGrDb.toFixed(1) : "0.0") + " dB"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                 Item { Layout.fillWidth: true }
                 Chip { label: i18n.t("CLOSE", i18n.lang); onHit: duckPop.close() } } } }
+
+    Popup { id: loudPop; objectName: "loudPop"; parent: Overlay.overlay; x: (parent.width - width) / 2; y: 40; width: 640; padding: 12; modal: true; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        readonly property var ls: engine.loudState
+        property int tick: 0
+        Timer { interval: 150; repeat: true; running: loudPop.visible; onTriggered: loudPop.tick++ }
+        readonly property var tl: (loudPop.tick, engine.telemetry)
+        function lu(v) { return v === undefined || v <= -119 ? i18n.t("-inf", i18n.lang) : Number(v).toFixed(1) }
+        background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: Theme.cyan }
+        ColumnLayout { width: parent.width; spacing: 7
+            Head { text: i18n.t("LOUDNESS MANAGER", i18n.lang) }
+            Note { text: i18n.t("AUTO FADER rides each channel's fader toward its target loudness (short-term, 3 s) within a range around your own position, at a limited speed. AUTO ON/OFF fades a silent channel out after the hold and brings it back at once. Moving a fader pauses its ride for 5 s and makes the new position the centre. Order: fader + DCA, then the ride, auto on/off, automix and the ducker.", i18n.lang) }
+            // MASTER
+            RowLayout { Layout.fillWidth: true; spacing: 4
+                Text { text: i18n.t("MASTER TARGET", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 96 }
+                Chip { objectName: "loudMasterOn"; label: loudPop.ls.masterOn ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); on: loudPop.ls.masterOn; tint: Theme.emerald; onHit: engine.setLoud({ masterOn: !loudPop.ls.masterOn }) }
+                Repeater { model: [["STREAMING", -14], ["PODCAST", -16], ["BROADCAST", -23]]
+                    delegate: Chip { objectName: "loudPreset_" + modelData[0]; label: i18n.t(modelData[0], i18n.lang) + " " + modelData[1]; on: loudPop.ls.preset === modelData[0]; tint: Theme.cyan; onHit: engine.setLoud({ preset: modelData[0] }) } }
+                Chip { objectName: "loudPreset_CUSTOM"; label: i18n.t("CUSTOM", i18n.lang); on: loudPop.ls.preset === "CUSTOM"; tint: Theme.cyan; onHit: engine.setLoud({ masterTarget: loudPop.ls.masterTarget }) }
+                Text { text: Number(loudPop.ls.masterTarget).toFixed(0) + " LUFS"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+            MSlider { objectName: "loudMasterTarget"; visible: loudPop.ls.preset === "CUSTOM"; Layout.fillWidth: true; tint: Theme.cyan; from: -30; to: -8; value: loudPop.ls.masterTarget; onMoved: engine.setLoud({ masterTarget: Math.round(value) }) }
+            RowLayout { Layout.fillWidth: true; spacing: 4
+                Repeater { model: [["momentary", "M", "LUFS"], ["shortTerm", "S", "LUFS"], ["integrated", "I", "LUFS"], ["lra", "LRA", "LU"], ["truePeak", "TP", "dBTP"], ["autoLevelDb", "GAIN", "dB"]]
+                    delegate: Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 5; color: Qt.rgba(0, 0, 0, 0.3); border.color: Theme.lineSoft
+                        readonly property real v: loudPop.tl[modelData[0]] === undefined ? -120 : loudPop.tl[modelData[0]]
+                        Column { anchors.centerIn: parent
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(modelData[1], i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7 }
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: (modelData[0] === "lra" ? Number(parent.parent.v).toFixed(1) : modelData[0] === "autoLevelDb" ? (parent.parent.v > 0 ? "+" : "") + Number(parent.parent.v).toFixed(1) : loudPop.lu(parent.parent.v)) + " " + modelData[2]; color: modelData[0] === "autoLevelDb" ? Theme.emerald : Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } } } } }
+            Note { visible: loudPop.ls.masterOn && !(engine.masterLimiter() || {}).on; text: i18n.t("Turn the master limiter on: it is the true-peak safety under the master target.", i18n.lang); color: Theme.amber }
+            // CHANNELS
+            RowLayout { Layout.fillWidth: true; spacing: 4
+                Text { text: i18n.t("CHANNELS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 96 }
+                Chip { objectName: "loudAllRideOn"; label: i18n.t("ALL AUTO ON", i18n.lang); tint: Theme.cyan; onHit: engine.setLoudAll("ride", true) }
+                Chip { objectName: "loudAllRideOff"; label: i18n.t("ALL AUTO OFF", i18n.lang); onHit: engine.setLoudAll("ride", false) }
+                Chip { objectName: "loudAllGateOn"; label: i18n.t("ALL ON/OFF ON", i18n.lang); tint: Theme.amber; onHit: engine.setLoudAll("gate", true) }
+                Chip { objectName: "loudAllGateOff"; label: i18n.t("ALL ON/OFF OFF", i18n.lang); onHit: engine.setLoudAll("gate", false) }
+                Item { Layout.fillWidth: true }
+                Text { text: loudPop.ls.rides + " " + i18n.t("riding", i18n.lang) + " · " + loudPop.ls.gates + " " + i18n.t("on/off", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } }
+            RowLayout { Layout.fillWidth: true; spacing: 4
+                Text { text: i18n.t("SPEED", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; Layout.preferredWidth: 96 }
+                Repeater { model: [["slow", "SLOW"], ["medium", "MEDIUM"], ["fast", "FAST"]]
+                    delegate: Chip { objectName: "loudSpeed_" + modelData[0]; label: i18n.t(modelData[1], i18n.lang); on: loudPop.ls.speed === modelData[0]; tint: Theme.cyan; onHit: engine.setLoud({ speed: modelData[0] }) } }
+                Text { text: "+" + Number(loudPop.ls.up).toFixed(1) + " / -" + Number(loudPop.ls.down).toFixed(1) + " dB/s"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
+                Item { Layout.fillWidth: true }
+                Chip { objectName: "loudGlobal"; label: i18n.t("ONE TARGET FOR ALL", i18n.lang); on: loudPop.ls.globalOn; tint: Theme.cyan; onHit: engine.setLoud({ globalOn: !loudPop.ls.globalOn }) } }
+            GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 8; rowSpacing: 2
+                Repeater { model: [["range", "RANGE ±", 0, 20, " dB", 0], ["gateThr", "ON/OFF BELOW", -80, -20, " LUFS", 0], ["hold", "HOLD", 0.5, 15, " s", 1], ["globalTarget", "TARGET", -40, -6, " LUFS", 0]]
+                    delegate: ColumnLayout { Layout.fillWidth: true; spacing: 0; opacity: modelData[0] !== "globalTarget" || loudPop.ls.globalOn ? 1 : 0.4
+                        Text { text: i18n.t(modelData[1], i18n.lang) + " " + Number(loudPop.ls[modelData[0]]).toFixed(modelData[5]) + modelData[4]; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                        MSlider { objectName: "loud_" + modelData[0]; Layout.fillWidth: true; tint: Theme.cyan; from: modelData[2]; to: modelData[3]; value: loudPop.ls[modelData[0]]
+                            onMoved: { const o = {}; o[modelData[0]] = modelData[5] ? Math.round(value * 10) / 10 : Math.round(value); engine.setLoud(o) } } } } }
+            ListView { objectName: "loudList"; Layout.fillWidth: true; Layout.preferredHeight: Math.min(260, count * 24); clip: true; model: Math.min(dp.chans, loudPop.ls.strips.length); spacing: 1
+                delegate: Rectangle { width: ListView.view.width; height: 23; radius: 3; color: Theme.ov(0.04)
+                    readonly property var u: loudPop.ls.strips[index] || ({})
+                    readonly property var mt: (loudPop.tick, engine.meterAt(index))
+                    readonly property var clsN: ["AUTO", "VOICE", "MUSIC", "INSTRUMENT"]
+                    RowLayout { anchors.fill: parent; anchors.margins: 2; spacing: 5
+                        Text { Layout.preferredWidth: 96; text: dp.chName(index); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; elide: Text.ElideRight }
+                        Chip { objectName: "loudRide" + index; label: i18n.t("AUTO", i18n.lang); on: !!u.ride; tint: Theme.cyan; onHit: engine.setLoudStrip(index, { ride: !u.ride }) }
+                        Chip { objectName: "loudGate" + index; label: i18n.t("ON/OFF", i18n.lang); on: !!u.gate; tint: Theme.amber; onHit: engine.setLoudStrip(index, { gate: !u.gate }) }
+                        Chip { objectName: "loudCls" + index; label: i18n.t(clsN[(u.cls === undefined ? -1 : u.cls) + 1], i18n.lang); onHit: engine.setLoudStrip(index, { cls: ((u.cls === undefined ? -1 : u.cls) + 2) % 4 - 1 }) }
+                        Text { Layout.preferredWidth: 64; text: Number(u.target || -18).toFixed(0) + " LUFS"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                        Text { Layout.preferredWidth: 72; text: i18n.t("IN", i18n.lang) + " " + loudPop.lu(mt ? mt.rideLufs : -120); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8 }
+                        Text { Layout.fillWidth: true; color: mt && mt.rideGateDb < -0.01 ? Theme.dim : Theme.emerald; font.family: Theme.mono; font.pixelSize: 8; font.bold: true
+                            text: !mt || (!u.ride && !u.gate) ? "" : mt.rideGateDb < -0.01 ? i18n.t("OFF", i18n.lang) + " " + Number(mt.rideGateDb).toFixed(0) + " dB" : mt.rideSusp ? i18n.t("HOLD", i18n.lang) : (mt.rideDb >= 0 ? "+" : "") + Number(mt.rideDb).toFixed(1) + " dB" } } } }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Chip { label: i18n.t("CLOSE", i18n.lang); onHit: loudPop.close() } } } }
 }

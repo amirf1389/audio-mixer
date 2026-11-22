@@ -65,7 +65,9 @@ void Remote::writeSeed() {
 }
 QVariantMap Remote::consoleSettings() const {
   return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")}, {"engineer", engine_->dspMode() == QLatin1String("engineer")}, {"fast", engine_->dspMode() == QLatin1String("fast")},
-          {"autoLevel", engine_->autoLevelOn()}, {"autoTarget", engine_->autoLevelTarget()}, {"autoMax", engine_->autoLevelMax()}, {"winGain", engine_->windowsGainMode()}, {"winMuteSync", engine_->windowsMuteSync()}};
+          {"autoLevel", engine_->autoLevelOn()}, {"autoTarget", engine_->autoLevelTarget()}, {"autoMax", engine_->autoLevelMax()}, {"winGain", engine_->windowsGainMode()}, {"winMuteSync", engine_->windowsMuteSync()},
+          {"loudMaster", engine_->loudState().value("masterOn")}, {"loudPreset", engine_->loudState().value("preset")}, {"loudTarget", engine_->loudState().value("masterTarget")},
+          {"loudRide", engine_->loudState().value("rides").toInt() > 0}, {"loudGate", engine_->loudState().value("gates").toInt() > 0}};   // LOUDNESS MANAGER: state + on / off for the remotes
 }
 void Remote::applySetting(const QString& k, const QVariant& v) {
   if (k == "width") engine_->setWidth(v.toDouble()); else if (k == "outputBits") engine_->setOutputBits(v.toInt()); else if (k == "dcBlock") engine_->setDcBlock(v.toBool());
@@ -74,6 +76,8 @@ void Remote::applySetting(const QString& k, const QVariant& v) {
   else if (k == "fast") engine_->setDspMode(v.toBool() ? QStringLiteral("fast") : QStringLiteral("digital"));
   else if (k == "autoLevel") engine_->setAutoLevelOn(v.toBool()); else if (k == "autoTarget") engine_->setAutoLevelTarget(v.toDouble()); else if (k == "autoMax") engine_->setAutoLevelMax(v.toDouble());
   else if (k == "winGain") engine_->setWindowsGainMode(v.toBool()); else if (k == "winMuteSync") engine_->setWindowsMuteSync(v.toBool());
+  else if (k == "loudMaster") engine_->setLoud({{"masterOn", v.toBool()}}); else if (k == "loudPreset") engine_->setLoud({{"preset", v.toString()}}); else if (k == "loudTarget") engine_->setLoud({{"masterTarget", v.toDouble()}});
+  else if (k == "loudRide") engine_->setLoudAll(QStringLiteral("ride"), v.toBool()); else if (k == "loudGate") engine_->setLoudAll(QStringLiteral("gate"), v.toBool());
 }
 void Remote::post(const QVariantMap& cmd) {
   QNetworkRequest q(QUrl(QStringLiteral("http://127.0.0.1:%1/api/control").arg(port()))); q.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); q.setRawHeader("X-Amix-Token", token_);
