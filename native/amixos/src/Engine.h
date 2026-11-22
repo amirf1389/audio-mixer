@@ -835,6 +835,9 @@ class Engine : public QObject {
 
  private:
   static constexpr int kStrips = am::kMaxStrips;   // 300: the ULTIMATE console. The licence decides how many run (BASIC 10 ... MASTER 32, +30 per EXTEND pack)
+  // A STRIP CHANGE: the cache is marked stale and the tick counted BEFORE the signal goes out. (A slot connected to the signal ran too
+  // late: Qt tells the interface's bindings first, so they read the strip state and the tick of the change before, one change behind.)
+  void stripsTouched() { stripDirty_ = true; ++stripTick_; emit stripsChanged(); }
   int meterTick_ = 0; int stripTick_ = 0; mutable QVariantList stripCache_, liteCache_; mutable bool stripDirty_ = true; mutable std::vector<int> stripVer_ = std::vector<int>(kStrips, 0);
   const QVariantList& stripCache() const {
     if (!stripDirty_) return stripCache_;

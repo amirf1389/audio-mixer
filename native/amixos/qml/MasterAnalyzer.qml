@@ -9,7 +9,10 @@ import QtQuick.Layouts
 Popup {
     id: pop
     objectName: "masterAnalyzer"
-    modal: true; padding: 0; width: 1020; height: 680; anchors.centerIn: Overlay.overlay
+    modal: true; padding: 0; width: 1020; height: 680; parent: Overlay.overlay
+    // CENTRED ON THE WINDOW, WHOLE: a window smaller than the box draws it smaller (it hung over the window edges, clipped on one side)
+    scale: Math.min(1, parent ? (parent.width - 24) / 1020 : 1, parent ? (parent.height - 24) / 680 : 1); transformOrigin: Popup.TopLeft; margins: -1   // placed here, not pushed by its unscaled size
+    x: parent ? Math.round((parent.width - width * scale) / 2) : 0; y: parent ? Math.round((parent.height - height * scale) / 2) : 0
     readonly property var tel: engine.telemetry
     property bool paused: false
     property int targetIndex: 0

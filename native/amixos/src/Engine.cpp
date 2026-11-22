@@ -60,7 +60,6 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   // Windows stayed muted for every program (no sound anywhere) and the console no longer knew. The mute is written down when it is set
   // and given back here, at the next start.
   if (QSettings().value("mixer/weMutedWindows", false).toBool()) { const bool before = QSettings().value("mixer/winBefore", false).toBool(); const auto set = sysSet_; svcPost([set, before] { set(before); }); QSettings().remove("mixer/weMutedWindows"); }
-  connect(this, &Engine::stripsChanged, this, [this] { stripDirty_ = true; ++stripTick_; });
   for (auto sig : {&Engine::groupsChanged, &Engine::busesChanged, &Engine::routingChanged, &Engine::recordChanged, &Engine::licenseChanged}) connect(this, sig, this, [this] { stripDirty_ = true; });   // DCA / mute groups, sends, arm and the plan feed the strip state too   // first receiver: the cache is stale before any binding reads it
   sysTimer_.setInterval(500); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemSound); connect(&sysTimer_, &QTimer::timeout, this, &Engine::syncSystemVolume); sysTimer_.start();
 #ifdef _WIN32
@@ -323,7 +322,7 @@ QVariantList Engine::buildStripState() const {
 }
 // ── aux sends ──
 QVariantList Engine::busState() const { QVariantList l; for (int k = 0; k < kBuses; ++k) { QVariantMap m; m["index"] = k; m["name"] = buses_[k].name; m["db"] = buses_[k].db; m["returnDb"] = buses_[k].returnDb; m["mute"] = buses_[k].mute; m["outputs"] = QStringLiteral("OUT %1-%2").arg(3 + 2 * k).arg(4 + 2 * k); m["kind"] = k < 8 ? "aux" : "fx"; m["fx"] = buses_[k].fxKind; m["fxName"] = buses_[k].fx ? QString::fromLatin1(buses_[k].fx->name()) : QString(); l << m; } return l; }
-void Engine::setSend(int i, int k, double db, bool pre) { if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return; SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; sd.db = std::clamp(db, -60.0, 10.0); sd.pre = pre; if (rt_) rt_->setSend(i, k, sd.db, sd.pre); emit stripsChanged(); }
+void Engine::setSend(int i, int k, double db, bool pre) { if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return; SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; sd.db = std::clamp(db, -60.0, 10.0); sd.pre = pre; if (rt_) rt_->setSend(i, k, sd.db, sd.pre); stripsTouched(); }
 QVariantMap Engine::send(int i, int k) const { QVariantMap m; if (i < 0 || i >= kStrips || k < 0 || k >= kBuses) return m; const SendUi& sd = strips_[static_cast<std::size_t>(i)].sends[k]; m["db"] = sd.db; m["pre"] = sd.pre; return m; }
 void Engine::setBusLevel(int k, double db) { if (k < 0 || k >= kBuses) return; buses_[k].db = std::clamp(db, -60.0, 10.0); if (rt_) rt_->setBusLevel(k, buses_[k].db); emit busesChanged(); }
 void Engine::setBusMute(int k, bool on) { if (k < 0 || k >= kBuses) return; buses_[k].mute = on; if (rt_) rt_->setBusMute(k, on); emit busesChanged(); }
@@ -340,9 +339,9 @@ QVariantList Engine::muteGroupState() const {
   for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = muteGroups_[g].name; m["active"] = muteGroups_[g].active; QVariantList mem; for (int i = 0; i < kStrips; ++i) if ((strips_[static_cast<std::size_t>(i)].muteGroups >> g) & 1u) mem << i; m["members"] = mem; l << m; }
   return l;
 }
-void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); pushLoud(i); if (rt_ && duckUi_.on) rt_->setDuckRole(i, duckRole(i)); emit stripsChanged(); emit groupsChanged(); emit loudChanged(); }
-void Engine::setDcaLevel(int g, double db) { if (g < 1 || g > kGroups) return; dcas_[g - 1].db = std::clamp(db, -60.0, 10.0); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
-void Engine::setDcaMute(int g, bool on) { if (g < 1 || g > kGroups) return; dcas_[g - 1].mute = on; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
+void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); pushLoud(i); if (rt_ && duckUi_.on) rt_->setDuckRole(i, duckRole(i)); stripsTouched(); emit groupsChanged(); emit loudChanged(); }
+void Engine::setDcaLevel(int g, double db) { if (g < 1 || g > kGroups) return; dcas_[g - 1].db = std::clamp(db, -60.0, 10.0); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); stripsTouched(); emit groupsChanged(); }
+void Engine::setDcaMute(int g, bool on) { if (g < 1 || g > kGroups) return; dcas_[g - 1].mute = on; for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushStrip(i); stripsTouched(); emit groupsChanged(); }
 void Engine::setDcaName(int g, const QString& n) { if (g < 1 || g > kGroups) return; dcas_[g - 1].name = n.left(16); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].dca == g) pushLoud(i); emit groupsChanged(); emit loudChanged(); }
 void Engine::setDcaColor(int g, int c) { if (g < 1 || g > kGroups) return; dcas_[g - 1].color = std::clamp(c, 0, 7); emit groupsChanged(); }
 // ---- DUCKER · VOICE OVER MUSIC: the roles go to the engine strip by strip; the envelope runs there (audiomixer/ducker.hpp)
@@ -424,15 +423,15 @@ void Engine::applyAutoDca(bool muteSilent) {
     if (c == QLatin1String("SILENT")) { if (muteSilent) { strips_[static_cast<std::size_t>(i)].mute = true; pushStrip(i); } continue; }
     for (const G& g : gs) if (c == QLatin1String(g.cls) && g.group) { strips_[static_cast<std::size_t>(i)].dca = g.group; pushStrip(i); } }
   if (gs[0].group && gs[1].group && duckUi_.keyDca == 0 && duckUi_.targetDca == 0) { duckUi_.keyDca = gs[0].group; duckUi_.targetDca = gs[1].group; }   // the ducker is set up, not switched on
-  autoProp_.clear(); pushDuck(); emit stripsChanged(); emit groupsChanged(); emit duckChanged(); emit autoDcaChanged();
+  autoProp_.clear(); pushDuck(); stripsTouched(); emit groupsChanged(); emit duckChanged(); emit autoDcaChanged();
 }
-void Engine::setMuteGroupMember(int i, int g, bool member) { if (i < 0 || i >= kStrips || g < 1 || g > kGroups) return; unsigned& m = strips_[static_cast<std::size_t>(i)].muteGroups; if (member) m |= 1u << (g - 1); else m &= ~(1u << (g - 1)); pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
-void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].active = on; for (int i = 0; i < kStrips; ++i) pushStrip(i); emit stripsChanged(); emit groupsChanged(); }
+void Engine::setMuteGroupMember(int i, int g, bool member) { if (i < 0 || i >= kStrips || g < 1 || g > kGroups) return; unsigned& m = strips_[static_cast<std::size_t>(i)].muteGroups; if (member) m |= 1u << (g - 1); else m &= ~(1u << (g - 1)); pushStrip(i); stripsTouched(); emit groupsChanged(); }
+void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].active = on; for (int i = 0; i < kStrips; ++i) pushStrip(i); stripsTouched(); emit groupsChanged(); }
 // effective = the strip's own fader + its DCA's fader (in dB), muted when the strip, its DCA or an active mute group it belongs to is muted
 double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60; const StripUi& s = strips_[static_cast<std::size_t>(i)]; const double g = s.dca > 0 ? dcas_[s.dca - 1].db : 0; return std::clamp(s.db + g, -60.0, 10.0); }
 bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
 void Engine::pushStrip(int i) { if (!rt_) return; rt_->setGainDb(i, effectiveDb(i)); rt_->setMute(i, effectiveMute(i)); }
-void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (rt_ && loudUi_.strips[i].ride) rt_->rideTouch(i, 5); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); if (rt_ && loudUi_.strips[partner(i)].ride) rt_->rideTouch(partner(i), 5); } emit stripsChanged(); }   // a hand on the fader (UI, MIDI, remote): AUTO FADER pauses 5 s and rides from the new position
+void Engine::setGain(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].db = std::clamp(db, -60.0, 10.0); pushStrip(i); if (rt_ && loudUi_.strips[i].ride) rt_->rideTouch(i, 5); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].db = strips_[static_cast<std::size_t>(i)].db; pushStrip(partner(i)); if (rt_ && loudUi_.strips[partner(i)].ride) rt_->rideTouch(partner(i), 5); } stripsTouched(); }   // a hand on the fader (UI, MIDI, remote): AUTO FADER pauses 5 s and rides from the new position
 // 360 and IAMF are one place: a strip with an IAMF ELEMENT in its rack is placed by that plug-in (the 360 page moves its knobs and reads
 // them back), and the strip's own 360 stage stays off so the sound is never placed twice. Without one, the 360 stage places it as before.
 int Engine::iamfSlot(int i) const { if (i < 0 || i >= kStrips) return -1; const StripUi& s = strips_[static_cast<std::size_t>(i)];
@@ -442,9 +441,9 @@ void Engine::setSpatial(int i, bool on, double az, double el, double dist, doubl
   if (const int k = iamfSlot(i); k >= 0) { PluginUi& p = s.plugins[k]; const double a = std::fmod(az + 540.0, 360.0) - 180.0;
     s.spAz = a; s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.5, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0); s.spOn = false; pushSpatial(i);
     p.vst->setParam(0, (s.spAz + 180) / 360); p.vst->setParam(1, (s.spEl + 90) / 180); p.vst->setParam(2, std::log(s.spDist / 0.5) / std::log(40.0)); p.vst->setParam(3, s.spSpread);
-    p.bypass = !on; p.vst->setBypass(!on); if (spkOn_) feedSpeakers(i); emit stripsChanged(); emit spatialMoved(); return; }
+    p.bypass = !on; p.vst->setBypass(!on); if (spkOn_) feedSpeakers(i); stripsTouched(); emit spatialMoved(); return; }
   s.spOn = on; s.spAz = std::fmod(az, 360.0); s.spEl = std::clamp(el, -90.0, 90.0); s.spDist = std::clamp(dist, 0.3, 20.0); s.spSpread = std::clamp(spread, 0.0, 1.0);
-  pushSpatial(i); emit stripsChanged(); emit spatialMoved();
+  pushSpatial(i); stripsTouched(); emit spatialMoved();
 }
 // what the engine is given: the object's place in the room, seen from a head that may be turned
 void Engine::pushSpatial(int i) {
@@ -561,7 +560,7 @@ bool Engine::applyRackPreset(int i, int slot, int presetId) {
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return false; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; const am::fx::Preset* pr = am::fx::preset(presetId);
   if (!pr || !p.vst || p.kind != QStringLiteral("fx:") + QString::fromStdString(pr->kind)) return false;
   std::string st; char b[64]; for (const auto& [id, v] : pr->values) { std::snprintf(b, sizeof b, "%s=%.4f;", id.c_str(), v); st += b; }   // the knobs of the preset; MIX stays where the insert has it
-  const bool ok = p.vst->setState(st); if (ok) emit stripsChanged(); return ok;
+  const bool ok = p.vst->setState(st); if (ok) stripsTouched(); return ok;
 }
 QVariantMap Engine::mastering() const {
   QVariantMap m; m["eqOn"] = mp_.eqOn; m["analog"] = mp_.analog; m["on"] = mp_.on; m["low"] = mp_.lowDb; m["air"] = mp_.airDb; m["mid"] = mp_.midDb; m["compMix"] = mp_.compMix; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["thr"] = mp_.thrDb; m["ratio"] = mp_.ratio; m["attack"] = mp_.attackMs; m["release"] = mp_.releaseMs; m["makeup"] = mp_.makeupDb; m["drive"] = mp_.drive; m["gain"] = mp_.gainDb; m["toneOn"] = mp_.toneOn; m["compOn"] = mp_.compOn; m["satOn"] = mp_.satOn; m["deessOn"] = mp_.deessOn; m["deessThr"] = mp_.deessThrDb; m["deessMax"] = mp_.deessMaxDb; m["exciterOn"] = mp_.exciterOn; m["exciter"] = mp_.exciterAmt; m["bassMonoOn"] = mp_.bassMonoOn; m["bassMonoHz"] = mp_.bassMonoHz; m["preset"] = masterPreset_; return m;
@@ -610,16 +609,16 @@ void Engine::applyMasteringPreset(const QString& name) {
     mp_.exciterOn = true; mp_.exciterAmt = p.exc; mp_.bassMonoOn = true; mp_.bassMonoHz = p.monoHz; mp_.deessOn = false; masterPreset_ = name; pushMaster(); emit masterChainChanged(); return; }
   for (const P& p : k) if (name == QLatin1String(p.n)) { mp_.on = true; mp_.toneOn = mp_.compOn = mp_.satOn = true; mp_.lowDb = p.low; mp_.airDb = p.air; mp_.thrDb = p.thr; mp_.ratio = p.ratio; mp_.attackMs = p.att; mp_.releaseMs = p.rel; mp_.makeupDb = p.mk; mp_.drive = p.drive; mp_.gainDb = p.gain; masterPreset_ = name; pushMaster(); emit masterChainChanged(); return; }
 }
-void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].pan = -strips_[static_cast<std::size_t>(i)].pan; if (rt_) rt_->setPan(j, strips_[static_cast<std::size_t>(j)].pan); } emit stripsChanged(); }
-void Engine::setMute(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].mute = on; pushStrip(partner(i)); } emit stripsChanged(); }
-void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].solo = on; if (rt_) rt_->setSolo(i, on); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].solo = on; if (rt_) rt_->setSolo(j, on); } emit stripsChanged(); }
-void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].name = n.left(24); emit stripsChanged(); }
-void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); emit stripsChanged(); }
+void Engine::setPan(int i, double p) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].pan = std::clamp(p, -1.0, 1.0); if (rt_) rt_->setPan(i, strips_[static_cast<std::size_t>(i)].pan); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].pan = -strips_[static_cast<std::size_t>(i)].pan; if (rt_) rt_->setPan(j, strips_[static_cast<std::size_t>(j)].pan); } stripsTouched(); }
+void Engine::setMute(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); if (linked(i)) { strips_[static_cast<std::size_t>(partner(i))].mute = on; pushStrip(partner(i)); } stripsTouched(); }
+void Engine::setSolo(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].solo = on; if (rt_) rt_->setSolo(i, on); if (linked(i)) { const int j = partner(i); strips_[static_cast<std::size_t>(j)].solo = on; if (rt_) rt_->setSolo(j, on); } stripsTouched(); }
+void Engine::setName(int i, const QString& n) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].name = n.left(24); stripsTouched(); }
+void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].color = std::clamp(c, 0, 7); stripsTouched(); }
 void Engine::setMaster(double db) {
   startNote_.clear();
   const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); pushMasterLevel();
   if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
-  emit stripsChanged(); syncSystemSound();
+  stripsTouched(); syncSystemSound();
 }
 void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ = on; QSettings().setValue("mixer/windowsMuteSync", on); syncSystemSound(); emit systemSoundChanged(); }
 void Engine::syncSystemSound() {
@@ -674,9 +673,9 @@ void Engine::restoreSystemSound() { if (weMuted_ && sysSet_) { sysSet_(winBefore
 bool Engine::inputMutedBySystem() const { return rt_ && running() && rt_->inputSilentSeconds() > 2.0; }
 void Engine::setHeadroomDb(int db) {
   db = db <= 0 ? 0 : db <= 3 ? 3 : db <= 6 ? 6 : db <= 9 ? 9 : 12; if (db == headroom_) return;
-  headroom_ = db; settings_.setValue("console/headroomDb", db); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); emit stripsChanged();
+  headroom_ = db; settings_.setValue("console/headroomDb", db); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); stripsTouched();
 }
-void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); emit stripsChanged(); emit masterChainChanged(); }
+void Engine::setMasterLimiter(bool on, double c, double rel) { masterLim_ = on; masterCeil_ = std::clamp(c, -24.0, 0.0); if (rel >= 0) masterRel_ = std::clamp(rel, 10.0, 2000.0); if (rt_) rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_); stripsTouched(); emit masterChainChanged(); }
 QVariantMap Engine::masterLimiter() const { QVariantMap m; m["on"] = masterLim_; m["ceiling"] = masterCeil_; m["release"] = masterRel_; return m; }
 void Engine::clearClips() { if (rt_) rt_->clearClips(); }
 // ---- licence (engine/cpp/app/license): the vendor public key is compiled in; keys and tokens are verified offline
@@ -703,7 +702,7 @@ void Engine::refreshLicense() {
     license_["baseChannels"] = u ? 300 : 32; license_["extendChannels"] = u ? 0 : std::max(0, licensedChannels_ - 32); license_["extendPacks"] = u ? 0 : (std::max(0, licensedChannels_ - 32) + 29) / 30; }
 #endif   // BASIC 1-10, PRO 1-20, STUDIO and MASTER 1-32, +30 per EXTEND pack, ULTIMATE all 300
   if (before != licensedChannels_ && rt_) for (int i = 0; i < kStrips; ++i) pushStrip(i);
-  emit licenseChanged(); if (before != licensedChannels_) emit stripsChanged();
+  emit licenseChanged(); if (before != licensedChannels_) stripsTouched();
 }
 static bool isExtendKey(const QString& key) { return key.trimmed().startsWith(QLatin1String("AMXX1.")); }
 QVariantMap Engine::checkKey(const QString& key) const {
@@ -1066,8 +1065,8 @@ void Engine::setBusFx(int k, const QString& kind) { if (k < 0 || k >= kBuses) re
 void Engine::setBusFxParam(int k, const QString& id, double v) { if (k < 0 || k >= kBuses) return; BusUi& b = buses_[k]; b.fxPreset = 0; b.fxValues[id] = std::clamp(v, 0.0, 1.0); if (b.fx) b.fx->set(id.toStdString(), b.fxValues[id]); emit busesChanged(); }
 void Engine::setBusFxBypass(int k, bool on) { if (k < 0 || k >= kBuses) return; buses_[k].fxBypass = on; if (buses_[k].fx) buses_[k].fx->setBypass(on); emit busesChanged(); }
 void Engine::setBusFxMix(int k, double wet) { if (k < 0 || k >= kBuses) return; buses_[k].fxMix = std::clamp(wet, 0.0, 1.0); if (buses_[k].fx) buses_[k].fx->setMix(buses_[k].fxMix); emit busesChanged(); }
-void Engine::setAutomix(int i, bool on, double w) { if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; s.automix = on; s.amWeight = std::clamp(w, 0.25, 4.0); if (rt_) rt_->setAutomix(i, on, s.amWeight); emit stripsChanged(); }
-void Engine::setWidth(double w) { width_ = std::clamp(w, 0.0, 2.0); if (rt_) rt_->setWidth(width_); emit stripsChanged(); }
+void Engine::setAutomix(int i, bool on, double w) { if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)]; s.automix = on; s.amWeight = std::clamp(w, 0.25, 4.0); if (rt_) rt_->setAutomix(i, on, s.amWeight); stripsTouched(); }
+void Engine::setWidth(double w) { width_ = std::clamp(w, 0.0, 2.0); if (rt_) rt_->setWidth(width_); stripsTouched(); }
 QVariantMap Engine::scopeFrame(int ch, double windowMs, int points, bool trigger) {
   QVariantMap m; std::vector<float> w; const std::size_t span = static_cast<std::size_t>(std::max(1.0, windowMs) * scope_.sampleRate() / 1000.0);
   scope_.window(ch, span, points, trigger, w); QVariantList l; l.reserve(static_cast<int>(w.size())); for (float v : w) l << v; m["samples"] = l;
@@ -1117,11 +1116,11 @@ void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
   if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); pushMasterLevel(); emit stripsChanged(); syncSystemSound(); }
+  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); pushMasterLevel(); stripsTouched(); syncSystemSound(); }
   emit monitorChanged();
 }
 void Engine::setMonitorSync(bool on) { mon_.sync = on; emit monitorChanged(); }
-void Engine::resetStripDsp(int i) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); if (rt_) pushAll(); emit stripsChanged(); }
+void Engine::resetStripDsp(int i) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); if (rt_) pushAll(); stripsTouched(); }
 // The factory channel layout: CH 1-2 MAIN (the device's inputs 1-2, a linked stereo pair), CH 3-4 LIVE (a linked stereo pair for the
 // live source), CH 5-7 RESERVE (free for whatever the user wants; open in every edition), the rest numbered.
 void Engine::factoryLayout() {
@@ -1140,7 +1139,7 @@ void Engine::factoryLayout() {
 void Engine::resetStrip(int i) {
   if (i < 0 || i >= kStrips) return; StripUi& s = strips_[static_cast<std::size_t>(i)];
   s.db = 0; s.pan = 0; s.mute = false; s.solo = false; s.dca = 0; s.muteGroups = 0; for (SendUi& sd : s.sends) sd = SendUi{}; s.dsp.set(am::dsp::ChannelParams{});
-  if (rt_) pushAll(); emit stripsChanged(); emit groupsChanged();
+  if (rt_) pushAll(); stripsTouched(); emit groupsChanged();
 }
 void Engine::setPeakHold(int ms) { peakHoldMs_ = std::clamp(ms, 0, 999999); if (rt_) rt_->setPeakHoldMs(peakHoldMs_); }
 void Engine::setClipThreshold(double db) { clipDb_ = std::clamp(db, -12.0, 0.0); if (rt_) rt_->setClipDb(clipDb_); }
@@ -1189,18 +1188,18 @@ void Engine::setLoud(const QVariantMap& c) {
   if (c.contains("globalOn")) loudUi_.globalOn = c.value("globalOn").toBool();
   if (c.contains("globalTarget")) loudUi_.globalTarget = std::clamp(c.value("globalTarget").toDouble(), -40.0, -6.0);
   if (c.contains("strips")) { const QVariantList l = c.value("strips").toList(); for (int i = 0; i < l.size() && i < kStrips; ++i) { const QVariantMap m = l[i].toMap(); LoudStripUi& u = loudUi_.strips[i]; u.ride = m.value("ride").toBool(); u.gate = m.value("gate").toBool(); u.cls = std::clamp(m.value("cls", -1).toInt(), -1, 2); } }
-  pushLoudAll(); emit loudChanged(); emit stripsChanged();
+  pushLoudAll(); emit loudChanged(); stripsTouched();
 }
 void Engine::setLoudStrip(int i, const QVariantMap& c) {
   if (i < 0 || i >= kStrips) return; LoudStripUi& u = loudUi_.strips[i];
   if (c.contains("ride")) u.ride = c.value("ride").toBool();
   if (c.contains("gate")) u.gate = c.value("gate").toBool();
   if (c.contains("cls")) u.cls = std::clamp(c.value("cls").toInt(), -1, 2);
-  pushLoud(i); if (linked(i)) { loudUi_.strips[partner(i)] = u; pushLoud(partner(i)); } emit loudChanged(); emit stripsChanged();
+  pushLoud(i); if (linked(i)) { loudUi_.strips[partner(i)] = u; pushLoud(partner(i)); } emit loudChanged(); stripsTouched();
 }
 void Engine::setLoudAll(const QString& what, bool on) {
   for (int i = 0; i < shownStrips() && i < kStrips; ++i) { if (what == QLatin1String("gate")) loudUi_.strips[i].gate = on; else loudUi_.strips[i].ride = on; pushLoud(i); }
-  emit loudChanged(); emit stripsChanged();
+  emit loudChanged(); stripsTouched();
 }
 QJsonObject Engine::loudJson() const { QJsonObject o = QJsonObject::fromVariantMap(loudState()); o.remove("rides"); o.remove("gates"); QJsonArray st; for (int i = 0; i < kStrips; ++i) { const LoudStripUi& u = loudUi_.strips[i]; if (!u.ride && !u.gate && u.cls < 0) { st.append(QJsonObject{}); continue; } st.append(QJsonObject{{"ride", u.ride}, {"gate", u.gate}, {"cls", u.cls}}); } while (!st.isEmpty() && st.last().toObject().isEmpty()) st.removeLast(); o["strips"] = st; return o; }
 void Engine::loudFromJson(const QJsonObject& o) { loudUi_ = LoudUi{}; if (!o.isEmpty()) { const QVariantMap m = o.toVariantMap(); QVariantMap c = m; if (m.value("preset").toString() == QLatin1String("CUSTOM")) c.remove("preset"); else c.remove("masterTarget"); c.remove("speed"); setLoud(c); if (m.value("preset").toString() == QLatin1String("CUSTOM")) loudUi_.preset = QStringLiteral("CUSTOM"); loudUi_.speed = m.value("speed", QStringLiteral("medium")).toString(); emit loudChanged(); } else { pushLoudAll(); emit loudChanged(); } }
@@ -1214,7 +1213,7 @@ void Engine::factoryReset() {
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
   graveTimer_.start(); if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
-  emit stripsChanged(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
+  stripsTouched(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
 }
 QString Engine::recordFolder() const { const QString d = settings_.value("record/folder").toString(); return d.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::MusicLocation) + "/A mix OS Recordings" : d; }
 bool Engine::startRecording() {
@@ -1227,7 +1226,7 @@ bool Engine::startRecording() {
 void Engine::stopRecording() { if (!recorder_.recording()) return; taps_.a.store(nullptr); recorder_.stop(); recMsg_ = QStringLiteral("Recorded %1 s, %2 file(s)%3 in %4").arg(recorder_.seconds(), 0, 'f', 1).arg(recorder_.files().size()).arg(recorder_.dropped() ? QStringLiteral(" (%1 blocks DROPPED: disk too slow)").arg(recorder_.dropped()) : QString()).arg(recordFolder()); emit recordChanged(); }
 void Engine::setArmed(int i, bool on) { if (i < 0 || i >= kStrips) return;
   if (on && !armed_.test(static_cast<std::size_t>(i)) && static_cast<int>(armed_.count()) >= am::rec::kMaxTracks) { recMsg_ = QStringLiteral("MULTITRACK: at most 100 channels can be armed at once."); emit recordChanged(); return; }
-  armed_.set(static_cast<std::size_t>(i), on); emit stripsChanged(); emit recordChanged(); }
+  armed_.set(static_cast<std::size_t>(i), on); stripsTouched(); emit recordChanged(); }
 // DirectSound lists a Bluetooth or USB headset twice: the music side and the HANDS-FREE side (telephone quality, and opening its microphone
 // switches the whole headset to that mode). Auto detect leaves the hands-free side off; it can still be picked by hand on CONNECTIONS.
 static bool handsFree(const QVariantMap& d) { static const QRegularExpression re("hands[- ]?free|\\bhfp\\b|\\bag audio\\b|headset", QRegularExpression::CaseInsensitiveOption); return d["kind"].toString() == "headset" || re.match(d["name"].toString()).hasMatch(); }
@@ -1404,23 +1403,23 @@ void Engine::recordHistory() {
 void Engine::undo() { histTimer_.stop(); if (histPos_ <= 0) return; restoring_ = true; applyConsoleJson(history_[static_cast<std::size_t>(--histPos_)], false); restoring_ = false; emit historyChanged(); }
 void Engine::redo() { histTimer_.stop(); if (histPos_ + 1 >= static_cast<int>(history_.size())) return; restoring_ = true; applyConsoleJson(history_[static_cast<std::size_t>(++histPos_)], false); restoring_ = false; emit historyChanged(); }
 void Engine::toggleAB() { const QJsonObject cur = consoleJson(); if (abOther_.isEmpty()) abOther_ = cur; const QJsonObject other = abOther_; abOther_ = cur; abSlot_ = abSlot_ == "A" ? "B" : "A"; applyConsoleJson(other, false); emit historyChanged(); }
-void Engine::setLink(int i, bool on) { if (i < 0 || i >= kStrips || partner(i) < 0) return; strips_[static_cast<std::size_t>(i)].link = on; strips_[static_cast<std::size_t>(partner(i))].link = on; if (on) { const StripUi& a = strips_[static_cast<std::size_t>(i & ~1)]; StripUi& b = strips_[static_cast<std::size_t>(i | 1)]; b.db = a.db; b.mute = a.mute; b.solo = a.solo; b.pan = -a.pan; pushStrip(i | 1); if (rt_) { rt_->setPan(i | 1, b.pan); rt_->setSolo(i | 1, b.solo); } } emit stripsChanged(); }
+void Engine::setLink(int i, bool on) { if (i < 0 || i >= kStrips || partner(i) < 0) return; strips_[static_cast<std::size_t>(i)].link = on; strips_[static_cast<std::size_t>(partner(i))].link = on; if (on) { const StripUi& a = strips_[static_cast<std::size_t>(i & ~1)]; StripUi& b = strips_[static_cast<std::size_t>(i | 1)]; b.db = a.db; b.mute = a.mute; b.solo = a.solo; b.pan = -a.pan; pushStrip(i | 1); if (rt_) { rt_->setPan(i | 1, b.pan); rt_->setSolo(i | 1, b.solo); } } stripsTouched(); }
 bool Engine::linked(int i) const { return i >= 0 && i < kStrips && strips_[static_cast<std::size_t>(i)].link; }
-void Engine::setTrim(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].trimDb = std::clamp(db, -24.0, 24.0); if (rt_) rt_->setTrimDb(i, strips_[static_cast<std::size_t>(i)].trimDb); emit stripsChanged(); }
+void Engine::setTrim(int i, double db) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].trimDb = std::clamp(db, -24.0, 24.0); if (rt_) rt_->setTrimDb(i, strips_[static_cast<std::size_t>(i)].trimDb); stripsTouched(); }
 double Engine::trim(int i) const { return i >= 0 && i < kStrips ? strips_[static_cast<std::size_t>(i)].trimDb : 0; }
 static bool isVstKind(const QString& k) { return k.startsWith("vst3:") || k.startsWith("vst2:") || k.startsWith("fx:"); }   // everything that runs as a rack insert: hosted plug-ins and the ten built-in effects (fx:<kind>)
-void Engine::muteAll(bool on) { muteKeep_.clear(); for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } emit stripsChanged(); }
+void Engine::muteAll(bool on) { muteKeep_.clear(); for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = on; pushStrip(i); } stripsTouched(); }
 bool Engine::allMuted() const { for (int i = 0; i < kStrips; ++i) if (!strips_[static_cast<std::size_t>(i)].mute) return false; return true; }
 // MUTE ALL remembers which channels were muted before, so pressing it again gives the console back as it was
 void Engine::toggleMuteAll() {
   if (!allMuted()) { std::vector<bool> keep(kStrips); for (int i = 0; i < kStrips; ++i) keep[static_cast<std::size_t>(i)] = strips_[static_cast<std::size_t>(i)].mute; muteAll(true); muteKeep_ = keep; return; }
   const std::vector<bool> keep = muteKeep_; muteKeep_.clear();
   for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].mute = keep.size() == static_cast<std::size_t>(kStrips) && keep[static_cast<std::size_t>(i)]; pushStrip(i); }
-  emit stripsChanged();
+  stripsTouched();
 }
-void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } emit stripsChanged(); }
-void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; pushMasterLevel(); emit stripsChanged(); }
-void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); emit stripsChanged(); }
+void Engine::clearSolo() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].solo = false; if (rt_) rt_->setSolo(i, false); } stripsTouched(); }
+void Engine::resetFaders() { for (int i = 0; i < kStrips; ++i) { StripUi& s = strips_[static_cast<std::size_t>(i)]; s.db = 0; s.pan = 0; pushStrip(i); if (rt_) rt_->setPan(i, 0); } masterDb_ = 0; pushMasterLevel(); stripsTouched(); }
+void Engine::flattenAllDsp() { for (int i = 0; i < kStrips; ++i) { strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); for (PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!isVstKind(p.kind)) p = PluginUi{}; } if (rt_) pushAll(); stripsTouched(); }
 
 static const struct { const char* kind; const char* name; } kBuiltIns[] = {{"gate", "NOISE GATE"}, {"eq", "CHANNEL EQ (3-BAND)"}, {"miceq", "MIC EQ (10-BAND)"}, {"xover", "X-OVER"}, {"comp", "COMPRESSOR"}, {"limiter", "LIMITER"}, {"delay", "DELAY"}, {"polarity", "POLARITY Ø"}};
 QVariantList Engine::pluginCatalog() const { QVariantList l; const QStringList off = settings_.value("store/off").toStringList(); for (const auto& b : kBuiltIns) { QVariantMap m; m["kind"] = b.kind; m["name"] = b.name; m["builtIn"] = true; l << m; } for (const auto& [k, n] : am::fx::catalog()) { if (off.contains(QStringLiteral("fx:") + QString::fromStdString(k))) continue; QVariantMap m; m["kind"] = QStringLiteral("fx:") + QString::fromStdString(k); m["name"] = QString::fromStdString(n); m["builtIn"] = false; m["fx"] = true; m["vendor"] = QStringLiteral("AMFB Audio"); l << m; }
@@ -1441,7 +1440,7 @@ int Engine::rescanVst(const QStringList& extraDirs) {
   if (done->load()) vstCatalog_ = *found; else { status_ = QStringLiteral("The plug-in scan did not finish in 3 minutes (a plug-in is hanging): the list was left as it was. Move that plug-in out of the folder and RESCAN."); qWarning("VST scan timed out"); }
   if (done->load()) retryPlugins();   // a plug-in that was not there when the console was loaded may be there now
   emit vstCatalogChanged();
-  emit stripsChanged(); return static_cast<int>(vstCatalog_.size());
+  stripsTouched(); return static_cast<int>(vstCatalog_.size());
 }
 static void splitVstKind(const QString& kind, QString& module, QString& cid) { const QString k = kind.mid(5); const int bar = k.lastIndexOf('|'); module = bar >= 0 ? k.left(bar) : k; cid = bar >= 0 ? k.mid(bar + 1) : QString(); }
 bool Engine::loadVst(int i, int slot) {
@@ -1528,7 +1527,7 @@ int Engine::retryPlugins() {
   for (int i = 0; i < kStrips; ++i) { bool any = false;
     for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) { if (loadVst(i, k)) { ++back; any = true; } } }
     if (any) rebuildInserts(i); }
-  if (back) emit stripsChanged();
+  if (back) stripsTouched();
   return back;
 }
 void Engine::rebuildInserts(int i) {
@@ -1562,7 +1561,7 @@ void Engine::setPluginParam(int i, int slot, int id, double v) { if (i < 0 || i 
   if (p.kind == QStringLiteral("fx:iamfelement")) { StripUi& st = strips_[static_cast<std::size_t>(i)];   // the 360 dial follows the plug-in's knobs, and the strip keeps the place for when it is taken out
     st.spAz = p.vst->param(0) * 360 - 180; st.spEl = p.vst->param(1) * 180 - 90; st.spDist = 0.5 * std::pow(40.0, p.vst->param(2)); st.spSpread = p.vst->param(3); if (spkOn_) feedSpeakers(i); emit spatialMoved(); }
   if (linked(i) && !mirror_ && partner(i) >= 0 && strips_[static_cast<std::size_t>(partner(i))].plugins[slot].kind == p.kind) { mirror_ = true; setPluginParam(partner(i), slot, id, v); mirror_ = false; }
-  emit stripsChanged(); }
+  stripsTouched(); }
 QString Engine::pluginUiState(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return {}; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get()); return fp ? QString::fromStdString(fp->uiState()) : QString(); }
 void Engine::setPluginUiState(int i, int slot, const QString& ui) { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; auto* fp = dynamic_cast<am::fx::FxPlugin*>(p.vst.get()); if (!fp) return;
   fp->setUiState(ui.toStdString()); p.state = QString::fromStdString(fp->state()); save(); }
@@ -1614,7 +1613,7 @@ bool Engine::matchStereoPair(int i) {
     if (q.vst) graveyard_.push_back(q.vst);
     q = PluginUi{}; q.kind = p.kind; q.bypass = p.bypass; q.state = p.vst ? QString::fromStdString(p.vst->state()) : p.state;
     if (isVstKind(q.kind)) loadVst(j, k); }                             // its own instance: a plug-in keeps the memory of one channel only
-  graveTimer_.start(); if (rt_) pushAll(); emit stripsChanged(); return true;
+  graveTimer_.start(); if (rt_) pushAll(); stripsTouched(); return true;
 }
 void Engine::setPlugin(int i, int slot, const QString& kind) {
   if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPlugin(partner(i), slot, kind); mirror_ = false; }   // a linked pair keeps the same rack
@@ -1631,7 +1630,7 @@ void Engine::setPlugin(int i, int slot, const QString& kind) {
   rebuildInserts(i);
   if (kind == QStringLiteral("fx:iamfelement") && p.vst) { if (had360) setSpatial(i, true, s.spAz, s.spEl, s.spDist, s.spSpread); else { s.spOn = false; pushSpatial(i); } }   // the plug-in takes over the strip's place
   else if (wasIamf && iamfSlot(i) < 0 && kind != QStringLiteral("fx:iamfelement")) { s.spOn = true; pushSpatial(i); }   // taken out: the 360 stage holds the same place
-  emit stripsChanged(); emit spatialMoved();
+  stripsTouched(); emit spatialMoved();
 }
 QVariantMap Engine::masterChainSeed() const {
   QVariantList eq; for (int b = 0; b < am::MasterChain::kBands; ++b) { const auto& e = mp_.eq[b]; eq << QVariantMap{{"type", static_cast<int>(e.type)}, {"freq", e.freq}, {"q", e.q}, {"gainDb", e.gainDb}}; }
@@ -1653,21 +1652,21 @@ void Engine::takeRemotePlugin(int i, int slot, bool bypass, const QString& state
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (!isVstKind(p.kind)) return;
   p.bypass = bypass; if (!state.isEmpty()) p.state = state;
   if (p.vst) { if (!state.isEmpty()) p.vst->setState(state.toStdString()); p.vst->setBypass(bypass); }
-  emit stripsChanged();
+  stripsTouched();
 }
 void Engine::setPluginBypass(int i, int slot, bool bypass) {
   if (linked(i) && !mirror_ && partner(i) >= 0) { mirror_ = true; setPluginBypass(partner(i), slot, bypass); mirror_ = false; }
   if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return; PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[slot]; if (p.kind.isEmpty()) return;
-  p.bypass = bypass; if (!isVstKind(p.kind)) applyPluginStage(i, p.kind, !bypass); else if (p.vst) p.vst->setBypass(bypass); emit stripsChanged();
+  p.bypass = bypass; if (!isVstKind(p.kind)) applyPluginStage(i, p.kind, !bypass); else if (p.vst) p.vst->setBypass(bypass); stripsTouched();
 }
-void Engine::movePlugin(int i, int from, int to) { if (i < 0 || i >= kStrips || from < 0 || from >= kPluginSlots || to < 0 || to >= kPluginSlots || from == to) return; std::swap(strips_[static_cast<std::size_t>(i)].plugins[from], strips_[static_cast<std::size_t>(i)].plugins[to]); rebuildInserts(i); emit stripsChanged(); }
+void Engine::movePlugin(int i, int from, int to) { if (i < 0 || i >= kStrips || from < 0 || from >= kPluginSlots || to < 0 || to >= kPluginSlots || from == to) return; std::swap(strips_[static_cast<std::size_t>(i)].plugins[from], strips_[static_cast<std::size_t>(i)].plugins[to]); rebuildInserts(i); stripsTouched(); }
 int Engine::pluginCount(int i) const { if (i < 0 || i >= kStrips) return 0; int n = 0; for (const PluginUi& p : strips_[static_cast<std::size_t>(i)].plugins) if (!p.kind.isEmpty()) ++n; return n; }
 void Engine::copyChannel(int i) { if (i < 0 || i >= kStrips) return; clipboard_ = stripJson(strips_[static_cast<std::size_t>(i)]); emit clipboardChanged(); }
 bool Engine::pasteChannel(int i) {
   if (i < 0 || i >= kStrips || !clipboard_) return false; StripUi& s = strips_[static_cast<std::size_t>(i)]; const QJsonObject& o = *clipboard_;
   s.dsp.set(dspFromJson(o.value("dsp").toObject())); s.pan = std::clamp(o.value("pan").toDouble(0), -1.0, 1.0);
   const QJsonArray sends = o.value("sends").toArray(); for (int k = 0; k < kBuses && k < sends.size(); ++k) { const QJsonObject e = sends[k].toObject(); s.sends[k].db = std::clamp(e.value("db").toDouble(-60), -60.0, 10.0); s.sends[k].pre = e.value("pre").toBool(); }
-  if (rt_) pushAll(); emit stripsChanged(); return true;
+  if (rt_) pushAll(); stripsTouched(); return true;
 }
 
 void Engine::setEq(int i, int band, int type, double f, double q, double g) {
@@ -1676,7 +1675,7 @@ void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   const am::dsp::EqBand b{static_cast<FilterType>(std::clamp(type, 0, 8)), std::clamp(f, 10.0, 24000.0), std::clamp(q, 0.1, 36.0), std::clamp(g, -24.0, 24.0)};
   strips_[static_cast<std::size_t>(i)].dsp.setEqBand(band, b); strips_[static_cast<std::size_t>(i)].eqPreset = 0;
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
-  emit stripsChanged();
+  stripsTouched();
 }
 void Engine::limitAllChannels(bool on) { for (int i = 0; i < kStrips; ++i) { const am::dsp::ChannelParams& p = strips_[static_cast<std::size_t>(i)].dsp.params(); setChannelLimiter(i, on, p.limiterCeilDb, p.limiterReleaseMs); } }
 bool Engine::allChannelsLimited() const { for (int i = 0; i < kStrips; ++i) if (!strips_[static_cast<std::size_t>(i)].dsp.params().limiterOn) return false; return true; }
@@ -1690,7 +1689,7 @@ int Engine::infUnused() {
 void Engine::setMasterMuted(bool on) {
   if (on == masterMuted_) return;
   if (on) { masterKeepDb_ = masterDb(); masterMuted_ = true; setMaster(-60.0); } else { masterMuted_ = false; setMaster(masterKeepDb_); }
-  emit stripsChanged();
+  stripsTouched();
 }
 double Engine::closeNoise(int i) {
   if (i < 0 || i >= kStrips || !rt_) return 0;
@@ -1718,7 +1717,7 @@ QVariantMap Engine::eqBand(int i, int band) const {
   const auto& b = strips_[static_cast<std::size_t>(i)].dsp.params().eq[static_cast<std::size_t>(band)];
   m["type"] = static_cast<int>(b.type); m["freq"] = b.freq; m["q"] = b.q; m["gainDb"] = b.gainDb; return m;
 }
-void Engine::setDelay(int i, double ms) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setDelayMs(ms); if (rt_) rt_->setDelayMs(i, strips_[static_cast<std::size_t>(i)].dsp.params().delayMs); emit stripsChanged(); }
+void Engine::setDelay(int i, double ms) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setDelayMs(ms); if (rt_) rt_->setDelayMs(i, strips_[static_cast<std::size_t>(i)].dsp.params().delayMs); stripsTouched(); }
 QVariantList Engine::storeItems() const {
   QVariantList l; const QStringList off = settings_.value("store/off").toStringList();
   for (const auto& [id, name, note] : {std::tuple<const char*, const char*, const char*>{"ext:AmF X1 Network", "AmF X1 Network", "phone remote and network control, run inside the console"},
@@ -1806,26 +1805,26 @@ int Engine::addToRack(int i, const QString& kind) {
   for (int k = 0; k < kPluginSlots; ++k) if (s.plugins[k].kind.isEmpty()) { setPlugin(i, k, kind); return k; }
   return -1;
 }
-void Engine::setAutoPolarity(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].autoPol = on; if (rt_) rt_->setAutoPolarity(i, on); emit stripsChanged(); }
-void Engine::setPolarity(int i, bool inv) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setPolarity(inv); if (rt_) rt_->setPolarity(i, inv); emit stripsChanged(); }
+void Engine::setAutoPolarity(int i, bool on) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].autoPol = on; if (rt_) rt_->setAutoPolarity(i, on); stripsTouched(); }
+void Engine::setPolarity(int i, bool inv) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setPolarity(inv); if (rt_) rt_->setPolarity(i, inv); stripsTouched(); }
 void Engine::setCrossover(int i, int type, int hpO, double hpF, int lpO, double lpF) {
   if (i < 0 || i >= kStrips) return; const XoverType t = static_cast<XoverType>(std::clamp(type, 0, 2));
   strips_[static_cast<std::size_t>(i)].dsp.setCrossover(t, std::clamp(hpO, 0, 8), std::clamp(hpF, 10.0, 24000.0), std::clamp(lpO, 0, 8), std::clamp(lpF, 10.0, 24000.0));
   if (rt_) { const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params(); rt_->setCrossover(i, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); }
-  emit stripsChanged();
+  stripsTouched();
 }
-void Engine::setChannelLimiter(int i, bool on, double c, double r) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setLimiter(on, std::clamp(c, -30.0, 0.0), std::clamp(r, 1.0, 2000.0)); if (rt_) rt_->setChannelLimiter(i, on, c, r); emit stripsChanged(); }
+void Engine::setChannelLimiter(int i, bool on, double c, double r) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.setLimiter(on, std::clamp(c, -30.0, 0.0), std::clamp(r, 1.0, 2000.0)); if (rt_) rt_->setChannelLimiter(i, on, c, r); stripsTouched(); }
 void Engine::setCompressor(int i, bool on, double thr, double ratio, double knee, double att, double rel, double makeup) {
   if (i < 0 || i >= kStrips) return;
   strips_[static_cast<std::size_t>(i)].dsp.setCompressor(on, std::clamp(thr, -60.0, 0.0), std::clamp(ratio, 1.0, 20.0), std::clamp(knee, 0.0, 24.0), std::clamp(att, 0.1, 200.0), std::clamp(rel, 5.0, 2000.0), std::clamp(makeup, 0.0, 24.0));
   if (rt_) { const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params(); rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); }
-  emit stripsChanged();
+  stripsTouched();
 }
 void Engine::setGate(int i, bool on, double thr, double range, double att, double hold, double rel) {
   if (i < 0 || i >= kStrips) return;
   strips_[static_cast<std::size_t>(i)].dsp.setGate(on, std::clamp(thr, -90.0, 0.0), std::clamp(range, -90.0, 0.0), std::clamp(att, 0.1, 100.0), std::clamp(hold, 0.0, 2000.0), std::clamp(rel, 5.0, 3000.0));
   if (rt_) { const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params(); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs); }
-  emit stripsChanged();
+  stripsTouched();
 }
 QVariantList Engine::compressorCurve(int i, int points) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; points = std::clamp(points, 8, 256); const auto& c = strips_[static_cast<std::size_t>(i)].dsp.compressor();
@@ -1884,14 +1883,14 @@ bool Engine::applyEqPreset(int slot, int i) {
   if (i < 0 || i >= kStrips) return false; const EqPresetUi* e = slot >= 1 && slot <= 10 ? factoryEqPreset(slot) : slot >= 11 && slot <= 20 ? &userEq_[slot - 11] : nullptr; if (!e || !e->used) return false;
   for (int b = 0; b < 10; ++b) setEq(i, b, static_cast<int>(e->bands[b].type), e->bands[b].freq, e->bands[b].q, e->bands[b].gainDb);
   const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params(); setCrossover(i, static_cast<int>(p.xoverType), e->hpOrder, e->hpFreq, e->lpOrder, e->lpFreq);
-  strips_[static_cast<std::size_t>(i)].eqPreset = slot; emit stripsChanged(); return true;
+  strips_[static_cast<std::size_t>(i)].eqPreset = slot; stripsTouched(); return true;
 }
 bool Engine::saveEqPreset(int slot, const QString& name, int i) {
   if (slot < 11 || slot > 20 || i < 0 || i >= kStrips) return false; EqPresetUi& e = userEq_[slot - 11]; const auto& p = strips_[static_cast<std::size_t>(i)].dsp.params();
   e.name = name.trimmed().isEmpty() ? QStringLiteral("CUSTOM %1").arg(slot - 10) : name.trimmed().left(24); for (int b = 0; b < 10; ++b) e.bands[b] = p.eq[static_cast<std::size_t>(b)]; e.hpOrder = p.hpOrder; e.hpFreq = p.hpFreq; e.lpOrder = p.lpOrder; e.lpFreq = p.lpFreq; e.used = true;
-  storeUserEq(); strips_[static_cast<std::size_t>(i)].eqPreset = slot; emit stripsChanged(); return true;
+  storeUserEq(); strips_[static_cast<std::size_t>(i)].eqPreset = slot; stripsTouched(); return true;
 }
-bool Engine::clearEqPreset(int slot) { if (slot < 11 || slot > 20) return false; userEq_[slot - 11] = EqPresetUi(); storeUserEq(); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].eqPreset == slot) strips_[static_cast<std::size_t>(i)].eqPreset = 0; emit stripsChanged(); return true; }
+bool Engine::clearEqPreset(int slot) { if (slot < 11 || slot > 20) return false; userEq_[slot - 11] = EqPresetUi(); storeUserEq(); for (int i = 0; i < kStrips; ++i) if (strips_[static_cast<std::size_t>(i)].eqPreset == slot) strips_[static_cast<std::size_t>(i)].eqPreset = 0; stripsTouched(); return true; }
 QVariantList Engine::eqPresetCurve(int slot, int points) const {
   QVariantList l; const EqPresetUi* e = slot >= 1 && slot <= 10 ? factoryEqPreset(slot) : slot >= 11 && slot <= 20 ? &userEq_[slot - 11] : nullptr; if (!e || !e->used) return l; points = std::clamp(points, 8, 512);
   am::dsp::Channel ch{48000}; for (int b = 0; b < 10; ++b) ch.setEqBand(b, e->bands[b]); ch.setCrossover(am::dsp::XoverType::Butterworth, e->hpOrder, e->hpFreq, e->lpOrder, e->lpFreq);
@@ -2034,7 +2033,7 @@ void Engine::tick() {
     if (++dynTick_ >= 3) { dynTick_ = 0; for (int i = 0; i < kStrips; ++i) strips_[static_cast<std::size_t>(i)].dyn.push(s.strips[i].inPk > 1e-6 ? 20.0 * std::log10(s.strips[i].inPk) : -120.0); }   // ten a second: the input, before EQ and dynamics
     bool polFlipped = false;   // AUTO PHASE turned a strip round: keep the saved setting the same as what is heard
     for (int i = 0; i < kStrips; ++i) { StripUi& su = strips_[static_cast<std::size_t>(i)]; if (su.autoPol && s.strips[i].polInv != su.dsp.params().polarityInvert) { su.dsp.setPolarity(s.strips[i].polInv); polFlipped = true; } }
-    if (polFlipped) emit stripsChanged();
+    if (polFlipped) stripsTouched();
     for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; { int& oc = strips_[static_cast<std::size_t>(i)].overComp; oc = s.strips[i].compGrDb < -12.0 ? std::min(oc + 1, 90) : std::max(oc - 1, 0); x["overComp"] = oc > 15; }   /* OVER-COMPRESSED: more than 12 dB of reduction for half a second */ x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; x["rideDb"] = s.strips[i].rideDb; x["rideGateDb"] = s.strips[i].rideGateDb; x["rideLufs"] = s.strips[i].rideLufs; x["rideSusp"] = s.strips[i].rideSusp; m << x; }
     vuMaster_ += (std::max(s.master[0].rms, s.master[1].rms) - vuMaster_) * vuA; t["masterVuDb"] = toDb(vuMaster_);
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
@@ -2126,7 +2125,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
   for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst) { if (!p.state.isEmpty()) p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
   if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }
-  emit stripsChanged(); emit busesChanged(); emit groupsChanged();
+  stripsTouched(); emit busesChanged(); emit groupsChanged();
 }
 void Engine::save() {
   // only what changed is written: the scenes and the user presets are large and rarely change, and on Windows every value written goes
@@ -2252,7 +2251,7 @@ bool Engine::applyPreset(const QString& name, int strip) {
   if (!found) return false;
   StripUi& s = strips_[static_cast<std::size_t>(strip)]; s.dsp.set(dspFromJson(o));
   if (rt_) { const auto& p = s.dsp.params(); for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = p.eq[static_cast<std::size_t>(b)]; rt_->setEqBand(strip, b, e.type, e.freq, e.q, e.gainDb); } rt_->setDelayMs(strip, p.delayMs); rt_->setPolarity(strip, p.polarityInvert); rt_->setCrossover(strip, p.xoverType, p.hpOrder, p.hpFreq, p.lpOrder, p.lpFreq); rt_->setChannelLimiter(strip, p.limiterOn, p.limiterCeilDb, p.limiterReleaseMs); rt_->setCompressor(strip, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(strip, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs); }
-  emit stripsChanged(); return true;
+  stripsTouched(); return true;
 }
 bool Engine::savePreset(const QString& name, int strip) {
   const QString n = name.trimmed().left(24); if (n.isEmpty() || strip < 0 || strip >= kStrips) return false;

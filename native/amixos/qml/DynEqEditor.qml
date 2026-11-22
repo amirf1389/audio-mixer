@@ -26,7 +26,10 @@ Popup {
     padding: 0; modal: false; closePolicy: Popup.CloseOnEscape
     background: Rectangle { color: Theme.cardSolid; radius: Theme.radius; border.color: Theme.line; border.width: 1 }
 
-    function openFor(strip_, slot_, title_) { strip = strip_; slot = slot_; title = title_ || "AmF DYNAMIC EQ"; sel = -1; presets = engine.rackPresets("fx:dyneq"); presetAt = -1; refresh(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
+    function openFor(strip_, slot_, title_) { strip = strip_; slot = slot_; title = title_ || "AmF DYNAMIC EQ"; sel = -1; presets = engine.rackPresets("fx:dyneq"); presetAt = -1; refresh(); recentre(); open() }
+    function recentre() { if (parent) { x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2) } }
+    onWidthChanged: if (visible) recentre(); onHeightChanged: if (visible) recentre()
+    Connections { target: dq.parent; ignoreUnknownSignals: true; function onWidthChanged() { if (dq.visible) dq.recentre() } function onHeightChanged() { if (dq.visible) dq.recentre() } }   // the window resized: still centred
     function refresh() { info = engine.dynEqInfo(strip, slot, points); disp.requestPaint() }
     function b(i, k) { return info.bands && info.bands[i] ? info.bands[i][k] : 0 }
     function isOn(i) { return b(i, 0) > 0.5 }

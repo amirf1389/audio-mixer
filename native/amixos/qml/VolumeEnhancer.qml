@@ -11,7 +11,10 @@ import QtQuick.Layouts
 Popup {
     id: pop
     objectName: "volumeEnhancer"
-    modal: true; padding: 0; width: 940; height: 520; anchors.centerIn: Overlay.overlay
+    modal: true; padding: 0; width: 940; height: 520; parent: Overlay.overlay
+    // CENTRED ON THE WINDOW, WHOLE: a window smaller than the box draws it smaller (it hung over the window edges, clipped on one side)
+    scale: Math.min(1, parent ? (parent.width - 24) / 940 : 1, parent ? (parent.height - 24) / 520 : 1); transformOrigin: Popup.TopLeft; margins: -1   // placed here, not pushed by its unscaled size
+    x: parent ? Math.round((parent.width - width * scale) / 2) : 0; y: parent ? Math.round((parent.height - height * scale) / 2) : 0
     property int tick: 0
     readonly property var m: { tick; return engine.mastering() }
     readonly property var lim: { tick; return engine.masterLimiter() }

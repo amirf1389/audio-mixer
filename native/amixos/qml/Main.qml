@@ -7,7 +7,9 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: root
-    visible: true
+    // shown by main.cpp once it is built and placed (centred on the work area of its screen, or where it was last, kept on a
+    // connected screen): it never shows an empty white frame first, nor opens wherever Windows cascades a new window
+    visible: false
     width: 1380
     height: 860
     minimumWidth: 720
@@ -17,10 +19,8 @@ ApplicationWindow {
     // THE FACTORY SETUP LOCKS THE CONSOLE: while it is up, nothing under it takes a click, a wheel or a keyboard shortcut
     readonly property bool setupLocked: forceSetup || !settings.setupDone
     color: Theme.obsidian
-    // FIT THE SCREEN: when the window as designed does not fit the work area (a small laptop, or an enlarged interface), or in RESPONSIVE
-    // zoom, it opens maximised instead of hanging over the edges. Not in the tests (offscreen), which need the designed size.
-    function fitScreen() { if (Qt.platform.pluginName === "offscreen") return
-        if (settings.uiZoom === -1 || Screen.desktopAvailableWidth < width + 24 || Screen.desktopAvailableHeight < height + 48) visibility = Window.Maximized }
+    // FIT THE SCREEN (main.cpp): when the window as designed does not fit the work area (a small laptop, or an enlarged interface), or
+    // in RESPONSIVE zoom, it opens maximised instead of hanging over the edges
     // the page shown. Read from the START PAGE setting ONCE: a binding to it ran again on every settings change (the settings object has
     // one change signal), so a setting saved before the first click (the audio starting, a device remembered) sent the window back to
     // the start page and logged a binding loop on "current"
@@ -33,7 +33,7 @@ ApplicationWindow {
     function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
     onActiveChanged: uiActivity()
     onVisibilityChanged: uiActivity()
-    Component.onCompleted: { fitScreen(); if (current === "") current = settings.startPage; touchPage(current); if (current === "mixer") mixerEver = true }
+    Component.onCompleted: { if (current === "") current = settings.startPage; touchPage(current); if (current === "mixer") mixerEver = true }
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }
@@ -68,6 +68,9 @@ ApplicationWindow {
         const slots = pageSlots.slice(); if (slots.indexOf(id) < 0) {
             let k = -1; for (let i = 0; i < pageCacheMax; ++i) if (slots[i] === "") { k = i; break }
             if (k < 0) { for (let j = 0; j < used.length; ++j) { const v = used[j]; if (v !== id && v !== root.current) { k = slots.indexOf(v); used.splice(j, 1); break } } }
+            // every slot held by a page the list does not know (it can not be let go by age): any page but the one shown goes, so the
+            // page asked for always gets a slot (it was left with none, and the page area stayed empty)
+            if (k < 0) for (let i = 0; i < pageCacheMax; ++i) if (slots[i] !== root.current) { k = i; const gone = slots[i]; const at = used.indexOf(gone); if (at >= 0) used.splice(at, 1); break }
             if (k < 0) return; slots[k] = id; pageSlots = slots }
         pageUsed = used }
     function clearPages() { pageSlots = ["", "", "", "", "", ""]; pageUsed = [] }
@@ -291,15 +294,27 @@ ApplicationWindow {
                     case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "streaming": return streamingC; case "update": return updateC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                     }
                 }
-                Rectangle {   // building a page: a thin line runs along the top
-                    id: pageBusy; objectName: "pageBusy"; visible: root.current !== "mixer" && root.pageStatus === Loader.Loading; z: 50; height: 2; color: Theme.orange
-                    width: parent.width * 0.3; y: 0
-                    SequentialAnimation on x { running: pageBusy.visible; loops: Animation.Infinite
-                        NumberAnimation { from: -pageBusy.width; to: pageBusy.parent ? pageBusy.parent.width : 0; duration: 700; easing.type: Easing.InOutQuad } }
+                // BUILDING A PAGE: never an empty page area. Until the page is ready (the MIXER too, the longest to build) its name shows with
+                // a line running along the top; a page that could not be built says so and offers to try again
+                readonly property int shownStatus: root.current === "mixer" ? mixerKeep.status : root.pageStatus
+                Item {
+                    id: pageBusy; objectName: "pageBusy"; anchors.fill: parent; z: 50
+                    visible: root.current !== "" && (pageArea.shownStatus === Loader.Loading || pageArea.shownStatus === Loader.Error || (root.current === "mixer" && !root.mixerEver))
+                    readonly property bool failed: pageArea.shownStatus === Loader.Error
+                    Rectangle { id: busyLine; visible: !pageBusy.failed; height: 2; color: Theme.orange; width: parent.width * 0.3; y: 0
+                        SequentialAnimation on x { running: pageBusy.visible && !pageBusy.failed; loops: Animation.Infinite
+                            NumberAnimation { from: -busyLine.width; to: pageBusy.width; duration: 700; easing.type: Easing.InOutQuad } } }
+                    Column { anchors.centerIn: parent; spacing: 10
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: pageBusy.failed ? i18n.t("This page could not be opened", i18n.lang) : i18n.t("OPENING", i18n.lang) + " " + i18n.t(root.pageOf(root.current).text, i18n.lang) + " …"
+                            color: pageBusy.failed ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
+                        Rectangle { objectName: "pageRetry"; visible: pageBusy.failed; anchors.horizontalCenter: parent.horizontalCenter; implicitWidth: rtT.implicitWidth + 24; implicitHeight: 26; width: implicitWidth; height: implicitHeight; radius: 6; color: Theme.cardRaised; border.color: Theme.line
+                            Text { id: rtT; anchors.centerIn: parent; text: i18n.t("TRY AGAIN", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.softRestart() } } }
                 }
                 // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).
                 // Hidden, its meters and timers stop (they follow the page's visibility). A soft restart rebuilds it.
-                Loader { id: mixerKeep; anchors.fill: parent; asynchronous: asyncPages; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC }
+                Loader { id: mixerKeep; objectName: "mixerKeep"; anchors.fill: parent; asynchronous: asyncPages; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC
+                    opacity: status === Loader.Ready ? 1 : 0; Behavior on opacity { enabled: asyncPages; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } } }
                 Component { id: frameC; FramePage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
