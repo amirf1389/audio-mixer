@@ -1,4 +1,5 @@
 #include <tuple>
+#include <functional>
 #include <chrono>
 #include <thread>
 // A mix OS: the native console. Qt Quick interface (qml/) on the C++20 engine (Engine.h -> am::Runtime). No browser, no web runtime.
@@ -332,6 +333,47 @@ int main(int argc, char* argv[]) {
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_LAG")) {   // INPUT LAG: a fader dragged with a 1000 Hz mouse, a button clicked, cached pages switched; each to the frame that shows it
+      std::function<QQuickItem*(QQuickItem*, const QString&)> walk = [&](QQuickItem* r, const QString& n) -> QQuickItem* { if (!r->isVisible()) return nullptr; if (r->objectName() == n && r->width() > 0) return r; for (QQuickItem* ch : r->childItems()) if (QQuickItem* f = walk(ch, n)) return f; return nullptr; };
+      auto find = [&](const char* name) { return walk(win->contentItem(), QString::fromLatin1(name)); };
+      auto post = [&](QEvent::Type ty, QPointF p, Qt::MouseButtons bs) { QCoreApplication::postEvent(win, new QMouseEvent(ty, p, p, win->mapToGlobal(p), Qt::LeftButton, bs, Qt::NoModifier)); };
+      qint64 swaps = 0; QElapsedTimer clk; clk.start(); qint64 lastSwap = 0; auto c = QObject::connect(win, &QQuickWindow::frameSwapped, win, [&] { ++swaps; lastSwap = clk.nsecsElapsed(); }, Qt::DirectConnection);
+      auto emitCost = [&] { waitMs(200); QElapsedTimer e; e.start(); for (int k = 0; k < 20; ++k) engine.setGain(3, -10.0 - k * 0.1); return e.nsecsElapsed() / 1e6 / 20; };
+      if (qEnvironmentVariableIsSet("AMIX_LAG_EACH")) { win->setProperty("current", "mixer"); waitMs(1500); std::printf("amixos --bench: LAG strip change, mixer only: %.2f ms\n", emitCost());
+        for (const char* pg : {"home", "asio", "dsp", "routing", "meter", "fx"}) { win->setProperty("current", QString::fromLatin1(pg)); waitMs(400); win->setProperty("current", "mixer"); std::printf("amixos --bench: LAG strip change, + %s cached: %.2f ms\n", pg, emitCost()); } }
+      for (const char* pg : {"home", "asio", "dsp", "routing", "meter", "fx"}) { win->setProperty("current", QString::fromLatin1(pg)); waitMs(400); }
+      win->setProperty("current", "mixer"); waitMs(1500);
+      if (QQuickItem* f = find("stripFader")) {
+        const QPointF top = f->mapToScene(QPointF(f->width() / 2, 20)), bot = f->mapToScene(QPointF(f->width() / 2, f->height() - 20));
+        const int t0 = engine.stripTick(); const double c0 = 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; const qint64 s0 = swaps;
+        double lagSum = 0, lagMax = 0, stall = 0; int lagN = 0, moves = 0; post(QEvent::MouseButtonPress, bot, Qt::LeftButton);
+        QElapsedTimer t; t.start(); qint64 last = 0, pending = -1;
+        while (t.elapsed() < 3000) {   // the mouse reports every millisecond; the event loop takes what it can
+          const double ph = std::fmod(t.elapsed() / 1500.0, 1.0); const double k = ph < 0.5 ? ph * 2 : 2 - ph * 2;
+          post(QEvent::MouseMove, bot + (top - bot) * k, Qt::LeftButton); ++moves; if (pending < 0) pending = clk.nsecsElapsed();
+          const qint64 before = lastSwap; QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+          if (lastSwap != before && pending >= 0) { const double l = (lastSwap - pending) / 1e6; lagSum += l; lagMax = std::max(lagMax, l); ++lagN; pending = -1; }
+          const qint64 now = t.elapsed(); stall = std::max(stall, double(now - last)); last = now; QThread::usleep(1000 - 0); }
+        post(QEvent::MouseButtonRelease, bot, Qt::NoButton); waitMs(300);
+        std::printf("amixos --bench: LAG fader drag 3 s, %d mouse moves at 1 kHz: %d engine strip updates, %lld frames, GUI CPU %.0f ms/s, input-to-frame mean %.1f ms / worst %.1f ms, longest event-loop stall %.1f ms\n",
+                    moves, engine.stripTick() - t0, swaps - s0, (1000.0 * double(std::clock()) / CLOCKS_PER_SEC - c0) / 3.0, lagN ? lagSum / lagN : 0.0, lagMax, stall);
+      } else { int n = 0, v = 0; for (QQuickItem* it : win->contentItem()->findChildren<QQuickItem*>()) { if (it->objectName() == "stripFader") { ++n; if (it->isVisible()) ++v; } } QObject* mp = win->findChild<QObject*>("mixerPage"); std::printf("amixos --bench: LAG no strip fader found (%d, %d visible; mixer page %p visible %d, current %s)\n", n, v, (void*)mp, mp ? mp->property("visible").toBool() : -1, qPrintable(win->property("current").toString())); }
+      if (QQuickItem* b = find("masterMuteBtn")) {
+        const QPointF p = b->mapToScene(QPointF(b->width() / 2, b->height() / 2)); double sum = 0, worst = 0;
+        for (int k = 0; k < 10; ++k) { const qint64 at = clk.nsecsElapsed(); post(QEvent::MouseButtonPress, p, Qt::LeftButton); post(QEvent::MouseButtonRelease, p, Qt::NoButton);
+          bool seen = false; qint64 shown = 0; const qint64 s0 = swaps; QElapsedTimer t; t.start();
+          while (t.elapsed() < 1000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 1); if (!seen) { seen = true; win->update(); } if (seen && swaps > s0 && lastSwap > at) { shown = lastSwap; break; } }
+          const double ms = (shown - at) / 1e6; sum += ms; worst = std::max(worst, ms); waitMs(120); }
+        std::printf("amixos --bench: LAG button click to frame: mean %.1f ms, worst %.1f ms (10 clicks)\n", sum / 10, worst);
+      }
+      { double sum = 0, worst = 0; int n = 0;
+        for (int r = 0; r < 3; ++r) for (const char* pg : {"home", "asio", "dsp", "routing", "meter", "fx", "mixer"}) { const qint64 at = clk.nsecsElapsed(); win->setProperty("current", QString::fromLatin1(pg)); if (qEnvironmentVariableIsSet("AMIX_LAG_EACH")) std::printf("amixos --bench: LAG   switch %s: %.1f ms in the click itself\n", pg, (clk.nsecsElapsed() - at) / 1e6);
+          QElapsedTimer t; t.start(); bool ready = false; while (t.elapsed() < 2000) { ready = win->property("pageReady").toBool(); if (ready && lastSwap > at) break; if (ready) win->update(); QCoreApplication::processEvents(QEventLoop::AllEvents, 1); }
+          const double ms = (lastSwap - at) / 1e6; if (qEnvironmentVariableIsSet("AMIX_LAG_EACH")) std::printf("amixos --bench: LAG   switch %s: %.1f ms to the frame\n", pg, ms); if (r > 0) { sum += ms; worst = std::max(worst, ms); ++n; } waitMs(250); }
+        std::printf("amixos --bench: LAG cached page switch to frame: mean %.1f ms, worst %.1f ms (%d switches)\n", sum / std::max(1, n), worst, n); }
+      { QElapsedTimer g; g.start(); qml.collectGarbage(); std::printf("amixos --bench: LAG one JavaScript garbage collection %.1f ms\n", g.nsecsElapsed() / 1e6); }
+      { double c0 = 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; const qint64 s0 = swaps; waitMs(3000); std::printf("amixos --bench: LAG mixer idle: GUI CPU %.0f ms/s, %.0f frames/s\n", (1000.0 * double(std::clock()) / CLOCKS_PER_SEC - c0) / 3.0, (swaps - s0) / 3.0); }
+      QObject::disconnect(c); engine.stop(); return 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_FRAMES")) {   // FRAME TIME: every page with the meters running, AMIX_BENCH_FRAMES ms each (default 3000)
       const int ms = std::max(500, qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") > 1 ? qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") : 3000);
       double sumMean = 0, worstP95 = 0, worstMax = 0; long frames = 0; int n = 0; QString worstId;

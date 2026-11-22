@@ -17,6 +17,12 @@ Item {
     property string maxText: ""
     property color paper: "#1c1c1c"   // lettering on a light faceplate (vintage)
     signal moved(real v)
+    // ONE ENGINE WRITE PER FRAME while turning (a mouse reports up to 1000 times a second); the knob itself follows every report, and the
+    // release, a double click and the wheel send at once, so the last value always reaches the engine
+    property real pendingV: NaN
+    function send(v) { if (sendT.running) { pendingV = v; return } pendingV = NaN; k.moved(v); sendT.start() }
+    function flush() { sendT.stop(); if (!isNaN(pendingV)) { const v = pendingV; pendingV = NaN; k.moved(v) } }
+    Timer { id: sendT; interval: 16; onTriggered: if (!isNaN(k.pendingV)) { const v = k.pendingV; k.pendingV = NaN; k.moved(v); sendT.start() } }
     implicitWidth: Math.max(size + 16, lab.implicitWidth + 6); implicitHeight: size + (vintage ? 40 : 34)
     onValueChanged: face.requestPaint(); onTintChanged: face.requestPaint()
     Canvas { id: face; width: k.size; height: k.size; anchors.horizontalCenter: parent.horizontalCenter
@@ -38,9 +44,11 @@ Item {
             c.strokeStyle = k.ink; c.lineWidth = w * 0.055; c.beginPath(); c.moveTo(r + Math.cos(a) * r * 0.28, r + Math.sin(a) * r * 0.28); c.lineTo(r + Math.cos(a) * r * 0.62, r + Math.sin(a) * r * 0.62); c.stroke() }
         MouseArea { anchors.fill: parent; property real y0: 0; property real v0: 0; cursorShape: Qt.SizeVerCursor
             onPressed: function (m) { y0 = m.y; v0 = k.value }
-            onPositionChanged: function (m) { if (!pressed) return; const v = Math.max(0, Math.min(1, v0 + (y0 - m.y) / ((m.modifiers & Qt.ShiftModifier) ? 900 : 180))); if (v !== k.value) { k.value = v; k.moved(v) } }
-            onDoubleClicked: { k.value = k.defaultValue; k.moved(k.value) }
-            onWheel: function (w) { const v = Math.max(0, Math.min(1, k.value + (w.angleDelta.y > 0 ? 0.02 : -0.02))); k.value = v; k.moved(v) } } }
+            onPositionChanged: function (m) { if (!pressed) return; const v = Math.max(0, Math.min(1, v0 + (y0 - m.y) / ((m.modifiers & Qt.ShiftModifier) ? 900 : 180))); if (v !== k.value) { k.value = v; k.send(v) } }
+            onReleased: k.flush()
+            onCanceled: k.flush()
+            onDoubleClicked: { k.flush(); k.value = k.defaultValue; k.moved(k.value) }
+            onWheel: function (w) { const v = Math.max(0, Math.min(1, k.value + (w.angleDelta.y > 0 ? 0.02 : -0.02))); k.flush(); k.value = v; k.moved(v) } } }
     // vintage: the rendered knob (its light and shadow stay put) with the pointer turning on it, and printed scale marks around it
     Repeater { model: k.vintage ? 11 : 0; delegate: Rectangle { readonly property real t: (135 + 27 * index) * Math.PI / 180; width: index % 5 === 0 ? 3.2 : 2.2; height: width; radius: width / 2; color: k.paper; opacity: 0.9
             x: face.x + k.size / 2 + Math.cos(t) * (k.size * 0.52) - width / 2; y: face.y + k.size / 2 + Math.sin(t) * (k.size * 0.52) - height / 2 } }

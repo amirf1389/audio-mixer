@@ -9,6 +9,10 @@ import QtQuick.Layouts
 Item {
     id: page
     objectName: "routingPage"
+    // HIDDEN IN THE PAGE CACHE: the strip tick is held while the page is not shown (every fader move re-ran this page's bindings); shown
+    // again, it takes the engine's tick and everything reads afresh
+    property int sTick: 0
+    Binding on sTick { when: page.visible; value: engine.stripTick; restoreMode: Binding.RestoreNone }
     property int tab: 0          // 0 inputs, 1 outputs
     property int bank: 0         // strips in pages of 16 (inputs) ; outputs 1-16 / 17-32
     readonly property int inCols: Math.max(32, Math.min(engine.inputCap, engine.deviceInputs))   // the input columns: 32 as ever, more when a larger device is open on a larger console
@@ -47,7 +51,7 @@ Item {
                         delegate: RowLayout { spacing: 2
                             readonly property int strip: page.bank * 16 + index
                             visible: strip < engine.strips
-                            readonly property var st: engine.stripAt(Math.min(strip, engine.strips - 1), engine.stripTick)
+                            readonly property var st: engine.stripAt(Math.min(strip, engine.strips - 1), page.sTick)
                             readonly property int route: page.inRoutes[strip] === undefined ? strip : page.inRoutes[strip]
                             Rectangle { Layout.preferredWidth: 96; implicitHeight: page.cell; radius: 3; color: Theme.ov(0.04)
                                 Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 3; radius: 1; color: Theme.stripColors[st ? st.color : 0] }

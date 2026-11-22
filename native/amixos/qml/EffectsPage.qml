@@ -19,7 +19,9 @@ Item {
     readonly property var catalog: engine.fxCatalog()
     readonly property var b: engine.busState[bus]
     readonly property var fx: (tick, engine.busFx(bus))
-    readonly property var bm: engine.busMeters[bus]
+    // the bus meters only while the page is shown: engine.busMeters converts all 16 buses on every meter update, also behind another page
+    property var bm: ({ peakDb: -120, rmsDb: -120, holdDb: -120, clip: false })
+    Binding on bm { when: page.visible; value: engine.busMeters[page.bus]; restoreMode: Binding.RestoreNone }
     Connections { target: engine; function onBusesChanged() { page.tick++ } }
     ColumnLayout {
         anchors.fill: parent; anchors.margins: 10; spacing: 8

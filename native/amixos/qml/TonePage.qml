@@ -22,7 +22,7 @@ Flickable {
     property string eqNote: ""
     readonly property var ch3: { ch3Tick; const c = engine.channelEq(strip); return c.low === undefined ? { low: 0, mid: 0, midFreq: 1000, high: 0, on: false } : c }
     function put3(key, v) { const c = Object.assign({}, ch3); c[key] = v; if (key !== "on") c.on = true; engine.setChannelEq(strip, c.low, c.mid, c.midFreq, c.high, c.on) }
-    Connections { target: engine; function onStripsChanged() { page.ch3Tick++ } }
+    Connections { target: engine; enabled: page.visible; function onStripsChanged() { page.ch3Tick++ } }
     property int band: 0
     property var curve: []
     property var bandNow: ({ type: 0, freq: 1000, q: 1, gainDb: 0 })
@@ -34,13 +34,17 @@ Flickable {
     property int presetTick: 0
     property int presetSel: 0
     property string presetName: ""
-    Connections { target: engine; function onStripsChanged() { page.presetTick++ } }
+    Connections { target: engine; enabled: page.visible; function onStripsChanged() { page.presetTick++ } }
     function reload() { curve = engine.responseCurve(strip, 160); bandNow = engine.eqBand(strip, band); ch = engine.channelParams(strip); canvas.requestPaint() }
-    function pageShown() { reload() }   // also when shown again from the page cache
+    function pageShown() { ch3Tick++; presetTick++; reload() }   // also when shown again from the page cache (hidden, the strip changes were not followed)
+    // HIDDEN IN THE PAGE CACHE: the strip tick is held while the page is not shown (every fader move re-ran this page's bindings); shown
+    // again, it takes the engine's tick and everything reads afresh
+    property int sTick: 0
+    Binding on sTick { when: page.visible; value: engine.stripTick; restoreMode: Binding.RestoreNone }
     Component.onCompleted: pageShown()
     onStripChanged: reload()
     onBandChanged: reload()
-    Connections { target: engine; function onStripsChanged() { page.reload() } }
+    Connections { target: engine; enabled: page.visible; function onStripsChanged() { page.reload() } }
     readonly property var typeNames: ["OFF", "PEAK", "LOW SHELF", "HIGH SHELF", "LOW PASS", "HIGH PASS", "NOTCH", "ALL-PASS 1", "ALL-PASS 2"]
     ColumnLayout {
         id: col
@@ -113,14 +117,14 @@ Flickable {
                 Text { text: i18n.t("CHANNEL", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
                 Combo {
                     implicitWidth: 150; model: engine.strips; currentIndex: page.strip
-                    displayText: engine.stripAt(currentIndex, engine.stripTick) ? engine.stripAt(currentIndex, engine.stripTick).name : ""
-                    delegate: ItemDelegate { width: parent.width; text: engine.stripAt(index, engine.stripTick) ? engine.stripAt(index, engine.stripTick).name : index; font.family: Theme.mono }
+                    displayText: engine.stripAt(currentIndex, page.sTick) ? engine.stripAt(currentIndex, page.sTick).name : ""
+                    delegate: ItemDelegate { width: parent.width; text: engine.stripAt(index, page.sTick) ? engine.stripAt(index, page.sTick).name : index; font.family: Theme.mono }
                     onActivated: page.strip = currentIndex
                 }
                 Item { Layout.fillWidth: true }
                 Rectangle { id: gb153; implicitWidth: Math.max(44, children[0].implicitWidth + 12); implicitHeight: 22; radius: 7; color: page.rta ? Theme.cyan : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb153.color) } GradientStop { position: 1; color: Theme.btnBottom(gb153.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("RTA", i18n.lang); color: page.rta ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: page.rta = !page.rta } ToolTip.visible: rtaH.hovered; ToolTip.text: i18n.t("Real-time analyser under the curve: this strip after its DSP", i18n.lang); HoverHandler { id: rtaH } }
                 Rectangle { id: gb154; implicitWidth: 60; implicitHeight: 22; radius: 7; color: page.ch.polarityInvert ? Theme.violet : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb154.color) } GradientStop { position: 1; color: Theme.btnBottom(gb154.color) } } Text { anchors.centerIn: parent; text: "Ø 180°"; color: page.ch.polarityInvert ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setPolarity(page.strip, !page.ch.polarityInvert) } }
-                Rectangle { readonly property bool on: engine.stripAt(page.strip, engine.stripTick) !== undefined && !!engine.stripAt(page.strip, engine.stripTick).autoPol
+                Rectangle { readonly property bool on: engine.stripAt(page.strip, page.sTick) !== undefined && !!engine.stripAt(page.strip, page.sTick).autoPol
                             implicitWidth: 70; implicitHeight: 22; radius: 4; color: on ? Theme.violet : Theme.ov(0.08); border.color: Theme.lineSoft
                             Text { anchors.centerIn: parent; text: i18n.t("Ø AUTO", i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setAutoPolarity(page.strip, !parent.on) }
