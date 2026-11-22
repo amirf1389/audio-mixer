@@ -263,28 +263,28 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.25.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 28216706,
-      "sha256": "2735a4a1d5e7733261d808fa7f338880f6580d9a5433133ea3067f0c6fdbf558"
+      "size": 28215614,
+      "sha256": "1e46572e268d12286344c8f72408ad4265d694ca1894bf18aa33abf73cf5e2cb"
     },
     "android-apk": {
-      "name": "AmF-X1-1.25.0.0-b7-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b7-android.apk",
-      "size": 14885668,
-      "sha256": "4b9bfd25e0f18f6b1ba0e820c29eea8c6940269c0047086d00a6b7446fa487aa",
+      "name": "AmF-X1-1.25.0.0-b8-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b8-android.apk",
+      "size": 14908056,
+      "sha256": "a80f415786ea301e67893cb0c8f1d9068341939e731ddff5cdea194219028b72",
       "package": "com.amfb.amixos",
-      "build": 7,
-      "versionCode": 125000007,
-      "versionName": "1.25.0.0 (build 7)"
+      "build": 8,
+      "versionCode": 125000008,
+      "versionName": "1.25.0.0 (build 8)"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.25.0.0-b7-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b7-android.apk",
-      "size": 14872418,
-      "sha256": "22134f01118fa69e02c923fce108ad33e4ce91391808d26780ece8cd91540144",
+      "name": "AmF-X1-Mixer-1.25.0.0-b8-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b8-android.apk",
+      "size": 14894810,
+      "sha256": "b800d1178d9afcc62ceb26a6863784ffaa57d184613a3e934637fabf50c9f24d",
       "package": "com.amfb.amixos.mixer",
-      "build": 7,
-      "versionCode": 125000007,
-      "versionName": "1.25.0.0 (build 7)"
+      "build": 8,
+      "versionCode": 125000008,
+      "versionName": "1.25.0.0 (build 8)"
     }
   },
   "plugins": [],
