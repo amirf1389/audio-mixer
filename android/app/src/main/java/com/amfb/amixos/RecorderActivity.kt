@@ -50,7 +50,7 @@ class RecorderActivity : FitActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(R.string.rec_title); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(R.string.rec_title); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         root.addView(TextView(this).apply { text = getString(R.string.rec_sub); setTextColor(dim); textSize = 12f; setPadding(0, 4, 0, 12) })
         fun row(label: Int, items: List<String>, into: ArrayList<Button>, pick: (Int) -> Unit) {
             root.addView(TextView(this).apply { text = getString(label); setTextColor(dim); textSize = 11f; letterSpacing = 0.15f })
@@ -67,7 +67,7 @@ class RecorderActivity : FitActivity() {
         root.addView(big); root.addView(small); root.addView(recBtn)
         root.addView(TextView(this).apply { text = getString(R.string.rec_takes); setTextColor(accent); textSize = 13f; letterSpacing = 0.15f; setTypeface(null, Typeface.BOLD); setPadding(0, 28, 0, 8) })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; root.addView(list)
-        root.addView(TextView(this).apply { text = getString(R.string.rec_note); setTextColor(dim); textSize = 12f; setPadding(0, 16, 0, 0) })
+        root.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.rec_note); setTextColor(dim); textSize = 12f; setPadding(0, 16, 0, 0) }))
         setContentView(Nav.wrap(this, ScrollView(this).apply { setBackgroundColor(Color.parseColor("#111418")); addView(root) }, null))
         mark(); refresh()
     }

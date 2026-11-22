@@ -27,7 +27,7 @@ class CalculatorActivity : FitActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(R.string.calc_title); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(R.string.calc_title); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         tools.forEachIndexed { i, t -> row.addView(Button(this).apply { text = t; isAllCaps = false; setOnClickListener { show(i) } }.also { tabs.add(it) }) }
         root.addView(HorizontalScrollView(this).apply { addView(row) })
@@ -72,7 +72,7 @@ class CalculatorActivity : FitActivity() {
         body.addView(TextView(this).apply { text = label; setTextColor(dim); setPadding(0, 12, 0, 0) })
         return EditText(this).apply { setText(value); setTextColor(Color.WHITE); textSize = 20f; inputType = InputType.TYPE_CLASS_TEXT }.also { body.addView(it) }
     }
-    private fun result() = TextView(this).apply { setTextColor(cyan); typeface = Typeface.MONOSPACE; textSize = 15f; setPadding(0, 20, 0, 8) }.also { body.addView(it) }
+    private fun result() = TextView(this).apply { setTextColor(cyan); typeface = Typeface.MONOSPACE; textSize = 13f; setPadding(0, 20, 0, 8) }.also { body.addView(it) }
     private fun note(t: String) = body.addView(TextView(this).apply { text = t; setTextColor(dim); textSize = 12f; setPadding(0, 12, 0, 0) })
     /** Runs f now and again whenever one of the fields changes. */
     private fun calc(vararg fs: EditText, f: () -> String): (TextView) -> Unit = { out ->

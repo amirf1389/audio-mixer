@@ -527,4 +527,19 @@
     <string name="presets_tone">Tone (%1$d)</string>
     <string name="presets_sent">%1$s sent to the console</string>
     <string name="presets_none">No preset pack in this app.</string>
+    <string name="ws_compare">COMPARE</string>
+    <string name="ws_learn">AUTO W</string>
+    <string name="ws_listening">LISTENING %1$d %%</string>
+    <string name="ws_presets">PRESETS</string>
+    <string name="ws_stop">STOP</string>
+    <string name="ws_now_boosted">NOW BOOSTED: %1$s</string>
+    <string name="ws_right">RIGHT: %1$s</string>
+    <string name="ws_it_was">IT WAS %1$s</string>
+    <string name="ws_score">SCORE %1$d / %2$d</string>
+    <string name="ws_which">WHICH BAND IS BOOSTED?</string>
+    <string name="ws_pick">Pick a drill</string>
+    <string name="eq_open_s">EQ CURVE</string>
+    <string name="lm_fx_pack_s">★ PRESETS</string>
+    <string name="lm_slot_add_s">SLOT %1$d · + ADD</string>
+    <string name="mast_presets_s">PRESETS</string>
 </resources>

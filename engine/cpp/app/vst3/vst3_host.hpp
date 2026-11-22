@@ -21,6 +21,12 @@ std::vector<std::string> scan(const std::vector<std::string>& dirs);            
 bool inspect(const std::string& modulePath, std::vector<ClassInfo>& classes, std::string& err);   // loads the module, lists Audio Module classes, unloads
 std::string binaryOf(const std::string& modulePath);                                     // the shared library inside a bundle ("" when none fits this platform)
 
+// FABFILTER QUICK-LOAD: finds the user's own installed FabFilter plug-ins among scanned classes (nothing of theirs is bundled, downloaded
+// or imitated; only the name is shown). FabFilter and Pro-Q are trademarks of FabFilter; not affiliated.
+bool isFabFilter(const std::string& vendor);                          // the vendor contains "FabFilter" (any case)
+int proQVersion(const std::string& vendor, const std::string& name);  // 0 when not a FabFilter Pro-Q; else its number (1 for a plain "Pro-Q")
+int bestProQ(const std::vector<ClassInfo>& classes);                  // index of the newest Pro-Q in the list, -1 when there is none
+
 using ParamInfo = host::ParamInfo;
 
 class Plugin final : public host::Plugin {

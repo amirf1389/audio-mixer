@@ -583,7 +583,7 @@ int main(int argc, char* argv[]) {
         if (mm.value("preset").toString() != g || !mm.value("bassMonoOn").toBool() || (mm.value("mid").toDouble() < 0) != (QString(g) == "METAL")) { std::fprintf(stderr, "amixos --smoke: %s preset\n", g); return 77; } }
       { QFile pf(QStringLiteral(AMIX_SOURCE_DIR) + "/../../releases/presets/presets-pack.json"); const QJsonObject pk = pf.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(pf.readAll()).object() : QJsonObject(); const QJsonObject now = engine.presetPack();   // the published pack = the presets in the code
         for (const char* k : {"mastering", "effects", "tone"}) if (pk.value(k).toArray() != now.value(k).toArray()) { std::fprintf(stderr, "amixos --smoke: releases/presets/presets-pack.json %s differs from the code: run node scripts/make-presets.js\n", k); return 253; }
-        if (now.value("mastering").toArray().size() != engine.masteringPresets().size() || now.value("effects").toArray().size() != 609) { std::fprintf(stderr, "amixos --smoke: preset pack counts\n"); return 253; } }
+        if (now.value("mastering").toArray().size() != engine.masteringPresets().size() || now.value("effects").toArray().size() != 614) { std::fprintf(stderr, "amixos --smoke: preset pack counts\n"); return 253; } }
       engine.applyMasteringPreset("AMFB SIGNATURE"); if (engine.mastering().value("preset").toString() != "AMFB SIGNATURE" || !engine.mastering().value("bassMonoOn").toBool()) { std::fprintf(stderr, "amixos --smoke: signature preset\n"); return 77; } QVariantMap so; so["on"] = false; so["preset"] = ""; so["bassMonoOn"] = false; so["exciterOn"] = false; engine.setMastering(so); }
     { // WINDOWS SOUND SYNC on a stand-in for the system volume: -inf mutes it, raising the fader restores what it was, sync off leaves it alone, exit takes the mute back
       bool sysMute = false; int sets = 0; engine.setSystemMuteBackend([&](bool& m) { m = sysMute; return true; }, [&](bool m) { sysMute = m; ++sets; return true; });
@@ -836,7 +836,7 @@ int main(int argc, char* argv[]) {
         const QVariantList sp = engine.pluginParams(20, a); const bool txt = sp.size() >= 4 && sp[0].toMap()["text"].toString().startsWith("1 ");
         if (a < 0 || a != b || n != 1 || d < 0 || dual != d || !txt) { std::fprintf(stderr, "amixos --smoke: rack helpers (sampler %d/%d x%d, dual %d/%d, text %d: %d params, first \"%s\")\n", a, b, n, d, dual, txt, static_cast<int>(sp.size()), sp.isEmpty() ? "" : qPrintable(sp[0].toMap()["text"].toString())); return 154; }
         engine.setPlugin(20, a, ""); engine.setPlugin(20, d, ""); }
-      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 51) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 51: 48 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO)\n", fxn); return 84; }
+      int fxn = 0; for (const QVariant& v : engine.pluginCatalog()) if (v.toMap().value("fx").toBool()) ++fxn; if (fxn != 52) { std::fprintf(stderr, "amixos --smoke: %d effects in the rack catalogue (want 52: 48 + the I/O FRAME objects AEC, TELEPHONE HYBRID, LOGIC / GPIO + AmF DYNAMIC EQ)\n", fxn); return 84; }
       for (const int ch : {6, 7}) { int slot = 0; for (const QVariant& v : engine.pluginCatalog()) { const QVariantMap m = v.toMap(); if (!m.value("fx").toBool()) continue; engine.setPlugin(ch, slot % 10, m.value("kind").toString()); const QVariantMap pl = engine.plugins(ch)[slot % 10].toMap();
           if (pl.value("pending").toBool() || pl.value("format").toString() != "FX" || engine.pluginParams(ch, slot % 10).size() < 4) { std::fprintf(stderr, "amixos --smoke: effect %s did not load into CH %d slot %d\n", qPrintable(m.value("kind").toString()), ch + 1, slot + 1); return 85; } ++slot; }
         engine.setPluginParam(ch, 0, 0, 0.9); engine.setPluginBypass(ch, 0, true); if (!engine.plugins(ch)[0].toMap().value("bypass").toBool()) { std::fprintf(stderr, "amixos --smoke: effect bypass\n"); return 86; }
@@ -906,7 +906,7 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "amixos --smoke: 1000 PADS + 1000 EFFECTS: pad and effect heard %.1f dBFS, pad changed %d, bad sources refused %d, put back %d\n", pk, set, refused, back);
         if (pk < -40 || !set || !refused || !back) return 126; }
       const QString sdir = QDir::tempPath() + "/amixos-smoke-samples"; QDir(sdir).removeRecursively(); std::string serr; if (!am::samples::writeAll(sdir.toStdString(), 48000, serr) || QDir(sdir).entryList({"*.wav"}, QDir::Files).size() != 100) { std::fprintf(stderr, "amixos --smoke: sample export: %s\n", serr.c_str()); return 123; } QDir(sdir).removeRecursively();
-      if (engine.fxPresets().size() != 609 || !engine.applyFxPreset(8, 301) || engine.busFx(8)["kind"].toString() != "pingpong" || engine.busFx(8)["params"].toList().size() != 6 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
+      if (engine.fxPresets().size() != 614 || !engine.applyFxPreset(8, 301) || engine.busFx(8)["kind"].toString() != "pingpong" || engine.busFx(8)["params"].toList().size() != 6 || !engine.applyFxPreset(8, 1) || engine.busFx(8)["kind"].toString() != "reverb" || engine.busFxPreset(8) != 1) { std::fprintf(stderr, "amixos --smoke: fx presets\n"); return 124; }
       if (!engine.applyFxPreset(9, 120) || engine.busFx(9)["kind"].toString() != "delay" || engine.applyFxPreset(9, 999)) { std::fprintf(stderr, "amixos --smoke: fx preset kinds\n"); return 125; } engine.setBusFx(8, ""); engine.setBusFx(9, "");
       if (engine.busState().size() != 16 || engine.busState()[0].toMap()["kind"] != "aux" || engine.busState()[8].toMap()["kind"] != "fx") { std::fprintf(stderr, "amixos --smoke: 16 buses (8 AUX + 8 FX)\n"); return 126; }
       // EQ PRESETS: 20 slots, the factory ten locked and named (AmiX W Shape first), apply changes the response, SAVE / CLEAR on a custom slot, locked slots refuse SAVE
@@ -2010,8 +2010,12 @@ int main(int argc, char* argv[]) {
           call("wDrag", 2, 3000.0, 2.0); const double A = pv(0); const bool drag = std::fabs(pv(10) - am::fx::WShape::bandKnob(2, 3000)) < 1e-3 && std::fabs(pv(3) - 2.0 / (A * 6)) < 1e-3;
           // EAR TRAINING: 4 RAW EQ starts on BASS; 4 RANDOM EQ boosts the hidden band, a right and a wrong answer are scored
           call("wTrainRaw"); const bool raw = std::fabs(pv(16) - 0.2) < 1e-3 && wed->property("rawStep").toInt() == 1; call("wTrainStop"); const bool stopped = pv(16) == 0;
-          call("wQuizNext", 3); const bool hidden = std::fabs(pv(16) - 0.6) < 1e-3; call("wQuizAnswer", 3); const int qb = wed->property("quizBand").toInt(); call("wQuizAnswer", qb % 5 + 1);
-          const bool quiz = hidden && wed->property("quizScore").toInt() == 1 && wed->property("quizTotal").toInt() == 2 && pv(16) > 0; call("wTrainStop");
+          const double presHz = am::fx::WShape::bandHz(2, pv(10)), d0 = call("wCurveDbAt", presHz).toDouble();
+          call("wQuizNext", 3); const bool hidden = std::fabs(pv(16) - 0.6) < 1e-3; const double dOpen = call("wCurveDbAt", presHz).toDouble();
+          call("wQuizAnswer", 3); const double dShown = call("wCurveDbAt", presHz).toDouble(); call("wQuizAnswer", 1); call("wQuizNext", 0); const int qb = wed->property("quizBand").toInt(); call("wQuizAnswer", qb % 5 + 1);
+          const bool noGiveaway = std::fabs(dOpen - d0) < 0.01 && dShown - d0 > 3.0;
+          std::printf("amixos --smoke: W-SHAPE 4 RANDOM EQ curve at %.0f Hz: before %.2f dB, open question %.2f dB, answered %.2f dB, no giveaway %d\n", presHz, d0, dOpen, dShown, noGiveaway);
+          const bool quiz = hidden && noGiveaway && wed->property("quizScore").toInt() == 1 && wed->property("quizTotal").toInt() == 2 && pv(16) > 0; call("wTrainStop");
           engine.startLive(1); pump(); call("wTrainRaw"); const bool locked = wed->property("wTrainLocked").toBool() && pv(16) == 0 && wed->property("rawStep").toInt() == 0; engine.stopLive(); pump();
           // AUTO W starts listening; switched off again here (the unit test plays it through)
           call("wLearn"); pump(); const bool learning = engine.wshapeInfo(0, 7).value("learning").toBool(); engine.setPluginParam(0, 7, 17, 0);

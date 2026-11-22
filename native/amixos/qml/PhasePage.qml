@@ -65,7 +65,7 @@ Item {
                         Text { text: i18n.t("-1  out of phase", i18n.lang); color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7 } Item { Layout.fillWidth: true }
                         Text { text: page.corr.toFixed(2); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 14; font.bold: true } Item { Layout.fillWidth: true }
                         Text { text: i18n.t("mono  +1", i18n.lang); color: Theme.emerald; font.family: Theme.mono; font.pixelSize: 7 } }
-                    Text { Layout.fillWidth: true; text: i18n.t("Above 0 the mix sums to mono without loss. Below 0 something cancels in mono (a flipped cable, a wide effect): check with the POLARITY buttons on the strips and with WIDTH below.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+                    MoreText { Layout.fillWidth: true; text: i18n.t("Above 0 the mix sums to mono without loss. Below 0 something cancels in mono (a flipped cable, a wide effect): check with the POLARITY buttons on the strips and with WIDTH below.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.lineSoft }
                     Text { text: i18n.t("STEREO WIDTH", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
                     RowLayout {
@@ -79,7 +79,7 @@ Item {
                         Repeater { model: [{ t: "MONO", v: 0 }, { t: "NARROW", v: 0.5 }, { t: "NORMAL", v: 1 }, { t: "WIDE", v: 1.5 }, { t: "MAX", v: 2 }]
                             delegate: Rectangle { id: gb119; implicitWidth: Math.max(60, children[0].implicitWidth + 12); implicitHeight: 22; radius: 7; color: Math.abs(engine.width - modelData.v) < 0.005 ? Theme.amber : Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb119.color) } GradientStop { position: 1; color: Theme.btnBottom(gb119.color) } } border.color: Theme.lineSoft
                                 Text { anchors.centerIn: parent; text: i18n.t(modelData.t ?? "", i18n.lang); color: Math.abs(engine.width - modelData.v) < 0.005 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.width = modelData.v } } } }
-                    Text { Layout.fillWidth: true; text: i18n.t("Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation).", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
+                    MoreText { Layout.fillWidth: true; text: i18n.t("Mid/side on the master before the fader: 100 % leaves the mix as it is, below narrows it toward mono, above lifts the side signal (watch the correlation).", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Item { Layout.fillHeight: true }
                 }
             }

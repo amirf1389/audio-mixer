@@ -92,7 +92,7 @@ class HomeActivity : FitActivity() {
             addView(LinearLayout(this@HomeActivity).apply { orientation = LinearLayout.HORIZONTAL
                 addView(TextView(this@HomeActivity).apply { text = t.glyph; textSize = 26f; setTextColor(t.color); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
                 if (t.id in pins) addView(TextView(this@HomeActivity).apply { text = "★"; textSize = 14f; setTextColor(Color.parseColor("#FBBF24")) }) })
-            addView(TextView(this@HomeActivity).apply { text = getString(t.title); textSize = 15f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 10, 0, 2) })
+            addView(TextView(this@HomeActivity).apply { text = getString(t.title); textSize = 13f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 10, 0, 2) })
             addView(TextView(this@HomeActivity).apply { text = getString(t.sub); textSize = 11f; setTextColor(getColor(R.color.dim)); maxLines = 2 }) })
     }
     private fun chip(parent: LinearLayout, text: String, color: Int, f: () -> Unit) = parent.addView(TextView(this).apply {
@@ -154,7 +154,7 @@ class HomeActivity : FitActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 18, 0, 0) } }
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(TextView(this).apply { text = getString(R.string.home_news, n.version); setTextColor(Color.parseColor("#A78BFA")); textSize = 11f; letterSpacing = 0.2f; typeface = Typeface.MONOSPACE; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
-        head.addView(TextView(this).apply { text = "✕"; setTextColor(getColor(R.color.dim)); textSize = 16f; setPadding(20, 0, 0, 0); setOnClickListener { Home.setNewsSeen(this@HomeActivity, ver); drawNews() } })
+        head.addView(TextView(this).apply { text = "✕"; setTextColor(getColor(R.color.dim)); textSize = 13f; setPadding(20, 0, 0, 0); setOnClickListener { Home.setNewsSeen(this@HomeActivity, ver); drawNews() } })
         box.addView(head); var open = false
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun fill() { list.removeAllViews(); for (it in (if (open) n.items else n.items.take(3))) list.addView(TextView(this).apply { text = "•  $it"; setTextColor(Color.WHITE); textSize = 12f; setPadding(0, 8, 0, 0); maxLines = if (open) 6 else 2; ellipsize = android.text.TextUtils.TruncateAt.END }) }
@@ -190,7 +190,7 @@ class HomeActivity : FitActivity() {
         card.removeAllViews(); val p = Prefs.remote(this); val host = p.getString("host", "").orEmpty(); val paired = !p.getString("token", "").isNullOrEmpty()
         card.addView(TextView(this).apply { text = getString(R.string.home_console); setTextColor(getColor(R.color.accent)); textSize = 11f; letterSpacing = 0.2f; typeface = Typeface.MONOSPACE })
         if (host.isEmpty()) {
-            card.addView(TextView(this).apply { text = getString(R.string.home_no_console); setTextColor(Color.WHITE); textSize = 16f; setPadding(0, 8, 0, 4) })
+            card.addView(TextView(this).apply { text = getString(R.string.home_no_console); setTextColor(Color.WHITE); textSize = 13f; setPadding(0, 8, 0, 4) })
             card.addView(TextView(this).apply { text = getString(R.string.home_no_console_sub); setTextColor(getColor(R.color.dim)); textSize = 12f })
             return
         }

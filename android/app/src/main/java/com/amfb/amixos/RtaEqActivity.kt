@@ -92,7 +92,7 @@ class RtaEqActivity : FitActivity() {
         if (host.isNotEmpty()) client = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), token))
         val accent = Color.parseColor("#FFB590"); val dim = Color.parseColor("#C2C7CF")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(R.string.rta_title); setTextColor(accent); textSize = 18f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(R.string.rta_title); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         graph = RtaEqView(this); graph.onChange = { _, done -> if (done) send() }
         root.addView(graph)
         fun row() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }.also { root.addView(it) }

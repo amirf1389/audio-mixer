@@ -79,7 +79,7 @@ class ToolsActivity : FitActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(R.string.tools_title); setTextColor(accent); textSize = 20f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(R.string.tools_title); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(R.string.tools_tuner, R.string.tools_spl, R.string.tools_gen, R.string.tools_rta).forEachIndexed { i, r -> row.addView(Button(this).apply { text = getString(r); setOnClickListener { show(i) } }.also { tabs.add(it) }) }
         root.addView(row)
@@ -92,7 +92,7 @@ class ToolsActivity : FitActivity() {
         stopMic(); stopGen(); tool = i; body.removeAllViews(); needle = null; rta = null
         tabs.forEachIndexed { k, b -> b.setTextColor(if (k == i) accent else Color.WHITE) }
         big = TextView(this).apply { setTextColor(Color.WHITE); textSize = 64f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; text = "—" }
-        small = TextView(this).apply { setTextColor(cyan); textSize = 16f; typeface = Typeface.MONOSPACE; gravity = Gravity.CENTER }
+        small = TextView(this).apply { setTextColor(cyan); textSize = 13f; typeface = Typeface.MONOSPACE; gravity = Gravity.CENTER }
         when (i) {
             0 -> { body.addView(big); needle = NeedleView(this).also { body.addView(it) }; body.addView(small); body.addView(note(getString(R.string.tools_tuner_note))); startMic() }
             1 -> { body.addView(big); body.addView(small)

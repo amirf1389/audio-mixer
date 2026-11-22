@@ -263,35 +263,35 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.25.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 28216706,
-      "sha256": "2735a4a1d5e7733261d808fa7f338880f6580d9a5433133ea3067f0c6fdbf558"
+      "size": 28286356,
+      "sha256": "2f95f735aa94f73d73aede9b18aced31f9d98000a40547d466e4bd58317dfc3e"
     },
     "android-apk": {
-      "name": "AmF-X1-1.25.0.0-b7-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b7-android.apk",
-      "size": 14885668,
-      "sha256": "4b9bfd25e0f18f6b1ba0e820c29eea8c6940269c0047086d00a6b7446fa487aa",
+      "name": "AmF-X1-1.25.0.0-b8-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b8-android.apk",
+      "size": 14974360,
+      "sha256": "b2ac4e01ce9d1fdb8f28382521343a1c8ffe209b508b303e7af1ed43f14bf0aa",
       "package": "com.amfb.amixos",
-      "build": 7,
-      "versionCode": 125000007,
-      "versionName": "1.25.0.0 (build 7)"
+      "build": 8,
+      "versionCode": 125000008,
+      "versionName": "1.25.0.0 (build 8)"
     },
     "android-mixer-apk": {
-      "name": "AmF-X1-Mixer-1.25.0.0-b7-android.apk",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b7-android.apk",
-      "size": 14872418,
-      "sha256": "22134f01118fa69e02c923fce108ad33e4ce91391808d26780ece8cd91540144",
+      "name": "AmF-X1-Mixer-1.25.0.0-b8-android.apk",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b8-android.apk",
+      "size": 14960346,
+      "sha256": "770a948915f2de70da8ed1621a1d5c42b759f897de37bf24ebf6e6e30eb5643f",
       "package": "com.amfb.amixos.mixer",
-      "build": 7,
-      "versionCode": 125000007,
-      "versionName": "1.25.0.0 (build 7)"
+      "build": 8,
+      "versionCode": 125000008,
+      "versionName": "1.25.0.0 (build 8)"
     }
   },
   "plugins": [],
   "presets": {
     "version": "2026.11.22",
     "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/presets/presets-pack.json",
-    "size": 165128,
-    "sha256": "bdac8fe4c13f92bda0b73fcb6b4587736f74a2cb7e62cda26b90704a6e7a89cd"
+    "size": 169546,
+    "sha256": "f46daa881c8ec09904950385ad231ca5e37c081b758cbb727fba0168c171dc20"
   }
 }

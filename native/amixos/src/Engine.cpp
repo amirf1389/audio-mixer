@@ -43,6 +43,7 @@ static const am::sysopt::CpuInfo& cpuOnce();
 #include <QJsonObject>
 #include <QDateTime>
 #include <QFileInfo>
+#include <algorithm>
 #include <cmath>
 
 using am::dsp::FilterType;
@@ -1554,6 +1555,19 @@ void Engine::setPluginUiState(int i, int slot, const QString& ui) { if (i < 0 ||
 QVariantMap Engine::wshapeInfo(int i, int slot) const { QVariantMap m; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return m; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get());
   auto* w = fp ? dynamic_cast<am::fx::WShape*>(fp->effect()) : nullptr; if (!w) return m;
   m["learn"] = w->learnProgress(); m["learning"] = w->params()[17].value > 0.5; m["learned"] = w->learnCount(); m["loud"] = w->loudFactor(); m["comp"] = w->compensationDb(); return m; }
+QVariantMap Engine::dynEqInfo(int i, int slot, int points) const { QVariantMap m; if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return m; auto* fp = dynamic_cast<am::fx::FxPlugin*>(strips_[static_cast<std::size_t>(i)].plugins[slot].vst.get());
+  auto* e = fp ? dynamic_cast<am::fx::DynEq*>(fp->effect()) : nullptr; if (!e) return m; points = std::clamp(points, 8, 1024);
+  QVariantList bands, dyn; for (int b = 0; b < am::fx::DynEq::kBands; ++b) { QVariantList v; for (int k = 0; k < am::fx::DynEq::kKeys; ++k) v << e->band(b, k); bands << QVariant(v); dyn << e->dynamicDb(b); }
+  QVariantList curve, still, pre, post; std::vector<float> sp(static_cast<std::size_t>(points)), sq(static_cast<std::size_t>(points)); e->spectrum(false, sp.data(), points, 20, 20000); e->spectrum(true, sq.data(), points, 20, 20000);
+  for (int k = 0; k < points; ++k) { const double f = 20 * std::pow(1000.0, (k + 0.5) / points); curve << e->responseDb(f, true); still << e->responseDb(f, false); pre << sp[static_cast<std::size_t>(k)]; post << sq[static_cast<std::size_t>(k)]; }
+  m["bands"] = bands; m["dyn"] = dyn; m["curve"] = curve; m["still"] = still; m["pre"] = pre; m["post"] = post; m["output"] = e->params().back().value; m["bypass"] = e->bypass(); return m; }
+void Engine::setDynEqBand(int i, int slot, int band, int key, double v) { if (band < 0 || band >= am::fx::DynEq::kBands || key < 0 || key >= am::fx::DynEq::kKeys) return; setPluginParam(i, slot, band * am::fx::DynEq::kKeys + key, v); }
+QVariantMap Engine::proQ() const {
+  QVariantMap best; int bestV = 0;
+  for (const QVariantMap& v : vstCatalog_) { const int n = am::vst3::proQVersion(v.value("vendor").toString().toStdString(), v.value("name").toString().toStdString()); const bool vst3 = v.value("format").toString() == "VST3";
+    if (n > bestV || (n == bestV && n > 0 && vst3 && best.value("format").toString() != "VST3")) { bestV = n; best = v; } }   // the newest; VST3 before VST2 of the same one
+  QVariantMap m; m["found"] = bestV > 0; if (bestV > 0) { m["name"] = best.value("name"); m["vendor"] = best.value("vendor"); m["kind"] = best.value("kind"); m["format"] = best.value("format"); } return m; }
+int Engine::addProQ(int i) { const QVariantMap q = proQ(); if (!q.value("found").toBool()) return -2; return addToRack(i, q.value("kind").toString()); }
 QString Engine::pluginError(int i, int slot) const { if (i < 0 || i >= kStrips || slot < 0 || slot >= kPluginSlots) return QString(); return strips_[static_cast<std::size_t>(i)].plugins[slot].error; }
 QVariantList Engine::plugins(int i) const {
   QVariantList l; if (i < 0 || i >= kStrips) return l; const StripUi& s = strips_[static_cast<std::size_t>(i)];

@@ -127,7 +127,7 @@ class EqActivity : FitActivity() {
         if (host.isNotEmpty()) client = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), token))
         val accent = Color.parseColor("#FFB590"); val dim = Color.parseColor("#C2C7CF")
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32) }
-        root.addView(TextView(this).apply { text = getString(R.string.eq_title, strip + 1) + "  " + (intent.getStringExtra("name") ?: ""); setTextColor(accent); textSize = 18f; setTypeface(null, Typeface.BOLD) })
+        root.addView(TextView(this).apply { text = getString(R.string.eq_title, strip + 1) + "  " + (intent.getStringExtra("name") ?: ""); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD) })
         info = TextView(this).apply { setTextColor(Color.parseColor("#7FD8E8")); typeface = Typeface.MONOSPACE; textSize = 13f; setPadding(0, 8, 0, 8) }
         curve = EqCurveView(this); curve.bands = decode(Prefs.local(this).getString("eq$strip", null)) ?: defaults()
         curve.onChange = { i -> showBand(); send(i) }; curve.onSelect = { showBand() }

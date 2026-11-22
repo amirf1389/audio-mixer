@@ -372,4 +372,23 @@ bool Plugin::openEditor(void* parent, int& w, int& h) {
 }
 void Plugin::closeEditor() { Impl& I = *impl_; if (I.view) { I.view->removed(); I.view->release(); I.view = nullptr; } }
 
+
+// ---------------------------------------------------------------- FabFilter quick-load (matching by vendor and name only)
+namespace {
+std::string lower(std::string s) { for (char& c : s) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a'); return s; }
+}  // namespace
+bool isFabFilter(const std::string& vendor) { return lower(vendor).find("fabfilter") != std::string::npos; }
+int proQVersion(const std::string& vendor, const std::string& name) {
+  if (!isFabFilter(vendor)) return 0; std::string n = lower(name);
+  if (n.rfind("fabfilter", 0) == 0) { n.erase(0, 9); while (!n.empty() && (n[0] == ' ' || n[0] == '-' || n[0] == '_')) n.erase(0, 1); }   // "FabFilter Pro-Q 3"
+  if (n.rfind("pro-q", 0) != 0 && n.rfind("pro q", 0) != 0) return 0;
+  std::size_t i = 5; while (i < n.size() && n[i] == ' ') ++i; int v = 0; while (i < n.size() && n[i] >= '0' && n[i] <= '9' && v < 1000) v = v * 10 + (n[i++] - '0');
+  if (i < n.size() && n[i] >= 'a' && n[i] <= 'z' && v == 0) return 0;   // "Pro-Qx" is some other name
+  return v > 0 ? v : 1;
+}
+int bestProQ(const std::vector<ClassInfo>& classes) {
+  int best = -1, bestV = 0; for (std::size_t i = 0; i < classes.size(); ++i) { const int v = proQVersion(classes[i].vendor, classes[i].name); if (v > bestV) { bestV = v; best = static_cast<int>(i); } }
+  return best;
+}
+
 }  // namespace am::vst3
