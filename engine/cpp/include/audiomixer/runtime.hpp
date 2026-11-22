@@ -105,6 +105,7 @@ struct Snapshot {
   struct StripMeter { double pk, rms, hold; std::uint32_t clipN; double compGrDb, gateDb, inPk, amGainDb, polCorr; bool polInv; double rideDb, rideGateDb, rideLufs; bool rideSusp; };   // ride*: the LOUDNESS MANAGER (auto fader offset, auto on/off gain, the input's short-term LUFS, suspended by a hand on the fader)   // polCorr: the strip against the rest of the mix (-1..1, AUTO PHASE strips), polInv: its polarity now   // compGrDb <= 0 (the channel compressor), gateDb <= 0 (the channel gate), amGainDb <= 0 (automix share)
   StripMeter strips[kMaxStrips]; StripMeter master[2]; StripMeter buses[kMaxBuses];
   double monitorPk[2];                       // what the control room hears, after the monitor section
+  double monitorBandDb[10];                  // the monitor's source mix (pre monitor EQ) in octave bands, dBFS, slow average
   double momentary, shortTerm, integrated, lra, truePeak, correlation, autoLevelDb;
   double duckGrDb;                           // DUCKER: the targets' gain now (<= 0 dB)
   std::uint64_t blocks, frames, xruns;
@@ -193,6 +194,16 @@ class Runtime {
   // the monitor section (control room): what goes to output channels 0 / 1 after the master meters. source 0 = master, 1..kMaxBuses = that bus
   // (post level, pre return); level in dB, dim = -20 dB, mono sums L+R, mute = silence. The master meters and loudness are not affected.
   void setMonitor(int source, double db, bool dim, bool mono, bool mute);
+  // DUAL LISTEN (control room only): the monitor hears source A (setMonitor's source) and source B together. blend 0 = all A, 1 = all B,
+  // equal power in between; listen 0 = the blend, 1 = A alone, 2 = B alone (the A/B switch). Off: source A only, as before.
+  void setMonitorDual(bool on, int sourceB, double blend, int listen);
+  static void dualGains(double blend, int listen, double& ga, double& gb) noexcept;   // the two source gains of the dual mix
+  // the monitor EQ (control room only, never the master / show outputs): up to kMonEqMax peaking filters after the monitor level.
+  // AI EQ AUTO sets them from the monitor analysis (monitorBandDb: the dual mix in kMonBands octave bands, 31.5 Hz .. 16 kHz, pre-EQ).
+  static constexpr int kMonEqMax = 8, kMonBands = 10;
+  static double monitorBandHz(int k) noexcept { return 31.25 * static_cast<double>(1 << k); }
+  void setMonitorEqOn(bool on);
+  void setMonitorEqFilter(int i, double freq, double q, double gainDb);   // gainDb 0 = that filter is flat
   // the routing matrix. Inputs: strip s reads device input channel `input` (-1 = nothing; the default is input s). Outputs: device output
   // channel `out` carries `source`: 0 off, 1 / 2 master L / R, 3 / 4 monitor L / R, 5 + 2k / 6 + 2k bus k L / R. The default is monitor on 0 / 1 and
   // bus k on 2 + 2k / 3 + 2k. Several outputs may carry the same source; an input may feed several strips.
@@ -272,6 +283,8 @@ class Runtime {
   AmpChannel amp_[64]; AmpParams ampUi_[64]; std::vector<float> mono_;   // the audio thread's stage, and the UI's copy of what was set
   std::vector<float> silence_, left_, right_;
   int monSrc_ = 0; double monGainTarget_ = 1, monGain_ = 1; bool monMono_ = false; double monPk_[2] = {0, 0};   // audio thread only
+  bool monDual_ = false; int monSrcB_ = 0; double monGa_ = 1, monGb_ = 0, monGaT_ = 1, monGbT_ = 0;   // DUAL LISTEN, audio thread only
+  bool monEqOn_ = false; dsp::Biquad monEq_[kMonEqMax][2]; double monEqGain_[kMonEqMax] = {}; dsp::Biquad monAna_[kMonBands]; double monBand_[kMonBands] = {};
   std::atomic<long> toneLeft_{0}, toneTotal_{0}; double tonePhase_ = 0;
   std::vector<float> monL_, monR_, extL_, extR_; std::atomic<ExtraSource*> extra_{nullptr}; std::atomic<Tap*> tap_{nullptr}, netTap_{nullptr}; std::atomic<NetInput*> netIn_{nullptr}, appIn_{nullptr}; std::atomic<int> tapRaw_{-1}; std::vector<std::vector<float>> netBuf_, appBuf_; int inRoute_[kMaxStrips]; int outRoute_[kMaxOutputs]; double trim_[kMaxStrips]; // the insert chain of each strip, swapped from the UI thread and read on the audio thread: a shared_ptr with the free atomic
   // functions (std::atomic_load / atomic_store), which every standard library has; std::atomic<std::shared_ptr> is missing from libc++ (Android, macOS)

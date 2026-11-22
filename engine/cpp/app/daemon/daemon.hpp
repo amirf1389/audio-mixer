@@ -122,7 +122,7 @@ class Daemon {
   // DCA GROUP CHANNELS as the console has them (the console applies them to its own mix; the service keeps them so every remote shows the
   // same group strips, and a remote's move of one reaches the console): id 1..8, members = strip numbers
   struct Dca { std::string name; double db = 0; bool mute = false; int color = 0; std::vector<int> members; };
-  struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; } mon_;
+  struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_;   // dual*: DUAL LISTEN (A + B in the control room)
   httpd::Response handle(const httpd::Request& r);
   json::Value apply(const json::Value& cmd, std::string& err);
   std::atomic<unsigned long long> version_{1}; std::atomic<int> watchers_{0};

@@ -2335,5 +2335,14 @@
 "BELL",
 "DYNAMIC",
 "Dynamic EQ",
-"AmF DYNAMIC EQ"
+"AmF DYNAMIC EQ",
+"CONTROL ROOM · SOURCE A",
+"SOURCE B",
+"A",
+"A+B",
+"B",
+"BLEND: how much of A and B the control room hears (equal loudness)",
+"AI EQ AUTO",
+"RESET: the AI EQ back to flat; it learns again",
+"AI EQ AUTO: the control room's EQ measures what you listen to and corrects it. The show is not affected; off puts the previous EQ back."
 ]

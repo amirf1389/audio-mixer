@@ -290,7 +290,7 @@ void Engine::pushAll() {
     rt_->setCompressor(i, p.compOn, p.compThresholdDb, p.compRatio, p.compKneeDb, p.compAttackMs, p.compReleaseMs, p.compMakeupDb); rt_->setGate(i, p.gateOn, p.gateThresholdDb, p.gateRangeDb, p.gateAttackMs, p.gateHoldMs, p.gateReleaseMs);
   }
   pushMasterLevel(); rt_->setLimiter(limiterOnNow(), ceilingNow(), masterRel_);
-  rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
+  rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen); pushMonitorEq(); rt_->setClipDb(clipDb_); rt_->setPeakHoldMs(peakHoldMs_); rt_->setWidth(width_);
   scope_.setSampleRate(rt_->sampleRate()); rt_->setTap(&taps_);
   for (int k = 0; k < kBuses; ++k) makeBusFx(k);
   for (int i = 0; i < kStrips; ++i) rebuildInserts(i);
@@ -1098,7 +1098,21 @@ void Engine::copyEqToAll(int i) {
   for (int j = 0; j < kStrips; ++j) { if (j == i) continue; for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = src.eq[static_cast<std::size_t>(b)]; setEq(j, b, static_cast<int>(e.type), e.freq, e.q, e.gainDb); } setCrossover(j, static_cast<int>(src.xoverType), src.hpOrder, src.hpFreq, src.lpOrder, src.lpFreq); }
 }
 QVariantList Engine::lissajous(int points) { std::vector<float> lr; scope_.pairs(points, lr); QVariantList l; l.reserve(static_cast<int>(lr.size())); for (float v : lr) l << v; return l; }
-QVariantMap Engine::monitor() const { QVariantMap m; m["source"] = mon_.source; m["db"] = mon_.db; m["dim"] = mon_.dim; m["mono"] = mon_.mono; m["mute"] = mon_.mute; m["sync"] = mon_.sync; return m; }
+QVariantMap Engine::monitor() const { QVariantMap m; m["source"] = mon_.source; m["db"] = mon_.db; m["dim"] = mon_.dim; m["mono"] = mon_.mono; m["mute"] = mon_.mute; m["sync"] = mon_.sync;
+  m["dual"] = mon_.dual; m["sourceB"] = mon_.sourceB; m["blend"] = mon_.blend; m["listen"] = mon_.listen; m["aiEq"] = monEq_.mode == am::measure::MonitorEqMode::AiAuto; m["eqMode"] = static_cast<int>(monEq_.mode);
+  QVariantList f; for (const auto& x : monEq_.filters) { QVariantMap e; e["freq"] = x.freq; e["q"] = x.q; e["gainDb"] = x.gainDb; f << e; } m["eqFilters"] = f; return m; }
+void Engine::pushMonitorEq() {
+  if (!rt_) return; rt_->setMonitorEqOn(monEq_.eqOn());
+  for (int i = 0; i < am::Runtime::kMonEqMax; ++i) { const bool has = monEq_.mode != am::measure::MonitorEqMode::Off && i < static_cast<int>(monEq_.filters.size()); const auto f = has ? monEq_.filters[static_cast<std::size_t>(i)] : am::measure::Filter{1000, 1, 0}; rt_->setMonitorEqFilter(i, f.freq, f.q, f.gainDb); }
+}
+void Engine::setMonitorDual(bool on, int sourceB, double blend, int listen) {
+  const bool was = mon_.dual; mon_.dual = on; mon_.sourceB = std::clamp(sourceB, 0, kBuses); mon_.blend = std::clamp(blend, 0.0, 1.0); mon_.listen = std::clamp(listen, 0, 2);
+  if (rt_) rt_->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen);
+  if (on && !was) { monEq_.engage(); monEqTick_ = 0; pushMonitorEq(); } else if (!on && was) { monEq_.release(); pushMonitorEq(); }   // DUAL LISTEN captures the EQ mode as AI EQ AUTO; off puts it back
+  emit monitorChanged();
+}
+void Engine::setMonitorAiEq(bool on) { if (on) { monEq_.engage(); monEqTick_ = 0; } else monEq_.release(); pushMonitorEq(); emit monitorChanged(); }
+void Engine::resetMonitorAiEq() { monEq_.reset(); monEqTick_ = 0; pushMonitorEq(); emit monitorChanged(); }
 void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
@@ -1197,7 +1211,7 @@ void Engine::factoryReset() {
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); loudUi_ = LoudUi{}; pushLoudAll(); emit loudChanged(); autoProp_.clear();
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
-  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
+  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
   graveTimer_.start(); if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
   emit stripsChanged(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
@@ -2024,6 +2038,8 @@ void Engine::tick() {
     for (int i = 0, nShown = shownStrips(); i < nShown; ++i) { vu_[i] += (s.strips[i].rms - vu_[i]) * vuA; QVariantMap x; x["polCorr"] = s.strips[i].polCorr; x["polInv"] = s.strips[i].polInv; x["peakDb"] = toDb(s.strips[i].pk); x["rmsDb"] = toDb(s.strips[i].rms); x["holdDb"] = toDb(s.strips[i].hold); x["clip"] = s.strips[i].clipN > 0; x["compGrDb"] = s.strips[i].compGrDb; { int& oc = strips_[static_cast<std::size_t>(i)].overComp; oc = s.strips[i].compGrDb < -12.0 ? std::min(oc + 1, 90) : std::max(oc - 1, 0); x["overComp"] = oc > 15; }   /* OVER-COMPRESSED: more than 12 dB of reduction for half a second */ x["gateDb"] = s.strips[i].gateDb; x["inDb"] = toDb(s.strips[i].inPk); x["vuDb"] = toDb(vu_[i]); x["amGainDb"] = s.strips[i].amGainDb; x["rideDb"] = s.strips[i].rideDb; x["rideGateDb"] = s.strips[i].rideGateDb; x["rideLufs"] = s.strips[i].rideLufs; x["rideSusp"] = s.strips[i].rideSusp; m << x; }
     vuMaster_ += (std::max(s.master[0].rms, s.master[1].rms) - vuMaster_) * vuA; t["masterVuDb"] = toDb(vuMaster_);
     t["monitorLDb"] = toDb(s.monitorPk[0]); t["monitorRDb"] = toDb(s.monitorPk[1]);
+    if (mon_.dual && monEq_.mode == am::measure::MonitorEqMode::AiAuto && ++monEqTick_ * timer_.interval() >= 2000) {   // AI EQ AUTO: learn again every 2 s from the monitor's own bands
+      monEqTick_ = 0; monEq_.learn(s.monitorBandDb, am::Runtime::kMonBands, am::Runtime::kMonEqMax); pushMonitorEq(); emit monitorChanged(); }
     t["masterPeakDb"] = toDb(std::max(s.master[0].pk, s.master[1].pk)); t["masterLDb"] = toDb(s.master[0].pk); t["masterRDb"] = toDb(s.master[1].pk); t["masterRmsDb"] = toDb(std::max(s.master[0].rms, s.master[1].rms)); t["masterLRmsDb"] = toDb(s.master[0].rms); t["masterRRmsDb"] = toDb(s.master[1].rms);
     t["masterClip"] = s.master[0].clipN + s.master[1].clipN > 0; t["momentary"] = s.momentary; t["shortTerm"] = s.shortTerm; t["integrated"] = s.integrated; t["lra"] = s.lra; t["truePeak"] = s.truePeak; t["correlation"] = s.correlation; t["autoLevelDb"] = s.autoLevelDb;
     t["blocks"] = static_cast<qulonglong>(s.blocks); t["frames"] = static_cast<qulonglong>(s.frames); t["xruns"] = static_cast<qulonglong>(s.xruns); t["loadPct"] = s.loadPct; t["blockUs"] = s.blockUs; t["maxBlockUs"] = s.maxBlockUs; t["jitterUs"] = s.jitterUs;

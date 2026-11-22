@@ -485,7 +485,7 @@ json::Value Daemon::state() const {
     o.set("dcas", dcas); }
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   o.set("settings", settingsJson());
-  json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); o.set("monitor", mo);
+  json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
   o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
@@ -609,7 +609,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     for (int k = 0; k < kMaxBuses; ++k) { rt->setBusLevel(k, buses_[k].db); rt->setBusMute(k, buses_[k].mute); rt->setBusReturn(k, buses_[k].returnDb); }
     pushSettings(*rt); loadRacks(*rt); rt->setTap(&rta_);
     mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
-    rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+    rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen);
     pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
     initRoutes(); for (int i = 0; i < opt_.strips; ++i) rt->setInputRoute(i, inRoute_[i]); for (int o = 0; o < Runtime::kMaxOutputs; ++o) rt->setOutputRoute(o, outRoute_[o]);   // the routing as kept
     ovActed_ = false; ov_.reset(); ovNote_.clear();   // ONE VOICE looks again on every device
@@ -748,7 +748,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (cmd.has("dim")) mon_.dim = cmd["dim"].asBool();
     if (cmd.has("mono")) mon_.mono = cmd["mono"].asBool();
     if (cmd.has("mute")) mon_.mute = cmd["mute"].asBool();
-    if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
+    if (cmd.has("dual")) mon_.dual = cmd["dual"].asBool();   // DUAL LISTEN: source B, blend 0..1 (A..B), listen 0 blend / 1 A / 2 B
+    if (cmd.has("sourceB")) mon_.sourceB = std::max(0, std::min(kMaxBuses, cmd["sourceB"].asInt(mon_.sourceB)));
+    if (cmd.has("blend")) mon_.blend = std::max(0.0, std::min(1.0, cmd["blend"].asNumber(0.5)));
+    if (cmd.has("listen")) mon_.listen = std::max(0, std::min(2, cmd["listen"].asInt(0)));
+    if (rt_) { rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen); }
     return ok;
   }
   if (op == "inRoute") { if (!strip(s)) return {}; initRoutes(); inRoute_[s] = std::max(-1, std::min(Runtime::kNetInBase - 1, cmd["input"].asInt(-1))); if (rt_) rt_->setInputRoute(s, inRoute_[s]); ++version_; return ok; }

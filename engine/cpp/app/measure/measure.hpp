@@ -74,4 +74,21 @@ std::string exportFiltersText(const std::vector<Filter>& f);                    
 std::string exportFiltersJson(const std::vector<Filter>& f);
 double peakingDbAt(const Filter& f, double freq, double fs = 48000);                       // the filter's own response, for drawing
 
+/** AI EQ AUTO of the control room (DUAL LISTEN): the monitor's octave bands (dBFS, band k at 31.25 * 2^k Hz) to at most maxFilters gentle
+ *  peaking filters (Auto EQ above, on a 12-points-per-octave grid, against a flat octave-band target = a pink balance at the bands' mean).
+ *  Bands below -90 dBFS are left out; nothing to hear = no filters. */
+std::vector<Filter> monitorAutoEq(const double* bandDb, int bands, int maxFilters = 8, double maxBoostDb = 4, double maxCutDb = 8);
+/** The monitor's EQ mode and what DUAL LISTEN captures: engage() keeps the mode and filters there were and runs AI EQ AUTO; release() puts
+ *  them back exactly. reset() clears the AI EQ's filters (it learns again). */
+struct MonitorEqMode {
+  enum Mode { Off = 0, Manual = 1, AiAuto = 2 };
+  Mode mode = Off; std::vector<Filter> filters;
+  bool captured = false; Mode savedMode = Off; std::vector<Filter> savedFilters;
+  void engage() { if (!captured) { savedMode = mode; savedFilters = filters; captured = true; } mode = AiAuto; filters.clear(); }
+  void release() { if (captured) { mode = savedMode; filters = savedFilters; captured = false; savedFilters.clear(); } }
+  void reset() { if (mode == AiAuto) filters.clear(); }
+  void learn(const double* bandDb, int bands, int maxFilters = 8) { if (mode == AiAuto) filters = monitorAutoEq(bandDb, bands, maxFilters); }
+  bool eqOn() const { return mode != Off && !filters.empty(); }
+};
+
 }  // namespace am::measure

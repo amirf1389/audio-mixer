@@ -34,6 +34,7 @@
 #include "vst3/vst3_host.hpp"
 #include "vst2/vst2_host.hpp"
 #include "record/recorder.hpp"
+#include "measure/measure.hpp"
 #include "fx/fx.hpp"
 #include "Scope.h"
 #include "Generator.h"
@@ -607,6 +608,9 @@ class Engine : public QObject {
   //   // SYSTEM SETUP wizard: full / 2way / 3way, sub none / stereo / mono                    // outputs shown: the device's, or 8 when nothing runs
   Q_INVOKABLE void resetRouting();                      // input s -> strip s, monitor on 1-2, bus k on 3+2k / 4+2k
   Q_INVOKABLE void setMonitor(int source, double db, bool dim, bool mono, bool mute);
+  Q_INVOKABLE void setMonitorDual(bool on, int sourceB, double blend, int listen);   // DUAL LISTEN: A (the source) + B, blend 0..1, listen 0 blend / 1 A / 2 B
+  Q_INVOKABLE void setMonitorAiEq(bool on);   // AI EQ AUTO of the control room: on captures the monitor's EQ mode, off restores it
+  Q_INVOKABLE void resetMonitorAiEq();        // the AI EQ's filters back to flat (it learns again)
   Q_INVOKABLE void setMonitorSync(bool on);   // SYNC: master and monitor faders move together by the same dB
   int vuRefDb() const { return vuRef_; }
   void setVuRefDb(int db) { vuRef_ = std::clamp(db, -24, -8); settings_.setValue("ui/vuRef", vuRef_); emit monitorChanged(); }
@@ -910,7 +914,8 @@ class Engine : public QObject {
   bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const; void secureInputFor(am::DeviceConfig& cfg);
   QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
   QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; std::bitset<kStrips> armed_; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
-  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; } mon_;   // sync: the monitor fader moves with the master fader (and back)
+  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_;
+  am::measure::MonitorEqMode monEq_; int monEqTick_ = 0; void pushMonitorEq();   // the control room's EQ (AI EQ AUTO under DUAL LISTEN)   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
   int uiLevel_ = 2, meterMs_ = 33; bool ecoUi_ = false; void applyUiRate();
