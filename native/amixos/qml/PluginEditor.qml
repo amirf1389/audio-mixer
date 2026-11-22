@@ -104,11 +104,15 @@ Popup {
     property int quizScore: 0
     property int quizTotal: 0
     property string quizNote: ""
+    property bool quizRevealed: false   // 4 RANDOM EQ: the hidden boost is drawn only once the question is answered (no giveaway on the curve)
+    readonly property bool quizOpen: quizBand > 0 && !quizRevealed
+    function wCurveDbAt(f) { const c = curves(); return c.length ? c[0].db(f) : 0 }
     function wTrain(b) { if (fx !== "wshape" || params.length < 18) return; engine.setPluginParam(strip, slot, params[16].id, wTrainLocked ? 0 : b / 5); reload() }
-    function wTrainStop() { rawStep = 0; quizBand = 0; rawTimer.stop(); if (fx === "wshape" && params.length >= 18 && params[16].value > 0) { engine.setPluginParam(strip, slot, params[16].id, 0); reload() } }
+    function wTrainStop() { rawStep = 0; quizBand = 0; quizRevealed = false; quizTimer.stop(); rawTimer.stop(); if (fx === "wshape" && params.length >= 18 && params[16].value > 0) { engine.setPluginParam(strip, slot, params[16].id, 0); reload() } }
     function wTrainRaw() { if (wTrainLocked) return; quizBand = 0; rawStep = 1; wTrain(1); rawTimer.restart() }
-    function wQuizNext(pickBand) { if (wTrainLocked) return; rawStep = 0; rawTimer.stop(); quizBand = pickBand > 0 ? pickBand : 1 + Math.floor(Math.random() * 5); wTrain(quizBand) }
-    function wQuizAnswer(b) { if (quizBand <= 0) return; quizTotal++; if (b === quizBand) { quizScore++; quizNote = i18n.t("RIGHT", i18n.lang) + ": " + i18n.t(wNames[quizBand - 1], i18n.lang) } else quizNote = i18n.t("IT WAS", i18n.lang) + " " + i18n.t(wNames[quizBand - 1], i18n.lang); wQuizNext(0) }
+    function wQuizNext(pickBand) { if (wTrainLocked) return; rawStep = 0; rawTimer.stop(); quizTimer.stop(); quizRevealed = false; quizBand = pickBand > 0 ? pickBand : 1 + Math.floor(Math.random() * 5); wTrain(quizBand) }
+    function wQuizAnswer(b) { if (quizBand <= 0 || quizRevealed) return; quizTotal++; if (b === quizBand) { quizScore++; quizNote = i18n.t("RIGHT", i18n.lang) + ": " + i18n.t(wNames[quizBand - 1], i18n.lang) } else quizNote = i18n.t("IT WAS", i18n.lang) + " " + i18n.t(wNames[quizBand - 1], i18n.lang); quizRevealed = true; rev++; quizTimer.restart() }
+    Timer { id: quizTimer; interval: 1800; onTriggered: if (ed.quizBand > 0) ed.wQuizNext(0) }
     function wLearn() { if (fx === "wshape" && params.length >= 18) { engine.setPluginParam(strip, slot, params[17].id, 1); reload() } }
     Timer { id: rawTimer; interval: 2500; repeat: true; onTriggered: { if (ed.rawStep >= 5) { ed.wTrainStop(); return } ed.rawStep++; ed.wTrain(ed.rawStep) } }
     function preset(step) { if (!presets.length) return; presetAt = (presetAt + step + presets.length) % presets.length; engine.applyRackPreset(strip, slot, presets[presetAt].id); const at = presetAt; reload(); presetAt = at }
@@ -142,7 +146,7 @@ Popup {
             const ks = [biq("ls", F(0), 0.6, A * v(1) * 9), biq("peak", F(1), q, -A * v(2) * 6), biq("peak", F(2), q, A * v(3) * 6), biq("peak", F(3), q * 1.2, -A * v(4) * 6), biq("hs", F(4), 0.6, A * v(5) * 9)]
             let sum = 0, n = 0; for (let f = 40; f <= 16000; f *= Math.pow(2, 1 / 3)) { let d = 0; for (const k of ks) d += magDb(k, f); sum += Math.pow(10, d / 10); n++ } const comp = (v(14, 1) >= 0.5 ? -10 * Math.log10(sum / n) : 0) + (v(7) - 0.5) * 24
             if (lf !== 1) { ks[0] = biq("ls", F(0), 0.6, Math.min(15, A * v(1) * 9 * lf)); ks[4] = biq("hs", F(4), 0.6, Math.min(15, A * v(5) * 9 * lf)) }   // LOUD COMP as it plays now
-            const tr = Math.round(v(16, 0) * 5); if (tr > 0) ks.push(biq(tr === 1 ? "ls" : tr === 5 ? "hs" : "peak", F(tr - 1), tr === 1 || tr === 5 ? 0.6 : 1.0, 6))   // the ear trainer's boost
+            const tr = ed.quizOpen ? 0 : Math.round(v(16, 0) * 5); if (tr > 0) ks.push(biq(tr === 1 ? "ls" : tr === 5 ? "hs" : "peak", F(tr - 1), tr === 1 || tr === 5 ? 0.6 : 1.0, 6))   // the ear trainer's boost
             return [{ name: "W CURVE", color: "#e8f4ff", width: 2.4, db: function (f) { let d = comp; for (const k of ks) d += magDb(k, f); return d } }] }
         return [] }
     readonly property int rowH: 262

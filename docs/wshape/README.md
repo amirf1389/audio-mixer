@@ -198,7 +198,8 @@ Press **4 RANDOM EQ**. One band, chosen at random, is boosted and the panel asks
 
 * The panel shows **RIGHT: <band>**, or **IT WAS <band>** if you missed.
 * **SCORE x / y** counts your right answers out of all answers.
-* The next hidden band starts straight away. Press **STOP** (or 4 RANDOM EQ again) to finish.
+* While a question is open, the curve, the points and the readouts do **not** show the hidden boost, so the display never gives the answer away. Once you answer, the boost is drawn on the curve for a moment.
+* The next hidden band starts about 2 seconds after your answer. Press **STOP** (or 4 RANDOM EQ again) to finish.
 * The score starts again at 0 / 0 each time the editor is opened for an effect.
 
 **Tips for training:** use full-range music you know well, at a moderate level. Toggle BYPASS to hear the difference. Aim for 8 out of 10 before moving the bands to new places to make it harder.
@@ -265,7 +266,14 @@ The phone's local mixer runs the same engine with the same W-SHAPE TUNER:
 3. The effect appears as a plug-in face with a **power LED** (bypass), **PRESETS**, a **MIX** knob, and a knob for each control with its live value (dB, Hz, %).
 4. **PRESETS** lists INIT (every knob to its default), your own saved presets, SAVE AS PRESET…, and the nine factory W-Shape presets marked **★** (SPEECH … STRONG). They come from the preset pack built into the app. **★ PRESET PACK EFFECT** in the rack adds a factory preset straight into the first free slot.
 
-The draggable curve, the AUTO W panel, the ear-training drills and COMPARE A/B are in the editor on the Windows console. A sound you build there plays the same on the phone, and the other way round.
+5. Above the knobs, the W-SHAPE face has the same tools as the Windows editor:
+   * **The W curve** with its five points: drag a point left / right to move the band within its range, up / down for its gain.
+   * **AUTO W** listens for 8 seconds (progress in %) and sets the five gains.
+   * **A**, **B** and **COMPARE**: two settings kept with the effect, in the same format as the console.
+   * **STEREO · MID · SIDE** and **PRESETS** (the nine factory presets).
+   * **4 RAW EQ**, **4 RANDOM EQ** and **STOP**, with the answer keys and **SCORE x / y**. The hidden boost is not drawn until you answer.
+
+A sound you build on the console plays the same on the phone, and the other way round.
 
 ---
 

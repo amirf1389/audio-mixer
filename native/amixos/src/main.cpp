@@ -2010,8 +2010,12 @@ int main(int argc, char* argv[]) {
           call("wDrag", 2, 3000.0, 2.0); const double A = pv(0); const bool drag = std::fabs(pv(10) - am::fx::WShape::bandKnob(2, 3000)) < 1e-3 && std::fabs(pv(3) - 2.0 / (A * 6)) < 1e-3;
           // EAR TRAINING: 4 RAW EQ starts on BASS; 4 RANDOM EQ boosts the hidden band, a right and a wrong answer are scored
           call("wTrainRaw"); const bool raw = std::fabs(pv(16) - 0.2) < 1e-3 && wed->property("rawStep").toInt() == 1; call("wTrainStop"); const bool stopped = pv(16) == 0;
-          call("wQuizNext", 3); const bool hidden = std::fabs(pv(16) - 0.6) < 1e-3; call("wQuizAnswer", 3); const int qb = wed->property("quizBand").toInt(); call("wQuizAnswer", qb % 5 + 1);
-          const bool quiz = hidden && wed->property("quizScore").toInt() == 1 && wed->property("quizTotal").toInt() == 2 && pv(16) > 0; call("wTrainStop");
+          const double presHz = am::fx::WShape::bandHz(2, pv(10)), d0 = call("wCurveDbAt", presHz).toDouble();
+          call("wQuizNext", 3); const bool hidden = std::fabs(pv(16) - 0.6) < 1e-3; const double dOpen = call("wCurveDbAt", presHz).toDouble();
+          call("wQuizAnswer", 3); const double dShown = call("wCurveDbAt", presHz).toDouble(); call("wQuizAnswer", 1); call("wQuizNext", 0); const int qb = wed->property("quizBand").toInt(); call("wQuizAnswer", qb % 5 + 1);
+          const bool noGiveaway = std::fabs(dOpen - d0) < 0.01 && dShown - d0 > 3.0;
+          std::printf("amixos --smoke: W-SHAPE 4 RANDOM EQ curve at %.0f Hz: before %.2f dB, open question %.2f dB, answered %.2f dB, no giveaway %d\n", presHz, d0, dOpen, dShown, noGiveaway);
+          const bool quiz = hidden && noGiveaway && wed->property("quizScore").toInt() == 1 && wed->property("quizTotal").toInt() == 2 && pv(16) > 0; call("wTrainStop");
           engine.startLive(1); pump(); call("wTrainRaw"); const bool locked = wed->property("wTrainLocked").toBool() && pv(16) == 0 && wed->property("rawStep").toInt() == 0; engine.stopLive(); pump();
           // AUTO W starts listening; switched off again here (the unit test plays it through)
           call("wLearn"); pump(); const bool learning = engine.wshapeInfo(0, 7).value("learning").toBool(); engine.setPluginParam(0, 7, 17, 0);

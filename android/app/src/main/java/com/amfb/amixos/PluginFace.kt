@@ -80,6 +80,7 @@ object PluginFace {
         pill(c.getString(R.string.fx_presets)) { presetMenu(c, kind, params, values, host) }
         pill("✕") { host.remove(); host.changed() }
         face.addView(bar)
+        if (kind == "wshape") WShape.section(c, params, values["mix"] ?: 1.0, st, host, "ab:" + (json["uiKey"]?.toString() ?: slot.toString()))?.let { face.addView(it) }   // the curve, AUTO W, A / B, ear training, STEREO / MID / SIDE, presets
         // the knobs: MIX first, then every parameter
         val grid = GridLayout(c).apply { columnCount = 4; setPadding(0, 16, 0, 0) }
         val knobs = (if (json.containsKey("mix")) listOf(mapOf("id" to "mix", "title" to "MIX", "value" to values["mix"], "default" to 1.0, "text" to String.format("%.0f %%", (values["mix"] ?: 1.0) * 100))) else emptyList()) + params   // a hosted plug-in has no MIX of ours
