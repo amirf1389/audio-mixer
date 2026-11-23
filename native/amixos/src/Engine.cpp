@@ -28,6 +28,7 @@
 static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
 #include "audiomixer/driver_intel.hpp"
+#include "audiomixer/asio.hpp"
 #include "audiomixer/sysopt.hpp"
 #include "audiomixer/simd.hpp"
 #include "audiomixer/latency.hpp"
@@ -53,6 +54,7 @@ static double toDb(double lin) { return lin > 1e-9 ? 20.0 * std::log10(lin) : -1
 
 static constexpr double kIsoCentres[10] = {31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
 Engine::Engine(QObject* parent) : QObject(parent) {
+  for (const QString& k : QSettings().value("asio/allowedUnsigned").toStringList()) { const int bar = k.indexOf('|'); if (bar > 0) am::asiotrust::allowUnsigned(k.left(bar).toStdString(), k.mid(bar + 1).toStdString()); }   // UNSIGNED ASIO drivers confirmed before (CLSID + DLL path)
   am::drv::setOpenRouting(QSettings().value("audio/openRouting", true).toBool());
   winSync_ = QSettings().value("mixer/windowsMuteSync", true).toBool(); sysGet_ = [](bool& m) { return am::systemMuteGet(m); }; sysSet_ = [](bool m) { return am::systemMuteSet(m); };
   winGain_ = QSettings().value("mixer/windowsGainMode", false).toBool(); volGet_ = [](float& f) { return am::systemVolumeGet(f); }; volSet_ = [](float f) { return am::systemVolumeSet(f); }; volSync_ = false;
@@ -174,6 +176,8 @@ void Engine::annotateAsio(QVariantMap& m, bool probed) {
   const QString key = QStringLiteral("asio/seen/") + QString(name).replace('/', '_').replace('\\', '_');
   QString status;
   if (a.own || a.type == "virtual" || a.type == "network") status = QStringLiteral("virtual");
+  else if (m.value("faulted").toBool()) status = QStringLiteral("faulted");
+  else if (m.value("unsignedDriver").toBool() && !m.value("allowed").toBool()) status = QStringLiteral("unsigned");
   else if (err.contains("bit")) status = QStringLiteral("other bitness");
   else if (!err.isEmpty()) status = QStringLiteral("busy");
   else if (in + out > 0) status = QStringLiteral("ready");
@@ -218,7 +222,11 @@ void Engine::refreshDevices() {
     // IN USE: held in exclusive mode (by another program, or this console) or the ASIO driver this console runs on: listed, never hidden
     const bool ours = rt_ && d.backend == curBackend_ && (d.id == curOut_ || d.id == curIn_);
     if (ours && d.backend == "asio") { if (devIn_ > 0) m["inChannels"] = devIn_; if (devOut_ > 0) m["outChannels"] = devOut_; }
-    if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError); annotateAsio(m, !timedOut_); }
+    if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError);
+      // SECURE ASIO: the signature state of the verified DLL, shown in the list; an unsigned driver is loaded only after a confirmation
+      m["trust"] = QString::fromStdString(d.trust); m["unsignedDriver"] = d.trust != "signed"; m["faulted"] = d.faulted; m["clsid"] = QString::fromStdString(d.clsid); m["dllPath"] = QString::fromStdString(d.dllPath);
+      m["allowed"] = d.trust == "signed" || am::asiotrust::unsignedAllowed(d.clsid, d.dllPath);
+      annotateAsio(m, !timedOut_); }
     m["inUse"] = ours || !d.probeError.empty(); if (m["inUse"].toBool()) m["inUseText"] = ours ? QStringLiteral("in use by this console") : QString::fromStdString(d.probeError);
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
@@ -227,6 +235,18 @@ void Engine::refreshDevices() {
   if (rescanAgain_) { rescanAgain_ = false; QTimer::singleShot(0, this, [this] { refreshDevices(); }); }
 }
 
+// UNSIGNED ASIO DRIVER: the user confirmed loading it. The CLSID and the DLL path come from the registry enumeration again (never from
+// the interface or the remote), and are remembered together: a different DLL behind the same name asks again.
+bool Engine::confirmUnsignedAsio(const QString& name) {
+  for (const am::AsioDriverInfo& d : am::listAsioDrivers()) {
+    if (QString::fromStdString(d.name) != name) continue;
+    am::asiotrust::allowUnsigned(d.clsid, d.path);
+    QStringList l = settings_.value("asio/allowedUnsigned").toStringList(); const QString k = QString::fromStdString(d.clsid + "|" + d.path); if (!l.contains(k)) l << k; settings_.setValue("asio/allowedUnsigned", l);
+    for (QVariant& v : devices_) { QVariantMap m = v.toMap(); if (m["backend"].toString() == "asio" && m["id"].toString() == name) { m["allowed"] = true; m["probeError"] = QString(); annotateAsio(m, false); v = m; } }
+    emit devicesChanged(); return true;
+  }
+  return false;
+}
 // DEVICES ON / OFF: a device switched OFF on CONNECTIONS is never picked by AUTO DETECT / auto start (neither as the device nor as the
 // paired microphone) and is not opened by hand either; kept as "backend|id" in audio/offDevices.
 bool Engine::deviceEnabled(const QString& backend, const QString& id) const { return !settings_.value("audio/offDevices").toStringList().contains(backend + "|" + id); }
@@ -277,6 +297,7 @@ bool Engine::open(const QString& backend, const QString& inDevice, const QString
   for (auto& s : strips_) s.dsp.setSampleRate(cfg.sampleRate);
   reloadAllVst(); pushAll();
   status_ = QStringLiteral("%1 • %2 Hz • %3 frames • %4 in / %5 out").arg(QString::fromStdString(rt_->backendName())).arg(cfg.sampleRate).arg(cfg.frames).arg(inChannels).arg(outChannels);
+  if (!rt_->openNote().empty()) { status_ += QStringLiteral(" • ") + QString::fromStdString(rt_->openNote()); qWarning("%s", rt_->openNote().c_str()); }   // a faulted ASIO driver: WASAPI took over
   timer_.start(); emit stateChanged(); return true;
 }
 // the first plug-in scan: never inside a driver start that is still waiting (it would run nested in that start's wait loop, with the runtime half open)

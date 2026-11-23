@@ -41,7 +41,7 @@ jobs:
           cmake -S native/amixos -B build/amixos -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build/amixos
           ctest --test-dir build/amixos --output-on-failure
-          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software build/amixos/amixos --shots build/shots
+          AMIX_ALLOW_CAPTURE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software build/amixos/amixos --shots build/shots
       - name: C SDK, Perl XS, Rust crates, WASM core, Linux tarball
         run: |
           sudo apt-get install -y perl clang lld

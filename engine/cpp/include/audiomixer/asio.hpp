@@ -3,9 +3,15 @@
 #pragma once
 #include <string>
 #include <vector>
+#include "audiomixer/asio_trust.hpp"
 
 namespace am {
-struct AsioDriverInfo { std::string name, clsid; int bits = 64; };   // bits: 64 from SOFTWARE\ASIO, 32 from SOFTWARE\WOW6432Node\ASIO (a 32-bit driver loads only into the 32-bit program)
+// bits: 64 from SOFTWARE\ASIO, 32 from SOFTWARE\WOW6432Node\ASIO (a 32-bit driver loads only into the 32-bit program).
+// path: the verified DLL (asio_trust.hpp); sig: its Authenticode state; faulted: crashed or hung earlier in this run (not loaded again).
+// Only drivers that passed the checks of asio_trust.hpp are listed; a probe or an open looks the CLSID up in the registry again and
+// never trusts a path handed in with this struct.
+struct AsioDriverInfo { std::string name, clsid; int bits = 64; std::string path; asiotrust::Sig sig = asiotrust::Sig::Unknown; bool faulted = false;
+                        bool isUnsigned() const { return sig != asiotrust::Sig::Valid; } };
 // What one driver reports through the Steinberg interface (IASIO): its real channel counts and the sample rates it accepts.
 // error is set when the driver could not be loaded or started; the counts are then 0.
 // bufMin / bufMax / bufPreferred / bufGranularity: the driver's getBufferSize (frames; granularity -1 = powers of two, 0 = only min == max).
@@ -26,8 +32,12 @@ inline long asioChooseBuffer(long want, long mn, long mx, long pref, long gran) 
 }
 #ifdef _WIN32
 std::vector<AsioDriverInfo> listAsioDrivers();
+std::vector<asiotrust::Rejected> rejectedAsioDrivers();   // registered but refused (untrusted path, no valid CLSID ...), with the reason
 AsioProbeInfo probeAsioDriver(const AsioDriverInfo& d);
+bool asioSelectionFaulted(const std::string& want);       // the driver this device name selects has faulted in this run (the runtime then falls back to WASAPI)
 #else
+inline std::vector<asiotrust::Rejected> rejectedAsioDrivers() { return {}; }
+inline bool asioSelectionFaulted(const std::string&) { return false; }
 inline std::vector<AsioDriverInfo> listAsioDrivers() { return {}; }
 inline AsioProbeInfo probeAsioDriver(const AsioDriverInfo& d) { AsioProbeInfo i; i.name = d.name; i.clsid = d.clsid; i.error = "ASIO is Windows-only"; return i; }
 #endif

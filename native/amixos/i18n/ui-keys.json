@@ -2384,5 +2384,15 @@
 "KEYBOARD VOLUME KEYS",
 "TRAY ICON",
 "UNMUTE",
-"OPEN CONSOLE"
+"OPEN CONSOLE",
+"FAULTED",
+"UNSIGNED",
+"LOAD ANYWAY",
+"This ASIO driver is not signed by its maker. It runs inside the console: load it only if you installed it yourself from a source you trust.",
+"This driver crashed or stopped answering and is not loaded again until the console restarts. The sound went to WASAPI.",
+"Warning: this driver has no valid digital signature. OPEN asks before it is loaded the first time.",
+"Hide from screenshots & screen sharing",
+"It cannot stop someone photographing the screen with a camera.",
+"AMIX_ALLOW_CAPTURE=1 is set: capture is allowed for this run.",
+"On: screenshots, recordings and live streams (TikTok LIVE Studio, OBS, Zoom) show this window black. Turn off only if you want to show it."
 ]

@@ -41,6 +41,10 @@ Flickable {
                 Choice { options: [{t: "AUTO", v: 0}, {t: "RESPONSIVE", v: -1}, {t: "150 %", v: 150}, {t: "125 %", v: 125}, {t: "110 %", v: 110}, {t: "100 %", v: 100}, {t: "90 %", v: 90}, {t: "80 %", v: 80}, {t: "75 %", v: 75}]; value: settings.uiZoom; onPicked: function (v) { settings.uiZoom = v } } }
             Opt { label: i18n.t("ECO interface (low CPU)", i18n.lang); hint: i18n.t("Meters redraw at 15 fps instead of 30 in front. Behind another app (Chrome, a game) they always drop to 4 fps, minimised to 1 fps; the sound is never slowed.", i18n.lang); Toggle { on: engine.ecoUi; onToggled: function (v) { engine.ecoUi = v } } }
             Opt { label: i18n.t("Tooltips", i18n.lang); hint: i18n.t("Short help when the pointer rests on a control", i18n.lang); Toggle { on: settings.tooltips; onToggled: function (v) { settings.tooltips = v } } }
+            Opt { objectName: "captureOpt"; label: i18n.t("Hide from screenshots & screen sharing", i18n.lang); hint: i18n.t("On: screenshots, recordings and live streams (TikTok LIVE Studio, OBS, Zoom) show this window black. Turn off only if you want to show it.", i18n.lang); more: true
+                Toggle { objectName: "captureToggle"; on: settings.hideFromCapture; onToggled: function (v) { settings.hideFromCapture = v } } }
+            Text { objectName: "captureNote"; Layout.fillWidth: true; Layout.leftMargin: 268; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
+                text: i18n.t("It cannot stop someone photographing the screen with a camera.", i18n.lang) + (settings.captureOverridden ? "  " + i18n.t("AMIX_ALLOW_CAPTURE=1 is set: capture is allowed for this run.", i18n.lang) : "") }
         }
         Panel {
             id: gfxPanel

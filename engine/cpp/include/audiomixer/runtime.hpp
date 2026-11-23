@@ -78,6 +78,9 @@ struct DeviceInfo {
   bool defaultIn = false, defaultOut = false;
   std::string kind;                  // what it is: headphones | headset | speakers | microphone | line | digital | interface | bluetooth | app | wrapper | unknown
   std::string probeError;            // ASIO: why the driver could not be read just now (busy in another program, unplugged, other bitness); empty = read
+  std::string trust;                 // ASIO: "signed" | "unsigned" | "invalid signature" | "unknown" (Authenticode of the verified driver DLL)
+  std::string clsid, dllPath;        // ASIO: the registered CLSID and the verified DLL (shown; never accepted back as input)
+  bool faulted = false;              // ASIO: the driver crashed or hung earlier in this run and is not loaded again
 };
 // WINDOWS SOUND (the system's own volume of the default output, through the documented endpoint-volume interface: no driver, no registry):
 // read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.
@@ -129,6 +132,7 @@ class Runtime {
   void stop();
   bool running() const { return running_; }
   const std::string& backendName() const { return backendName_; }
+  const std::string& openNote() const { return openNote_; }   // set when open() succeeded another way than asked (a faulted ASIO driver: WASAPI instead)
   int inputChannels() const { return nIn_; }    // the open device's inputs / outputs (0 while closed)
   int outputChannels() const { return nOut_; }
   bool exclusive() const { return exclusive_; }              // WASAPI opened exclusively (Windows' mixer and its volume are bypassed)
@@ -286,7 +290,7 @@ class Runtime {
   int jobs_[kMaxStrips] = {}; const float* jobSrc_[kMaxStrips] = {}; bool jobFx_[kMaxStrips] = {}; std::size_t jobFrames_ = 0; std::size_t quiet_[kMaxStrips] = {}; unsigned pubSkip_ = 0;
   std::shared_ptr<const InsertChain> held_[kMaxStrips];   // the chains a parallel block runs (kept until the strip's next block)
 
-  Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_, outDevice_; bool exclusive_ = false;
+  Mixer mixer_; std::unique_ptr<Backend> backend_; std::string backendName_, outDevice_, openNote_; bool exclusive_ = false;
   int nIn_ = 0, nOut_ = 0; bool running_ = false;
   AmpChannel amp_[64]; AmpParams ampUi_[64]; std::vector<float> mono_;   // the audio thread's stage, and the UI's copy of what was set
   std::vector<float> silence_, left_, right_;

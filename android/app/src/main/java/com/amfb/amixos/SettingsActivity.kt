@@ -76,6 +76,7 @@ class SettingsActivity : FitActivity() {
         choice(r, "textSize", TextFit.AUTO, listOf(TextFit.AUTO, TextFit.SMALL, TextFit.NORMAL, TextFit.LARGE), getString(R.string.set_text_size), { recreate() }) { getString(listOf(R.string.set_text_auto, R.string.set_text_small, R.string.set_text_normal, R.string.set_text_large)[it]) }
         toggle(r, "haptics", true, getString(R.string.set_haptics), null)
         toggle(r, "confirmStop", true, getString(R.string.set_confirm_stop), getString(R.string.set_confirm_stop_note))
+        toggle(r, CaptureGuard.KEY, false, getString(R.string.set_hide_capture), getString(R.string.set_hide_capture_note)) { CaptureGuard.apply(this) }
 
         // PHONE AUDIO is not chosen here any more: the phone mixer runs at what the phone's own audio HAL reports (rate, buffer, and the
         // brand profile's headroom), and the interface is picked on DEVICES & NETWORK
@@ -101,9 +102,9 @@ class SettingsActivity : FitActivity() {
         if (label.isNotEmpty()) box.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 13f; setPadding(0, 12, 0, 0) })
         box.addView(note(value))
     }
-    private fun toggle(p: SharedPreferences, key: String, def: Boolean, label: String, sub: String?) {
-        val sw = Switch(this).apply { text = label; setTextColor(Color.WHITE); textSize = 15f; isChecked = p.getBoolean(key, def); setPadding(0, 12, 0, 0)
-            setOnCheckedChangeListener { _: CompoundButton, on: Boolean -> p.edit().putBoolean(key, on).apply() } }
+    private fun toggle(p: SharedPreferences, key: String, def: Boolean, label: String, sub: String?, after: (() -> Unit)? = null) {
+        val sw = Switch(this).apply { text = label; setTextColor(Color.WHITE); textSize = 15f; isChecked = p.getBoolean(key, def); setPadding(0, 12, 0, 0); tag = key
+            setOnCheckedChangeListener { _: CompoundButton, on: Boolean -> p.edit().putBoolean(key, on).apply(); after?.invoke() } }
         box.addView(sw); if (sub != null) box.addView(note(sub))
     }
     private fun <T> choice(p: SharedPreferences, key: String, def: Int, values: List<Int>, label: String, after: (() -> Unit)? = null, show: (Int) -> T) {
