@@ -239,6 +239,10 @@ class Engine : public QObject {
   QString driverFallback() const; void setDriverFallback(const QString& f);
   Q_PROPERTY(bool openRouting READ openRouting WRITE setOpenRouting NOTIFY devicesChanged)   // the ASIO driver that was picked is opened first: ASIO4ALL although a manufacturer driver is there, the Realtek driver instead of its pin (default on)
   bool openRouting() const; void setOpenRouting(bool on);
+  // SYSTEM EFFECTS (APOs), READ ONLY: per active Windows endpoint {id, name, capture, disabled, active, vendors[], effects[{clsid, name, vendor, slot}]};
+  // empty elsewhere. openWindowsSound opens the Windows Sound control panel (mmsys.cpl, Playback or Recording) where the user switches them.
+  Q_INVOKABLE QVariantList systemEffects() const;
+  Q_INVOKABLE bool openWindowsSound(bool capture) const;
   Q_INVOKABLE QVariantList bluetoothDevices() const;        // the devices whose name says Bluetooth (headset, hands-free, A2DP, AirPods...), DirectSound first
   Q_PROPERTY(QString lastRoute READ lastRoute NOTIFY stateChanged)   // what the last start did, in plain words
   QString lastRoute() const { return lastRoute_; }

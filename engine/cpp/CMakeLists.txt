@@ -2,6 +2,7 @@
 #   cmake -S engine/cpp -B build && cmake --build build && ctest --test-dir build --output-on-failure
 cmake_minimum_required(VERSION 3.12)
 project(audiomixer_engine C CXX)
+include(${CMAKE_CURRENT_LIST_DIR}/../../scripts/security/hardening.cmake)   # compiler / linker hardening (stack protector, FORTIFY, PIE, RELRO; MinGW --dynamicbase --nxcompat)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/winres.cmake)   # amfb_win_version: publisher / product / version on every Windows binary
 set(CMAKE_CXX_STANDARD 20)   # the channel DSP (include/audiomixer/dsp.hpp) is C++20; everything else compiles as before
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,7 +24,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|x64)$" AND CMAKE_SIZEOF_
   endif()
 endif()
 
-set(RUNTIME_SRC src/runtime.cpp src/worker_pool.cpp src/backend_null.cpp src/devices.cpp src/driver_intel.cpp src/bluetooth.cpp src/sysopt.cpp src/app_sound.cpp src/app_capture.cpp src/app_volume.cpp src/latency.cpp src/device_watch.cpp src/asio_trust.cpp)
+set(RUNTIME_SRC src/runtime.cpp src/worker_pool.cpp src/backend_null.cpp src/devices.cpp src/driver_intel.cpp src/bluetooth.cpp src/sysopt.cpp src/app_sound.cpp src/app_capture.cpp src/app_volume.cpp src/latency.cpp src/device_watch.cpp src/asio_trust.cpp src/apo_info.cpp)
 set(RUNTIME_LIBS Threads::Threads)
 if(WIN32)
   list(APPEND RUNTIME_SRC src/backend_wasapi.cpp src/backend_asio.cpp src/backend_dsound.cpp)
@@ -476,6 +477,9 @@ endif()
 add_executable(bluetooth_test test/bluetooth_test.cpp)
 target_link_libraries(bluetooth_test PRIVATE audiomixer_runtime)
 add_test(NAME bluetooth COMMAND bluetooth_test)
+add_executable(apo_info_test test/apo_info_test.cpp)
+target_link_libraries(apo_info_test PRIVATE audiomixer_runtime)
+add_test(NAME apo_info COMMAND apo_info_test)
 add_test(NAME ext_test COMMAND ext_test $<TARGET_FILE:amfb_network> $<TARGET_FILE:amfb_hybrid>)
 add_executable(ducker_test test/ducker_test.cpp)
 target_link_libraries(ducker_test PRIVATE audiomixer_runtime)

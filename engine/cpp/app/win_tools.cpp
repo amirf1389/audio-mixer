@@ -41,8 +41,8 @@ std::wstring widen(const std::string& s) { if (s.empty()) return std::wstring();
 
 #ifdef AM_EMBED_ASIO
 std::wstring driverDir() {
-  wchar_t pf[MAX_PATH] = {0}; if (!GetEnvironmentVariableW(L"ProgramFiles", pf, MAX_PATH)) wcscpy(pf, L"C:\\Program Files");
-  return std::wstring(pf) + L"\\Audio Mixer ASIO";
+  wchar_t pf[MAX_PATH] = {0}; const DWORD n = GetEnvironmentVariableW(L"ProgramFiles", pf, MAX_PATH);
+  return std::wstring(n > 0 && n < MAX_PATH ? pf : L"C:\\Program Files") + L"\\Audio Mixer ASIO";   // a missing or too long value: the standard folder
 }
 #endif
 

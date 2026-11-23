@@ -45,6 +45,30 @@ Item {
                     Item { Layout.fillWidth: true }
                     Btn { objectName: "audioSettingsBtn"; label: i18n.t("AUDIO / MIDI SETTINGS", i18n.lang); on: true; onColor: Theme.amber; onClicked: page.Window.window.openAudioSettings() }
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } } }
+            // SYSTEM EFFECTS (APOs), READ ONLY: per Windows endpoint, whether the maker's enhancements (Realtek, Dolby, DTS, Waves, Nahimic ...) are
+            // active; they can colour the sound and add latency. Nothing is changed here: the button opens the Windows Sound control panel.
+            Card { Layout.columnSpan: 2; objectName: "apoCard"; id: apoCard
+                property var eps: []
+                function scan() { apoCard.eps = engine.systemEffects() }
+                Component.onCompleted: scan()
+                Connections { target: engine; function onDevicesChanged() { apoCard.scan() } }
+                RowLayout { spacing: 10; Head { text: i18n.t("SYSTEM EFFECTS (APOs)", i18n.lang) }
+                    Item { Layout.fillWidth: true }
+                    Btn { objectName: "apoRescan"; label: i18n.t("CHECK AGAIN", i18n.lang); onClicked: apoCard.scan() } }
+                Note { text: i18n.t("Windows sound enhancements from the sound card's maker (Realtek, Dolby, DTS, Waves, Nahimic) or Windows itself run on the endpoint, outside AmF X1. They can colour the sound (EQ, loudness, virtual surround) and add latency. AmF X1 only reads them; switch them off in the device's Windows Sound properties (Enhancements / Advanced tab) and use AmF effects instead.", i18n.lang) }
+                Note { visible: apoCard.eps.length === 0; objectName: "apoNone"; color: Theme.muted; text: Qt.platform.os === "windows" ? i18n.t("No active endpoint with system effects found.", i18n.lang) : i18n.t("System effects (APOs) are a Windows feature: nothing to check on this system.", i18n.lang) }
+                Repeater { model: apoCard.eps
+                    delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                        Rectangle { implicitWidth: apoSt.implicitWidth + 12; implicitHeight: 18; radius: 5; color: modelData.active ? Theme.amber : Theme.emerald
+                            Text { id: apoSt; anchors.centerIn: parent; text: modelData.active ? i18n.t("EFFECTS ON", i18n.lang) : modelData.disabled ? i18n.t("SWITCHED OFF", i18n.lang) : i18n.t("CLEAN", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } }
+                        Text { text: (modelData.capture ? i18n.t("IN", i18n.lang) : i18n.t("OUT", i18n.lang)) + "  " + modelData.name; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; elide: Text.ElideRight; Layout.preferredWidth: 300 }
+                        Text { Layout.fillWidth: true; text: modelData.vendors.length ? modelData.vendors.join(" · ") : i18n.t("none", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight }
+                        Btn { label: i18n.t("WINDOWS SOUND SETTINGS", i18n.lang); onClicked: engine.openWindowsSound(modelData.capture) } } }
+                RowLayout { spacing: 6
+                    Text { text: i18n.t("AmF ALTERNATIVES:", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                    Btn { objectName: "apoAltEq"; label: i18n.t("RTA EQ", i18n.lang); onClicked: page.Window.window.current = "rtaeq" }
+                    Btn { label: i18n.t("EFFECTS", i18n.lang); onClicked: page.Window.window.current = "fx" }
+                    Btn { label: i18n.t("MASTERING", i18n.lang); onClicked: page.Window.window.current = "master" } } }
             // LOW LATENCY: the open device's latency in plain words (LOW / OK / HIGH), the figures, what would lower it, and a ROUND TRIP test
             Card { Layout.columnSpan: 2; objectName: "latencyCard"
                 property var rep: engine.latencyReport()

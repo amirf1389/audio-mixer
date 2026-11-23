@@ -258,6 +258,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   qml.rootContext()->setContextProperty("buildStamp", QStringLiteral(AMIX_BUILD_STAMP));   // when this build was made (UTC)
   qml.rootContext()->setContextProperty("noBoot", smoke);
+  qml.rootContext()->setContextProperty("quietToasts", bench && qEnvironmentVariableIsSet("AMIX_BENCH_FIT"));   // FIT bench: the toasts (transient overlays) are not part of any page layout
   qml.rootContext()->setContextProperty("pageCacheOff", qEnvironmentVariable("AMIX_PAGE_CACHE") == "0");   // the page cache off: the before/after of the SWITCH bench
   qml.rootContext()->setContextProperty("asyncPages", !smoke || qEnvironmentVariableIsSet("AMIX_ASYNC_PAGES"));   // pages build without blocking the click (the tests: synchronous, unless asked)
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
@@ -2150,7 +2151,7 @@ int main(int argc, char* argv[]) {
                   const int got = engine.readAsioChannels("{a1}"); if (got != engine.deviceInputs() || got != 2 || !engine.asioNote().contains("2 input channel")) { std::fprintf(stderr, "amixos --shots: the device's channels were not read (%d of %d: %s)\n", got, engine.deviceInputs(), qPrintable(engine.asioNote())); std::exit(215); }
                   engine.open("null", "-", "", 48000, 256, 0, 2); if (engine.readAsioChannels("{a1}") != 0 || !engine.asioNote().contains("outputs only")) std::exit(216);   // no input asked for by name ("-"): outputs only
                   engine.open("null", "", "", 48000, 256, 2, 2); engine.resetRouting(); } }
-              mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
+              settings.setVuStyle(QStringLiteral("analog")); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); settings.setVuStyle(QStringLiteral("digital")); std::printf("amixos --shots: mixer-vu\n"); }
           }
         }
       }
@@ -2162,6 +2163,14 @@ int main(int argc, char* argv[]) {
           engine.setDeviceEnabled("alsa", "hw:1,0", false); cw->setProperty("current", "home"); waitMs(150); cw->setProperty("current", "io"); waitMs(500); cw->grabWindow().save(shots + "/connections-onoff.png");
           engine.setDeviceEnabled("alsa", "hw:1,0", true); engine.simulateDevices(keep); }
         auto* lw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); settings.setDarkTheme(false); for (const char* id : {"home", "mixer", "dsp"}) { lw->setProperty("current", QString::fromLatin1(id)); waitMs(350); lw->grabWindow().save(shots + "/" + id + "-light.png"); } settings.setDarkTheme(true); waitMs(200); std::printf("amixos --shots: home-light, mixer-light, dsp-light\n"); }
+        { auto* tw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); for (const char* th : {"chocolate", "ocean", "forest", "plum"}) { settings.setColorTheme(QString::fromLatin1(th)); tw->setProperty("current", QStringLiteral("mixer")); waitMs(350); tw->grabWindow().save(shots + "/mixer-" + th + ".png"); }   // the colour themes
+          settings.setColorTheme(QString()); waitMs(200); std::printf("amixos --shots: mixer-chocolate, mixer-ocean, mixer-forest, mixer-plum\n"); }
+        if (QObject* nc = qml.rootObjects().first()->findChild<QObject*>(QStringLiteral("noticeCenter"))) {   // NOTIFICATIONS: three toasts and the history
+          auto* tw = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+          for (const auto& kv : std::initializer_list<std::pair<const char*, const char*>>{{"new", "What's new: 3 new features"}, {"connected", "Device connected: Speakers"}, {"clip", "Clipping: a channel or the master went over 0 dBFS"}})
+            QMetaObject::invokeMethod(nc, "push", Q_ARG(QVariant, QString::fromLatin1(kv.first)), Q_ARG(QVariant, QString::fromLatin1(kv.second)));
+          waitMs(300); tw->grabWindow().save(shots + "/notices-toasts.png"); QMetaObject::invokeMethod(nc, "toggle"); waitMs(300); tw->grabWindow().save(shots + "/notices-history.png"); QMetaObject::invokeMethod(nc, "toggle"); waitMs(100);
+          std::printf("amixos --shots: notices-toasts, notices-history\n"); }
       // the language tables: 80 languages, every one covers the page names
       int full = 0; for (const QVariant& l : i18n.languages()) if (l.toMap().value("coverage").toInt() >= 44) ++full;
       std::printf("amixos --smoke: %d languages, %d cover all page names; MIXER in fa = %s\n", i18n.count(), full, qPrintable(i18n.t("MIXER", "fa")));

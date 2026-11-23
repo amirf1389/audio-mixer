@@ -23,6 +23,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool hideFromCapture READ hideFromCapture WRITE setHideFromCapture NOTIFY changed)   // HIDE FROM SCREENSHOTS & SCREEN SHARING (Windows, CaptureGuard.h): on by default (also blocks OBS / TikTok LIVE Studio), applies at once
   Q_PROPERTY(bool captureOverridden READ captureOverridden CONSTANT)   // AMIX_ALLOW_CAPTURE=1 (the repository's tooling): the setting is kept but not applied
   Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY changed)
+  Q_PROPERTY(QString colorTheme READ colorTheme WRITE setColorTheme NOTIFY changed)   // the colour theme: "" (the console's own), chocolate, ocean, forest, plum
   Q_PROPERTY(bool colorMotion READ colorMotion WRITE setColorMotion NOTIFY changed)   // the AURORA colour behind the pages moves (off: it stays still, for slow computers)   // the console's look: dark (stage) or light (daylight); Theme.qml and the Qt palette follow
   Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)   // the system is auto on: the remembered device, else AUTO DETECT, at every start (default on)
   Q_PROPERTY(QVariantMap lastDevice READ lastDevice NOTIFY changed)              // backend, in, out, rate, frames, inChannels, outChannels
@@ -36,6 +37,7 @@ class Settings : public QObject {
   Q_PROPERTY(QString zoomNote READ zoomNote CONSTANT)
   Q_PROPERTY(double liveZoom READ liveZoom WRITE setLiveZoom NOTIFY changed)   // ZOOM IN / OUT at once (Ctrl + / - / 0, Ctrl + wheel): 0.5 .. 2.0 on top of the interface zoom
   Q_PROPERTY(bool vuDefault READ vuDefault WRITE setVuDefault NOTIFY changed)
+  Q_PROPERTY(QString vuStyle READ vuStyle WRITE setVuStyle NOTIFY changed)   // the meters on every fader page: "digital" (bars) or "analog" (needle faces)
   Q_PROPERTY(bool bootAnimation READ bootAnimation WRITE setBootAnimation NOTIFY changed)   // the opening animation
   Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
@@ -63,6 +65,8 @@ class Settings : public QObject {
   bool hideFromCapture() const { return s_.value("general/hideFromCapture", true).toBool(); } void setHideFromCapture(bool v) { set("general/hideFromCapture", v); }
   bool captureOverridden() const { return qEnvironmentVariable("AMIX_ALLOW_CAPTURE") == QLatin1String("1"); }
   bool darkTheme() const { return s_.value("ui/dark", true).toBool(); } void setDarkTheme(bool v) { set("ui/dark", v); }
+  QString colorTheme() const { const QString t = s_.value("ui/colorTheme").toString(); return t == "chocolate" || t == "ocean" || t == "forest" || t == "plum" ? t : QString(); }
+  void setColorTheme(const QString& v) { set("ui/colorTheme", v == "chocolate" || v == "ocean" || v == "forest" || v == "plum" ? v : QString()); }
   bool colorMotion() const { return s_.value("ui/colorMotion", true).toBool(); } void setColorMotion(bool v) { set("ui/colorMotion", v); }
   bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }
@@ -84,6 +88,7 @@ class Settings : public QObject {
   bool bootAnimation() const { return s_.value("ui/bootAnimation", true).toBool(); } void setBootAnimation(bool v) { set("ui/bootAnimation", v); }
   bool bootSound() const { return s_.value("ui/bootSound", true).toBool(); } void setBootSound(bool v) { set("ui/bootSound", v); }
   bool vuDefault() const { return s_.value("mixer/vu", false).toBool(); } void setVuDefault(bool v) { set("mixer/vu", v); }
+  QString vuStyle() const { return vuDefault() ? QStringLiteral("analog") : QStringLiteral("digital"); } void setVuStyle(const QString& v) { setVuDefault(v == QLatin1String("analog")); }   // one setting: ANALOG = the VU faces
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }

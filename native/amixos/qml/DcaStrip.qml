@@ -29,6 +29,7 @@ Rectangle {
         Rectangle { objectName: "dcaAssignBtn" + (ds.d.index || 0); Layout.fillWidth: true; implicitHeight: 20; radius: 5; color: Theme.ov(0.06); border.color: ds.dc
             Text { anchors.centerIn: parent; text: i18n.t("ASSIGN", i18n.lang); color: ds.dc; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ds.assign(ds.d.index) } }
+        BigVu { objectName: "dcaBigVu" + (ds.d.index || 0); visible: ds.visible; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(ds.width - 12, 74); Layout.preferredHeight: sizeFor(ds.height); lDb: !ds.visible ? -120 : (() => { engine.meterTick; let m = -120; const mem = ds.d.members || []; for (let k = 0; k < mem.length; ++k) { const x = engine.meterAt(mem[k]); if (x.peakDb > m) m = x.peakDb } return m })() }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
             Fader { objectName: "dcaFader" + (ds.d.index || 0); Layout.fillHeight: true; Layout.fillWidth: true; showLevels: false; tint: ds.dc; from: -60; to: 10; value: ds.d.db || 0; onMoved: function (db) { engine.setDcaLevel(ds.d.index, db) } }
             // the ducker's gain reduction on its target group: 0 at the top, the depth at the bottom

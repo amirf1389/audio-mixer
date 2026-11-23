@@ -27,6 +27,8 @@
 #include <QFileSystemWatcher>
 static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
+#include "audiomixer/apo_info.hpp"
+#include <QProcess>
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/asio.hpp"
 #include "audiomixer/sysopt.hpp"
@@ -1037,6 +1039,23 @@ void Engine::setOpenRouting(bool on) { am::drv::setOpenRouting(on); settings_.se
 QString Engine::driverFallback() const { return QString::fromStdString(am::drv::fallback()); }
 void Engine::setDriverFallback(const QString& f) { am::drv::setFallback(f.toStdString()); emit devicesChanged(); }
 static bool looksBluetooth(const QString& n) { static const QRegularExpression re("bluetooth|hands-free|hands free|\\bhfp\\b|a2dp|airpods|\\bbt\\b|wireless|headset|earbuds|buds|jbl|bose|sony wh|wf-|galaxy buds|soundcore|boat|beats", QRegularExpression::CaseInsensitiveOption); return re.match(n).hasMatch(); }
+QVariantList Engine::systemEffects() const {
+  QVariantList out;
+  for (const auto& e : am::apo::scan()) {
+    QVariantMap m; m["id"] = QString::fromStdString(e.id); m["name"] = QString::fromStdString(e.name); m["capture"] = e.capture; m["disabled"] = e.sysFxDisabled; m["active"] = e.effectsActive();
+    QStringList v; for (const auto& x : e.vendors()) v << QString::fromStdString(x); m["vendors"] = v;
+    QVariantList fx; for (const auto& f : e.effects) { QVariantMap x; x["clsid"] = QString::fromStdString(f.clsid); x["name"] = QString::fromStdString(f.name); x["vendor"] = QString::fromStdString(f.vendor); x["slot"] = QString::fromStdString(f.slot); fx << x; }
+    m["effects"] = fx; out << m;
+  }
+  return out;
+}
+bool Engine::openWindowsSound(bool capture) const {
+#ifdef Q_OS_WIN
+  return QProcess::startDetached(QStringLiteral("control.exe"), {capture ? QStringLiteral("mmsys.cpl,,1") : QStringLiteral("mmsys.cpl,,0")});   // no shell: the program and one argument
+#else
+  Q_UNUSED(capture); return false;
+#endif
+}
 QVariantList Engine::bluetoothDevices() const {
   QVariantList l; for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["backend"] == "null" || d["backend"] == "asio") continue; if (!looksBluetooth(d["name"].toString())) continue; l << d; }
   std::stable_sort(l.begin(), l.end(), [](const QVariant& a, const QVariant& b) { return (a.toMap()["backend"] == "dsound") > (b.toMap()["backend"] == "dsound"); });

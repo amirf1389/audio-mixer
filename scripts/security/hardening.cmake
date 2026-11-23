@@ -1,15 +1,16 @@
 # Compiler / linker hardening for the C and C++ targets of this repository.
-# Not included by any project yet: add, after project(), in engine/cpp/CMakeLists.txt and native/amixos/CMakeLists.txt:
-#     include(${CMAKE_CURRENT_LIST_DIR}/../../scripts/security/hardening.cmake)   # adjust the relative path per project
-# and re-run the tests and benchmarks (none of these flags changes behaviour of correct code; _FORTIFY_SOURCE turns some overflows into aborts).
+# Included, after project(), by engine/cpp/CMakeLists.txt and native/amixos/CMakeLists.txt (once per build: include_guard below; the
+# console's include covers the engine it adds as a subdirectory). None of these flags changes the behaviour of correct code;
+# _FORTIFY_SOURCE turns some overflows into aborts. Android: the NDK sets stack protector, FORTIFY, PIE and RELRO itself.
 # scripts/security/audit.js recognises the include and then reports the flags as present.
 #
 #   GCC / Clang (Linux, macOS, MinGW): -fstack-protector-strong, -D_FORTIFY_SOURCE=2 (optimised builds only), PIE, full RELRO, noexecstack
 #   MSVC: /GS (default), /guard:cf, /DYNAMICBASE, /NXCOMPAT, /HIGHENTROPYVA, /CETCOMPAT where the linker knows it
 #   MinGW (GNU ld / lld): --dynamicbase, --nxcompat, --high-entropy-va
 # AM_HARDENING=OFF switches all of it off (for a quick comparison build).
+include_guard(GLOBAL)
 option(AM_HARDENING "compiler and linker hardening flags" ON)
-if(NOT AM_HARDENING)
+if(NOT AM_HARDENING OR ANDROID)
   return()
 endif()
 

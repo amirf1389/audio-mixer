@@ -19,6 +19,7 @@
 #include <mmsystem.h>
 #include <avrt.h>
 #include <new>
+#include <string>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,7 +48,7 @@ class AudioMixerAsio final : public IASIO {
     InterlockedIncrement(&g_objects);
     InitializeCriticalSection(&ring_lock_); InitializeCriticalSection(&link_lock_);
     ring_ = new short[kRingFrames * kChannels]();
-    strcpy(error_, "");
+    error_[0] = '\0';
   }
 
   // ───────── IUnknown ─────────
@@ -66,7 +67,7 @@ class AudioMixerAsio final : public IASIO {
 
   // ───────── IASIO ─────────
   ASIOBool ASIO_CALL init(void *sysHandle) override { (void)sysHandle; inited_ = true; return ASIOTrue; }
-  void ASIO_CALL getDriverName(char *name) override { strcpy(name, kDriverName); }
+  void ASIO_CALL getDriverName(char *name) override { snprintf(name, 32, "%s", kDriverName); }   // ASIO: the name buffer is 32 characters
   long ASIO_CALL getDriverVersion() override { return 118; }
   void ASIO_CALL getErrorMessage(char *string) override { strncpy(string, error_, 123); string[123] = 0; }
 
@@ -78,7 +79,7 @@ class AudioMixerAsio final : public IASIO {
     stop_evt_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     connector_ = stop_evt_ ? CreateThread(nullptr, 0, &AudioMixerAsio::connectorMain, this, 0, nullptr) : nullptr;   // without it the driver still runs, silent
     thread_ = CreateThread(nullptr, 0, &AudioMixerAsio::threadMain, this, 0, &thread_id_);
-    if (!thread_) { running_ = false; stopConnector(); strcpy(error_, "cannot start the driver thread"); return ASE_HWMalfunction; }
+    if (!thread_) { running_ = false; stopConnector(); snprintf(error_, sizeof error_, "%s", "cannot start the driver thread"); return ASE_HWMalfunction; }
     SetThreadPriority(thread_, THREAD_PRIORITY_TIME_CRITICAL);
     return ASE_OK;
   }
@@ -125,7 +126,7 @@ class AudioMixerAsio final : public IASIO {
     if (!clocks || !numSources || *numSources < 1) return ASE_InvalidParameter;
     memset(clocks, 0, sizeof *clocks);
     clocks[0].index = 0; clocks[0].associatedChannel = -1; clocks[0].associatedGroup = -1; clocks[0].isCurrentSource = ASIOTrue;
-    strcpy(clocks[0].name, "Internal");
+    snprintf(clocks[0].name, sizeof clocks[0].name, "%s", "Internal");
     *numSources = 1;
     return ASE_OK;
   }
@@ -145,9 +146,9 @@ class AudioMixerAsio final : public IASIO {
     // an ASIO output is what the host plays into the mixer ("To mixer")
     if (info->isInput) {
       EnterCriticalSection(&link_lock_); bool up = link_ && am_link_alive(link_); LeaveCriticalSection(&link_lock_);
-      sprintf(info->name, "Mixer %s (%s)", info->channel == 0 ? "L" : "R", up ? "connected" : "waiting");
+      snprintf(info->name, sizeof info->name, "Mixer %s (%s)", info->channel == 0 ? "L" : "R", up ? "connected" : "waiting");
     } else {
-      sprintf(info->name, "To mixer %s", info->channel == 0 ? "L" : "R");
+      snprintf(info->name, sizeof info->name, "To mixer %s", info->channel == 0 ? "L" : "R");
     }
     return ASE_OK;
   }
@@ -184,7 +185,7 @@ class AudioMixerAsio final : public IASIO {
   ASIOError ASIO_CALL controlPanel() override {
     char text[320];
     EnterCriticalSection(&link_lock_); bool up = link_ && am_link_alive(link_); LeaveCriticalSection(&link_lock_);
-    sprintf(text, "Audio Mixer ASIO driver\n\nMixer connection: %s\nSample rate: %.0f Hz   Buffer: %ld frames\n\n%s",
+    snprintf(text, sizeof text, "Audio Mixer ASIO driver\n\nMixer connection: %s\nSample rate: %.0f Hz   Buffer: %ld frames\n\n%s",
             up ? "connected" : (running_ ? "NOT connected (start Audio Mixer; the driver keeps trying)" : "not started yet"), rate_, buffer_size_ ? buffer_size_ : kDefaultBuffer,
             "In the mixer open LIVE SOURCES, find the device \"Audio Mixer\" and switch READ (host playback) and WRITE (host recording) on.");
     MessageBoxA(nullptr, text, "Audio Mixer ASIO", MB_OK | MB_ICONINFORMATION);
@@ -382,19 +383,17 @@ static bool setValue(HKEY root, const wchar_t *path, const wchar_t *name, const 
 
 // regsvr32 AudioMixerASIO64.dll (as administrator): the class in HKLM\SOFTWARE\Classes\CLSID, the driver in HKLM\SOFTWARE\ASIO\Audio Mixer where ASIO hosts look
 extern "C" HRESULT __stdcall DllRegisterServer() {
-  wchar_t dll[MAX_PATH], key[160];
+  wchar_t dll[MAX_PATH];
   if (!GetModuleFileNameW(g_module, dll, MAX_PATH)) return SELFREG_E_CLASS;
-  swprintf(key, 160, L"SOFTWARE\\Classes\\CLSID\\%ls", kClsidText);
-  bool ok = setValue(HKEY_LOCAL_MACHINE, key, nullptr, L"Audio Mixer ASIO");
-  swprintf(key, 160, L"SOFTWARE\\Classes\\CLSID\\%ls\\InprocServer32", kClsidText);
-  ok = ok && setValue(HKEY_LOCAL_MACHINE, key, nullptr, dll) && setValue(HKEY_LOCAL_MACHINE, key, L"ThreadingModel", L"Both");
+  const std::wstring cls = std::wstring(L"SOFTWARE\\Classes\\CLSID\\") + kClsidText, srv = cls + L"\\InprocServer32";   // built as strings: no fixed buffer
+  bool ok = setValue(HKEY_LOCAL_MACHINE, cls.c_str(), nullptr, L"Audio Mixer ASIO");
+  ok = ok && setValue(HKEY_LOCAL_MACHINE, srv.c_str(), nullptr, dll) && setValue(HKEY_LOCAL_MACHINE, srv.c_str(), L"ThreadingModel", L"Both");
   ok = ok && setValue(HKEY_LOCAL_MACHINE, L"SOFTWARE\\ASIO\\Audio Mixer", L"CLSID", kClsidText) && setValue(HKEY_LOCAL_MACHINE, L"SOFTWARE\\ASIO\\Audio Mixer", L"Description", L"Audio Mixer");
   return ok ? S_OK : SELFREG_E_CLASS;
 }
 extern "C" HRESULT __stdcall DllUnregisterServer() {
-  wchar_t key[160];
   RegDeleteTreeW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\ASIO\\Audio Mixer");
-  swprintf(key, 160, L"SOFTWARE\\Classes\\CLSID\\%ls", kClsidText);
-  RegDeleteTreeW(HKEY_LOCAL_MACHINE, key);
+  const std::wstring cls = std::wstring(L"SOFTWARE\\Classes\\CLSID\\") + kClsidText;
+  RegDeleteTreeW(HKEY_LOCAL_MACHINE, cls.c_str());
   return S_OK;
 }

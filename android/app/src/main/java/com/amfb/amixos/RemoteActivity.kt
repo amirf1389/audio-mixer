@@ -66,6 +66,7 @@ class RemoteActivity : FitActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ui.postDelayed(noticePoll, 5000)
         val prefs = getSharedPreferences("remote", Context.MODE_PRIVATE)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#111418")); setPadding(24, 24, 24, 24) }
         root.addView(Nav.modeBar(this, false))   // DUAL MODE: THIS PHONE | CONSOLE
@@ -287,6 +288,14 @@ class RemoteActivity : FitActivity() {
     // ---- AUTO-DETECT: find the console on the Wi-Fi by itself (the console's /api/status carries a stable consoleId)
     private lateinit var hostBox: EditText; private lateinit var portBox: EditText; private lateinit var tokenBox: EditText; private lateinit var timelineView: TextView
     private val timeline = LinkTimeline(); private var autoMode = false; private var searchRound = 0; private var searching = false; private var pinAsked = false; private var consoleId = ""
+    // NOTIFICATIONS: the console's events (clipping, device lost / connected, CPU overload, audio loop stopped, what's new) as a toast and in the timeline
+    private val notices = Notices()
+    private fun notice(e: Notices.Event?) { if (e == null || closing) return; android.widget.Toast.makeText(this, e.text, android.widget.Toast.LENGTH_SHORT).show(); note(e.text) }
+    private val noticePoll = object : Runnable { override fun run() { if (closing) return
+        val c = client; if (c != null && resumed()) io.execute { runCatching { c.status() }.getOrNull()?.let { st -> ui.post { if (closing) return@post
+            val p = getSharedPreferences("notices", MODE_PRIVATE); notice(notices.versionSeen(System.currentTimeMillis(), st.version, p.getString("version", null))); p.edit().putString("version", st.version).apply()
+            notices.status(System.currentTimeMillis(), st.running, st.outDevice, st.xruns, st.loadPct).forEach { notice(it) } } } }
+        ui.postDelayed(this, 5000) } }
     private fun note(text: String) { timeline.add(System.currentTimeMillis(), text)
         timelineView.text = getString(R.string.link_timeline) + "\n" + timeline.render { t -> android.text.format.DateFormat.format("HH:mm:ss", t).toString() }; timelineView.visibility = View.VISIBLE }
     private fun resumed() = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
@@ -400,6 +409,7 @@ class RemoteActivity : FitActivity() {
         val floor = Prefs.meterFloor(this).toDouble(); fun bar(v: Double) = ((DaemonClient.lin2db(v) + floor) / floor * 1000).toInt().coerceIn(0, 1000)
         for (i in faders.indices) if (i < m.strips.size) { faders[i].level = bar(m.strips[i].pk); faders[i].clip = m.strips[i].clip }
         masterFader.level = bar(Math.max(m.masterL, m.masterR)); masterFader.clip = m.masterClip
+        notice(notices.clip(System.currentTimeMillis(), m.masterClip || m.strips.any { it.clip }))
         masterMeterView?.let { v -> if (v.isAttachedToWindow) { val d = { x: Double -> if (x <= 1e-6) "-∞" else String.format("%.1f", 20 * Math.log10(x)) }; v.text = getString(R.string.master_meters, d(m.masterL), d(m.masterR)) } else masterMeterView = null }
     }
 
@@ -795,5 +805,5 @@ class RemoteActivity : FitActivity() {
             .filterIsInstance<java.net.Inet4Address>().map { it.hostAddress }.filterNotNull().firstOrNull { it.startsWith("192.168.") || it.startsWith("10.") || Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(it) }
     }.getOrNull()
 
-    override fun onDestroy() { closing = true; syncing = false; ui.removeCallbacks(presence); stream?.stop(); io.shutdownNow(); scanIo.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { closing = true; syncing = false; ui.removeCallbacks(presence); ui.removeCallbacks(noticePoll); stream?.stop(); io.shutdownNow(); scanIo.shutdownNow(); super.onDestroy() }
 }

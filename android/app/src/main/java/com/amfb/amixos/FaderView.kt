@@ -17,8 +17,11 @@ import com.amfb.amixos.remote.DaemonClient
  *  Drag moves relative to where the finger went down (no jump); a double tap puts the fader at 0 dB. */
 class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : View(ctx) {
     var progress = 750; set(v) { field = v.coerceIn(0, 1000); invalidate() }
-    var level = 0; set(v) { field = v.coerceIn(0, 1000); if (v >= hold) { hold = v; holdAt = System.currentTimeMillis() }; invalidate() }
-    var clip = false; set(v) { field = v; invalidate() }
+    var level = 0; set(v) { field = v.coerceIn(0, 1000); if (v >= hold) { hold = v; holdAt = System.currentTimeMillis() }; if (field >= CLIP_POS) clipLatched = true; invalidate() }
+    /** the engine's clip flag; a clip (or a level above 0 dBFS) LATCHES the red lamp until the meter is tapped */
+    var clip = false; set(v) { field = v; if (v) clipLatched = true; invalidate() }
+    var clipLatched = false; private set
+    fun clearClip() { clipLatched = false; hold = 0; invalidate() }
     var onMove: ((Int) -> Unit)? = null
     var onTouchState: ((Boolean) -> Unit)? = null
     private var hold = 0; private var holdAt = 0L
@@ -33,7 +36,9 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : Vi
     private val capRect = RectF(); private val topRect = RectF(); private val trackRect = RectF(); private val meterRect = RectF()
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         text.textSize = (w * 0.125f).coerceIn(18f, 26f)   // the scale's numbers fit beside the track on a narrow strip ("+10" was cut on the left)   // the meter's colours depend on the height only: made once per size, not on every frame
-        meter.shader = LinearGradient(0f, h - pad, 0f, pad, intArrayOf(0xFF16A34A.toInt(), 0xFF16A34A.toInt(), 0xFFEAB308.toInt(), 0xFFEF4444.toInt()), floatArrayOf(0f, 0.7f, 0.86f, 1f), Shader.TileMode.CLAMP)
+        // green below -3 dBFS, amber from -3 dBFS, red above 0 dBFS (the danger zones of the console's meters)
+        val warn = (WARN_POS / 1000f); val red = (CLIP_POS / 1000f)
+        meter.shader = LinearGradient(0f, h - pad, 0f, pad, intArrayOf(0xFF16A34A.toInt(), 0xFF16A34A.toInt(), 0xFFEAB308.toInt(), 0xFFEAB308.toInt(), 0xFFEF4444.toInt(), 0xFFEF4444.toInt()), floatArrayOf(0f, warn, warn + 0.001f, red - 0.012f, red - 0.011f, 1f), Shader.TileMode.CLAMP)
     }
     private fun yOf(p: Int) = pad + (1 - p / 1000f) * (height - 2 * pad)
     override fun onMeasure(w: Int, h: Int) { setMeasuredDimension(resolveSize(150, w), resolveSize(620, h)) }
@@ -50,18 +55,24 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : Vi
         while (yy - seg + 2 >= pad) { if (yy <= top) break; c.drawRect(mx, maxOf(top, yy - seg + 2), mx + mw, yy, meter); yy -= seg }
         if (System.currentTimeMillis() - holdAt > 1500) hold = maxOf(level, hold - 8)
         val hy = pad + (1 - hold / 1000f) * (height - 2 * pad); if (hold > 0) c.drawRect(mx, hy - 2, mx + mw, hy + 2, holdP)
-        clipP.color = if (clip) 0xFFEF4444.toInt() else 0xFF3A1D1D.toInt(); c.drawRoundRect(mx - 3, pad - 22, mx + mw + 3, pad - 8, 4f, 4f, clipP)
+        clipP.color = if (clip || clipLatched) 0xFFEF4444.toInt() else 0xFF3A1D1D.toInt(); c.drawRoundRect(mx - 3, pad - 22, mx + mw + 3, pad - 8, 4f, 4f, clipP)
         // the cap
         val y = yOf(progress); val r = capRect.apply { set(tx - w * 0.34f, y - capH / 2, tx + w * 0.34f, y + capH / 2) }
         cap.color = 0xFF42474E.toInt(); c.drawRoundRect(r, 14f, 14f, cap); cap.color = 0xFF3B4658.toInt(); topRect.set(r.left, r.top, r.right, r.top + capH / 3); c.drawRoundRect(topRect, 14f, 14f, cap)
         cap.color = 0xFF272A2F.toInt(); for (k in listOf(-0.28f, 0.28f)) c.drawRect(r.left + 10, y + capH * k - 1.5f, r.right - 10, y + capH * k + 1.5f, cap)   // grip lines
         line.color = accent; c.drawLine(r.left + 6, y, r.right - 6, y, line)
     }
+    companion object {
+        /** -3 dBFS and 0 dBFS on the meter's 0..1000 scale (linear dB from the -60 dB floor up to 0 dBFS at the top) */
+        const val WARN_POS = 950
+        const val CLIP_POS = 1000
+    }
     private var downY = 0f; private var downP = 0; private var lastTap = 0L
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { parent?.requestDisallowInterceptTouchEvent(true); downY = e.y; downP = progress; onTouchState?.invoke(true)
+            MotionEvent.ACTION_DOWN -> { if (e.x >= width * 0.68f && clipLatched) { clearClip(); return true }   // a tap on the meter clears the clip lamp
+                parent?.requestDisallowInterceptTouchEvent(true); downY = e.y; downP = progress; onTouchState?.invoke(true)
                 val now = System.currentTimeMillis(); if (now - lastTap < 300) { progress = 750; onMove?.invoke(progress) }; lastTap = now }
             MotionEvent.ACTION_MOVE -> { val p = downP + ((downY - e.y) / (height - 2 * pad) * 1000).toInt(); if (p.coerceIn(0, 1000) != progress) { progress = p; onMove?.invoke(progress) } }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> onTouchState?.invoke(false)

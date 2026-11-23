@@ -10,7 +10,12 @@
 #  include <bluetoothapis.h>
 #else
 #  include <array>
-#  include <memory>
+#  include <cerrno>
+#  include <fcntl.h>
+#  include <string>
+#  include <sys/wait.h>
+#  include <unistd.h>
+#  include <vector>
 #endif
 
 namespace am {
@@ -98,11 +103,23 @@ std::vector<BluetoothDevice> bluetoothDevices(int inquirySeconds, std::string* n
 #else
 
 namespace {
-std::string runCmd(const std::string& cmd) {
-  std::array<char, 512> buf; std::string out;
-  std::unique_ptr<FILE, int (*)(FILE*)> p(popen(cmd.c_str(), "r"), pclose);
-  if (!p) return out;
-  while (std::fgets(buf.data(), int(buf.size()), p.get())) out += buf.data();
+// runs a program with its arguments directly (fork + execvp, no shell: nothing in an argument is ever interpreted) and returns what it
+// printed on stdout; stderr goes to /dev/null. Empty when the program is missing or fails to start.
+std::string runArgv(const std::vector<std::string>& argv) {
+  std::string out; if (argv.empty()) return out;
+  int fd[2]; if (::pipe(fd) != 0) return out;
+  const pid_t pid = ::fork();
+  if (pid < 0) { ::close(fd[0]); ::close(fd[1]); return out; }
+  if (pid == 0) {
+    ::dup2(fd[1], STDOUT_FILENO); ::close(fd[0]); ::close(fd[1]);
+    const int dn = ::open("/dev/null", O_WRONLY); if (dn >= 0) { ::dup2(dn, STDERR_FILENO); ::close(dn); }
+    std::vector<char*> a; a.reserve(argv.size() + 1); for (const auto& x : argv) a.push_back(const_cast<char*>(x.c_str())); a.push_back(nullptr);
+    ::execvp(a[0], a.data()); ::_exit(127);
+  }
+  ::close(fd[1]);
+  std::array<char, 512> buf; ssize_t n;
+  while ((n = ::read(fd[0], buf.data(), buf.size())) > 0 || (n < 0 && errno == EINTR)) if (n > 0) out.append(buf.data(), static_cast<std::size_t>(n));
+  ::close(fd[0]); int st = 0; while (::waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
   return out;
 }
 bool macOk(const std::string& a) {
@@ -113,7 +130,7 @@ bool macOk(const std::string& a) {
 }  // namespace
 
 BluetoothRadio bluetoothRadio() {
-  BluetoothRadio r; const std::string s = runCmd("bluetoothctl show 2>/dev/null");
+  BluetoothRadio r; const std::string s = runArgv({"bluetoothctl", "show"});
   const auto c = s.find("Controller "); if (c == std::string::npos) return r;
   r.present = true; r.address = s.substr(c + 11, 17);
   const auto n = s.find("Name: "); if (n != std::string::npos) r.name = s.substr(n + 6, s.find('\n', n) - n - 6);
@@ -123,15 +140,15 @@ BluetoothRadio bluetoothRadio() {
 std::vector<BluetoothDevice> bluetoothDevices(int inquirySeconds, std::string* note) {
   std::vector<BluetoothDevice> out;
   if (!bluetoothRadio().present) { if (note) *note = "this computer has no Bluetooth adapter, or BlueZ is not running"; return out; }
-  if (inquirySeconds > 0) runCmd("timeout " + std::to_string(std::clamp(inquirySeconds, 1, 20)) + " bluetoothctl --timeout " + std::to_string(std::clamp(inquirySeconds, 1, 20)) + " scan on >/dev/null 2>&1");
-  const std::string list = runCmd("bluetoothctl devices 2>/dev/null");
+  if (inquirySeconds > 0) { const std::string t = std::to_string(std::clamp(inquirySeconds, 1, 20)); runArgv({"timeout", t, "bluetoothctl", "--timeout", t, "scan", "on"}); }
+  const std::string list = runArgv({"bluetoothctl", "devices"});
   std::size_t pos = 0;
   while (pos < list.size()) {
     const auto nl = list.find('\n', pos); const std::string line = list.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos); pos = nl == std::string::npos ? list.size() : nl + 1;
     if (line.rfind("Device ", 0) != 0 || line.size() < 24) continue;
     BluetoothDevice b; b.address = line.substr(7, 17); if (!macOk(b.address)) continue;
     b.name = line.substr(25);
-    const std::string info = runCmd("bluetoothctl info " + b.address + " 2>/dev/null");   // the address was checked: letters, digits and colons only
+    const std::string info = runArgv({"bluetoothctl", "info", b.address});   // the address was checked (letters, digits and colons only) and goes as one argument, no shell
     auto yes = [&](const char* k) { const auto i = info.find(std::string(k) + ": yes"); return i != std::string::npos; };
     b.connected = yes("Connected"); b.paired = yes("Paired"); b.remembered = yes("Trusted") || b.paired;
     const auto cl = info.find("Class: 0x"); if (cl != std::string::npos) b.classOfDevice = static_cast<std::uint32_t>(std::strtoul(info.c_str() + cl + 9, nullptr, 16));

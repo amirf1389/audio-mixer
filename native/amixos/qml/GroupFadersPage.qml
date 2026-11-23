@@ -17,10 +17,11 @@ Flickable {
                 Repeater {
                     model: engine.dcaState
                     delegate: Rectangle {
-                        Layout.fillWidth: true; implicitHeight: 300; radius: 8; color: Qt.rgba(0, 0, 0, 0.25); border.color: modelData.members.length ? Qt.rgba(0.984, 0.749, 0.141, 0.4) : Theme.lineSoft
+                        Layout.fillWidth: true; implicitHeight: 400; radius: 8; color: Qt.rgba(0, 0, 0, 0.25); border.color: modelData.members.length ? Qt.rgba(0.984, 0.749, 0.141, 0.4) : Theme.lineSoft
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 6; spacing: 4
                             TextInput { Layout.fillWidth: true; text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setDcaName(modelData.index, text) }
+                            BigVu { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(parent.width - 4, 74); Layout.preferredHeight: 90; lDb: { engine.meterTick; let m = -120; const mem = modelData.members || []; for (let k = 0; k < mem.length; ++k) { const x = engine.meterAt(mem[k]); if (x.peakDb > m) m = x.peakDb } return m } }
                             Fader { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: modelData.db; onMoved: function (db) { engine.setDcaLevel(modelData.index, db) } }
                             Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(modelData.db); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 }
                             Rectangle { id: gb39; Layout.fillWidth: true; implicitHeight: 18; radius: 7; color: modelData.mute ? Theme.danger : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb39.color) } GradientStop { position: 1; color: Theme.btnBottom(gb39.color) } } Text { anchors.centerIn: parent; text: "M"; color: modelData.mute ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setDcaMute(modelData.index, !modelData.mute) } }

@@ -48,6 +48,7 @@ Item {
                                 Rectangle { Layout.alignment: Qt.AlignHCenter; implicitWidth: 34; implicitHeight: 16; radius: 3; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08)
                                     Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
                                     MouseArea { anchors.fill: parent; onClicked: engine.setSend(strip, page.bus, sd ? sd.db : -60, !(sd && sd.pre)) } }
+                                BigVu { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(parent.width, 74); Layout.preferredHeight: sizeFor(parent.height); lDb: { if (!sd || sd.db <= -60) return -120; const x = (engine.meterTick, engine.meterAt(src)); return x.peakDb + sd.db } }
                                 Fader { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; value: sd ? sd.db : -60; onMoved: function (db) { engine.setSend(strip, page.bus, db, sd ? sd.pre : false) } }
                                 Text { Layout.alignment: Qt.AlignHCenter; text: sd && sd.db > -60 ? Theme.dbText(sd.db) : i18n.t("OFF", i18n.lang); color: sd && sd.db > -60 ? Theme.amber : Theme.dim; font.family: Theme.mono; font.pixelSize: 8 }
                             }
@@ -61,7 +62,9 @@ Item {
                     anchors.fill: parent; anchors.margins: 8; spacing: 6
                     TextInput { Layout.fillWidth: true; text: page.b ? page.b.name : ""; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setBusName(page.bus, text) }
                     Text { Layout.alignment: Qt.AlignHCenter; text: page.b ? page.b.outputs : ""; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    BigVu { objectName: "busBigVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: sizeFor(parent.height); lDb: page.bm ? page.bm.peakDb : -120; rmsDb: page.bm ? page.bm.rmsDb : -120; clip: page.bm ? page.bm.clip : false }
                     RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
+                        MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 5; peakDb: page.bm ? page.bm.peakDb : -120; rmsDb: page.bm ? page.bm.rmsDb : -120 }
                         Fader { Layout.fillHeight: true; value: page.b ? page.b.db : 0; onMoved: function (db) { engine.setBusLevel(page.bus, db) } }
                         MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; peakDb: page.bm ? page.bm.peakDb : -120; rmsDb: page.bm ? page.bm.rmsDb : -120; holdDb: page.bm ? page.bm.holdDb : -120; clip: page.bm ? page.bm.clip : false } }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(page.b ? page.b.db : 0) + i18n.t(" dB", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 }

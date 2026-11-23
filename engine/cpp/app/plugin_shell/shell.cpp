@@ -162,13 +162,13 @@ class Factory : public IPluginFactory2 {
   tresult PLUGIN_API queryInterface(const TUID iid, void** obj) override { if (same(iid, FUnknown_iid) || same(iid, IPluginFactory_iid) || same(iid, IPluginFactory2_iid)) { addRef(); *obj = static_cast<IPluginFactory2*>(this); return kResultOk; } *obj = nullptr; return kNoInterface; }
   uint32 PLUGIN_API addRef() override { return ++refs_; }
   uint32 PLUGIN_API release() override { const uint32 r = --refs_; if (!r) delete this; return r; }
-  tresult PLUGIN_API getFactoryInfo(PFactoryInfo* i) override { *i = PFactoryInfo(); std::snprintf(i->vendor, sizeof i->vendor, "%s", design().vendor.c_str()); std::strcpy(i->url, "https://amfb.audio"); std::strcpy(i->email, "plugins@amfb.audio"); i->flags = PFactoryInfo::kUnicode; return kResultOk; }
+  tresult PLUGIN_API getFactoryInfo(PFactoryInfo* i) override { *i = PFactoryInfo(); std::snprintf(i->vendor, sizeof i->vendor, "%s", design().vendor.c_str()); std::snprintf(i->url, sizeof i->url, "%s", "https://amfb.audio"); std::snprintf(i->email, sizeof i->email, "%s", "plugins@amfb.audio"); i->flags = PFactoryInfo::kUnicode; return kResultOk; }
   int32 PLUGIN_API countClasses() override { return 1; }
-  tresult PLUGIN_API getClassInfo(int32 idx, PClassInfo* i) override { if (idx != 0) return kResultFalse; *i = PClassInfo(); uidOf(design(), i->cid); i->cardinality = PClassInfo::kManyInstances; std::strcpy(i->category, kVstAudioEffectClass); std::snprintf(i->name, sizeof i->name, "%s", design().name.c_str()); return kResultOk; }
+  tresult PLUGIN_API getClassInfo(int32 idx, PClassInfo* i) override { if (idx != 0) return kResultFalse; *i = PClassInfo(); uidOf(design(), i->cid); i->cardinality = PClassInfo::kManyInstances; std::snprintf(i->category, sizeof i->category, "%s", kVstAudioEffectClass); std::snprintf(i->name, sizeof i->name, "%s", design().name.c_str()); return kResultOk; }
   tresult PLUGIN_API getClassInfo2(int32 idx, PClassInfo2* i) override {
-    if (idx != 0) return kResultFalse; const auto& d = design(); *i = PClassInfo2(); uidOf(d, i->cid); i->cardinality = PClassInfo::kManyInstances; std::strcpy(i->category, kVstAudioEffectClass);
+    if (idx != 0) return kResultFalse; const auto& d = design(); *i = PClassInfo2(); uidOf(d, i->cid); i->cardinality = PClassInfo::kManyInstances; std::snprintf(i->category, sizeof i->category, "%s", kVstAudioEffectClass);
     std::snprintf(i->name, sizeof i->name, "%s", d.name.c_str()); i->classFlags = 0; std::snprintf(i->subCategories, sizeof i->subCategories, "%s", d.category.c_str());
-    std::snprintf(i->vendor, sizeof i->vendor, "%s", d.vendor.c_str()); std::snprintf(i->version, sizeof i->version, "%s", d.version.c_str()); std::strcpy(i->sdkVersion, kVstVersionString); return kResultOk; }
+    std::snprintf(i->vendor, sizeof i->vendor, "%s", d.vendor.c_str()); std::snprintf(i->version, sizeof i->version, "%s", d.version.c_str()); std::snprintf(i->sdkVersion, sizeof i->sdkVersion, "%s", kVstVersionString); return kResultOk; }
   tresult PLUGIN_API createInstance(FIDString cid, FIDString iid, void** obj) override { TUID mine; uidOf(design(), mine); if (!same(cid, mine)) { *obj = nullptr; return kNoInterface; } Shell* s = new Shell(); const tresult r = s->queryInterface(iid, obj); s->release(); return r; }
  private:
   std::atomic<uint32> refs_{1};

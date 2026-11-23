@@ -50,6 +50,11 @@ body.nometers .mt{display:none}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}.dot.ok{background:var(--green)}.dot.bad{background:var(--red)}
 .note{color:var(--dim);font-size:11px;margin:8px 0 0}.note.clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;min-height:20px}.note.clip.open{white-space:normal}.note.clip::before{content:"\24D8  ";color:var(--accent)}
 .err{color:var(--red)}
+/* COLOUR THEMES (SETTINGS → COLOUR THEME): the console's CHOCOLATE (base #66370A), OCEAN, FOREST and PLUM; dark looks, text AA on every surface */
+body.th-chocolate{--bg:#1e1003;--card:#2e1905;--line:#66370A;--text:#fdf3e7;--dim:#d0ad85}body.th-chocolate header{background:#2a1604ee}
+body.th-ocean{--bg:#06141f;--card:#0b2233;--line:#0b3d5c;--text:#eef7fc;--dim:#86afc6}body.th-ocean header{background:#081a28ee}
+body.th-forest{--bg:#0a140d;--card:#13241a;--line:#1f4d2b;--text:#f0f8f1;--dim:#9cc2a3}body.th-forest header{background:#0f1d14ee}
+body.th-plum{--bg:#160b17;--card:#241326;--line:#4a1f4d;--text:#fbf0fc;--dim:#b896bc}body.th-plum header{background:#1c0f1eee}
 /* LIGHT THEME (SETTINGS → THEME) */
 body.light{--bg:#f3f4f6;--card:#fff;--line:#d6dbe2;--text:#111827;--dim:#5b6573}body.light header{background:#ffffffee}body.light input,body.light select,body.light .lm div,body.light .mt{background:#f8fafc}
 body.light button{background:#eef1f5;color:var(--text)}body.light nav button.cur{background:#fff}
@@ -71,9 +76,14 @@ kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:
 main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radius:8px}h2{margin:0 0 6px;font-size:11px}.row{padding:6px 0;gap:8px}
 .card:not(.more) .row small{display:none}.card:has(.row small)>h2{cursor:pointer}.card:has(.row small)>h2::after{content:" \24D8";color:var(--dim);font-weight:400}.card.more:has(.row small)>h2::after{content:" \25BE"}
 .grid{gap:8px}.bar{gap:6px;margin-bottom:8px}
+#bridge .bm b.clip{animation:clipf .8s steps(2) infinite}@keyframes clipf{50%{color:var(--text,#e2e8f0)}}
+#nBell{margin-left:8px;font:700 10px ui-monospace,monospace;padding:3px 8px;border-radius:8px;border:1px solid var(--dim);background:transparent;color:inherit}#nBell b{color:#ef4444;margin-left:4px}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;max-width:92vw;padding:9px 14px;border-radius:10px;background:#1d2026;color:#f1f5f9;border:1px solid #fbbf24;font:600 12px ui-monospace,monospace;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+#nPanel{position:fixed;right:10px;top:54px;z-index:49;width:min(340px,92vw);max-height:60vh;overflow:auto;padding:10px;border-radius:10px;background:#16181c;color:#f1f5f9;border:1px solid #475569}#nPanel h3{margin:0 0 6px;font:700 11px ui-monospace,monospace;letter-spacing:2px}#nPanel li{font:11px ui-monospace,monospace;margin:4px 0;list-style:none}#nPanel ul{padding:0;margin:0}#nPanel small{color:#94a3b8;margin-right:6px}
 </style></head><body>
-<header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<div id="toast" role="status" aria-live="polite" hidden></div><div id="nPanel" hidden><h3>NOTIFICATIONS</h3><ul id="nList"></ul><button id="nClear">Clear</button></div>
+<header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span><button id="nBell" aria-label="Notifications" title="NOTIFICATIONS: what's new, clipping, device lost / connected, CPU overload, update ready, audio loop stopped">NOTICES<b id="nCnt"></b></button></div>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">SEND TO</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUP FADERS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
 <div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
@@ -200,6 +210,7 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 <div class="row"><span>Faders locked at start<small>no accidental moves; LOCK FADERS on MIXER unlocks</small></span><button id="oLock"></button></div></div>
 <div class="card"><h2>LOOK</h2>
 <div class="row"><span>Theme</span><span class="seg" id="oTheme"></span></div>
+<div class="row"><span>Colour theme<small>the panels, faders and meters; a dark theme</small></span><span class="seg" id="oScheme"></span></div>
 <div class="row"><span>Start page</span><select id="oStart"><option value="">the last one</option><option value="mix">MIXER</option><option value="ch">CHANNEL</option><option value="bus">BUSES</option><option value="mon">MONITOR</option><option value="scn">SCENES</option><option value="rec">RECORD</option></select></div>
 <div class="row"><span>Keyboard shortcuts<small><kbd>1</kbd>…<kbd>0</kbd> pages · <kbd>←</kbd> <kbd>→</kbd> channel · <kbd>M</kbd> mute · <kbd>S</kbd> solo · <kbd>L</kbd> lock</small></span><button id="oKeys"></button></div></div>
 <div class="card"><h2>BEHAVIOUR</h2>
@@ -221,7 +232,7 @@ const $=s=>document.querySelector(s);let token=null,page=0,state=null,ws=null,po
 addEventListener("pointerup",()=>{drag=null});addEventListener("pointercancel",()=>{drag=null});
 const ls={get(k,d){try{const v=localStorage.getItem("amfx1."+k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem("amfx1."+k,JSON.stringify(v))}catch(e){}}};
 try{token=localStorage.getItem("amfx1.token")}catch(e){}
-const DEF={knobs:true,scroll:true,per:16,fh:220,cw:84,meters:true,bridge:true,hold:2,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
+const DEF={knobs:true,scroll:true,per:16,fh:220,cw:84,meters:true,bridge:true,hold:2,sync:true,vib:false,wake:false,ask:true,num:false,lockStart:false,theme:"auto",scheme:"",start:"",keys:true};const opt=Object.assign({},DEF,ls.get("opts",{}));
 const posToDb=p=>p<=0?-120:p>=1?10:p>=.75?(p-.75)*40:p>=.5?-20+(p-.5)*80:p>=.25?-60+(p-.25)*160:-120+p*240;
 const dbToPos=d=>d<=-120?0:d>=10?1:d>=0?.75+d/40:d>=-20?.5+(d+20)/80:d>=-60?.25+(d+60)/160:(d+120)/240;
 const fmt=d=>d<=-119?"-∞":(d>0?"+":"")+d.toFixed(1);const lin=v=>v>1e-6?20*Math.log10(v):-120;const mpos=v=>Math.max(0,Math.min(1,(lin(v)+60)/60));
@@ -287,16 +298,16 @@ function bridgeReset(send){BR.hold=[];BR.holdT=[];BR.clip=[];BR.mHold=-120;BR.mC
 function bridge(o){if(!opt.bridge||$("#bridge").hidden)return;const c=$("#brC"),g=c.getContext("2d"),W=c.width,H=c.height,now=Date.now(),hold=opt.hold?opt.hold*1000:1e12;
  const n=(state&&state.strips?state.strips.length:o.strips.length)||o.strips.length,gap=Math.max(1,Math.round(W/600)),mw=Math.round(W*.06),cw=Math.max(2,(W-2*mw-gap*(n+3))/n);
  const css=getComputedStyle(document.body),ok=css.getPropertyValue("--acc").trim()||"#22d3ee";g.clearRect(0,0,W,H);
- const col=v=>v>-3?"#ef4444":v>-12?"#fbbf24":ok;
+ const col=v=>v>0?"#ef4444":v>=-3?"#fbbf24":ok;   // amber from -3 dBFS, red above 0 dBFS
  const dp=d=>Math.max(0,Math.min(1,(d+60)/60));   // the frames carry linear levels; the bridge works in dB (lin)
  const draw=(x,w,pk,rms,i,clipNow)=>{const hpk=dp(pk)*H,hr=dp(rms)*H;g.fillStyle="rgba(127,127,127,.12)";g.fillRect(x,0,w,H);g.fillStyle=col(pk);g.globalAlpha=.45;g.fillRect(x,H-hpk,w,hpk);g.globalAlpha=1;g.fillRect(x,H-hr,w,hr);
-  if(i!==null){if(!(BR.hold[i]>pk)||now-BR.holdT[i]>hold){BR.hold[i]=pk;BR.holdT[i]=now}if(clipNow)BR.clip[i]=true;const y=H-dp(BR.hold[i])*H;g.fillStyle=col(BR.hold[i]);g.fillRect(x,Math.min(H-2,y),w,2);if(BR.clip[i]){g.fillStyle="#ef4444";g.fillRect(x,0,w,Math.max(3,H*.12))}}};
+  if(i!==null){if(!(BR.hold[i]>pk)||now-BR.holdT[i]>hold){BR.hold[i]=pk;BR.holdT[i]=now}if(clipNow||pk>0)BR.clip[i]=true;const y=H-dp(BR.hold[i])*H;g.fillStyle=col(BR.hold[i]);g.fillRect(x,Math.min(H-2,y),w,2);if(BR.clip[i]){g.fillStyle="#ef4444";g.fillRect(x,0,w,Math.max(3,H*.12))}}};
  for(let i=0;i<n;i++){const m=o.strips[i]||{};draw(gap+i*(cw+gap),cw,lin(m.pk||0),lin(m.rms||0),i,!!m.clip)}
  const M=o.master||{},x0=W-2*mw-gap,ml=lin(M.l||0),mr=lin(M.r||0),mrms=lin(M.rms||0);draw(x0,mw-gap,ml,mrms,null,false);draw(x0+mw,mw-gap,mr,mrms,null,false);
- const mp=Math.max(ml,mr);if(mp>BR.mHold||now-BR.mHoldT>hold){BR.mHold=mp;BR.mHoldT=now}if(M.clip)BR.mClip=true;
+ const mp=Math.max(ml,mr);if(mp>BR.mHold||now-BR.mHoldT>hold){BR.mHold=mp;BR.mHoldT=now}if(M.clip||mp>0)BR.mClip=true;
  const pk=$("#brPk");pk.textContent=BR.mHold>-90?BR.mHold.toFixed(1)+" dB":"—";pk.classList.toggle("clip",BR.mClip);
  const nc=BR.clip.filter(Boolean).length+(BR.mClip?1:0);$("#brClip").textContent=nc?nc+" CLIP"+(nc>1?"S":""):""}
-function meters(o){if(!o||!o.strips)return;lastMeters=o;if(tab==="mst"&&o.master){const b=$("#xMt").querySelectorAll("b");b[0].style.height=(mpos(o.master.l||0)*100).toFixed(1)+"%";b[1].style.height=(mpos(o.master.r||0)*100).toFixed(1)+"%";const pk=Math.max(o.master.l||0,o.master.r||0);$("#xPk").textContent=pk>0?fmt(20*Math.log10(pk)):"−∞"}bridge(o);if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
+function meters(o){if(!o||!o.strips)return;lastMeters=o;noticeMeters(o);if(tab==="mst"&&o.master){const b=$("#xMt").querySelectorAll("b");b[0].style.height=(mpos(o.master.l||0)*100).toFixed(1)+"%";b[1].style.height=(mpos(o.master.r||0)*100).toFixed(1)+"%";const pk=Math.max(o.master.l||0,o.master.r||0);$("#xPk").textContent=pk>0?fmt(20*Math.log10(pk)):"−∞"}bridge(o);if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
  if(tab==="rec"){const L=o.loudness||{},f=v=>typeof v==="number"&&v>-70?v.toFixed(1):"—";$("#lM").textContent=f(L.m);$("#lS").textContent=f(L.s);$("#lI").textContent=f(L.i);$("#lR").textContent=typeof L.lra==="number"&&L.lra>0?L.lra.toFixed(1):"—";$("#lT").textContent=f(L.tp);$("#lC").textContent=typeof o.correlation==="number"?o.correlation.toFixed(2):"—"}}
 // ---- BUSES, MONITOR, LIMITER: drawn from the state, kept up to date by the same push
 function hslider(id,lab,db,onV){const f=typeof id==="string"?$(id):id,t=typeof lab==="string"?$(lab):lab;if(free(f)){f.value=Math.round(dbToPos(db)*1000);t.textContent=fmt(db)}f.oninput=()=>{const v=posToDb(f.value/1000);t.textContent=fmt(v);onV(v)};f.onpointerdown=()=>{drag=f}}
@@ -382,6 +393,23 @@ function panels(){consoleSettings();if(tab==="rta")rtaPage();if(tab==="bus")buse
 // ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
 const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
 const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
+// ---- NOTIFICATIONS: the console's events as a toast and in a history (NOTICES): what's new, clipping, device lost / connected, CPU
+// overload, update ready, audio loop stopped. Worked out from /api/status (every 5 s while paired) and the meter stream.
+const NT={list:[],unread:0,prev:null,clip:false,cpuAt:0,toastT:0};
+function notify(kind,text){NT.list.unshift({t:Date.now(),kind,text});NT.list.length=Math.min(NT.list.length,50);NT.unread++;$("#nCnt").textContent=String(NT.unread);
+ const el=$("#toast");el.textContent=text;el.style.borderColor=kind==="clip"||kind==="lost"||kind==="cpu"||kind==="stopped"?"#ef4444":"#fbbf24";el.hidden=false;clearTimeout(NT.toastT);NT.toastT=setTimeout(()=>{el.hidden=true},4000);if(!$("#nPanel").hidden)noticeList()}
+function noticeList(){const ul=$("#nList");ul.textContent="";if(!NT.list.length){const li=document.createElement("li");li.textContent="No notifications";ul.appendChild(li)}
+ for(const n of NT.list){const li=document.createElement("li"),sm=document.createElement("small");sm.textContent=new Date(n.t).toLocaleTimeString();li.append(sm,document.createTextNode(n.text));ul.appendChild(li)}}
+$("#nBell").onclick=()=>{const p=$("#nPanel");p.hidden=!p.hidden;if(!p.hidden){NT.unread=0;$("#nCnt").textContent="";noticeList()}};
+$("#nClear").onclick=()=>{NT.list=[];NT.unread=0;$("#nCnt").textContent="";noticeList()};
+function noticeStatus(s){if(!s)return;const p=NT.prev;NT.prev=s;
+ try{const seen=localStorage.getItem("amixSeenVersion");if(s.version&&seen&&seen!==s.version)notify("new","What's new: the console is now "+s.version);if(s.version)localStorage.setItem("amixSeenVersion",s.version)}catch(e){}
+ if(!p)return;if(p.running&&!s.running)notify("stopped","The audio loop stopped on the console");
+ if(p.outDevice&&!s.outDevice)notify("lost","Device lost: "+p.outDevice);else if(s.outDevice&&p.outDevice!==s.outDevice)notify("connected","Device connected: "+s.outDevice);
+ if(((s.loadPct||0)>=90||(s.xruns||0)>(p.xruns||0))&&Date.now()-NT.cpuAt>30000){NT.cpuAt=Date.now();notify("cpu","CPU overload: dropouts on the console (load "+Math.round(s.loadPct||0)+" %)")}
+ if(s.update&&s.update!==p.update)notify("update","Update ready: "+s.update)}
+setInterval(async()=>{if(!token||document.hidden)return;try{noticeStatus(await api("/api/status"))}catch(e){}},5000);
+function noticeMeters(o){const c=!!((o.master&&o.master.clip)||(o.strips||[]).some(m=>m&&m.clip));if(c&&!NT.clip)notify("clip","Clipping: a channel or the master went over 0 dBFS");NT.clip=c}
 async function readStatus(){try{status=await api("/api/status")}catch(e){status=null}showStatus()}
 function showStatus(){const s=status||{};const r=$("#rT");r.textContent=hms(s.recording?s.recordSeconds:0);r.classList.toggle("rec",!!s.recording);
  $("#rF").textContent=s.recording?"recording "+(base(s.recordFile)||"")+" · in the recordings folder on the computer":"not recording";$("#rGo").disabled=!!s.recording;$("#rStop").disabled=!s.recording;
@@ -400,6 +428,8 @@ function applyOpts(){document.body.style.setProperty("--fh",opt.fh+"px");documen
  {const h=$("#oHold");h.innerHTML="";for(const [v,l] of [[1,"1 s"],[2,"2 s"],[5,"5 s"],[0,"HOLD"]]){const b=document.createElement("button");b.textContent=l;b.className=opt.hold===v?"on acc":"";b.onclick=()=>{opt.hold=v;ls.set("opts",opt);bridgeReset(false);applyOpts()};h.appendChild(b)}}tog("#oSync","sync",()=>{if(opt.sync)load()});tog("#oVib","vib");tog("#oWake","wake",wake);tog("#oAsk","ask");tog("#oNum","num",()=>build());tog("#oLock","lockStart");tog("#oKeys","keys");
  const th=$("#oTheme");th.textContent="";for(const [v,l] of [["auto","AUTO"],["dark","DARK"],["light","LIGHT"]]){const b=document.createElement("button");b.textContent=l;b.className=opt.theme===v?"on acc":"";b.onclick=()=>{opt.theme=v;buzz();save()};th.appendChild(b)}
  const light=opt.theme==="light"||(opt.theme==="auto"&&matchMedia("(prefers-color-scheme: light)").matches);document.body.classList.toggle("light",light);
+ for(const k of ["chocolate","ocean","forest","plum"])document.body.classList.toggle("th-"+k,!light&&opt.scheme===k);
+ const sc=$("#oScheme");sc.textContent="";for(const [v,l] of [["","CONSOLE"],["chocolate","CHOCOLATE"],["ocean","OCEAN"],["forest","FOREST"],["plum","PLUM"]]){const b=document.createElement("button");b.textContent=l;b.className=opt.scheme===v?"on acc":"";b.onclick=()=>{opt.scheme=v;if(v&&opt.theme==="light")opt.theme="dark";buzz();save()};sc.appendChild(b)}
  const st=$("#oStart");st.value=opt.start||"";st.onchange=()=>{opt.start=st.value;save()};
  $("#oWho").textContent=ls.get("who","this browser")}
 async function wake(){try{if(opt.wake&&!document.hidden&&"wakeLock" in navigator){if(!wakeLock)wakeLock=await navigator.wakeLock.request("screen");wakeLock.addEventListener("release",()=>{wakeLock=null})}else if(!opt.wake&&wakeLock){await wakeLock.release();wakeLock=null}}catch(e){wakeLock=null}
