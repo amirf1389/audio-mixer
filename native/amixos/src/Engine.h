@@ -25,6 +25,7 @@
 #include <thread>
 #include "audiomixer/onevoice.hpp"
 #include "audiomixer/watchdog.hpp"
+#include "audiomixer/device_watch.hpp"
 #include "audiomixer/dynamics.hpp"
 #include <vector>
 
@@ -927,6 +928,9 @@ class Engine : public QObject {
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
+  // HOT-PLUG WHILE CAPTURING: the system's notifications (devWatch_) mark devMon_ and poll at once (devNotify_ debounces a burst); the
+  // fingerprint runs on its own short thread (never behind a stuck audio-service job); a rescan asked during a scan runs right after it
+  std::unique_ptr<am::DeviceChangeWatch> devWatch_; am::DeviceMonitor devMon_; QTimer devNotify_; QElapsedTimer fpSince_; bool rescanAgain_ = false;
   bool live_ = false; int liveStrip_ = 0;
   mutable QSettings settings_;
 };

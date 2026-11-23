@@ -12,6 +12,7 @@
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/app_sound.hpp"
+#include "audiomixer/device_watch.hpp"
 #include <algorithm>
 #include <mutex>
 #ifdef _WIN32
@@ -152,6 +153,8 @@ void addWasapi(std::vector<DeviceInfo>& out) {
         WAVEFORMATEX* f = nullptr;
         if (SUCCEEDED(ac->GetMixFormat(&f)) && f) {
           ch = f->nChannels; info.defaultRate = f->nSamplesPerSec;
+          // HELD IN EXCLUSIVE MODE (by another program, or by this console): still listed, marked in use, never hidden
+          if (classifyStreamError(ac->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, f, nullptr)) == StreamFault::InUse) info.probeError = "in use: held in exclusive mode";
           // the rates this endpoint takes on its own (exclusive mode), 44.1 kHz up to 768 kHz, in any of the usual sample formats; the shared-mode rate is always in
           static const DWORD kRates[] = {44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000};
           static const WORD kBits[][2] = {{32, 32}, {32, 24}, {24, 24}, {16, 16}};
@@ -230,12 +233,13 @@ BOOL CALLBACK dsEnum(LPGUID guid, LPCSTR desc, LPCSTR, LPVOID ctx) {
 }
 void addDsound(std::vector<DeviceInfo>& out) { DsList r{&out, false}; DirectSoundEnumerateA(&dsEnum, &r); DsList c{&out, true}; DirectSoundCaptureEnumerateA(&dsEnum, &c); }
 
-void addAsio(std::vector<DeviceInfo>& out, bool probe) {
+void addAsio(std::vector<DeviceInfo>& out, bool probe, const std::string& skip = std::string()) {
   for (const auto& d : listAsioDrivers()) {
-    AsioProbeInfo p; if (probe) p = probeAsioDriver(d); else { p.inChannels = 2; p.outChannels = 2; }   // a driver of the other bitness is not loaded: it comes back with error set and no channels
+    const bool held = !skip.empty() && d.name == skip;   // the driver this console has open: loading it a second time hangs or steals it (one client per driver)
+    AsioProbeInfo p; if (probe && !held) p = probeAsioDriver(d); else { p.inChannels = 2; p.outChannels = 2; }   // a driver of the other bitness is not loaded: it comes back with error set and no channels
     DeviceInfo info; info.backend = "asio"; info.id = d.name; info.name = d.bits == static_cast<int>(sizeof(void*) * 8) ? d.name : d.name + " (" + std::to_string(d.bits) + "-bit driver)";
     info.inChannels = static_cast<int>(p.inChannels); info.outChannels = static_cast<int>(p.outChannels);
-    info.probeError = probe ? p.error : std::string();
+    info.probeError = held ? std::string("in use by this console") : probe ? p.error : std::string();
     info.sampleRates = p.sampleRates;
     if (!p.sampleRates.empty()) {
       info.defaultRate = p.sampleRates.front();
@@ -312,6 +316,7 @@ std::string deviceFingerprint() {
     en->Release(); }
   if (SUCCEEDED(coInit)) CoUninitialize();
   for (const auto& d : listAsioDrivers()) { f += "asio:"; f += d.name; f += '|'; }   // registry only: the driver is not loaded
+  if (processLoopbackAvailable()) for (const am::app::Session& s : am::app::sessions()) { f += "app:"; f += std::to_string(s.pid); f += '|'; }   // APP SOUND: a program that opens (or closes) a sound stream while the console captures
 #endif
 #ifdef AM_HAVE_ALSA
   { void** hints = nullptr; if (snd_device_name_hint(-1, "pcm", &hints) >= 0) { for (void** h = hints; *h; ++h) { char* name = snd_device_name_get_hint(*h, "NAME"); if (name) { f += name; f += '|'; std::free(name); } } snd_device_name_free_hint(hints); } }
@@ -331,15 +336,16 @@ std::vector<EndpointInfo> listEndpoints() {
   return v;
 #endif
 }
-std::vector<DeviceInfo> listDevices(bool probeAsio) {
-  (void)probeAsio;
+std::vector<DeviceInfo> listDevices(bool probeAsio) { return listDevicesExcept(probeAsio, std::string()); }
+std::vector<DeviceInfo> listDevicesExcept(bool probeAsio, const std::string& skipAsio) {
+  (void)probeAsio; (void)skipAsio;
   std::vector<DeviceInfo> v;
 #ifdef AM_HAVE_ALSA
   addAlsa(v);
 #endif
 #ifdef _WIN32
   addWasapi(v);
-  addAsio(v, probeAsio);
+  addAsio(v, probeAsio, skipAsio);
   addDsound(v);
 #endif
 #ifdef __APPLE__

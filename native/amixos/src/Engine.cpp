@@ -115,6 +115,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (settings_.value("spatial/front10", false).toBool()) { spkOn_ = true; spkSaved_ = settings_.value("spatial/front10Saved").toMap(); }   // the speaker array was on when the program closed: the saved console already holds its feeds
 }
 Engine::~Engine() {
+  devWatch_.reset();   // unregistered first: no system notification reaches a half-destroyed console
   closePluginWindows(); save(); stop();
   { std::lock_guard<std::mutex> l(svcM_); svcStop_ = true; svcQ_.clear(); } svcCv_.notify_all();
   if (svcThread_.joinable()) svcThread_.detach();   // a call stuck in the audio service must not hold the exit; the process ends anyway
@@ -131,14 +132,27 @@ void Engine::svcPost(std::function<void()> job) {
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
-void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
+void Engine::setHotplugWatch(bool on) {
+  if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); }
+    // LIVE HOT-PLUG: Windows says at once when an endpoint is added, removed, enabled / disabled or becomes the default (IMMNotificationClient,
+    // on its own MTA thread); the 3 s poll stays as the safety net. The callback only marks and posts: nothing blocks on the system's thread.
+    if (!devWatch_ && !simulated_) { devNotify_.setSingleShot(true); devNotify_.setInterval(400); connect(&devNotify_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection);
+      devWatch_ = std::make_unique<am::DeviceChangeWatch>([this] { devMon_.notify(); QMetaObject::invokeMethod(this, [this] { devNotify_.start(); }, Qt::QueuedConnection); }); } }
+  else { hotplug_.stop(); devWatch_.reset(); }
+  emit stateChanged(); }
 void Engine::checkHotplug() {
-  if (simulated_ || fpBusy_) return; fpBusy_ = true;   // on the audio service worker: enumerating endpoints can block (see svcPost)
-  svcPost([this] { const std::string f = am::deviceFingerprint(); QMetaObject::invokeMethod(this, [this, f] { fpBusy_ = false; applyFingerprint(f); }, Qt::QueuedConnection); });
+  if (simulated_) return;
+  if (fpBusy_ && fpSince_.isValid() && fpSince_.elapsed() < 20000) return;   // one at a time; a check stuck for 20 s (a hung endpoint) no longer blocks hot-plug for good
+  fpBusy_ = true; fpSince_.start(); const qint64 gen = fpSince_.msecsSinceReference();
+  // its own short thread, not the audio service worker: a volume / mute call stuck there (a Bluetooth device going away mid-capture) used to
+  // hold fpBusy_ forever, and no device was ever detected again until the program restarted
+  QPointer<Engine> self(this);
+  std::thread([self, gen] { const std::string f = am::deviceFingerprint();
+    if (QCoreApplication* app = QCoreApplication::instance()) QMetaObject::invokeMethod(app, [self, gen, f] { if (!self || self->fpSince_.msecsSinceReference() != gen) return; self->fpBusy_ = false; self->applyFingerprint(f); }, Qt::QueuedConnection); }).detach();
 }
 void Engine::applyFingerprint(const std::string& f) {
-  if (simulated_ || f == fingerprint_) return;
-  const bool first = fingerprint_.empty(); fingerprint_ = f; if (first) return;   // the first poll only learns the baseline
+  if (simulated_) return;
+  fingerprint_ = f; if (!devMon_.feed(f)) return;   // the first poll only learns the baseline; then a changed fingerprint or a system notification rescans
   const QStringList before = [&] { QStringList l; for (const QVariant& v : devices_) l << v.toMap()["name"].toString(); return l; }();
   refreshDevices();
   QStringList after; for (const QVariant& v : devices_) after << v.toMap()["name"].toString();
@@ -182,13 +196,17 @@ bool Engine::guarded(std::function<bool()> work, int timeoutMs) {
 }
 void Engine::refreshDevices() {
   if (simulated_) { emit devicesChanged(); return; }
-  if (scanning_) return;   // a scan is already running (the interface stays live during it)
+  if (scanning_) { rescanAgain_ = true; return; }   // a scan is already running (the interface stays live during it): RESCAN pressed now runs right after it, never lost
   scanning_ = true; emit busyChanged();
   auto found = std::make_shared<std::vector<am::DeviceInfo>>(); auto eps = std::make_shared<std::vector<am::EndpointInfo>>();
-  guarded([found, eps] { *eps = am::listEndpoints(); *found = am::listDevices(); return true; }, 8000);
+  // WHILE CAPTURING ON ASIO: the driver this console holds open is listed without loading it a second time (one client per driver: the
+  // probe used to hang the scan for 8 s, or take the driver away from the running stream)
+  const std::string heldAsio = am::asioDriverToSkip(rt_ != nullptr, curBackend_, curIn_, curOut_);
+  guarded([found, eps, heldAsio] { *eps = am::listEndpoints(); *found = am::listDevicesExcept(true, heldAsio); return true; }, 8000);
   absent_.clear();   // endpoints that exist but cannot be opened now: headphones on an empty jack, a device switched off in Windows
   for (const am::EndpointInfo& ep : *eps) if (ep.state != "active") absent_ << QVariantMap{{"name", QString::fromStdString(ep.name)}, {"flow", QString::fromStdString(ep.flow)}, {"state", QString::fromStdString(ep.state)}, {"kind", QString::fromStdString(ep.kind)}};
-  if (timedOut_) { found = std::make_shared<std::vector<am::DeviceInfo>>(am::listDevices(false)); status_ = QStringLiteral("A driver did not answer the scan in 8 s: the list is shown without loading ASIO drivers (channel counts assumed 2 / 2). SOFT RESTART scans again."); qWarning("device scan timed out: the list was built without probing ASIO drivers"); }
+  if (timedOut_) { auto quick = std::make_shared<std::vector<am::DeviceInfo>>(); guarded([quick] { *quick = am::listDevices(false); return true; }, 4000); found = quick; timedOut_ = true;   // off the interface thread too (the flag stays: the counts were not read)
+    status_ = QStringLiteral("A driver did not answer the scan in 8 s: the list is shown without loading ASIO drivers (channel counts assumed 2 / 2). SOFT RESTART scans again."); qWarning("device scan timed out: the list was built without probing ASIO drivers"); }
   scanning_ = false; emit busyChanged();
   devices_.clear();
   for (const am::DeviceInfo& d : *found) {
@@ -197,11 +215,16 @@ void Engine::refreshDevices() {
     { static const QStringList wired{"digital", "line", "interface", "dac", "wrapper", "virtual", "app"};   // a cable or a converter: a brand in the name ("JBL", "Bose", "wireless") does not make it Bluetooth
       m["bluetooth"] = d.kind == "bluetooth" || (!wired.contains(m["kind"].toString()) && looksBluetooth(m["name"].toString())); } m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
+    // IN USE: held in exclusive mode (by another program, or this console) or the ASIO driver this console runs on: listed, never hidden
+    const bool ours = rt_ && d.backend == curBackend_ && (d.id == curOut_ || d.id == curIn_);
+    if (ours && d.backend == "asio") { if (devIn_ > 0) m["inChannels"] = devIn_; if (devOut_ > 0) m["outChannels"] = devOut_; }
     if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError); annotateAsio(m, !timedOut_); }
+    m["inUse"] = ours || !d.probeError.empty(); if (m["inUse"].toBool()) m["inUseText"] = ours ? QStringLiteral("in use by this console") : QString::fromStdString(d.probeError);
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
   }
   emit devicesChanged();
+  if (rescanAgain_) { rescanAgain_ = false; QTimer::singleShot(0, this, [this] { refreshDevices(); }); }
 }
 
 // DEVICES ON / OFF: a device switched OFF on CONNECTIONS is never picked by AUTO DETECT / auto start (neither as the device nor as the
@@ -2016,6 +2039,13 @@ bool Engine::failover(const QString& why) {
 }
 void Engine::tick() {
   QVariantList m; QVariantMap t;
+  // DEVICE INVALIDATED: Windows took the device away under the stream (unplugged, disabled, its format changed, the audio service restarted).
+  // The stream said so (Runtime::deviceLost): open it again, else fail over to the best device left, and read the list again; never a frozen console
+  if (rt_ && !opening_ && rt_->deviceLost()) QMetaObject::invokeMethod(this, [this] { if (!rt_ || opening_ || !rt_->deviceLost()) return;
+      const QString was = outDevName_.isEmpty() ? inDevName_ : outDevName_;
+      if (watchdog_) failover(QStringLiteral("%1 was disconnected or reset by Windows").arg(was.isEmpty() ? QStringLiteral("the sound card") : was));
+      else { stop(); status_ = QStringLiteral("The sound card was disconnected or reset by Windows: %1. Pick a device and press START.").arg(was); emit stateChanged(); }
+      refreshDevices(); }, Qt::QueuedConnection);
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
     // WATCHDOG: no new block for three seconds while the engine is running: the device stalled; start again (three times a minute at most)
