@@ -50,6 +50,7 @@ ApplicationWindow {
     Timer { interval: 3000; running: asyncPages; onTriggered: { warmTimer.start(); if (pageCacheOff) return; root.mixerEver = true; root.touchPage("asio", true) } }   // the most used pages (MIXER, SOUND CARD) built ahead, in the background
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
+    Binding { target: Theme; property: "scheme"; value: settings.colorTheme }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
     Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
     Aurora { anchors.fill: parent; z: -1; visible: Theme.glass; motion: Theme.glass && settings.colorMotion && graphics.heavyEffects; accent: Theme.accent }
@@ -88,6 +89,7 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+=", "Ctrl++", StandardKey.ZoomIn]; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: { settings.zoomIn(); zoomToast.show() } }
     Shortcut { sequences: ["Ctrl+-", StandardKey.ZoomOut]; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: { settings.zoomOut(); zoomToast.show() } }
     Shortcut { sequence: "Ctrl+0"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: { settings.zoomReset(); zoomToast.show() } }
+    NoticeCenter { id: notices; anchors.fill: parent; z: 94 }
     Rectangle { id: zoomToast; objectName: "zoomToast"; z: 95; anchors.horizontalCenter: parent.horizontalCenter; y: 64; radius: 8; color: Theme.card; border.color: Theme.cyan; opacity: 0
         width: ztT.implicitWidth + 28; height: 30; function show() { opacity = 1; ztHide.restart() }
         Behavior on opacity { NumberAnimation { duration: 160 } }
@@ -200,6 +202,10 @@ ApplicationWindow {
                     visible: updater.newFeatures > 0 || updater.state === "available"; implicitWidth: newTxt.implicitWidth + 16; implicitHeight: 22; radius: 11; color: Theme.orange
                     Text { id: newTxt; anchors.centerIn: parent; text: (updater.state === "available" ? i18n.t("UPDATE ", i18n.lang) + updater.latest : i18n.t("NEW", i18n.lang)) + (updater.newFeatures > 0 ? " · " + updater.newFeatures : ""); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: whatsNew.open() } }
+                Rectangle { objectName: "noticeBell"; implicitWidth: nbT.implicitWidth + 14; implicitHeight: 22; radius: 11; color: notices.unread > 0 ? Theme.amber : Theme.cardRaised; border.color: Theme.line   // NOTIFICATIONS: the history
+                    Text { id: nbT; anchors.centerIn: parent; text: notices.unread > 0 ? "◉ " + notices.unread : "◉"; color: notices.unread > 0 ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    MouseArea { anchors.fill: parent; onClicked: notices.toggle() }
+                    ToolTip.visible: nbH.hovered; ToolTip.text: i18n.t("NOTIFICATIONS: what's new, clipping, device lost / connected, CPU overload, update ready, audio loop stopped", i18n.lang); HoverHandler { id: nbH } }
                 Text { text: engine.edition.toUpperCase(); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                 Rectangle { implicitWidth: 26; implicitHeight: 26; radius: 13; color: Theme.cardRaised; border.color: Theme.line   // THEME: dark / light
                     Text { anchors.centerIn: parent; text: settings.darkTheme ? "☾" : "☀"; color: settings.darkTheme ? Theme.amber : Theme.orange; font.pixelSize: 13 }

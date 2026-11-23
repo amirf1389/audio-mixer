@@ -2162,6 +2162,14 @@ int main(int argc, char* argv[]) {
           engine.setDeviceEnabled("alsa", "hw:1,0", false); cw->setProperty("current", "home"); waitMs(150); cw->setProperty("current", "io"); waitMs(500); cw->grabWindow().save(shots + "/connections-onoff.png");
           engine.setDeviceEnabled("alsa", "hw:1,0", true); engine.simulateDevices(keep); }
         auto* lw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); settings.setDarkTheme(false); for (const char* id : {"home", "mixer", "dsp"}) { lw->setProperty("current", QString::fromLatin1(id)); waitMs(350); lw->grabWindow().save(shots + "/" + id + "-light.png"); } settings.setDarkTheme(true); waitMs(200); std::printf("amixos --shots: home-light, mixer-light, dsp-light\n"); }
+        { auto* tw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); for (const char* th : {"chocolate", "ocean", "forest", "plum"}) { settings.setColorTheme(QString::fromLatin1(th)); tw->setProperty("current", QStringLiteral("mixer")); waitMs(350); tw->grabWindow().save(shots + "/mixer-" + th + ".png"); }   // the colour themes
+          settings.setColorTheme(QString()); waitMs(200); std::printf("amixos --shots: mixer-chocolate, mixer-ocean, mixer-forest, mixer-plum\n"); }
+        if (QObject* nc = qml.rootObjects().first()->findChild<QObject*>(QStringLiteral("noticeCenter"))) {   // NOTIFICATIONS: three toasts and the history
+          auto* tw = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+          for (const auto& kv : std::initializer_list<std::pair<const char*, const char*>>{{"new", "What's new: 3 new features"}, {"connected", "Device connected: Speakers"}, {"clip", "Clipping: a channel or the master went over 0 dBFS"}})
+            QMetaObject::invokeMethod(nc, "push", Q_ARG(QVariant, QString::fromLatin1(kv.first)), Q_ARG(QVariant, QString::fromLatin1(kv.second)));
+          waitMs(300); tw->grabWindow().save(shots + "/notices-toasts.png"); QMetaObject::invokeMethod(nc, "toggle"); waitMs(300); tw->grabWindow().save(shots + "/notices-history.png"); QMetaObject::invokeMethod(nc, "toggle"); waitMs(100);
+          std::printf("amixos --shots: notices-toasts, notices-history\n"); }
       // the language tables: 80 languages, every one covers the page names
       int full = 0; for (const QVariant& l : i18n.languages()) if (l.toMap().value("coverage").toInt() >= 44) ++full;
       std::printf("amixos --smoke: %d languages, %d cover all page names; MIXER in fa = %s\n", i18n.count(), full, qPrintable(i18n.t("MIXER", "fa")));

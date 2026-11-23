@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.21)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" AMIX_VERSION)
 string(STRIP "${AMIX_VERSION}" AMIX_VERSION)
 project(AmixOS VERSION 0.1.0 LANGUAGES CXX)
+include(${CMAKE_CURRENT_LIST_DIR}/../../scripts/security/hardening.cmake)   # compiler / linker hardening (stack protector, FORTIFY, PIE, RELRO; MinGW --dynamicbase --nxcompat)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,6 +56,8 @@ qt_add_qml_module(amixos
         qml/MSlider.qml
         qml/DynEqEditor.qml
         qml/MeterBar.qml
+        qml/BigVu.qml
+        qml/NoticeCenter.qml
         qml/VuMeter.qml
         qml/RoutingPage.qml
         qml/LicensePage.qml

@@ -46,7 +46,7 @@ Item {
         MouseArea { id: mkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: mkey.can; onClicked: mkey.hit() } }
     // A SECTION of the channel overview: a flat header bar with its title, as on a desk's channel screen
     component SectHead: Rectangle { property string title; property string link: ""; signal open()
-        Layout.fillWidth: true; implicitHeight: 20; radius: 3; color: Theme.dark ? "#262a31" : "#d5dae2"
+        Layout.fillWidth: true; implicitHeight: 20; radius: 3; color: Theme.head
         Text { anchors.centerIn: parent; text: i18n.t(parent.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
         Text { visible: parent.link !== ""; anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: Theme.cyan; font.pixelSize: 13; font.bold: true }
         MouseArea { anchors.fill: parent; enabled: parent.link !== ""; cursorShape: Qt.PointingHandCursor; onClicked: page.go(parent.link) } }
@@ -77,7 +77,7 @@ Item {
     Shortcut { sequences: ["Ctrl+Shift+-", "Ctrl+Shift+_"]; enabled: page.visible; onActivated: page.stripZoom(-8) }
     property bool simple: settings.mixerSimple   // SIMPLE strips: the name, the tone knobs, pan, MUTE / SOLO and the fader; FULL adds every key and readout
     property bool showInput: true
-    property bool showTone: true   // GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers
+    property bool showTone: true   // (a strip shorter than 820 px leaves it to the CHANNEL PANEL: the big VU needs the room) GAIN and the analog 3-band EQ on every strip (StripTone), as on the phones and browsers
     property bool showBadges: true
     property bool showPan: true
     property bool showGroups: true
@@ -547,7 +547,7 @@ Item {
                                                         Rectangle { objectName: "inProgStereo" + index; implicitWidth: 40; implicitHeight: 16; radius: 3; color: Theme.ov(0.08); border.color: Theme.cyan
                                                             Text { anchors.centerIn: parent; text: i18n.t("STEREO", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 6; font.bold: true }
                                                             MouseArea { anchors.fill: parent; onClicked: { apps.capture(modelData.id, modelData.name, page.sel, true); inPop.close() } } } } } } } }
-                                    StripTone { visible: page.showTone; Layout.alignment: Qt.AlignHCenter; strip: index; st: stripItem.st }
+                                    StripTone { visible: page.showTone && stripItem.height >= 820; Layout.alignment: Qt.AlignHCenter; strip: index; st: stripItem.st }
                                     RowLayout { visible: !page.simple; Layout.fillWidth: true; spacing: 2
                                         Rectangle { implicitWidth: 14; implicitHeight: 12; radius: 4; color: st && st.armed ? Qt.rgba(1, 0.165, 0.373, 0.85) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: "●"; color: st && st.armed ? "#0b0f14" : Theme.dim; font.pixelSize: 7 } MouseArea { anchors.fill: parent; onClicked: engine.setArmed(index, !(st && st.armed)) } ToolTip.visible: armHov.hovered; ToolTip.text: i18n.t("Arm CH ", i18n.lang) + (index + 1) + i18n.t(" for recording", i18n.lang); HoverHandler { id: armHov } }
                                         Rectangle { implicitWidth: 24; implicitHeight: 12; radius: 4; color: st && st.link ? Theme.harm(stripItem.sc) : Theme.ov(0.05); border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: index % 2 ? "⟵L" : "L⟶"; color: st && st.link ? "#0b0f14" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setLink(index, !(st && st.link)) } ToolTip.visible: lnkHov.hovered; ToolTip.text: i18n.t("Stereo link with CH ", i18n.lang) + ((index ^ 1) + 1) + i18n.t(": gain, mute, solo follow, pan mirrors", i18n.lang); HoverHandler { id: lnkHov } }
@@ -660,6 +660,7 @@ Item {
                                             MenuItem { text: i18n.t("Listen here: monitor = master", i18n.lang); onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
                                             MenuItem { text: (st && st.armed ? "✓ " : "") + i18n.t("Arm for recording (pre-fader WAV)", i18n.lang); onTriggered: engine.setArmed(index, !(st && st.armed)) }
                                         } } } } }   // the menu, its loader, the ⋯ button and the AI row end here: the VU meter, the sends and the fader belong to the strip
+                                    BigVu { objectName: "stripBigVu" + index; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.max(30, Math.min(stripItem.width - 10, 110)); Layout.preferredHeight: sizeFor(stripItem.height); merged: stripItem.width < 90; lDb: mt ? mt.peakDb : -120; rmsDb: mt ? mt.rmsDb : -120; clip: mt ? mt.clip : false }   // the big VU above the fader (the thin IN / OUT / GR meters stay left of it)
                                     VuMeter { visible: page.vuMode; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 62; Layout.preferredHeight: 36; vuDb: mt ? mt.vuDb : -120; refDb: engine.vuRefDb; peakLamp: mt ? mt.clip : false; label: i18n.t("VU", i18n.lang) }
                                     // SENDS ON STRIPS: 8 mini faders (AUX 1-8 or FX 1-8), each with its PRE/POST switch
                                     RowLayout { visible: page.sendView > 0; Layout.fillHeight: true; Layout.fillWidth: true; spacing: 2
@@ -703,14 +704,14 @@ Item {
                                                         const now = fadRow.settled, to = modelData[1] === "louder" ? Math.min(12, now + 1) : modelData[1] === "quieter" ? Math.max(-90, now - 1) : modelData[1] === "zero" ? 0 : fadRow.before
                                                         settleT.stop(); fadRow.before = now; fadRow.settled = to; engine.setGain(stripItem.stripIdx, to) } } }
                                             Item { Layout.preferredHeight: 4 } }
-                                        Fader { objectName: "stripFader"; showLevels: false; numbers: true; tint: stripItem.sc; Layout.fillHeight: true; readonly property bool riding: !!(st && st.loudRide); value: st ? st.db + (riding && mt ? mt.rideDb : 0) : 0; ghost: riding && mt && Math.abs(mt.rideDb) > 0.05 ? st.db : NaN; badge: !st || !(st.loudRide || st.loudGate) || !mt ? "" : mt.rideGateDb < -0.01 ? "OFF" : mt.rideSusp ? "HOLD" : st.loudRide ? "AUTO" : ""; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } }
                                         ColumnLayout { Layout.fillHeight: true; spacing: 0
                                             RowLayout { Layout.fillHeight: true; spacing: 2
                                                 MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 5; peakDb: mt ? mt.inDb : -120; rmsDb: mt ? mt.inDb : -120; floorDb: -60 }   // input (pre-fader)
                                                 MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 9; peakDb: mt ? mt.peakDb : -120; rmsDb: mt ? mt.rmsDb : -120; holdDb: mt ? mt.holdDb : -120; clip: mt ? mt.clip : false }   // post-fader
                                                 Rectangle { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 4; radius: 2; color: Theme.deep; border.color: Theme.lineSoft   // gain reduction, from the top
                                                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 1; height: Math.min(1, Math.max(0, -(mt ? mt.compGrDb : 0) / 24)) * (parent.height - 2); radius: 1; color: Theme.amber } } }
-                                            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("IN  OUT GR", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6 } } }
+                                            Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("IN  OUT GR", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6 } }
+                                        Fader { objectName: "stripFader"; showLevels: false; numbers: true; tint: stripItem.sc; Layout.fillHeight: true; readonly property bool riding: !!(st && st.loudRide); value: st ? st.db + (riding && mt ? mt.rideDb : 0) : 0; ghost: riding && mt && Math.abs(mt.rideDb) > 0.05 ? st.db : NaN; badge: !st || !(st.loudRide || st.loudGate) || !mt ? "" : mt.rideGateDb < -0.01 ? "OFF" : mt.rideSusp ? "HOLD" : st.loudRide ? "AUTO" : ""; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } } }
                                     Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
                                     // groups and sends readout
                                     RowLayout { visible: page.showGroups && !page.simple; Layout.alignment: Qt.AlignHCenter; spacing: 2
@@ -732,7 +733,7 @@ Item {
             // the selected channel's whole chain, editable
             Rectangle {
                 visible: page.sidePanel
-                objectName: "channelOverview"; Layout.preferredWidth: 236; Layout.fillHeight: true; radius: 6; color: Theme.dark ? "#16181c" : "#f4f6f9"; border.color: Theme.line
+                objectName: "channelOverview"; Layout.preferredWidth: 236; Layout.fillHeight: true; radius: 6; color: Theme.cardSolid; border.color: Theme.line
                 Flickable {
                     id: sideFlick; anchors.fill: parent; anchors.margins: 8; contentWidth: width; contentHeight: side.implicitHeight; clip: true
                     flickableDirection: Flickable.VerticalFlick
@@ -777,7 +778,7 @@ Item {
                         MSlider { Layout.fillWidth: true; from: -60; to: 0; value: page.selCh.compThresholdDb === undefined ? -20 : page.selCh.compThresholdDb; onMoved: engine.setCompressor(page.sel, page.selCh.compOn, value, page.selCh.compRatio, page.selCh.compKneeDb, page.selCh.compAttackMs, page.selCh.compReleaseMs, page.selCh.compMakeupDb) }
                         // tone: the curve of the 3-band EQ on a grid (click: the full equaliser)
                         SectHead { title: "EQ"; link: "dsp" }
-                        Rectangle { objectName: "eqCurve"; Layout.fillWidth: true; implicitHeight: 86; radius: 3; color: Theme.dark ? "#0a0b0d" : "#ffffff"; border.color: Theme.line
+                        Rectangle { objectName: "eqCurve"; Layout.fillWidth: true; implicitHeight: 86; radius: 3; color: Theme.dark ? Theme.deep : "#ffffff"; border.color: Theme.line
                             readonly property var eq: (page.selSt, engine.channelEq(page.sel))
                             onEqChanged: curve.requestPaint()
                             Canvas { id: curve; anchors.fill: parent; anchors.margins: 1
@@ -841,6 +842,7 @@ Item {
                     ModKey { objectName: "enhancerBtn"; Layout.fillWidth: true; label: "ENHANCE"; tint: Theme.emerald; lit: engine.mastering().on; onClicked: page.Window.window.openEnhancer() }   // AMFB VOLUME ENHANCER
                     ModKey { objectName: "masterMuteBtn"; Layout.fillWidth: true; label: "MUTE"; tint: Theme.danger; litText: "#fff"; lit: engine.masterMuted; onClicked: engine.masterMuted = !engine.masterMuted }
                     ModKey { objectName: "analyzerBtn"; Layout.fillWidth: true; label: "ANALYZER"; tint: Theme.cyan; onClicked: page.Window.window.openAnalyzer() } }   // AMFB MASTER ANALYZER
+                BigVu { objectName: "masterBigVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 90; lDb: engine.telv("masterLDb", page.tick) ?? -120; rDb: engine.telv("masterRDb", page.tick) ?? -120; rmsDb: engine.telv("masterRmsDb", page.tick) ?? -120; clip: !!engine.telv("masterClip", page.tick) }
                 RowLayout { Layout.fillHeight: true; Layout.alignment: Qt.AlignHCenter; spacing: 8
                     Fader { showLevels: false; Layout.fillHeight: true; value: engine.masterDb; remoteHot: remote.touched(-1, remote.pulse); inDb: engine.telv("masterRmsDb", page.tick) === undefined ? -120 : engine.telv("masterRmsDb", page.tick); outDb: engine.telv("masterPeakDb", page.tick) === undefined ? -120 : engine.telv("masterPeakDb", page.tick); clip: engine.telv("masterClip", page.tick) === true; onMoved: function (db) { engine.setMaster(db) } }
                     MeterBar { Layout.fillHeight: true; Layout.topMargin: 8; implicitWidth: 10; peakDb: engine.telv("masterLDb", page.tick); rmsDb: engine.telv("masterRmsDb", page.tick); clip: engine.telv("masterClip", page.tick) }
@@ -911,6 +913,7 @@ Item {
                                 ToolTip.visible: rstH.hovered && settings.tooltips; ToolTip.text: i18n.t("RESET: the AI EQ back to flat; it learns again", i18n.lang); HoverHandler { id: rstH } } }
                         ToolTip.visible: aiH.hovered && settings.tooltips; ToolTip.text: i18n.t("AI EQ AUTO: the control room's EQ measures what you listen to and corrects it. The show is not affected; off puts the previous EQ back.", i18n.lang); HoverHandler { id: aiH } } }
                 // the fader and its two meters on one scale: 0 dBFS on the meters sits on the fader's 0 dB mark, -60 at the fader's floor
+                BigVu { objectName: "monBigVu"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 90; lDb: engine.telv("monitorLDb", page.tick) ?? -120; rDb: engine.telv("monitorRDb", page.tick) ?? -120 }
                 RowLayout { Layout.fillHeight: true; Layout.preferredHeight: 80; Layout.minimumHeight: 80; Layout.alignment: Qt.AlignHCenter; spacing: 6
                     Fader { id: monFader; objectName: "monFader"; showLevels: false; Layout.fillHeight: true; Layout.preferredHeight: 80; Layout.minimumHeight: 80; value: page.mon.db; outDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : Math.max(engine.telv("monitorLDb", page.tick), engine.telv("monitorRDb", page.tick)); onMoved: function (db) { engine.setMonitor(page.mon.source, db, page.mon.dim, page.mon.mono, page.mon.mute) } }
                     MeterBar { Layout.fillHeight: true; Layout.preferredHeight: 40; Layout.minimumHeight: 0; Layout.topMargin: monFader.pos(0) + 20; Layout.bottomMargin: 20; implicitWidth: 9; peakDb: engine.telv("monitorLDb", page.tick) === undefined ? -120 : engine.telv("monitorLDb", page.tick); rmsDb: -120 }

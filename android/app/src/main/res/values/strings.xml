@@ -28,7 +28,7 @@
     <string name="pair_help">On the computer: NETWORK → PHONE REMOTE → START. Type the six-digit PIN shown there (it changes every minute).</string>
     <string name="pair_need_host">Type the console address first (shown on the computer under PHONE REMOTE).</string>
     <string name="find">FIND CONSOLE</string>
-    <string name="buses">BUSES</string>
+    <string name="buses">SEND TO</string>
     <string name="monitor">MONITOR</string>
     <string name="clear_clips">CLEAR CLIPS</string>
     <string name="searching">Looking for consoles on this Wi-Fi…</string>

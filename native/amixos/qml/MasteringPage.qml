@@ -64,6 +64,8 @@ Item {
                     delegate: RowLayout { spacing: 6; Text { visible: index > 0; text: "→"; color: Theme.dim; font.pixelSize: 10 }
                         Text { text: page.t(modelData[0]); color: !modelData[2] ? Theme.muted : modelData[1] ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: modelData[2] } } }
                 Item { Layout.fillWidth: true } } }
+        RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
+        BigVu { objectName: "masteringBigVu"; visible: page.visible; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 96; Layout.preferredHeight: 220; lDb: engine.telv("masterLDb", engine.meterTick) ?? -120; rDb: engine.telv("masterRDb", engine.meterTick) ?? -120; rmsDb: engine.telv("masterRmsDb", engine.meterTick) ?? -120; clip: !!engine.telv("masterClip", engine.meterTick) }
         GridLayout { Layout.fillWidth: true; Layout.fillHeight: true; columns: width > 1000 ? 3 : 2; columnSpacing: 8; rowSpacing: 8
             Card { title: page.t("TONE"); sub: page.t("shelves"); on: page.m.toneOn; onToggled: page.put("toneOn", !page.m.toneOn)
                 Knob { label: page.t("LOW 100 Hz"); value: page.m.low; from: -12; to: 12; unit: "dB"; onMoved: function (v) { page.put("low", v) } }
@@ -99,6 +101,6 @@ Item {
                 Knob { label: page.t("OUTPUT"); value: page.m.gain; from: -12; to: 12; unit: "dB"; onMoved: function (v) { page.put("gain", v) } }
                 Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; text: page.t("OUTPUT pushes the mix into the limiter: louder, with less dynamics. Watch LOUDNESS for the target (-14 LUFS streaming, -23 broadcast). Saved with the console; the recorder and the monitor hear the result.") }
                 Item { Layout.fillHeight: true } }
-        }
+        } }
     } }
 }
