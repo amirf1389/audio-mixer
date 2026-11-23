@@ -2351,5 +2351,13 @@
 "3D",
 "FROM ABOVE",
 "RANGE dB",
-"view CPU %1 ms/s"
+"view CPU %1 ms/s",
+"DIM takes 20 dB off; MUTE silences the master (the fader stays where it is)",
+"WINDOWS VOLUME",
+"Every change is sent at most once a frame; what the console or another remote moves shows here as it happens.",
+"INSERTS · PLUG-INS",
+"Up to 10 inserts per channel, from the computer's scanned VST2 / VST3 plug-ins and the built-in effects.",
+"No inserts on this channel.",
+"preset…",
+"Remove %1?"
 ]

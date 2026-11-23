@@ -26,7 +26,7 @@ data class Rta(val src: Int, val f: List<Double>, val db: List<Double>)
 data class ProgramEq(val on: Boolean = false, val gains: List<Double> = List(10) { 0.0 })
 /** a DCA group channel of the console (id 1..8): its fader is an offset on its members' level, MUTE mutes them; members = strip numbers */
 data class DcaState(val id: Int, val name: String, val db: Double, val mute: Boolean, val color: Int, val members: List<Int>)
-data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound(), val dcas: List<DcaState> = emptyList())   // v: the console's change counter (LIVE SYNC)
+data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound(), val dcas: List<DcaState> = emptyList(), val masterMute: Boolean = false, val masterDim: Boolean = false)   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
 /** loudness of the master (LUFS momentary / short-term / integrated, range LU, true peak dBTP) */
 data class Loudness(val m: Double = -120.0, val s: Double = -120.0, val i: Double = -120.0, val lra: Double = 0.0, val tp: Double = -120.0)
@@ -100,7 +100,7 @@ class DaemonClient(val ep: Endpoint) {
         }
         fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
             return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo"), it.num("trim"), it.obj("tone").let { t -> Tone(t.num("low"), t.num("mid"), t.num("midHz", 1000.0), t.num("high"), t["on"] != false) }, (it["eq"] as? List<*>).orEmpty().map { b -> nums(b) }) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) },
-                o.list("dcas").map { DcaState(it.int("id"), it.str("name"), it.num("db"), it.bool("mute"), it.int("color"), (it["members"] as? List<*>).orEmpty().mapNotNull { x -> (x as? Number)?.toInt() }) })
+                o.list("dcas").map { DcaState(it.int("id"), it.str("name"), it.num("db"), it.bool("mute"), it.int("color"), (it["members"] as? List<*>).orEmpty().mapNotNull { x -> (x as? Number)?.toInt() }) }, m.bool("mute"), m.bool("dim"))
         }
         fun nums(v: Any?): List<Double> = (v as? List<*>).orEmpty().map { (it as? Number)?.toDouble() ?: 0.0 }
         fun parseProgramEq(o: Map<String, Any?>): ProgramEq { val p = o.obj("programEq"); val g = nums(p["gains"])
@@ -133,6 +133,17 @@ class DaemonClient(val ep: Endpoint) {
     fun solo(strip: Int, on: Boolean) = push(mapOf("op" to "solo", "strip" to strip, "on" to on))
     fun name(strip: Int, name: String) = control(mapOf("op" to "name", "strip" to strip, "name" to name))
     fun master(db: Double) = push(mapOf("op" to "master", "db" to db))
+    /** MASTER MUTE / DIM (-20 dB): sent alone, so the fader's value is never re-sent with them */
+    fun masterMute(on: Boolean) = push(mapOf("op" to "master", "mute" to on))
+    fun masterDim(on: Boolean) = push(mapOf("op" to "master", "dim" to on))
+    /** CHANNEL INSERTS: what may be added (the console's scanned plug-ins and the built-in effects, by opaque id), and the changes */
+    fun insertCatalog(): List<Inserts.Entry> = Inserts.catalog(getObj("/api/inserts"))
+    fun insertSlots(strip: Int): List<Inserts.Slot> = Inserts.slots(racks(strip))
+    fun insertAdd(strip: Int, id: String, slot: Int? = null) = control(Inserts.add(strip, id, slot))
+    fun insertRemove(strip: Int, slot: Int) = control(Inserts.remove(strip, slot))
+    fun insertMove(strip: Int, slot: Int, to: Int) = control(Inserts.move(strip, slot, to))
+    fun pluginPreset(strip: Int, slot: Int, preset: Int) = control(mapOf("op" to "plugin", "strip" to strip, "slot" to slot, "preset" to preset))
+    fun pluginDefaults(strip: Int, slot: Int) = control(mapOf("op" to "plugin", "strip" to strip, "slot" to slot, "defaults" to true))
     /** a DCA group strip (group 1..8): its level offset and / or its MUTE */
     fun dca(group: Int, db: Double? = null, mute: Boolean? = null) = push(buildMap { put("op", "dca"); put("group", group); db?.let { put("db", it) }; mute?.let { put("mute", it) } })
     /** a console setting (the service checks each): "winVolume" 0..100, "winGain" true/false, "width" 0..2 ... */

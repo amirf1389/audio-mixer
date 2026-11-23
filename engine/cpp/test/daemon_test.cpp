@@ -304,6 +304,8 @@ int main() {
       std::fputs("{\"racks\":[{\"strip\":0,\"name\":\"VOCAL\",\"plugins\":[{\"slot\":2,\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\",\"name\":\"Fake Gain\",\"bypass\":false,\"state\":\"0.75,0.5\"}]},"
                  "{\"strip\":1,\"name\":\"GTR\",\"plugins\":[{\"slot\":0,\"kind\":\"vst2:C:/missing.dll\",\"name\":\"Gone\"}]}]}", f); std::fclose(f); }
     am::Daemon::Options po = o; po.port = 0; po.seed = sf; po.tokenStore.clear();
+    const std::string cif = "daemon_test_console.json"; { std::FILE* f = std::fopen(cif.c_str(), "wb"); std::fputs("{\"vst\":[{\"name\":\"Fake Gain\",\"vendor\":\"Test Labs\",\"format\":\"VST3\",\"kind\":\"vst3:C:/VST3/FakeGain.vst3|ABC\"},{\"name\":\"Odd\",\"kind\":\"C:/evil.dll\"}]}", f); std::fclose(f); }
+    po.consoleInfo = cif;
     po.pluginFactory = [](const std::string& kind, double, int, std::string& err) -> std::unique_ptr<am::host::Plugin> {
       if (kind.find("FakeGain") == std::string::npos) { err = "the module is not on this computer"; return nullptr; } auto p = std::make_unique<FakePlugin>(); g_fake = p.get(); return p; };
     am::Daemon pd(po); std::string e; CHECK(pd.start(e)); const unsigned short pp = pd.port(); const std::vector<std::pair<std::string, std::string>> pa = {{"X-Amix-Token", po.token}};
@@ -336,10 +338,51 @@ int main() {
       CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"plugin\",\"strip\":0,\"slot\":2,\"bypass\":true}", pa, status, body) && pd.state()["racksBy"].asString() == "remote");
       CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"rack\",\"strip\":0,\"plugins\":[]}", pa, status, body) && status == 200);
       CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/racks", "", pa, status, body) && Value::parse(body, ok)["racks"].size() == 1); }
+    { // CHANNEL INSERTS FROM A REMOTE: the catalog has ids (no paths), add / move / bypass / param / preset / remove, bad input refused
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/inserts", "", {}, status, body) && (status == 401 || status == 429));
+      CHECK(am::httpd::Client::request("127.0.0.1", pp, "GET", "/api/inserts", "", pa, status, body) && status == 200 && body.find("C:/") == std::string::npos && body.find("evil") == std::string::npos);
+      const Value cat = Value::parse(body, ok)["plugins"]; std::string fakeId, revId;
+      for (const Value& x : cat.items()) { if (x["name"].asString() == "Fake Gain") fakeId = x["id"].asString(); if (x["fx"].asBool() && revId.empty()) revId = x["id"].asString(); }
+      CHECK(ok && fakeId.size() == 16 && revId.size() == 16 && Value::parse(body, ok)["maxSlots"].asInt() == 10);
+      auto ctl = [&](const std::string& j) { std::this_thread::sleep_for(std::chrono::milliseconds(110)); return am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", j, pa, status, body) ? status : 0; };
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"add\",\"id\":\"" + fakeId + "\"}") == 200 && Value::parse(body, ok)["slot"].asInt() == 0);
+      CHECK(pd.state()["racksBy"].asString() == "remote");
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"add\",\"id\":\"" + revId + "\",\"slot\":3}") == 200);
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"add\",\"id\":\"" + revId + "\",\"slot\":3}") == 400);   // taken
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"add\",\"id\":\"" + revId + "\",\"slot\":10}") == 400);  // slot range
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"add\",\"id\":\"0123456789abcdef\"}") == 400);           // not in the list
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"add\",\"id\":\"vst3:C:/VST3/FakeGain.vst3|ABC\"}") == 400);   // a path is never taken
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":99,\"action\":\"add\",\"id\":\"" + fakeId + "\"}") == 400);
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"move\",\"slot\":0,\"to\":5}") == 200);
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"move\",\"slot\":0,\"to\":1}") == 400);   // nothing there now
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"move\",\"slot\":5,\"to\":-1}") == 400);
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"explode\"}") == 400);
+      { const Value r = pd.racks(4, true); CHECK(r.size() == 1 && r.at(0)["slots"].size() == 2 && r.at(0)["slots"].at(0)["slot"].asInt() == 3 && r.at(0)["slots"].at(1)["slot"].asInt() == 5 && r.at(0)["slots"].at(1)["loaded"].asBool());
+        CHECK(r.at(0)["slots"].at(0)["presets"].size() > 0 || r.at(0)["slots"].at(0)["kind"].asString().rfind("fx:", 0) == 0); }
+      CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":5,\"bypass\":true}") == 200 && g_fake->byp);
+      CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":5,\"param\":7,\"value\":0.125}") == 200 && std::abs(g_fake->gain - 0.125) < 1e-12);
+      CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":5,\"param\":7,\"value\":-0.1}") == 400);
+      CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":5,\"param\":12345,\"value\":0.5}") == 400);
+      CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":5,\"preset\":1}") == 400);   // a built-in effect's preset is not for this plug-in
+      CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":5,\"defaults\":true}") == 200 && std::abs(g_fake->gain - 0.5) < 1e-12);
+      { int pid = 0; const Value r = pd.racks(4, true); const Value& pr = r.at(0)["slots"].at(0)["presets"]; if (pr.size()) pid = pr.at(0)["id"].asInt();
+        if (r.at(0)["slots"].at(0)["loaded"].asBool() && pid) CHECK(ctl("{\"op\":\"plugin\",\"strip\":4,\"slot\":3,\"preset\":" + std::to_string(pid) + "}") == 200); }
+      CHECK(ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"remove\",\"slot\":5}") == 200 && ctl("{\"op\":\"insert\",\"strip\":4,\"action\":\"remove\",\"slot\":5}") == 400);
+      { int refused = 0; for (int i = 0; i < 40; ++i) if (am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"insert\",\"strip\":4,\"action\":\"move\",\"slot\":3,\"to\":2}", pa, status, body) && status == 400 && body.find("slow down") != std::string::npos) ++refused;
+        CHECK(refused > 0); }   // rate limited
+      std::this_thread::sleep_for(std::chrono::milliseconds(2100)); }
+    // MASTER from a remote: the value comes back exactly; mute / dim alone leave the fader where it is (no echo moves it)
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"master\",\"db\":-7.3}", pa, status, body) && status == 200);
+    CHECK(pd.state()["master"]["db"].asNumber() == -7.3);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"master\",\"mute\":true}", pa, status, body) && status == 200);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"master\",\"dim\":true}", pa, status, body) && status == 200);
+    { const Value m = pd.state()["master"]; CHECK(m["db"].asNumber() == -7.3 && m["mute"].asBool() && m["dim"].asBool()); }
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"master\",\"db\":" + Value(pd.state()["master"]["db"].asNumber()).dump() + "}", pa, status, body) && pd.state()["master"]["db"].asNumber() == -7.3);   // its own echo: the same value
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"master\",\"mute\":false,\"dim\":false}", pa, status, body) && !pd.state()["master"]["mute"].asBool() && pd.state()["master"]["db"].asNumber() == -7.3);
     // THE CHANNEL EQ (bands 0..7) is kept in the state, so the console and every remote follow it
     CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"eq\",\"strip\":1,\"band\":3,\"type\":\"highshelf\",\"freq\":8000,\"q\":0.7,\"gainDb\":4.5}", pa, status, body) && status == 200);
     { const Value e = pd.state()["strips"].at(1)["eq"].at(3); CHECK(e.at(0).asInt() == 3 && e.at(1).asNumber() == 8000 && e.at(3).asNumber() == 4.5); }
-    pd.stop(); std::remove(sf.c_str()); g_fake = nullptr; }
+    pd.stop(); std::remove(sf.c_str()); std::remove(cif.c_str()); g_fake = nullptr; }
   { // RTA: a 1 kHz sine at -6 dBFS reads about -6 dB in its band and nothing far from it; the master's RTA EQ from the seed and from a remote
     am::Rta rta; rta.source.store(am::Rta::kMaster); std::vector<float> L(256), R(256); double ph = 0;
     for (int b = 0; b < 40; ++b) { for (std::size_t i = 0; i < L.size(); ++i) { L[i] = R[i] = 0.5f * static_cast<float>(std::sin(ph)); ph += 2 * 3.14159265358979 * 1000.0 / 48000.0; } rta.onBlock(nullptr, 0, L.data(), R.data(), L.size(), 48000); }

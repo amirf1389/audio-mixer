@@ -93,7 +93,7 @@ class RemoteActivity : FitActivity() {
         val clipBtn = Button(this).apply { text = getString(R.string.clear_clips); isEnabled = false }
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row2.addView(find); row2.addView(consolesBtn); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(android.widget.HorizontalScrollView(this).apply { addView(row2) })
-        row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } });  addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
+        row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } });  addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.ins_button); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, InsertsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
         connectBtn = connect
         // RECORD on the console, MUTE GROUPS (kept on this phone) and the console's INPUT source
         val recBtn = Button(this).apply { text = getString(R.string.remote_rec); isEnabled = false; setOnClickListener { toggleRecord(this) } }
@@ -400,6 +400,7 @@ class RemoteActivity : FitActivity() {
         val floor = Prefs.meterFloor(this).toDouble(); fun bar(v: Double) = ((DaemonClient.lin2db(v) + floor) / floor * 1000).toInt().coerceIn(0, 1000)
         for (i in faders.indices) if (i < m.strips.size) { faders[i].level = bar(m.strips[i].pk); faders[i].clip = m.strips[i].clip }
         masterFader.level = bar(Math.max(m.masterL, m.masterR)); masterFader.clip = m.masterClip
+        masterMeterView?.let { v -> if (v.isAttachedToWindow) { val d = { x: Double -> if (x <= 1e-6) "-∞" else String.format("%.1f", 20 * Math.log10(x)) }; v.text = getString(R.string.master_meters, d(m.masterL), d(m.masterR)) } else masterMeterView = null }
     }
 
     private fun showDevices() {
@@ -621,6 +622,7 @@ class RemoteActivity : FitActivity() {
             .setNegativeButton(R.string.scene_pending_off) { _, _ -> Prefs.remote(this).edit().putString("recallOnConnect", "").apply() }.show()
     }
     /** MASTER: the limiter (on / off, ceiling). */
+    private var masterMeterView: TextView? = null
     private fun showMaster() {
         val c = client ?: return
         AlertDialog.Builder(this).setTitle("MASTER").setView(masterPanel(c)).setPositiveButton(android.R.string.ok, null).show()
@@ -628,6 +630,20 @@ class RemoteActivity : FitActivity() {
     internal fun masterPanel(c: DaemonClient): View {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
         val st = state; var on = st?.limiter ?: true; var ceil = st?.ceilingDb ?: -0.5
+        // THE MASTER: fader with its dB, MUTE, DIM (-20 dB) and the master meters; a drag sends its latest value only, and the state's echo
+        // of it does not move the fader back (it is ignored while the finger is down)
+        val mdb = TextView(this).apply { text = getString(R.string.master_level, DaemonClient.fmtDb(st?.masterDb ?: 0.0)); setTextColor(Color.parseColor("#FFB590")); textSize = 18f; typeface = android.graphics.Typeface.MONOSPACE }
+        box.addView(mdb)
+        box.addView(SeekBar(this).apply { max = 1000; progress = (DaemonClient.dbToPos(st?.masterDb ?: 0.0) * 1000).toInt(); contentDescription = getString(R.string.master_fader)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar, p: Int, u: Boolean) { if (!u) return; val v = Math.round(DaemonClient.posToDb(p / 1000.0) * 10) / 10.0; mdb.text = getString(R.string.master_level, DaemonClient.fmtDb(v)); live.submit("master") { c.master(v) } }
+                override fun onStartTrackingTouch(s: SeekBar) { touching++ }; override fun onStopTrackingTouch(s: SeekBar) { touching = maxOf(0, touching - 1); catchUp() } }) })
+        val sw = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        sw.addView(ToggleButton(this).apply { textOn = getString(R.string.master_muted); textOff = getString(R.string.master_mute); isChecked = st?.masterMute == true; setOnCheckedChangeListener { b, v -> buzz(b); live.submit("masterMute") { c.masterMute(v) } } })
+        sw.addView(ToggleButton(this).apply { textOn = getString(R.string.master_dimmed); textOff = getString(R.string.master_dim); isChecked = st?.masterDim == true; setOnCheckedChangeListener { b, v -> buzz(b); live.submit("masterDim") { c.masterDim(v) } } })
+        box.addView(sw)
+        masterMeterView = TextView(this).apply { setTextColor(Color.parseColor("#34D399")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f; text = getString(R.string.master_meters, "—", "—") }
+        box.addView(masterMeterView)
         val t = TextView(this).apply { text = String.format("CEILING  %.1f dBFS", ceil); setTextColor(Color.WHITE) }
         box.addView(ToggleButton(this).apply { textOn = "LIMITER ON"; textOff = "LIMITER OFF"; isChecked = on; setOnCheckedChangeListener { b, v -> buzz(b); on = v; io.execute { runCatching { c.limiter(on, ceil) } } } })
         box.addView(t)

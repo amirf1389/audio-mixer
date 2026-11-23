@@ -6,6 +6,8 @@
 #include "samples/sfx.hpp"
 #include "audiomixer/bluetooth.hpp"
 #include "paths/paths.hpp"
+#include "fx/fx.hpp"
+#include "fx/presets.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -298,6 +300,11 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     if (!err.empty()) { res.status = 400; json::Value e = json::Value::object(); e.set("ok", false); e.set("error", err); res.body = e.dump(); return res; }
     res.body = out.dump(); return res;
   }
+  if (r.method == "GET" && r.path == "/api/inserts") {   // what a remote may add to a channel (names and opaque ids: no module paths)
+    { const std::string rr = roleOf(r); if (rr == "held") { res.status = 403; res.body = "{\"ok\":false,\"held\":true}"; return res; }
+      if (rr.empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; } }
+    json::Value o; { std::lock_guard<std::mutex> g(m_); o = insertCatalog(); } res.body = o.dump(); return res;
+  }
   if (r.method == "GET" && r.path == "/api/console-info") {   // the console's plug-ins, racks and extensions as it saved them when the service started (read-only)
     { const std::string rr = roleOf(r); if (rr == "held") { res.status = 403; res.body = "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}"; return res; }
       if (rr.empty()) { res.status = noteRefused() ? 429 : 401; res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; } }
@@ -411,11 +418,36 @@ json::Value Daemon::racks(int onlyStrip, bool params, bool states) const {
             // the plug-in's own text, its unit added only when it left it out
             x.set("text", hasUnit ? t : t + " " + pi.units); }
           ps.push(x); }
-        o.set("params", ps); }
+        o.set("params", ps);
+        json::Value pr = json::Value::array(); if (q.kind.rfind("fx:", 0) == 0) for (const auto& p : fx::presets()) if ("fx:" + p.kind == q.kind) { json::Value x = json::Value::object(); x.set("id", p.id); x.set("name", p.name); x.set("category", p.category); pr.push(x); }
+        o.set("presets", pr); }
       if (states) o.set("state", q.pl ? q.pl->state() : q.state);
       ss.push(o); }
     r.set("slots", ss); a.push(r); }
   return a;
+}
+namespace {
+std::string kindId(const std::string& k) { std::uint64_t h = 1469598103934665603ull; for (unsigned char c : k) { h ^= c; h *= 1099511628211ull; } char b[20]; std::snprintf(b, sizeof b, "%016llx", static_cast<unsigned long long>(h)); return b; }
+}
+bool Daemon::Bucket::take(double perSecond, double burst) {
+  const auto now = std::chrono::steady_clock::now(); if (tokens < 0) { tokens = burst; at = now; }
+  tokens = std::min(burst, tokens + perSecond * std::chrono::duration<double>(now - at).count()); at = now;
+  if (tokens < 1) return false; tokens -= 1; return true;
+}
+// what a remote may put on a channel: the console's scanned plug-ins (from remote-console.json, written by the console) and the built-in effects
+std::vector<std::pair<std::string, json::Value>> Daemon::catalogKinds() const {
+  std::vector<std::pair<std::string, json::Value>> out;
+  for (const auto& [k, n] : fx::catalog()) { json::Value e = json::Value::object(); e.set("name", n); e.set("vendor", "AMFB Audio"); e.set("format", "built-in"); e.set("fx", true); out.push_back({"fx:" + k, e}); }
+  if (!opt_.consoleInfo.empty()) { std::ifstream f(opt_.consoleInfo, std::ios::binary); std::string t((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()); bool ok = false;
+    const json::Value o = t.size() < 4 * 1024 * 1024 ? json::Value::parse(t, ok) : json::Value(); const json::Value& v = o["vst"];
+    if (ok && v.isArray()) for (std::size_t i = 0; i < v.size() && i < 4096; ++i) { const json::Value& x = v.at(i); const std::string k = x["kind"].asString();
+      if (k.rfind("vst3:", 0) != 0 && k.rfind("vst2:", 0) != 0) continue;
+      json::Value e = json::Value::object(); e.set("name", x["name"].asString()); e.set("vendor", x["vendor"].asString()); e.set("format", x["format"].asString()); e.set("fx", false); out.push_back({k, e}); } }
+  return out;
+}
+json::Value Daemon::insertCatalog() const {
+  json::Value a = json::Value::array(); for (auto& [k, e] : catalogKinds()) { json::Value x = e; x.set("id", kindId(k)); a.push(x); }
+  json::Value o = json::Value::object(); o.set("plugins", a); o.set("maxSlots", kRemoteSlots); return o;
 }
 double Daemon::trimForLevel(double l) { return l <= 0.0005 ? -120.0 : std::max(-120.0, std::min(0.0, 30.0 * std::log10(l))); }
 bool Daemon::windowsSetsLevel() const { return rt_ && rt_->backendName() == "wasapi" && !rt_->exclusive() && (rt_->outDevice().empty() || rt_->outDevice() == "-"); }
@@ -440,7 +472,7 @@ double Daemon::outTrim() const {   // GAIN MODE's trim (the same rule as the con
 }
 // the master fader and, separately, GAIN MODE's listening trim: the trim comes after the meters, the loudness meter and AUTO LEVEL
 // (Mixer::setOutputTrimDb), so turning Windows down does not make AUTO LEVEL turn the mix back up
-void Daemon::applyMaster(Runtime& rt) const { rt.setMasterDb(masterDb_); rt.setOutputTrimDb(outTrim()); }
+void Daemon::applyMaster(Runtime& rt) const { rt.setMasterDb(masterMute_ ? -120.0 : clampDb(masterDb_ + (masterDim_ ? -20.0 : 0.0))); rt.setOutputTrimDb(outTrim()); }
 void Daemon::pushSettings(Runtime& rt) const {
   rt.setWidth(set_.width); rt.setOutputBits(set_.outputBits < 0 ? 0 : set_.outputBits); rt.setDcBlock(set_.dcBlock); rt.setAnalogChannels(set_.analog);
   rt.setAutoLevel(set_.autoLevel, set_.autoTarget, set_.autoMax); rt.setClipDb(set_.clipDb); rt.setPeakHoldMs(set_.peakHoldMs); applyMaster(rt);
@@ -483,7 +515,7 @@ json::Value Daemon::state() const {
     for (int g = 0; g < 8; ++g) { const Dca& d = dcas_[g]; json::Value v = json::Value::object(); v.set("id", g + 1); v.set("name", d.name.empty() ? "DCA " + std::to_string(g + 1) : d.name); v.set("db", d.db); v.set("mute", d.mute); v.set("color", d.color);
       json::Value m = json::Value::array(); for (int x : d.members) m.push(x); v.set("members", m); dcas.push(v); }
     o.set("dcas", dcas); }
-  json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
+  json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("mute", masterMute_); m.set("dim", masterDim_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   o.set("settings", settingsJson());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
@@ -546,7 +578,7 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
       s.low = g(t["low"].asNumber(s.low)); s.mid = g(t["mid"].asNumber(s.mid)); s.high = g(t["high"].asNumber(s.high)); s.midHz = std::max(100.0, std::min(8000.0, t["midHz"].asNumber(s.midHz))); s.toneOn = t["on"].asBool(s.toneOn); }
     const json::Value& eq = v["eq"]; for (std::size_t b = 0; b < eq.size() && b < 8; ++b) { const json::Value& e = eq.at(b); Strip::Band& d = s.eq[b];
       d.type = std::max(0, std::min(8, e.at(0).asInt(0))); d.freq = std::max(10.0, std::min(24000.0, e.at(1).asNumber(1000))); d.q = std::max(0.05, std::min(36.0, e.at(2).asNumber(0.707))); d.gain = std::max(-24.0, std::min(24.0, e.at(3).asNumber(0))); } }
-  if (o["master"].isObject()) masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_)));
+  if (o["master"].isObject()) { masterDb_ = std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_))); masterMute_ = o["master"]["mute"].asBool(masterMute_); }
   if (o["routes"].isObject()) {   // the console's ROUTING: what feeds each strip, what each output carries
     initRoutes(); const json::Value& ri = o["routes"]["in"]; const json::Value& ro = o["routes"]["out"];
     for (std::size_t i = 0; i < ri.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) inRoute_[i] = std::max(-1, std::min(Runtime::kNetInBase - 1, ri.at(i).asInt(static_cast<int>(i))));
@@ -622,7 +654,12 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "mute") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].mute = on; if (rt_) rt_->setMute(s, on); return ok; }
   if (op == "solo") { if (!strip(s)) return {}; const bool on = cmd["on"].asBool(); strips_[static_cast<std::size_t>(s)].solo = on; if (rt_) rt_->setSolo(s, on); return ok; }
   if (op == "name") { if (!strip(s)) return {}; std::string n = cmd["name"].asString(); if (n.size() > 24) n.resize(24); if (n.empty()) { err = "empty name"; return {}; } strips_[static_cast<std::size_t>(s)].name = n; return ok; }
-  if (op == "master") { masterDb_ = clampDb(cmd["db"].asNumber(0)); if (rt_) applyMaster(*rt_); return ok; }
+  if (op == "master") {   // {db} and / or {mute}, {dim}: what is left out stays (a remote echo of one field never moves the others)
+    const bool any = cmd.has("db") || cmd.has("mute") || cmd.has("dim");
+    if (cmd.has("db") || !any) { const double d = cmd["db"].asNumber(0); if (!std::isfinite(d)) { err = "db: a number"; return {}; } masterDb_ = clampDb(d); }
+    if (cmd.has("mute")) { masterMute_ = cmd["mute"].asBool(); }
+    if (cmd.has("dim")) { masterDim_ = cmd["dim"].asBool(); }
+    if (rt_) applyMaster(*rt_); return ok; }
   if (op == "rta") {   // the analyzer's source; a remote renews it while its page is open
     const json::Value& v = cmd["src"]; const int src = v.type() == json::Value::String ? Rta::kOff : std::max(-1, std::min(opt_.strips - 1, v.asInt(Rta::kOff)));
     rta_.source.store(src); rtaUntil_ = src == Rta::kOff ? 0 : static_cast<long long>(std::time(nullptr)) + 20; ok.set("src", src); return ok; }
@@ -672,8 +709,31 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (now.empty()) racks_.erase(s); else racks_[s] = std::move(now);
     if (cmd.has("name")) rackNames_[s] = cmd["name"].asString();
     if (rt_) loadRack(*rt_, s); ++racksV_; racksFromConsole_ = true; return ok; }
-  if (op == "plugin") {   // a plug-in of the console's racks: bypass or one parameter (0..1)
+  if (op == "insert") {   // CHANNEL INSERTS from a remote: add (a plug-in of the catalog, by its id), remove, move (swap two slots)
+    if (!strip(s)) return {}; const std::string act = cmd["action"].asString();
+    if (!insertBucket_.take(10, 20)) { err = "too many insert changes: slow down"; return {}; }
+    auto slotOk = [&](const char* k, int& v) { if (!cmd[k].isNumber()) { err = std::string(k) + ": a slot number"; return false; } const double d = cmd[k].asNumber(-1); v = static_cast<int>(d);
+      if (d != v || v < 0 || v >= kRemoteSlots) { err = std::string(k) + ": 0.." + std::to_string(kRemoteSlots - 1); return false; } return true; };
+    std::vector<PlugSlot>& rk = racks_[s]; auto at = [&](int k) -> PlugSlot* { for (PlugSlot& q : rk) if (q.slot == k) return &q; return nullptr; };
+    int k = -1;
+    if (act == "add") {
+      const std::string id = cmd["id"].asString(); if (id.size() != 16) { err = "id: one from /api/inserts"; return {}; }
+      std::string kind; json::Value entry; for (auto& [kk, e] : catalogKinds()) if (kindId(kk) == id) { kind = kk; entry = e; }
+      if (kind.empty()) { err = "that plug-in is not in the console's list"; return {}; }
+      if (cmd.has("slot")) { if (!slotOk("slot", k)) return {}; if (at(k)) { err = "that slot is taken"; return {}; } }
+      else { for (int j = 0; j < kRemoteSlots && k < 0; ++j) if (!at(j)) k = j; if (k < 0) { err = "the channel's inserts are full"; return {}; } }
+      PlugSlot sl; sl.slot = k; sl.kind = kind; sl.name = entry["name"].asString(); rk.push_back(std::move(sl));
+      std::sort(rk.begin(), rk.end(), [](const PlugSlot& a, const PlugSlot& b) { return a.slot < b.slot; }); ok.set("slot", k); }
+    else if (act == "remove") { if (!slotOk("slot", k)) return {}; if (!at(k)) { err = "no plug-in in that slot"; return {}; }
+      rk.erase(std::remove_if(rk.begin(), rk.end(), [&](const PlugSlot& q) { return q.slot == k; }), rk.end()); }
+    else if (act == "move") { int to = -1; if (!slotOk("slot", k) || !slotOk("to", to)) return {}; PlugSlot* a = at(k); if (!a) { err = "no plug-in in that slot"; return {}; }
+      PlugSlot* b = at(to); a->slot = to; if (b) b->slot = k; std::sort(rk.begin(), rk.end(), [](const PlugSlot& x, const PlugSlot& y) { return x.slot < y.slot; }); }
+    else { err = "action: add, remove or move"; return {}; }
+    if (rt_) loadRack(*rt_, s); ++racksV_; ++version_; racksFromConsole_ = false; return ok; }   // the strip stays listed (even empty): the console follows its structure
+  if (op == "plugin") {   // a plug-in of the console's racks: bypass, one parameter (0..1), a factory preset or the defaults
     const int st = cmd["strip"].asInt(-1), sl = cmd["slot"].asInt(-1); auto it = racks_.find(st); PlugSlot* p = nullptr;
+    if (st < 0 || st >= opt_.strips || sl < 0 || sl >= 64) { err = "strip or slot out of range"; return {}; }
+    if (!paramBucket_.take(200, 200)) { err = "too many changes: slow down"; return {}; }
     if (it != racks_.end()) for (PlugSlot& q : it->second) if (q.slot == sl) p = &q;
     if (!p) { err = "no plug-in in that slot"; return {}; }
     if (cmd.has("bypass")) { p->bypass = cmd["bypass"].asBool(false); if (p->pl) p->pl->setBypass(p->bypass); }
@@ -681,6 +741,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
       const double v = cmd["value"].asNumber(-1); if (!(v >= 0 && v <= 1)) { err = "value: 0..1"; return {}; }
       const auto id = static_cast<std::uint32_t>(cmd["param"].asNumber(-1)); bool known = false; for (const auto& q : p->pl->params()) if (q.id == id && !q.readOnly) known = true;
       if (!known) { err = "no such parameter"; return {}; } p->pl->setParam(id, v); ok.set("text", p->pl->paramText(id, v)); }
+    else if (cmd.has("preset")) { if (!p->pl) { err = "that plug-in is not loaded here"; return {}; } const fx::Preset* pr = fx::preset(cmd["preset"].asInt(0));
+      if (!pr || "fx:" + pr->kind != p->kind) { err = "no such preset for that plug-in"; return {}; }
+      std::string stt; char b[96]; for (const auto& [id, v] : pr->values) { std::snprintf(b, sizeof b, "%s=%.4f;", id.c_str(), v); stt += b; }   // the knobs (not the MIX), as the console does
+      if (!p->pl->setState(stt)) { err = "the preset did not apply"; return {}; } }
+    else if (cmd.has("defaults")) { if (!p->pl) { err = "that plug-in is not loaded here"; return {}; } for (const auto& q : p->pl->params()) if (!q.readOnly && !q.bypass && !q.hidden) p->pl->setParam(q.id, q.defaultNormalized); }
     else { err = "bypass or param"; return {}; }
     ++racksV_; racksFromConsole_ = false; return ok; }
   if (op == "setting") {   // a console setting from a remote (see daemon.hpp); every value is checked here

@@ -79,7 +79,14 @@ class Daemon {
   //   GET /api/racks                every rack: [{strip, name, slots:[{slot, kind, name, vendor, format, bypass, loaded, error}]}], "v"
   //   GET /api/racks?strip=N        that strip's slots with their parameters [{id, title, value 0..1, default, text, steps}]
   //   GET /api/racks?states=1       with each plug-in's state (master token: the console takes the phones' changes back)
-  //   POST /api/control {"op":"plugin","strip":N,"slot":K, "bypass":true|false | "param":ID,"value":0..1}
+  //   POST /api/control {"op":"plugin","strip":N,"slot":K, "bypass":true|false | "param":ID,"value":0..1 | "preset":ID | "defaults":true}
+  // CHANNEL INSERTS from a remote (up to kRemoteSlots per strip, slots 0..kRemoteSlots-1):
+  //   GET  /api/inserts             the plug-ins a remote may add: [{id, name, vendor, format, fx}] (the console's scanned VST2/VST3 list
+  //                                 and the built-in effects); "id" is an opaque hash: a remote never sends a module path
+  //   POST /api/control {"op":"insert","strip":N,"action":"add","id":"<id>"[,"slot":K]} | "remove","slot":K | "move","slot":K,"to":J (swap)
+  //   structure changes are limited to 10 a second, parameter changes to 200 a second
+  static constexpr int kRemoteSlots = 10;
+  json::Value insertCatalog() const;
   json::Value racks(int strip = -1, bool params = false, bool states = false) const;
   unsigned long long racksVersion() const { return racksV_.load(); }
   // RTA (the spectrum for the remotes' EQ pages): POST {"op":"rta","src":-1 (master) | strip | "off"}; while on (a remote renews it every
@@ -140,6 +147,9 @@ class Daemon {
   Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1}; std::string masterPreset_;   // the MASTERING PRESET picked last (its name)
   json::Value programEqJson() const;
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
+  struct Bucket { double tokens = -1; std::chrono::steady_clock::time_point at; bool take(double perSecond, double burst); };
+  Bucket insertBucket_, paramBucket_; bool masterMute_ = false, masterDim_ = false;   // MASTER MUTE / DIM (-20 dB) from the remotes
+  std::vector<std::pair<std::string, json::Value>> catalogKinds() const;   // {kind, entry} of what a remote may add (m_ held)
   std::map<int, std::vector<PlugSlot>> racks_; std::map<int, std::string> rackNames_; std::atomic<unsigned long long> racksV_{1};
   void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)
   void loadRack(Runtime& rt, int strip);   // the same for one strip

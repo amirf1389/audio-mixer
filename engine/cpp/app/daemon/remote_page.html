@@ -73,7 +73,7 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 .grid{gap:8px}.bar{gap:6px;margin-bottom:8px}
 </style></head><body>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">BUSES</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUPS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
 <div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
@@ -100,6 +100,16 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 <div class="bar"><button id="aeApply" class="pri sm" disabled>APPLY</button><button id="aeCancel" class="sm" disabled>CANCEL</button></div></div></div></section>
 <section id="bus" class="page"><div class="bar"><span class="seg"><button id="bAux" class="on acc">AUX 1–8</button><button id="bFx">FX 1–8</button></span><span class="sp"></span></div><div id="buses" class="grid"></div>
 <p class="note">AUX buses are the monitor mixes, FX buses the effect returns. LEVEL is the bus master, RETURN what comes back into the main mix.</p></section>
+<section id="mst" class="page"><div class="grid">
+<div class="card"><h2>MASTER</h2>
+<div style="display:flex;gap:16px;align-items:stretch"><div style="flex:1"><div class="row"><span>Level</span><b id="xDbT" class="db" style="font:600 22px ui-monospace,monospace;color:var(--cyan)">—</b></div>
+<input type="range" class="h" id="xDb" min="0" max="1000" aria-label="Master fader">
+<div class="row"><span>Switches<small>DIM takes 20 dB off; MUTE silences the master (the fader stays where it is)</small></span><span class="seg"><button id="xDim">DIM</button><button id="xMute">MUTE</button></span></div></div>
+<div id="xMt" style="display:flex;gap:4px;width:34px;height:150px" aria-label="Master meters"><i style="flex:1;background:#0b0f15;border:1px solid var(--line);position:relative;border-radius:3px"><b style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,var(--green),var(--amber) 80%,var(--red))"></b></i><i style="flex:1;background:#0b0f15;border:1px solid var(--line);position:relative;border-radius:3px"><b style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,var(--green),var(--amber) 80%,var(--red))"></b></i></div></div>
+<div class="row"><span>Peak</span><b id="xPk" class="db">—</b></div></div>
+<div class="card" id="xWinC"><h2>WINDOWS VOLUME<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">the computer's own output volume</small></h2>
+<div class="row"><span>Volume</span><span style="flex:1;max-width:60%;display:flex;gap:8px;align-items:center"><input id="xWin" class="h" type="range" min="0" max="100" step="1" aria-label="Windows volume"><b id="xWinV" style="min-width:48px;text-align:right">—</b></span></div></div>
+</div><p class="note">Every change is sent at most once a frame; what the console or another remote moves shows here as it happens.</p></section>
 <section id="mon" class="page"><div class="grid">
 <div class="card"><h2>MONITOR · CONTROL ROOM</h2>
 <div class="row"><span>Source<small>what the monitor outputs play</small></span><select id="mSrc"></select></div>
@@ -125,6 +135,9 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 <div class="card"><h2>DYNAMICS</h2>
 <div class="band"><div class="hd"><b>GATE</b><button id="gOn" class="sm">OFF</button></div><div id="gK"></div></div>
 <div class="band"><div class="hd"><b>COMPRESSOR</b><button id="cOn" class="sm">OFF</button></div><div id="cK"></div></div></div>
+<div class="card" id="insC"><h2>INSERTS · PLUG-INS</h2><div id="insL"></div>
+<div class="bar" style="margin:10px 0 0"><select id="insAdd" aria-label="Plug-in to add" style="flex:1;min-width:0"></select><button id="insAddB" class="sm pri">ADD</button></div>
+<div id="insP"></div><p class="note" id="insN">Up to 10 inserts per channel, from the computer's scanned VST2 / VST3 plug-ins and the built-in effects.</p></div>
 <div class="card"><h2>SENDS</h2><div class="bar"><span class="seg"><button id="sAux" class="sm on acc">AUX 1–8</button><button id="sFx" class="sm">FX 1–8</button></span></div><div id="sends"></div></div>
 </div></section>
 <section id="scn" class="page"><div class="grid">
@@ -281,7 +294,7 @@ function bridge(o){if(!opt.bridge||$("#bridge").hidden)return;const c=$("#brC"),
  const mp=Math.max(ml,mr);if(mp>BR.mHold||now-BR.mHoldT>hold){BR.mHold=mp;BR.mHoldT=now}if(M.clip)BR.mClip=true;
  const pk=$("#brPk");pk.textContent=BR.mHold>-90?BR.mHold.toFixed(1)+" dB":"—";pk.classList.toggle("clip",BR.mClip);
  const nc=BR.clip.filter(Boolean).length+(BR.mClip?1:0);$("#brClip").textContent=nc?nc+" CLIP"+(nc>1?"S":""):""}
-function meters(o){if(!o||!o.strips)return;lastMeters=o;bridge(o);if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
+function meters(o){if(!o||!o.strips)return;lastMeters=o;if(tab==="mst"&&o.master){const b=$("#xMt").querySelectorAll("b");b[0].style.height=(mpos(o.master.l||0)*100).toFixed(1)+"%";b[1].style.height=(mpos(o.master.r||0)*100).toFixed(1)+"%";const pk=Math.max(o.master.l||0,o.master.r||0);$("#xPk").textContent=pk>0?fmt(20*Math.log10(pk)):"−∞"}bridge(o);if(opt.meters)for(const e of els){const v=e.i<0?Math.max(o.master.l,o.master.r):(o.strips[e.i]||{}).pk||0;e.bar.style.height=(mpos(v)*100).toFixed(1)+"%"}
  if(tab==="rec"){const L=o.loudness||{},f=v=>typeof v==="number"&&v>-70?v.toFixed(1):"—";$("#lM").textContent=f(L.m);$("#lS").textContent=f(L.s);$("#lI").textContent=f(L.i);$("#lR").textContent=typeof L.lra==="number"&&L.lra>0?L.lra.toFixed(1):"—";$("#lT").textContent=f(L.tp);$("#lC").textContent=typeof o.correlation==="number"?o.correlation.toFixed(2):"—"}}
 // ---- BUSES, MONITOR, LIMITER: drawn from the state, kept up to date by the same push
 function hslider(id,lab,db,onV){const f=typeof id==="string"?$(id):id,t=typeof lab==="string"?$(lab):lab;if(free(f)){f.value=Math.round(dbToPos(db)*1000);t.textContent=fmt(db)}f.oninput=()=>{const v=posToDb(f.value/1000);t.textContent=fmt(v);onV(v)};f.onpointerdown=()=>{drag=f}}
@@ -363,7 +376,7 @@ function consoleSettings(){const S=state&&state.settings;if(!S)return;
  onOff("#cLoudM",!!S.loudMaster,"loudMaster");onOff("#cLoudR",!!S.loudRide,"loudRide");onOff("#cLoudG",!!S.loudGate,"loudGate");segOf("#cLoudP",["STREAMING","PODCAST","BROADCAST"],S.loudPreset,"loudPreset",v=>v[0]+v.slice(1).toLowerCase()+" "+({STREAMING:-14,PODCAST:-16,BROADCAST:-23})[v]);
  $("#cTrim").textContent=!S.winGain?"—":S.winTrimDb<=-119?"OFF":S.winTrimDb===0?"0 dB":S.winTrimDb.toFixed(1)+" dB";
  $("#cTrimN").textContent=!has?"This computer has no Windows volume the console can reach.":S.winGain&&S.winSetsLevel?"The console plays through Windows' own mixer here, which already sets the level with this slider: no extra trim (no double cut).":""}
-function panels(){consoleSettings();if(tab==="rta")rtaPage();if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch")channel();if(tab==="grp")drawGroups()}
+function panels(){consoleSettings();if(tab==="rta")rtaPage();if(tab==="bus")buses();if(tab==="mon")monitor();if(tab==="ch"){channel();inserts()}if(tab==="mst")masterPage();if(tab==="grp")drawGroups()}
 // ---- RECORD and STATUS: the console's status, read every two seconds while one of these pages is open
 const base=f=>String(f||"").split(/[\\/]/).pop();   // the file name only: a remote does not need the computer's folders
 const hms=s=>{s=Math.floor(s||0);return [s/3600|0,(s/60|0)%60,s%60].map(x=>String(x).padStart(2,"0")).join(":")};
@@ -540,6 +553,41 @@ function drawPresets(){if(!pack)return;const kinds=[["mastering","MASTERING"],["
   list.appendChild(r)}}
 $("#preFind").oninput=drawPresets;
 // ---- pages
+
+// ONE UPDATE PER FRAME: the latest value of each control goes out on the next animation frame (older ones are dropped); a control that
+// was just moved here ignores the state for a moment, so its own echo never pulls it back (and never moves the gain).
+const fq={},held={};let fRaf=0;function sendFrame(k,c){fq[k]=c;held[k]=Date.now();if(!fRaf)fRaf=requestAnimationFrame(()=>{fRaf=0;for(const x of Object.keys(fq)){const c=fq[x];delete fq[x];api("/api/control",c).catch(e=>setSt(e.message,true))}})}
+const mine=k=>Date.now()-(held[k]||0)<600;
+function masterPage(){if(!state||!state.master)return;const M=state.master,f=$("#xDb");
+ if(free(f)&&!mine("xm")){f.value=Math.round(dbToPos(M.db)*1000);$("#xDbT").textContent=fmt(M.db)}
+ f.oninput=()=>{const v=Math.round(posToDb(f.value/1000)*10)/10;$("#xDbT").textContent=fmt(v);M.db=v;sendFrame("xm",{op:"master",db:v})};f.onpointerdown=()=>{drag=f};
+ for(const [id,k,c] of [["#xDim","dim","amb"],["#xMute","mute","red"]]){const b=$(id);b.classList.add(c);if(!mine("x"+k))b.classList.toggle("on",!!M[k]);b.onclick=()=>{buzz();M[k]=!b.classList.contains("on");b.classList.toggle("on",M[k]);sendFrame("x"+k,{op:"master",[k]:M[k]})}}
+ const S=state.settings||{},has=S.winVolume>=0,w=$("#xWin");$("#xWinC").style.display=has?"":"none";
+ if(has&&free(w)&&!mine("xw")){w.value=S.winVolume;$("#xWinV").textContent=S.winVolume+"%"}
+ w.oninput=()=>{const v=+w.value;$("#xWinV").textContent=v+"%";S.winVolume=v;sendFrame("xw",{op:"setting",key:"winVolume",value:v})};w.onpointerdown=()=>{drag=w}}
+// CHANNEL INSERTS: the channel's slots (0..9) as the console has them; add from the console's own list (by id), remove, move, bypass, parameters, presets
+let insCat=null,insKey="",insOpen=-1;
+async function inserts(){if(!state||!token)return;if(!insCat){insCat=[];try{insCat=(await api("/api/inserts")).plugins||[]}catch(e){}
+  const a=$("#insAdd");a.innerHTML="";for(const p of insCat){const o=document.createElement("option");o.value=p.id;o.textContent=p.name+(p.fx?" · built-in":" · "+(p.format||"")+(p.vendor?" · "+p.vendor:""));a.appendChild(o)}}
+ if((drag&&$("#insP").contains(drag))||mine("p"))return;const k=cur+":"+state.racksV;if(k===insKey)return;insKey=k;let slots=[];try{const r=(await api("/api/racks?strip="+cur)).racks||[];slots=r.length?r[0].slots:[]}catch(e){}drawInserts(slots)}
+function insCtl(c){return api("/api/control",c).then(()=>{insKey="";inserts()}).catch(e=>{$("#insN").textContent=e.message})}
+function drawInserts(slots){const L=$("#insL");L.innerHTML="";const used=new Set(slots.map(s=>s.slot));
+ if(!slots.length)L.innerHTML='<p class="note">No inserts on this channel.</p>';
+ for(const s of slots){const r=document.createElement("div");r.className="row";r.innerHTML='<span><b></b><small></small></span><span class="seg"><button class="sm u" aria-label="Move up">▲</button><button class="sm d" aria-label="Move down">▼</button><button class="sm byp amb">BYP</button><button class="sm ed">EDIT</button><button class="sm rm red">✕</button></span>';
+  r.querySelector("b").textContent=(s.slot+1)+" · "+s.name;r.querySelector("small").textContent=s.loaded?((s.vendor||"")+" "+(s.format||"")):(s.error||"not loaded here");
+  const by=r.querySelector(".byp");by.classList.toggle("on",!!s.bypass);by.onclick=()=>{buzz();insCtl({op:"plugin",strip:cur,slot:s.slot,bypass:!s.bypass})};
+  r.querySelector(".rm").onclick=()=>{if(confirm("Remove "+s.name+"?"))insCtl({op:"insert",strip:cur,action:"remove",slot:s.slot})};
+  const mv=t=>{if(t>=0&&t<10)insCtl({op:"insert",strip:cur,action:"move",slot:s.slot,to:t})};r.querySelector(".u").onclick=()=>mv(s.slot-1);r.querySelector(".d").onclick=()=>mv(s.slot+1);
+  r.querySelector(".ed").disabled=!s.loaded;r.querySelector(".ed").onclick=()=>{insOpen=insOpen===s.slot?-1:s.slot;drawInserts(slots)};L.appendChild(r)}
+ $("#insAddB").disabled=used.size>=10;$("#insAddB").onclick=()=>{const id=$("#insAdd").value;if(id)insCtl({op:"insert",strip:cur,action:"add",id})};
+ const P=$("#insP");P.innerHTML="";const s=slots.find(x=>x.slot===insOpen);if(!s||!s.params)return;
+ const h=document.createElement("div");h.className="bar";h.style.margin="10px 0 4px";h.innerHTML='<b style="flex:1"></b><select class="pr" aria-label="Preset"></select><button class="sm df">DEFAULTS</button>';h.querySelector("b").textContent=s.name;
+ const ps=h.querySelector(".pr");ps.innerHTML='<option value="">preset…</option>';for(const p of s.presets||[]){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;ps.appendChild(o)}ps.style.display=(s.presets||[]).length?"":"none";
+ ps.onchange=()=>{if(ps.value)insCtl({op:"plugin",strip:cur,slot:s.slot,preset:+ps.value})};h.querySelector(".df").onclick=()=>insCtl({op:"plugin",strip:cur,slot:s.slot,defaults:true});P.appendChild(h);
+ for(const q of s.params){const d=document.createElement("div");d.className="kn";d.innerHTML='<span></span><input type="range" min="0" max="1000"><em></em>';d.querySelector("span").textContent=q.title;const f=d.querySelector("input"),t=d.querySelector("em");
+  f.value=Math.round(q.value*1000);t.textContent=q.text;f.setAttribute("aria-label",q.title);if(q.steps>0)f.step=Math.max(1,Math.round(1000/q.steps));
+  f.onpointerdown=()=>{drag=f};f.oninput=()=>{held.p=Date.now();sendFrameP(s.slot,q.id,f.value/1000,t)};P.appendChild(d)}}
+const pq={};let pRaf=0;function sendFrameP(slot,id,v,t){pq[slot+"_"+id]={slot,id,v,t};if(!pRaf)pRaf=requestAnimationFrame(()=>{pRaf=0;for(const k of Object.keys(pq)){const x=pq[k];delete pq[k];api("/api/control",{op:"plugin",strip:cur,slot:x.slot,param:x.id,value:x.v}).then(o=>{if(o&&o.text!=null)x.t.textContent=o.text}).catch(e=>{$("#insN").textContent=e.message})}})}
 function go(p){tab=p;for(const s of document.querySelectorAll(".page"))s.style.display=s.id===p?"block":"none";for(const b of document.querySelectorAll("#nav button"))b.classList.toggle("cur",b.dataset.p===p);ls.set("tab",p);
  clearInterval(statusT);if(p==="rec"||p==="sys"){readStatus();statusT=setInterval(()=>{if(!document.hidden)readStatus()},2000)}panels();if(p==="rec"&&lastMeters)meters(lastMeters)
  if(p==="scn")drawScenes();if(p==="pre")loadPresets();if(p==="dev"&&!devs.length)loadDevices();if(p==="ch")drawEq()}

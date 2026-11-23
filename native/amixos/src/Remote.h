@@ -94,7 +94,7 @@ class Remote : public QObject {
   /** a command to the running service (a SAMPLE PAD while it plays the sound); false when it does not run */
   bool send(const QVariantMap& cmd) { if (!running()) return false; ensureToken(); if (token_.isEmpty()) return false; post(cmd); return true; }
  private:
-  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0, remotes_ = 0, pulse_ = 0; qint64 lastTouch_ = 0; int dTicks_ = 0, dGets_ = 0, dApplied_ = 0; QHash<int, qint64> touched_;
+  QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; bool baseMute_ = false; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0, remotes_ = 0, pulse_ = 0; qint64 lastTouch_ = 0; int dTicks_ = 0, dGets_ = 0, dApplied_ = 0; QHash<int, qint64> touched_;
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;
