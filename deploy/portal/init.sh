@@ -34,4 +34,5 @@ if [ -f secrets/vendor-private.pem ]; then chmod 600 secrets/vendor-private.pem;
 
 # the containers run as user 1000 (node): give it the key files (read-only mounts keep the 0600 mode)
 if [ "$(id -u)" = 0 ]; then chown -R 1000:1000 secrets data site-releases; echo "files handed to uid 1000 for Docker"; fi
+grep -Eq '^ADMIN_ALLOW_IPS=.+' .env 2>/dev/null || echo "WARNING: ADMIN_ALLOW_IPS is not set: the staff hosts are protected by the password only. Set it in .env to your own addresses."
 echo "done. Now edit the domains in .env (PUBLIC_DOMAIN, ADMIN_DOMAIN, OTA_ADMIN_DOMAIN, ACME_EMAIL, ADMIN_ALLOW_IPS)."

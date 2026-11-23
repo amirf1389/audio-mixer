@@ -12,7 +12,9 @@ hand out N seats until date D"). The computers on the site then activate against
 - The devices trust the host because the grant carries the host's public key, signed by the central server. A copied
   or home-made host cannot make leases the devices accept.
 
-Run:  uvicorn --factory sitehost:app --host 0.0.0.0 --port 8090      (settings: see deploy/site-host.env.example)
+Run:  python sitehost.py   (binds LKMS_HOST_BIND, default 127.0.0.1, port LKMS_HOST_PORT, default 8090; set LKMS_HOST_BIND=0.0.0.0
+      to serve the site's computers on the LAN)   or   uvicorn --factory sitehost:app --host 127.0.0.1 --port 8090
+      (settings: see deploy/site-host.env.example). Each client address may make LKMS_HOST_RATE requests a minute (default 120); more get 429.
 """
 from __future__ import annotations
 
@@ -191,6 +193,24 @@ class SiteHost:
         return {"valid": True, "plan": grant.get("plan"), "lease_expires_at": exp, "lease": body + "." + _b64u(self.key.sign(body.encode())), "grant": self._get("grant")}
 
 
+class RateLimiter:
+    """Per-client-address token bucket: `rate` requests per `per` seconds, refilled continuously. Old entries are dropped."""
+
+    def __init__(self, rate: int, per: float, now=time.time) -> None:
+        self.rate, self.per, self.now, self.lock, self.buckets = max(1, rate), per, now, threading.Lock(), {}
+
+    def allow(self, key: str) -> bool:
+        t = self.now()
+        with self.lock:
+            if len(self.buckets) > 10000:
+                self.buckets = {k: v for k, v in self.buckets.items() if t - v[1] < self.per}
+            tokens, last = self.buckets.get(key, (float(self.rate), t))
+            tokens = min(float(self.rate), tokens + (t - last) * self.rate / self.per)
+            ok = tokens >= 1.0
+            self.buckets[key] = (tokens - 1.0 if ok else tokens, t)
+            return ok
+
+
 def create_app(settings: HostSettings | None = None, *, background: bool = True, now=time.time) -> FastAPI:
     settings = settings or HostSettings.from_env()
     host = SiteHost(settings, now)
@@ -210,6 +230,19 @@ def create_app(settings: HostSettings | None = None, *, background: bool = True,
 
     app = FastAPI(title="LKMS site host", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.host = host
+    limiter = RateLimiter(int(os.environ.get("LKMS_HOST_RATE", "120")), 60.0, now)
+
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next):
+        ip = request.client.host if request.client else "?"
+        if not limiter.allow(ip):
+            resp = JSONResponse(status_code=429, content={"valid": False, "error": "rate_limited"}, headers={"Retry-After": "60", "Cache-Control": "no-store"})
+        else:
+            resp = await call_next(request)
+        # JSON only: the same headers with or without a proxy in front
+        resp.headers.update({"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+                             "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"})
+        return resp
 
     def refuse(code: str, http: int, **extra):
         return JSONResponse(status_code=http, content={"valid": False, "error": code, **extra}, headers={"Cache-Control": "no-store"})
@@ -289,3 +322,8 @@ def create_app(settings: HostSettings | None = None, *, background: bool = True,
 
 def app() -> FastAPI:       # uvicorn --factory sitehost:app
     return create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app(), host=os.environ.get("LKMS_HOST_BIND", "127.0.0.1"), port=int(os.environ.get("LKMS_HOST_PORT", "8090")), server_header=False)

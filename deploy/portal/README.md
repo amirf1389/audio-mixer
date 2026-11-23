@@ -70,7 +70,9 @@ The proper fix is a separate update-signing key. That needs an app release that 
    `scp ~/.audio-mixer-vendor/vendor-private.pem root@SERVER:/opt/audio-mixer/deploy/portal/secrets/` and then `sudo sh init.sh`.
    (Use the folder `scripts/license.js` reports as the vendor key folder.)
 8. **Set the domains** in `.env`: `PUBLIC_DOMAIN`, `ADMIN_DOMAIN`, `OTA_ADMIN_DOMAIN` and `ACME_EMAIL`.
-   Set `ADMIN_ALLOW_IPS` to your own IP address or addresses, for example `203.0.113.7/32`.
+   Set `ADMIN_ALLOW_IPS` to your own IP address or addresses, for example `203.0.113.7/32`. When it is set, the staff hosts answer 404 to
+   every other address. When it is not set they stay reachable from everywhere behind the password only (so existing deploys keep working),
+   and `start.js` / `init.sh` print a WARNING.
    (The Caddyfile reads these values from the environment, so you do not edit it.)
 9. **Start:** `docker compose up -d --build`. Check with `docker compose ps`: all three services should show *healthy* or *running*.
    Then open `https://updates.example.com/healthz`.

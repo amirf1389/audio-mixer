@@ -9,6 +9,7 @@ Row {
     id: hv
     spacing: 6
     signal appsClicked()
+    property bool compact: false   // narrow window: the knob and APPS only (the dB is in the knob's tooltip)
     readonly property bool muted: engine.masterMuted
     readonly property real db: engine.masterDb
     property real shownDb: db
@@ -48,9 +49,10 @@ Row {
         TapHandler { onTapped: engine.masterMuted = !engine.masterMuted }
         WheelHandler { onWheel: (e) => { const d = e.angleDelta.y > 0 ? 1 : e.angleDelta.y < 0 ? -1 : 0; if (d !== 0) volume.stepMaster(d) } }
         HoverHandler { id: kH }
-        ToolTip.visible: kH.hovered; ToolTip.text: i18n.t("MASTER VOLUME: drag or wheel to set, click to mute", i18n.lang)
+        ToolTip.visible: kH.hovered; ToolTip.text: (hv.compact ? (hv.muted ? i18n.t("MUTED", i18n.lang) : volume.dbText(hv.shownDb) + " dB") + "\n" : "") + i18n.t("MASTER VOLUME: drag or wheel to set, click to mute", i18n.lang)
     }
     Column {
+        visible: !hv.compact
         anchors.verticalCenter: parent.verticalCenter; spacing: 1
         Text { text: i18n.t("MASTER", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: true; font.letterSpacing: 1 }
         Text { objectName: "headerVolumeDb"; text: hv.muted ? i18n.t("MUTED", i18n.lang) : volume.dbText(hv.shownDb) + " dB"; color: hv.muted ? Theme.danger : Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; width: 64 }

@@ -1,11 +1,13 @@
 # The SITE HOST, for a customer with a volume licence. They run this once inside their own network:
 #   docker compose up -d
 # The site's computers then use http://<this machine>:8090 as their licence server address.
+# By default the port is published on 127.0.0.1 only (a TLS proxy on the same machine in front). To let the site's computers reach it
+# directly, set SITE_HOST_PUBLISH=0.0.0.0 (or the LAN address) in .env, and keep the machine off the internet.
 services:
   site-host:
     build: ../../host
     env_file: .env
-    ports: ["8090:8090"]
+    ports: ["${SITE_HOST_PUBLISH:-127.0.0.1}:8090:8090"]
     volumes:
       - site-host-data:/data
     restart: unless-stopped

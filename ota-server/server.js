@@ -131,6 +131,8 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', po
       others: osdetect.others(m, [file && file.key, driver && driver.key]), manifest: (publicUrl ? publicUrl.replace(/\/+$/, '') : '') + (ch === 'stable' ? '' : '/' + ch) + '/update.json' };
     return { code: 200, body, file, driver };
   }
+  // CORS '*' ONLY on the public read-only routes (/update.json, /<channel>/update.json, /latest, /api/latest, /download, /driver, /healthz).
+  // The /admin* routes and POST /request-license (the app posts it, not a web page) send no CORS header, so no other site's page can read them.
   const CORS = { 'Access-Control-Allow-Origin': '*', 'Vary': 'User-Agent, Sec-CH-UA-Platform, Sec-CH-UA-Arch', 'Accept-CH': 'Sec-CH-UA-Platform, Sec-CH-UA-Arch' };   // public, read-only, signed data: any page or app may read it
 
   // ── public routes ──
@@ -226,9 +228,9 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', po
     return lines.map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean).reverse().slice(0, n);
   }
   const cleanStr = (v, n) => String(v || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
-  const LIC_CORS = { ...CORS, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+  const LIC_CORS = {};   // no CORS: see CORS above
   async function handleLicenseRequest(req, res, ip) {
-    if (req.method === 'OPTIONS') return send(res, 204, '', { ...LIC_CORS, 'Access-Control-Max-Age': '600' });
+    if (req.method === 'OPTIONS') return send(res, 204, '', LIC_CORS);
     if (req.method !== 'POST') return fail(res, 405, 'method not allowed');
     const lim = limiter.allow('lic:' + ip, 10); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { ...LIC_CORS, 'Retry-After': lim.retryAfter });
     req.audit = { action: 'license.request', target: '', detail: {} };
@@ -360,7 +362,7 @@ function createOta({ dataDir, token = '', publicUrl = '', jwk, portalDb = '', po
       if (req.method === 'OPTIONS') return send(res, 204, '', { ...CORS, 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600' });
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'method not allowed');
       if (PUBLIC[p]) return servePublic(req, res, p);
-      if (p === '/healthz') return send(res, 200, { ok: true, channels: Object.fromEntries(channels().map(c => [c, versionOf(c)])) });
+      if (p === '/healthz') return send(res, 200, { ok: true, channels: Object.fromEntries(channels().map(c => [c, versionOf(c)])) }, CORS);
       const lim = limiter.allow('d:' + ip, rate); if (!lim.ok) return send(res, 429, { ok: false, error: 'too many requests' }, { 'Retry-After': lim.retryAfter });
       let m;
       if (p === '/api/latest' || p === '/latest' || p === '/download') {

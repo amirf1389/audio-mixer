@@ -170,8 +170,8 @@ jobs:
         run: |
           sudo apt-get install -y kotlin && sh jvm-test/run.sh ../build/engine
           gradle wrapper --gradle-version 8.9 --no-daemon
-          ./gradlew --no-daemon assembleRelease bundleRelease
-          cp app/build/outputs/apk/release/app-release.apk ../dist/amixos-android.apk
+          ./gradlew --no-daemon assembleRelease bundleRelease -PallowDebugSigning=true   # CI test build: debug-signed, *-UNSIGNED-TEST (no release key here)
+          cp app/build/outputs/apk/release/app-release*.apk ../dist/amixos-android.apk
           cp app/build/outputs/bundle/release/app-release.aab ../dist/amixos-android.aab
       - uses: actions/upload-artifact@v4
         with:

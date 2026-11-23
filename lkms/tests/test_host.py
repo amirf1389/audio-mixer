@@ -158,3 +158,12 @@ def test_only_a_host_certified_by_the_central_server_is_believed(site, tmp_path)
     assert st["licensed"] and st["seats"] == 3 and st["seats_used"] == 1 and st["plan"] == "site"
     assert httpx.get(site["host_url"] + "/status").status_code == 401
     assert (Path(hs.data_dir) / "host.key").stat().st_mode & 0o077 == 0     # the host's key is readable by its owner only
+
+
+def test_rate_limiter_per_address():
+    clock = [1000.0]
+    lim = sitehost.RateLimiter(3, 60.0, lambda: clock[0])
+    assert [lim.allow("a") for _ in range(4)] == [True, True, True, False]
+    assert lim.allow("b")                      # another address has its own bucket
+    clock[0] += 20.0                           # 20 s refill one token at 3 per minute
+    assert lim.allow("a") and not lim.allow("a")
