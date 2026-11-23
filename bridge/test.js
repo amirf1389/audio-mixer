@@ -2317,9 +2317,9 @@ test('OTA license key requests: the app\'s LICENSE page can POST its request fil
     const base = 'http://127.0.0.1:' + server.address().port;
     try {
       const req = { app: 'audio-mixer', kind: 'license-request', v: 1, machineId: 'AAAA-BBBB-CCCC', plan: 'pro', name: 'Jane Doe', email: 'jane@example.com', platform: 'linux', arch: 'x64', version: '1.12.2.0', at: Date.now() };
-      // CORS preflight: the app's own page (a different origin than the OTA server) posts here
-      const opt = await fetch(base + '/request-license', { method: 'OPTIONS' });
-      assert.strictEqual(opt.status, 204); assert.match(opt.headers.get('access-control-allow-methods'), /POST/);
+      // no CORS here (the app posts natively, not from a web page): another site's page may not post or read
+      const opt = await fetch(base + '/request-license', { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } });
+      assert.strictEqual(opt.status, 204); assert.strictEqual(opt.headers.get('access-control-allow-origin'), null); assert.strictEqual(opt.headers.get('access-control-allow-methods'), null);
       // a valid request with an e-mail: stored, and a real receipt e-mail sent through the fake SMTP server above
       const r1 = await fetch(base + '/request-license', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
       const j1 = await r1.json(); assert.strictEqual(r1.status, 200); assert.deepStrictEqual(j1, { ok: true, received: true, emailed: true });
@@ -2496,6 +2496,8 @@ test('OS detection for update links: user agents, Client Hints, explicit choice,
     assert.strictEqual((await go('/update.json', 'x')).headers.get('access-control-allow-origin'), '*');
     const pre = await fetch(b + '/api/latest', { method: 'OPTIONS', headers: { Origin: 'https://app.example' } }); assert.strictEqual(pre.status, 204); assert.match(pre.headers.get('access-control-allow-methods'), /GET/);
     assert.strictEqual((await fetch(b + '/latest', { method: 'POST' })).status, 405);
+    assert.strictEqual((await fetch(b + '/healthz')).headers.get('access-control-allow-origin'), '*');
+    for (const ap of ['/admin/stats', '/admin/login']) assert.strictEqual((await fetch(b + ap, { headers: { ...auth, Origin: 'https://evil.example' } })).headers.get('access-control-allow-origin'), null, 'no CORS on ' + ap);
     const st = await (await fetch(b + '/admin/stats', { headers: auth })).json(), det = Object.values(st.days)[0].detect; assert.ok(det.android >= 3 && det.windows >= 3 && det.macos === 1 && det.linux === 2 && det.unknown >= 1 && det.ios >= 2, JSON.stringify(det));
   } finally { srv.closeAllConnections(); srv.close(); }
 });

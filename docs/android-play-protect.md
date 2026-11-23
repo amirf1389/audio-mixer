@@ -26,6 +26,8 @@ export AMFX1_KEYSTORE_PASSWORD=...   AMFX1_KEY_ALIAS=amfx1   AMFX1_KEY_PASSWORD=
 cd android && gradle assembleRelease      # or bundleRelease for the Play Store (.aab)
 apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk   # must show your certificate, not "Android Debug"
 ```
+Without `AMFX1_KEYSTORE` the release build stops with an error. For a local test only, `gradle assembleRelease -PallowDebugSigning=true`
+builds a debug-signed APK named `*-release-UNSIGNED-TEST.apk`: never publish it (anyone can sign a replacement with the public debug key).
 
 ## 3. Distribute so Play Protect knows the app
 - **Best: publish on Google Play** (closed or internal testing is enough to start). Apps from Play are scanned and trusted by

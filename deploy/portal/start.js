@@ -43,10 +43,18 @@ function plan(env, base) {
   return { data, licence, ota };
 }
 
+// The staff hosts (Caddyfile, `import staff`) answer only ADMIN_ALLOW_IPS. Unset or "everyone" keeps the old password-only behaviour, so say so loudly.
+function staffAllowWarning(env) {
+  const v = (env.ADMIN_ALLOW_IPS || '').trim();
+  if (v && !/(^|\s)(0\.0\.0\.0\/0|::\/0)(\s|$)/.test(v)) return '';
+  return 'WARNING: ADMIN_ALLOW_IPS is not set (or allows every address): the staff hosts are protected by the password only. Set it in .env to your own addresses, e.g. ADMIN_ALLOW_IPS=203.0.113.7/32';
+}
+
 function main(argv = process.argv.slice(2)) {
   const i = argv.indexOf('--env'), envFile = path.resolve(i >= 0 ? argv[i + 1] : process.env.PORTAL_ENV_FILE || path.join(HERE, '.env'));
   if (!fs.existsSync(envFile)) { console.error('No ' + envFile + ': run deploy/portal/init.sh (or init.ps1) first.'); return process.exit(1); }
-  let p; try { p = plan(readEnv(envFile), path.dirname(envFile)); } catch (e) { console.error(e.message); return process.exit(1); }
+  let env, p; try { env = readEnv(envFile); p = plan(env, path.dirname(envFile)); } catch (e) { console.error(e.message); return process.exit(1); }
+  const warn = staffAllowWarning(env); if (warn) console.warn(warn);
   for (const d of ['staff', 'licence', 'ota']) fs.mkdirSync(path.join(p.data, d), { recursive: true, mode: 0o700 });
   const kids = [];
   const run = (name, script, env) => {
@@ -61,5 +69,5 @@ function main(argv = process.argv.slice(2)) {
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
 }
 
-module.exports = { readEnv, plan };
+module.exports = { staffAllowWarning, readEnv, plan };
 if (require.main === module) main();

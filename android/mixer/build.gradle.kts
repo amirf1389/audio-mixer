@@ -6,6 +6,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// release signing (see android { } below): the keystore from the environment, or an explicit opt-in to a debug-signed TEST build
+val releaseKeystorePath: String? = System.getenv("AMFX1_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).exists() }
+val allowDebugSigning = (findProperty("allowDebugSigning") as String?) == "true"
+tasks.matching { it.name == "packageRelease" }.configureEach {
+    doFirst {
+        if (releaseKeystorePath == null && !allowDebugSigning) throw GradleException("release build refused: no release keystore (set AMFX1_KEYSTORE, AMFX1_KEYSTORE_PASSWORD, AMFX1_KEY_ALIAS, AMFX1_KEY_PASSWORD). For a local test APK only, add -PallowDebugSigning=true (debug-signed, named *-UNSIGNED-TEST.apk; never publish it).")
+    }
+}
+
 android {
     namespace = "com.amfb.amixos"
     compileSdk = 35
@@ -18,7 +27,7 @@ android {
         versionName = rootProject.file("../native/amixos/version.txt").readText().trim() + " (build " + build + ")"
     }
     // RELEASE SIGNING: the same rule as :app (the key comes from the environment, never from the repository)
-    val releaseKeystore = System.getenv("AMFX1_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).exists() }
+    val releaseKeystore = releaseKeystorePath
     signingConfigs {
         if (releaseKeystore != null) create("release") {
             storeFile = file(releaseKeystore); storePassword = System.getenv("AMFX1_KEYSTORE_PASSWORD")
@@ -26,8 +35,18 @@ android {
             enableV2Signing = true; enableV3Signing = true
         }
     }
+    // No release keystore: the release build FAILS (packageRelease below), unless -PallowDebugSigning=true asks for a local TEST APK, which is
+    // then signed with the public debug key and named *-UNSIGNED-TEST.apk. Never hand such an APK out; store / public APKs need your own key.
+    val releaseSigning = when {
+        releaseKeystore != null -> signingConfigs.getByName("release")
+        allowDebugSigning -> signingConfigs.getByName("debug")
+        else -> null
+    }
+    if (releaseKeystore == null && allowDebugSigning) applicationVariants.all {
+        if (buildType.name == "release") outputs.all { (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "${project.name}-release-UNSIGNED-TEST.apk" }
+    }
     buildTypes {
-        release { isMinifyEnabled = false; signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug") }
+        release { isMinifyEnabled = false; signingConfig = releaseSigning }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }

@@ -33,6 +33,9 @@
 }
 
 # Staff hosts: only the allowed addresses, never framed, never cached, never indexed.
+# ADMIN_ALLOW_IPS (space-separated CIDRs) set: every other client gets 404 before the login page. NOT set: the fallback below lets every
+# address reach the login page (password-only, the behaviour of older deploys, so an update never locks staff out); start.js and init.sh
+# print a WARNING in that case. Set it for any real deploy.
 (staff) {
 	@outsider not remote_ip {$ADMIN_ALLOW_IPS:0.0.0.0/0 ::/0}
 	respond @outsider "not found" 404

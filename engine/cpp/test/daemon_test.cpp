@@ -285,6 +285,26 @@ int main() {
     CHECK(std::abs(am::Daemon::trimForLevel(0.1) + 30) < 1e-9 && am::Daemon::trimForLevel(0) <= -119);
     d.setVolumeBackend([](float&) { return false; }, [](float) { return false; }); CHECK(set("winVolume", "40") == 400);   // no Windows slider here: said so
     CHECK(set("winGain", "false") == 200 && set("winMuteSync", "false") == 200 && !d.state()["settings"]["winMuteSync"].asBool()); }
+  { // PER-APP VOLUME over the remote: the list in the state, a checked change, the rate limit, a Windows-mixer move as a new state, no echo
+    auto mem = std::make_unique<am::vol::MemoryLayer>(); am::vol::MemoryLayer* L = mem.get();
+    L->add({"spotify#1", 42, "Spotify", "", 0.8f, false, false}); L->add({"sys", 0, "System sounds", "", 1.f, false, true});
+    d.setAppLayer(std::move(mem));
+    Value st2 = d.state(); CHECK(st2["appsAvailable"].asBool() && st2["apps"].size() == 2 && st2["apps"].items()[0]["system"].asBool() && st2["apps"].items()[1]["name"].asString() == "Spotify" && st2["apps"].items()[1]["volume"].asNumber() == 80);
+    auto post = [&](const std::string& j) { std::string b2; int s2 = 0; am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", j, auth, s2, b2); return s2; };
+    CHECK(post("{\"op\":\"appVolume\",\"id\":\"spotify#1\",\"volume\":25}") == 200 && d.state()["apps"].items()[1]["volume"].asNumber() == 25);
+    const int listsBefore = L->lists; const auto v1 = d.stateVersion(); d.state(); CHECK(L->lists == listsBefore && d.stateVersion() == v1);   // its echo moved nothing, and the list was not read again
+    CHECK(post("{\"op\":\"appVolume\",\"id\":\"nobody\",\"volume\":25}") == 400);       // not listed
+    CHECK(post("{\"op\":\"appVolume\",\"id\":\"spotify#1\",\"volume\":140}") == 400);   // out of range
+    CHECK(post("{\"op\":\"appVolume\",\"id\":\"spotify#1\",\"volume\":\"9\"}") == 400); // not a number
+    CHECK(post("{\"op\":\"appVolume\",\"id\":7,\"volume\":9}") == 400);                   // the id is text
+    CHECK(post("{\"op\":\"appMute\",\"id\":\"spotify#1\",\"on\":1}") == 400);           // on: a boolean
+    CHECK(post("{\"op\":\"appMute\",\"id\":\"spotify#1\",\"on\":true}") == 200 && d.state()["apps"].items()[1]["mute"].asBool());
+    CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"appMute\",\"id\":\"spotify#1\",\"on\":false}", {}, status, body) && (status == 401 || status == 429));   // no token
+    const auto v2 = d.stateVersion(); L->poke("spotify#1", 0.5f, false); CHECK(d.stateVersion() > v2 && d.state()["apps"].items()[1]["volume"].asNumber() == 50 && !d.state()["apps"].items()[1]["mute"].asBool());   // moved in the Windows mixer
+    L->add({"discord", 9, "Discord", "", 1.f, false, false}); CHECK(d.state()["apps"].size() == 3 && d.state()["apps"].items()[1]["name"].asString() == "Discord");
+    int refused = 0; for (int i = 0; i < 60; ++i) if (post("{\"op\":\"appVolume\",\"id\":\"discord\",\"volume\":" + std::to_string(i) + "}") == 400) ++refused;
+    CHECK(refused > 0 && L->sets < 70);   // the rate limit holds a flood back
+  }
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"stop\"}", auth, status, body) && status == 200);
   CHECK(!d.state()["running"].asBool());
   CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/nothing", "", {}, status, body) && status == 404);

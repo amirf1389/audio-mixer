@@ -10,6 +10,10 @@
 //   amixos --lang CODE  start in that language (one of the 80+; also applies to --shots)
 #include <QGuiApplication>
 #include <QPointer>
+#ifdef AMIX_TRAY
+#include <QApplication>   // the tray icon's menu is a widget menu
+#endif
+#include "Volume.h"
 #ifdef _WIN32
 #include <objbase.h>
 #endif
@@ -152,7 +156,11 @@ int main(int argc, char* argv[]) {
     if (std::abs(z - 1.0) > 0.001) qputenv("QT_SCALE_FACTOR", QByteArray::number(z, 'f', 2));
   }
 #endif
+#ifdef AMIX_TRAY
+  QApplication app(argc, argv);
+#else
   QGuiApplication app(argc, argv);
+#endif
   { bool testRun = false; for (int i = 1; i < argc; ++i) { const QByteArray a(argv[i]); if (a == "--smoke" || a == "--bench" || a == "--shots" || a == "--film" || a == "--big" || a == "--dump-presets") testRun = true; }
     Graphics::choose(testRun, app.arguments()); }   // GRAPHICS: the back end for this computer, before any window (Graphics.h)
   // One explicit palette for every stock control (Slider, ComboBox, TextField, Menu, Dialog, ScrollBar, ToolTip): the Fusion style draws
@@ -204,6 +212,8 @@ int main(int argc, char* argv[]) {
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   AppWindows appWindows;   // PROGRAM PICTURES for the app picker and the live program view (before the interface: it outlives it)
   Apps apps(&engine);   // before the interface, so it outlives it: every strip reads it (a page must never see it gone at exit)
+  Volume volume(&engine, &apps);   // VOLUME CONTROL: tray, volume keys, per-app volume (before the interface, which reads it)
+  if (smoke || bench || !shots.isEmpty() || !film.isEmpty() || !bigShots.isEmpty()) volume.quiet();   // test runs take no keys and show no tray icon
   QQmlApplicationEngine qml;
   qmlRegisterType<Waterfall3D>("AmixOS.Views", 1, 0, "Waterfall3D");   // the WATERFALL 3D view (C++: one mesh on the graphics card)
   qml.rootContext()->setContextProperty("engine", &engine);
@@ -220,6 +230,7 @@ int main(int argc, char* argv[]) {
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("appWindows", &appWindows); qml.addImageProvider(QStringLiteral("appwin"), new AppWindowImages(&appWindows));   // the engine owns the provider
+  qml.rootContext()->setContextProperty("volume", &volume);
   qml.rootContext()->setContextProperty("apps", &apps);   // APP CAPTURE: several programs, each on its own strips
   qml.rootContext()->setContextProperty("samples", &samples);
   update.pluginDir = settings.vstUserFolder(); QObject::connect(&update, &Update::pluginInstalled, &settings, [&] { settings.rescanVst(); });   // PLUG-IN DOWNLOADS land in the console's own plug-in folder
@@ -296,6 +307,9 @@ int main(int argc, char* argv[]) {
     QObject::connect(win, &QQuickWindow::sceneGraphError, win, [win](QQuickWindow::SceneGraphError, const QString& m) {
       qWarning("amixos: the graphics device reported an error (%s); the interface is drawn again", qPrintable(m)); QTimer::singleShot(200, win, [win] { win->releaseResources(); win->update(); }); });
   }
+  // the tray's OPEN CONSOLE / QUIT
+  QObject::connect(&volume, &Volume::openConsole, &app, [&] { if (qml.rootObjects().isEmpty()) return; if (auto* w = qobject_cast<QWindow*>(qml.rootObjects().first())) { if (w->windowState() & Qt::WindowMinimized) w->showNormal(); else w->show(); w->raise(); w->requestActivate(); } });
+  QObject::connect(&volume, &Volume::quitRequested, &app, &QCoreApplication::quit);
   if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
   // AUTO AUDIO INTERFACE: when an interface is plugged in (hot-plug) and the engine is idle, start it (the remembered device if it is the one, else AUTO DETECT)
   QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& what) { if (!added || engine.running() || !settings.autoStart()) return; QTimer::singleShot(1500, &app, [&] { if (!engine.running()) settings.startLastDevice(); }); qInfo("hot-plug: %s", qPrintable(what)); });
@@ -1803,6 +1817,21 @@ int main(int argc, char* argv[]) {
     engine.setInputRoute(3, 0); engine.setOutputRoute(0, 1);   // the routing matrix: CH 4 reads input 1, OUT 1 carries MASTER L
     if (engine.inputRoutes()[3].toInt() != 0 || engine.outputRoutes()[0].toInt() != 1) { std::fprintf(stderr, "amixos --smoke: routing did not take\n"); return 11; }
     engine.resetRouting(); if (engine.inputRoutes()[3].toInt() != 3 || engine.outputRoutes()[0].toInt() != 3) { std::fprintf(stderr, "amixos --smoke: routing defaults wrong\n"); return 12; }
+    { // VOLUME CONTROL: a hotkey steps the master on its grid, the media keys stay with Windows unless taken, mute and back; per-app writes coalesced, no echo
+      const double was = engine.masterDb(); const int tWas = volume.target(), sWas = volume.stepDb(); const bool mWas = volume.mediaKeys();
+      volume.setTarget(0); volume.setStepDb(2); volume.setMediaKeys(false); engine.setMaster(-7);
+      const bool up = volume.press(0, false); const double afterUp = engine.masterDb(); const bool media = volume.press(1, true);
+      volume.press(2, false); const bool muted = engine.masterMuted(); volume.press(0, false); const bool back = !engine.masterMuted();
+      auto mem = std::make_unique<am::vol::MemoryLayer>(); am::vol::MemoryLayer* L = mem.get(); L->add({"a", 1, "Player", "", 1.f, false, false}); volume.setLayer(std::move(mem));
+      int changes = 0; auto c = QObject::connect(&volume, &Volume::appsChanged, &app, [&] { ++changes; });
+      const int w0 = volume.writes(); for (int i = 0; i < 50; ++i) volume.setAppVolume("a", i); volume.flush(); QCoreApplication::processEvents();
+      const int writes = volume.writes() - w0; const int echoes = changes - 50; L->poke("a", 0.2f, true); QCoreApplication::processEvents(); const int afterEcho = changes;
+      L->poke("a", 0.3f, false); QCoreApplication::processEvents(); QObject::disconnect(c);
+      const bool okApps = volume.apps().size() == 1 && std::fabs(volume.apps()[0].toMap()["volume"].toDouble() - 30) < 0.01;
+      volume.setLayer(am::vol::makeSystemLayer()); volume.setTarget(tWas); volume.setStepDb(sWas); volume.setMediaKeys(mWas); engine.setMaster(was);
+      if (!up || std::fabs(afterUp + 6) > 1e-9 || media || !muted || !back || writes != 1 || echoes != 0 || afterEcho != changes - 1 || !okApps) {
+        std::fprintf(stderr, "amixos --smoke: volume control: up %d (%.1f, want -6) media %d mute %d back %d writes %d echoes %d apps %d\n", up, afterUp, media, muted, back, writes, echoes, okApps); return 13; }
+      std::printf("amixos --smoke: volume keys and per-app volume OK (step -7 -> %.1f dB, 50 moves -> %d write, no echo)\n", afterUp, writes); }
     QTimer::singleShot(1200, &app, [&] {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
@@ -1829,6 +1858,16 @@ int main(int argc, char* argv[]) {
             engine.setMonitorDual(false, 2, 0.4, 0); engine.setMonitor(0, 0, false, false, false); }
           engine.setAutomix(0, true, 1); engine.setAutomix(1, true, 1); win->setProperty("current", "mixer"); settle(900); win->grabWindow().save(shots + "/mixer-automix.png"); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
           win->setProperty("current", "update"); settle(900); win->grabWindow().save(shots + "/software-update.png");
+          { // VOLUME CONTROL: the header knob, the per-app panel and the tray popup, with demo programs (a layer in memory, not Windows)
+            auto mem = std::make_unique<am::vol::MemoryLayer>();
+            mem->add({"sys", 0, "System sounds", "", 0.62f, false, true}); mem->add({"sp", 4120, "Spotify", "", 0.8f, false, false}); mem->add({"ch", 3312, "Chrome", "", 0.45f, false, false});
+            mem->add({"dc", 7781, "Discord", "", 1.0f, true, false}); mem->add({"ob", 9020, "OBS Studio", "", 0.3f, false, false});
+            volume.setLayer(std::move(mem)); engine.setMaster(-6.5); win->setProperty("current", "mixer"); settle(900);
+            if (auto* hv = win->findChild<QQuickItem*>("headerVolume")) { const QPointF at = hv->mapToScene(QPointF(0, 0)); const qreal dpr = win->devicePixelRatio();
+              win->grabWindow().copy(QRectF((at.x() - 160) * dpr, 0, (hv->width() + 320) * dpr, 60 * dpr).toRect()).save(shots + "/volume-header-knob.png"); }
+            if (QObject* ap = win->findChild<QObject*>("appVolumePanel")) { QMetaObject::invokeMethod(ap, "open"); settle(900); win->grabWindow().save(shots + "/volume-apps.png"); QMetaObject::invokeMethod(ap, "close"); settle(300); }
+            if (auto* tp = win->findChild<QQuickWindow*>("trayPopup")) { tp->setX(40); tp->setY(40); tp->show(); settle(900); tp->grabWindow().save(shots + "/volume-tray-popup.png"); tp->hide(); }
+            volume.setLayer(am::vol::makeSystemLayer()); engine.setMaster(0); settle(200); }
           engine.startLive(0); settle(900); win->grabWindow().save(shots + "/live-mode.png"); engine.stopLive(); settle(300);
           { // STORE > DOWNLOADS with two example entries (one already there)
             const QByteArray sha(64, 'a'); const auto entry = [&](const char* id, const char* name, const char* ver, const char* note, const char* file, double size) { QJsonObject f; f["name"] = file; f["url"] = QStringLiteral("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/plugins/") + file; f["sha256"] = QString::fromLatin1(sha); f["size"] = size; QJsonObject files; for (const char* k : {"win-x64-exe", "linux-deb", "linux-tar", "macos-dmg", "macos"}) files[k] = f; QJsonObject o; o["id"] = id; o["name"] = name; o["version"] = ver; o["note"] = note; o["files"] = files; return o; };

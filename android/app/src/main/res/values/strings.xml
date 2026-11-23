@@ -567,4 +567,8 @@
     <string name="ins_presets">PRESETS</string>
     <string name="ins_defaults">DEFAULTS</string>
     <string name="ins_note">Up to 10 inserts per channel, from the computer\'s scanned VST2 / VST3 plug-ins and the built-in effects. The console checks every change.</string>
+    <string name="apps_title">APPS (WINDOWS VOLUME MIXER)</string>
+    <string name="apps_none">No program is playing sound on the console\'s computer.</string>
+    <string name="apps_volume">%1$s volume</string>
+    <string name="apps_mute">Mute %1$s</string>
 </resources>

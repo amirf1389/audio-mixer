@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "audiomixer/runtime.hpp"
+#include "audiomixer/app_volume.hpp"
 #include "plugin/plugin.hpp"
 #include "rta.hpp"
 #include "audiomixer/onevoice.hpp"
@@ -104,6 +105,12 @@ class Daemon {
   static double trimForLevel(double level01);   // GAIN MODE: 30*log10(level), 0 -> -120 (off); the console uses the same curve
   void setVolumeBackend(std::function<bool(float&)> get, std::function<bool(float)> set) { volGet_ = std::move(get); volSet_ = std::move(set); }   // tests
   void pollVolume();                            // reads the Windows slider once (the watcher does it twice a second)
+  // PER-APP VOLUME (the Windows volume mixer's programs, app_volume.hpp): the state has "apps":[{id,name,pid,volume 0..100,mute,system}] and
+  // "appsAvailable"; POST {"op":"appVolume","id":ID,"volume":0..100} / {"op":"appMute","id":ID,"on":true|false}. The id must be listed,
+  // the volume a number in range; at most 30 changes a second (a drag sends its newest value only). The list is read again only when
+  // Windows says a program came or went; a move in the Windows mixer reaches the remotes as a new state, the console's own does not echo.
+  void setAppLayer(std::unique_ptr<vol::SessionLayer> layer);   // tests (start() takes this computer's own when none was set)
+  json::Value appsJson() const;
   bool loadSeed(const std::string& file, std::string& err);   // {"strips":[{name,db,pan,mute,solo}],"master":{"db"}}
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
@@ -156,6 +163,9 @@ class Daemon {
   bool racksFromConsole_ = false;          // the last rack change came from the console itself (op rack): it does not take it back
   struct Prefs { double width = 1.0, autoTarget = -16, autoMax = 12, clipDb = -0.1, peakHoldMs = 1500; int outputBits = 0; bool dcBlock = true, analog = false, autoLevel = false, winGain = false, winMuteSync = true; bool loudMaster = false, loudRide = false, loudGate = false; double loudTarget = -14; std::string loudPreset = "STREAMING"; } set_;   // loud*: the console's LOUDNESS MANAGER (the console applies it; shown and switched by the remotes)
   std::atomic<int> winVol_{-1}; std::function<bool(float&)> volGet_; std::function<bool(float)> volSet_; std::thread volWatch_;
+  std::unique_ptr<vol::SessionLayer> appLayer_; mutable std::mutex appsM_; mutable vol::SessionList apps_; mutable std::atomic<bool> appsStale_{true}; Bucket appBucket_;
+  void wireApps();
+  json::Value appCommand(const json::Value& cmd, std::string& err);
   double outTrim() const;    // GAIN MODE's listening trim, dB (0 = none, -120 = silent)
   void applyMaster(Runtime& rt) const;   // the master fader and the trim to the engine (m_ held)
   bool windowsSetsLevel() const;
