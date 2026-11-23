@@ -594,6 +594,7 @@ class Engine : public QObject {
   Q_INVOKABLE QString inputLabel(int input) const;   // "UM2 · IN 3": the short device name + the channel, for a strip's INPUT chip
   QString inputDeviceName() const { return inDevName_; } QString outputDeviceName() const { return outDevName_; }
   Q_INVOKABLE bool deviceEnabled(const QString& backend, const QString& id) const;
+  Q_INVOKABLE bool confirmUnsignedAsio(const QString& name);   // UNSIGNED ASIO driver: load it from now on (remembered with its CLSID + DLL path)
   Q_INVOKABLE void setDeviceEnabled(const QString& backend, const QString& id, bool on);   // OFF: never auto-picked, not opened
   Q_INVOKABLE void setInputRoute(int strip, int input);
   Q_INVOKABLE void setOutputRoute(int out, int source);

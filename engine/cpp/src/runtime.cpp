@@ -10,6 +10,7 @@
 
 #include "audiomixer/fpu.hpp"
 #include "backends.hpp"
+#include "audiomixer/asio.hpp"
 
 namespace am {
 
@@ -51,6 +52,7 @@ Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, siz
 Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
 
 bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
+  openNote_.clear();
   stop(); backend_.reset();   // the old device is fully gone (no callback can still run) before the buffers below are made again
   // a block size or a rate that makes no sense is refused here: the backends divide by them and loop on them
   if (cfg.frames < 16 || cfg.frames > 16384) { err = "the block size must be 16 .. 16384 frames (asked: " + std::to_string(cfg.frames) + ")"; return false; }
@@ -74,7 +76,18 @@ bool Runtime::open(const DeviceConfig& cfg, std::string& err) {
     b.b0 = alpha / a0; b.b1 = 0; b.b2 = -alpha / a0; b.a1 = -2 * std::cos(w0) / a0; b.a2 = (1 - alpha) / a0; monBand_[k] = 0; }
   for (auto& f : monEq_) { f[0].reset(); f[1].reset(); }
   head_ = 0; tail_ = 0; blocks_ = 0; frames_ = 0; std::memset(&pub_, 0, sizeof pub_);
-  if (!backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err)) { backend_.reset(); return false; }   // a device that did not open is not kept: start() then says "open() first"
+  if (!backend_->open(cfg, [this](const float* const* in, float* const* out, std::size_t frames) { onBlock(in, out, frames); }, err)) { backend_.reset();   // a device that did not open is not kept: start() then says "open() first"
+#ifdef _WIN32
+    // FAULTED ASIO DRIVER (crashed or hung, asio_trust.hpp): the sound goes on through WASAPI on the default devices instead
+    const std::string want = cfg.outDevice != "-" && !cfg.outDevice.empty() ? cfg.outDevice : (cfg.inDevice != "-" ? cfg.inDevice : std::string());
+    if (name == "asio" && asioSelectionFaulted(want)) {
+      DeviceConfig w = cfg; w.backend = "wasapi"; w.inDevice = cfg.inChannels > 0 ? std::string() : std::string("-"); w.outDevice.clear(); w.exclusive = false;
+      std::string e2; const std::string why = err;
+      if (open(w, e2)) { openNote_ = "the ASIO driver faulted (" + why + "): running on WASAPI instead"; err = openNote_; return true; }
+      err = why + "; the WASAPI fallback failed too: " + e2;
+    }
+#endif
+    return false; }
   return true;
 }
 bool Runtime::start(std::string& err) { if (!backend_) { err = "open() first"; return false; } if (running_) return true; running_ = backend_->start(err); return running_; }

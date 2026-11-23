@@ -33,7 +33,7 @@ qt_add_executable(amixos
     src/Samples.cpp src/Samples.h
     src/Links.cpp src/Links.h src/Apps.cpp src/Apps.h src/SysNotify.cpp src/SysNotify.h src/AppWindows.cpp src/AppWindows.h
     src/Update.cpp src/Update.h
-    src/Volume.cpp src/Volume.h
+    src/Volume.cpp src/Volume.h src/CaptureGuard.cpp src/CaptureGuard.h
     src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
     src/Waterfall.cpp src/Waterfall.h
@@ -206,11 +206,11 @@ endif()
 
 enable_testing()
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
-set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
+set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1" TIMEOUT 60)   # AMIX_ALLOW_CAPTURE: the repository's own tooling may capture the window
 # PAGE BUDGET: every page and every popup opens within its time budget (built from nothing 600 ms, cached 150 ms) and its content stays
 # inside the page area / the window (amixos --bench, AMIX_BENCH_BUDGET; see main.cpp)
 add_test(NAME amixos_page_budget COMMAND amixos --bench)
-set_tests_properties(amixos_page_budget PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_BENCH_BUDGET=600;AMIX_BUDGET_CACHED=150;AMIX_BUDGET_SIZES=1280x720,1920x1080" TIMEOUT 900)
+set_tests_properties(amixos_page_budget PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1;AMIX_BENCH_BUDGET=600;AMIX_BUDGET_CACHED=150;AMIX_BUDGET_SIZES=1280x720,1920x1080" TIMEOUT 900)
 
 # AmF X1 PLUG-IN BUILDER: the builder as its own program (shares the builder page, Theme, the language tables and the plug-in shell)
 file(GLOB AMIX_I18N_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} i18n/verified-22.json i18n/auto-58.json i18n/ui/*.json)

@@ -241,6 +241,7 @@ void addAsio(std::vector<DeviceInfo>& out, bool probe, const std::string& skip =
     info.inChannels = static_cast<int>(p.inChannels); info.outChannels = static_cast<int>(p.outChannels);
     info.probeError = held ? std::string("in use by this console") : probe ? p.error : std::string();
     info.sampleRates = p.sampleRates;
+    info.trust = asiotrust::sigName(d.sig); info.clsid = d.clsid; info.dllPath = d.path; info.faulted = asiotrust::isFaulted(d.clsid);
     if (!p.sampleRates.empty()) {
       info.defaultRate = p.sampleRates.front();
       for (const double r : p.sampleRates) if (r == 48000) info.defaultRate = r;

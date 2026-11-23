@@ -18,6 +18,7 @@
 #include <objbase.h>
 #endif
 #include <QQmlApplicationEngine>
+#include "CaptureGuard.h"
 #include <QQmlIncubationController>
 #include "fx/fx_plugin.hpp"
 #include <QQmlContext>
@@ -267,6 +268,9 @@ int main(int argc, char* argv[]) {
   std::unique_ptr<FrameIncubation> frameIncubation; if (bench && qEnvironmentVariableIsSet("AMIX_BENCH_BLANK")) { frameIncubation = std::make_unique<FrameIncubation>(); qml.setIncubationController(frameIncubation.get()); }
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
   if (!qml.rootObjects().isEmpty()) graphics.attach(qobject_cast<QQuickWindow*>(qml.rootObjects().first()));
+  // HIDE FROM SCREENSHOTS & SCREEN SHARING: every window, now and as each new one appears; the SETTINGS switch applies at once
+  CaptureGuard captureGuard; captureGuard.setEnabled(settings.hideFromCapture());
+  QObject::connect(&settings, &Settings::changed, &captureGuard, [&] { if (captureGuard.enabled() != (settings.hideFromCapture() && !CaptureGuard::envAllowsCapture())) captureGuard.setEnabled(settings.hideFromCapture()); });
   // THE WINDOW OPENS PLACED: built first (Main.qml starts hidden), then put centred on the work area of the screen under the mouse
   // (the taskbar left out, in that monitor's own scale), or back where it was closed when that place is still on a connected screen
   // (a monitor unplugged since: pulled onto a visible one), maximised when the designed size does not fit; only then shown

@@ -40,6 +40,19 @@ object TextFit {
 /** Every screen of the app starts from this: it applies the responsive text size before anything is drawn. */
 open class FitActivity : AppCompatActivity() {
     override fun attachBaseContext(newBase: Context) { super.attachBaseContext(newBase); TextFit.override(newBase)?.let { applyOverrideConfiguration(it) } }
+    override fun onCreate(savedInstanceState: android.os.Bundle?) { super.onCreate(savedInstanceState); CaptureGuard.apply(this) }
+    override fun onResume() { super.onResume(); CaptureGuard.apply(this) }     // a change in SETTINGS reaches every screen when it comes back to the front
     override fun onStart() { super.onStart(); PlayersBus.screenStarted() }     // the players pause only when no screen of the app is shown
     override fun onStop() { PlayersBus.screenStopped(); super.onStop() }
+}
+
+/** HIDE FROM SCREENSHOTS & SCREEN SHARING: FLAG_SECURE on every screen of both apps (opt-in, off by default: streaming apps would capture a black screen). The window
+ *  then shows black in screenshots, screen recordings, casting and the recent-apps preview. It cannot stop a camera pointed at the screen. */
+object CaptureGuard {
+    const val KEY = "hideFromCapture"
+    fun enabled(c: android.content.Context) = Prefs.remote(c).getBoolean(KEY, false)
+    fun apply(a: android.app.Activity) {
+        if (enabled(a)) a.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else a.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
 }

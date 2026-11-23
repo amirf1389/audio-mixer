@@ -20,6 +20,8 @@ class Settings : public QObject {
   Q_PROPERTY(QString startPage READ startPage WRITE setStartPage NOTIFY changed)
   Q_PROPERTY(bool confirmDestructive READ confirmDestructive WRITE setConfirmDestructive NOTIFY changed)
   Q_PROPERTY(bool tooltips READ tooltips WRITE setTooltips NOTIFY changed)
+  Q_PROPERTY(bool hideFromCapture READ hideFromCapture WRITE setHideFromCapture NOTIFY changed)   // HIDE FROM SCREENSHOTS & SCREEN SHARING (Windows, CaptureGuard.h): on by default (also blocks OBS / TikTok LIVE Studio), applies at once
+  Q_PROPERTY(bool captureOverridden READ captureOverridden CONSTANT)   // AMIX_ALLOW_CAPTURE=1 (the repository's tooling): the setting is kept but not applied
   Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY changed)
   Q_PROPERTY(bool colorMotion READ colorMotion WRITE setColorMotion NOTIFY changed)   // the AURORA colour behind the pages moves (off: it stays still, for slow computers)   // the console's look: dark (stage) or light (daylight); Theme.qml and the Qt palette follow
   Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)   // the system is auto on: the remembered device, else AUTO DETECT, at every start (default on)
@@ -58,6 +60,8 @@ class Settings : public QObject {
   QString startPage() const { return s_.value("general/startPage", "home").toString(); } void setStartPage(const QString& v) { set("general/startPage", v); }
   bool confirmDestructive() const { return s_.value("general/confirm", true).toBool(); } void setConfirmDestructive(bool v) { set("general/confirm", v); }
   bool tooltips() const { return s_.value("general/tooltips", true).toBool(); } void setTooltips(bool v) { set("general/tooltips", v); }
+  bool hideFromCapture() const { return s_.value("general/hideFromCapture", true).toBool(); } void setHideFromCapture(bool v) { set("general/hideFromCapture", v); }
+  bool captureOverridden() const { return qEnvironmentVariable("AMIX_ALLOW_CAPTURE") == QLatin1String("1"); }
   bool darkTheme() const { return s_.value("ui/dark", true).toBool(); } void setDarkTheme(bool v) { set("ui/dark", v); }
   bool colorMotion() const { return s_.value("ui/colorMotion", true).toBool(); } void setColorMotion(bool v) { set("ui/colorMotion", v); }
   bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
