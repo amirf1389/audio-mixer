@@ -22,8 +22,12 @@ Item {
         Text { text: i18n.t(label, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 90 }
         MSlider { Layout.fillWidth: true; from: parent.from; to: parent.to; value: parent.value; onMoved: parent.moved(value) }
         Text { text: parent.value.toFixed(parent.to > 30 ? 0 : 2) + " " + unit; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.preferredWidth: 60 } }
+    // A SHORT WINDOW (or a large interface zoom): the page scrolls instead of running past the bottom of the page area
+    Flickable { id: pageScroll; objectName: "pageScroll"; anchors.fill: parent; contentWidth: width; contentHeight: Math.max(height, pageCol.implicitHeight + 20); clip: true
+        boundsBehavior: Flickable.StopAtBounds; interactive: contentHeight > height + 1; ScrollIndicator.vertical: ScrollIndicator { }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 10; spacing: 8
+        id: pageCol; x: 10; y: 10; width: pageScroll.width - 20; height: pageScroll.contentHeight - 20
+        spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: page.t("360 AUDIO:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
@@ -107,5 +111,5 @@ Item {
                         Item { Layout.fillHeight: true }
                         Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7
                             text: page.t("Listen on headphones. The far ear hears the strip up to 0.66 ms later, quieter and duller (head shadow); behind adds a gentle low-pass; distance over 1 m lowers the level; SPREAD 1 removes the direction. Elevation narrows the sideways cues; this model has no pinna filter, so up and down sound alike. Sends and buses keep the strip's pan. Saved with the console and its scenes. Not an HRTF data set and not a licensed immersive format.") } } } } }
-    }
+    } }
 }

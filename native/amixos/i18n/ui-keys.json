@@ -2346,5 +2346,10 @@
 "RESET: the AI EQ back to flat; it learns again",
 "AI EQ AUTO: the control room's EQ measures what you listen to and corrects it. The show is not affected; off puts the previous EQ back.",
 "This page could not be opened",
-"TRY AGAIN"
+"TRY AGAIN",
+"WATERFALL 3D",
+"3D",
+"FROM ABOVE",
+"RANGE dB",
+"view CPU %1 ms/s"
 ]

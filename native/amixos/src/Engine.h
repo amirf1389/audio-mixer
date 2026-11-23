@@ -448,6 +448,7 @@ class Engine : public QObject {
   void setMediaSource(am::Runtime::ExtraSource* s) { sources_.c.store(s); }
   void setSampleSource(am::Runtime::ExtraSource* s) { sources_.d.store(s); }
   void setMeasureIo(am::Runtime::Tap* t, am::Runtime::ExtraSource* s) { taps_.c.store(t); sources_.e.store(s); }
+  ScopeTap& scope() { return scope_; }   // the WATERFALL reads the analyser ring (C++ only)
   // 360 AUDIO: a strip around the head (headphones). az degrees (0 front, 90 right), el -90..90, dist metres, spread 0..1
   // MASTER CHAIN: the PROGRAM EQ (strip index -1 in setEq / eqBand / setGraphicEq: the RTA EQ page's own rack) and MASTERING after it
   // EQUALIZER APO: the filter text that Equalizer APO (the open-source system-wide equaliser for Windows) reads and writes: "Preamp: -3 dB",
@@ -918,7 +919,7 @@ class Engine : public QObject {
   bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const; void secureInputFor(am::DeviceConfig& cfg);
   QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
   QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; std::bitset<kStrips> armed_; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
-  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_;
+  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = false; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_; double monOff_ = 0;   // SYNC is off by default; monOff_ = monitor - master as last set by hand
   am::measure::MonitorEqMode monEq_; int monEqTick_ = 0; void pushMonitorEq();   // the control room's EQ (AI EQ AUTO under DUAL LISTEN)   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;

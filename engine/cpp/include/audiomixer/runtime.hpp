@@ -235,7 +235,10 @@ class Runtime {
   void setExtraSource(ExtraSource* s) { extra_.store(s); }
   // a TAP sees every block on the audio thread (the recorder): the strips after trim / DSP / inserts and before the fader, then the master
   // after its chain and meters (what the show hears, before the monitor section). Must not block or allocate. nullptr detaches.
-  struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0; };
+  struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0;
+    // after the buses and the monitor (control room) are worked out for the block: busOut holds 2 * nBuses channels (L, R of each bus),
+    // monL / monR what goes to the monitor outputs. For analysers that look at a bus or the monitor; optional.
+    virtual void onBuses(const float* const* /*busOut*/, int /*nBuses*/, const float* /*monL*/, const float* /*monR*/, std::size_t /*frames*/) {} };
   void setTap(Tap* t) { tap_.store(t); }
   ExtraSource* extraSource() const { return extra_.load(); }   // so a short test (the ROUND TRIP click) can borrow the slot and give it back
   Tap* tap() const { return tap_.load(); }

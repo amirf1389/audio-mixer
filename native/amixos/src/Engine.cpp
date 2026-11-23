@@ -640,7 +640,8 @@ void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_
 void Engine::setMaster(double db) {
   startNote_.clear();
   const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); pushMasterLevel();
-  if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
+  if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(masterDb_ + monOff_, -60.0, 10.0);   // the offset set by hand is kept exactly: a trip to -inf and back does not creep the monitor
+    if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
   stripsTouched(); syncSystemSound();
 }
 void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ = on; QSettings().setValue("mixer/windowsMuteSync", on); syncSystemSound(); emit systemSoundChanged(); }
@@ -952,6 +953,7 @@ struct RoundTripProbe : am::Runtime::ExtraSource, am::Runtime::Tap {
     if (prevTap) prevTap->onBlock(strips, n, L, R, frames, rate);
     const std::size_t p = inPos.load(); if (n > 0 && strips[0]) for (std::size_t i = 0; i < frames && p + i < rec.size(); ++i) rec[p + i] = strips[0][i];
     inPos.store(p + frames); }
+  void onBuses(const float* const* busOut, int nBuses, const float* monL, const float* monR, std::size_t frames) override { if (prevTap) prevTap->onBuses(busOut, nBuses, monL, monR, frames); }
 };
 QVariantMap Engine::startRoundTrip() {
   if (!rt_) return {{"ok", false}, {"note", QStringLiteral("Start the sound card first.")}};
@@ -1139,10 +1141,11 @@ void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
   if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); pushMasterLevel(); stripsTouched(); syncSystemSound(); }
+  if (!mon_.sync) monOff_ = mon_.db - masterDb_;
+  else if (mon_.db != was) { const double want = mon_.db - monOff_; masterDb_ = std::clamp(want, -60.0, 10.0); if (masterDb_ != want) monOff_ = mon_.db - masterDb_; pushMasterLevel(); stripsTouched(); syncSystemSound(); }
   emit monitorChanged();
 }
-void Engine::setMonitorSync(bool on) { mon_.sync = on; emit monitorChanged(); }
+void Engine::setMonitorSync(bool on) { mon_.sync = on; monOff_ = mon_.db - masterDb_; emit monitorChanged(); }
 void Engine::resetStripDsp(int i) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); if (rt_) pushAll(); stripsTouched(); }
 // The factory channel layout: CH 1-2 MAIN (the device's inputs 1-2, a linked stereo pair), CH 3-4 LIVE (a linked stereo pair for the
 // live source), CH 5-7 RESERVE (free for whatever the user wants; open in every edition), the rest numbered.
@@ -1233,7 +1236,7 @@ void Engine::factoryReset() {
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); loudUi_ = LoudUi{}; pushLoudAll(); emit loudChanged(); autoProp_.clear();
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
-  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
+  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monOff_ = 0; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
   graveTimer_.start(); if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
   stripsTouched(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
@@ -1751,7 +1754,9 @@ QVariantList Engine::storeItems() const {
     m["loads"] = m["installed"].toBool() && probed[QString::fromLatin1(name)].isEmpty(); m["error"] = probed[QString::fromLatin1(name)];
     m["on"] = !off.contains(QString::fromLatin1(id)); l << m; }
   for (const auto& [k, n] : am::fx::catalog()) { const QString id = QStringLiteral("fx:") + QString::fromStdString(k);
-    QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id); l << m; }
+    QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id);
+    if (k == "dehiss") { m["kind"] = "extension"; m["loads"] = true; m["note"] = "spectral hiss removal: learned or auto-learned noise profile, insert effect; also as AmF DE-HISS.vst3"; }   // AmF DE-HISS: a system extension in the store
+    l << m; }
   return l;
 }
 void Engine::setStoreEnabled(const QString& id, bool on) {
@@ -2145,7 +2150,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   if (root.contains("inputRoutes")) { const QJsonArray ir = root.value("inputRoutes").toArray(); for (int i = 0; i < kStrips && i < ir.size(); ++i) inRoute_[i] = cleanRoute(ir[i].toInt(i)); emit routingChanged(); }
   if (root.contains("outputRoutes")) { const QJsonArray orr = root.value("outputRoutes").toArray(); for (int o = 0; o < kOutputs && o < orr.size(); ++o) outRoute_[o] = orr[o].toInt(0) == am::Runtime::kSrcMasterMono ? am::Runtime::kSrcMasterMono : std::clamp(orr[o].toInt(0), 0, am::Runtime::kSrcBus0L + 2 * kBuses - 1); emit routingChanged(); }
   if (root.contains("amps")) { for (auto& a : ampUi_) a.clear(); for (const QJsonValue& v : root.value("amps").toArray()) { const QJsonObject a = v.toObject(); const int o = a.value("out").toInt(-1); if (o >= 0 && o < 64) { QVariantMap m = a.toVariantMap(); m.remove("out"); ampUi_[o] = m; if (rt_) rt_->setAmp(o, ampFromMap(m)); } } emit ampChanged(); }
-  if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(true); mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
+  if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(false); monOff_ = mon_.db - masterDb_; mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
   const QJsonArray arr = root.value("strips").toArray(); keepStrips_ = std::max(keepStrips_, std::min(kStrips, static_cast<int>(arr.size())));
   for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && recallSafe_.test(static_cast<std::size_t>(i))) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();

@@ -37,7 +37,7 @@ Item {
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: engine.dcaState; delegate: Chip { objectName: "dcaPick" + modelData.index; label: modelData.index + " · " + modelData.name; on: dp.group === modelData.index; tint: Theme.stripColors[modelData.color || 0]; onHit: dp.group = modelData.index } } }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: dp.chans; delegate: Chip { objectName: "dcaCh" + index; readonly property var st: engine.stripAt(index, engine.stripTick); label: (index + 1) + (st && st.dca > 0 && st.dca !== dp.group ? " ·" + st.dca : "")
+                Repeater { model: dp.chans; delegate: Chip { objectName: "dcaCh" + index; readonly property var st: assignPop.visible ? engine.stripAt(index, engine.stripTick) : null; label: (index + 1) + (st && st.dca > 0 && st.dca !== dp.group ? " ·" + st.dca : "")
                         on: st && st.dca === dp.group; onHit: engine.setDca(index, st && st.dca === dp.group ? 0 : dp.group) } } }
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }

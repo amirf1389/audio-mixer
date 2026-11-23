@@ -5,6 +5,7 @@ import QtQuick
 import AmixOS   // this module: brings the Theme singleton (a plain directory import would see Theme as an ordinary type)
 import QtQuick.Controls
 import QtQuick.Layouts
+import AmixOS.Views   // Waterfall3D
 
 Popup {
     id: pop
@@ -13,13 +14,25 @@ Popup {
     // CENTRED ON THE WINDOW, WHOLE: a window smaller than the box draws it smaller (it hung over the window edges, clipped on one side)
     scale: Math.min(1, parent ? (parent.width - 24) / 1020 : 1, parent ? (parent.height - 24) / 680 : 1); transformOrigin: Popup.TopLeft; margins: -1   // placed here, not pushed by its unscaled size
     x: parent ? Math.round((parent.width - width * scale) / 2) : 0; y: parent ? Math.round((parent.height - height * scale) / 2) : 0
-    readonly property var tel: engine.telemetry
+    readonly property var tel: pop.visible ? engine.telemetry : ({})   // closed: follows nothing (it re-ran every meter binding here 60 times a second)
     property bool paused: false
     property int targetIndex: 0
     readonly property var targets: [ { n: "STREAMING", lufs: -14, peak: -1 }, { n: "BROADCAST", lufs: -23, peak: -1 }, { n: "PODCAST", lufs: -16, peak: -1 }, { n: "LIVE / CLUB", lufs: -9, peak: -0.3 } ]
     readonly property var target: targets[targetIndex]
     property var history: []        // [{m, s}] four per second, three minutes
     property var columns: []        // spectrogram columns, newest last
+    // WATERFALL 3D: the spectrum's history as a surface going back in time (the card's 2D / WATERFALL 3D toggle). Its own C++ item reads the
+    // analyser ring through the shared FFT; the 2D spectrogram's timer stops while it is shown.
+    property bool wf3d: false
+    function openWaterfall() { pop.wf3d = true; pop.open() }
+    // the sources: the master, the monitor, every bus and every channel (value: the analyser's source number)
+    function wfSources() { const l = [{ t: i18n.t("MASTER", i18n.lang), v: -1 }, { t: i18n.t("MONITOR", i18n.lang), v: 2000 }]
+        const b = engine.busState || []; for (let k = 0; k < b.length; ++k) l.push({ t: i18n.t("BUS", i18n.lang) + " " + (k + 1) + (b[k].name ? " · " + b[k].name : ""), v: 1000 + k })
+        for (let i = 0; i < engine.strips; ++i) { const st = engine.stripLite(i); l.push({ t: i18n.t("CH", i18n.lang) + " " + (i + 1) + (st && st.name ? " · " + st.name : ""), v: i }) }
+        return l }
+    property var wfSourceList: []
+    onOpened: if (pop.wf3d) pop.wfSourceList = pop.wfSources()
+    onWf3dChanged: if (pop.wf3d && pop.visible) pop.wfSourceList = pop.wfSources()
     function val(k) { const v = tel[k]; return v === undefined || v < -99 ? -120 : v }
     function num(v, d) { return v < -99 ? "—" : Number(v).toFixed(d === undefined ? 1 : d) }
     // against the target: within 1 LU = on target, above = too loud, more than 3 below = quiet
@@ -27,7 +40,7 @@ Popup {
     function clearAll() { history = []; columns = []; hist.requestPaint(); sgram.requestPaint() }
     Timer { interval: engine.uiAwake ? 250 : 500; running: pop.visible && !pop.paused; repeat: true
         onTriggered: { const h = pop.history; h.push({ m: pop.val("momentary"), s: pop.val("shortTerm") }); if (h.length > 720) h.shift(); pop.history = h; hist.requestPaint() } }
-    Timer { interval: engine.uiAwake ? 100 : 500; running: pop.visible && !pop.paused; repeat: true
+    Timer { interval: engine.uiAwake ? 100 : 500; running: pop.visible && !pop.paused && !pop.wf3d; repeat: true
         onTriggered: { const s = engine.spectrum(0); if (!s || !s.length) return; const c = pop.columns; c.push(s); if (c.length > 150) c.shift(); pop.columns = c; sgram.requestPaint() } }
 
     component Head: Text { color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
@@ -65,7 +78,7 @@ Popup {
             Pill { objectName: "maPause"; label: pop.paused ? i18n.t("RESUME", i18n.lang) : i18n.t("PAUSE", i18n.lang); on: pop.paused; onColor: Theme.amber; onClicked: pop.paused = !pop.paused }
             Pill { objectName: "maClear"; label: i18n.t("CLEAR", i18n.lang); onClicked: pop.clearAll() }
             Pill { objectName: "maClose"; label: i18n.t("CLOSE", i18n.lang); onClicked: pop.close() } }
-        RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; Layout.leftMargin: 14; Layout.rightMargin: 14; spacing: 8
+        RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.bottomMargin: pop.wf3d ? 14 : 0; spacing: 8
             ColumnLayout { Layout.preferredWidth: 400; Layout.maximumWidth: 400; Layout.fillHeight: true; spacing: 8
                 Card { Layout.fillWidth: true; implicitHeight: 172
                     Head { x: 14; y: 10; text: i18n.t("LOUDNESS", i18n.lang) }
@@ -97,16 +110,21 @@ Popup {
                             Small { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t("Below zero for long: left and right cancel in mono.", i18n.lang); color: Theme.dim; font.pixelSize: 9 }
                             Item { Layout.fillHeight: true } } } } }
             Card { Layout.fillWidth: true; Layout.fillHeight: true
-                Head { x: 14; y: 10; text: i18n.t("SPECTROGRAM", i18n.lang) }
-                Small { anchors.right: parent.right; anchors.rightMargin: 14; y: 12; text: i18n.t("the master · last 15 seconds · low at the bottom", i18n.lang) }
-                Canvas { id: sgram; objectName: "maSpectrogram"; anchors.fill: parent; anchors.topMargin: 32; anchors.margins: 12
+                Head { x: 14; y: 10; text: pop.wf3d ? i18n.t("WATERFALL 3D", i18n.lang) : i18n.t("SPECTROGRAM", i18n.lang) }
+                Row { objectName: "maModeRow"; anchors.right: parent.right; anchors.rightMargin: 10; y: 6; spacing: 6
+                    Small { anchors.verticalCenter: parent.verticalCenter; visible: !pop.wf3d; text: i18n.t("the master · last 15 seconds · low at the bottom", i18n.lang) }
+                    Pill { objectName: "maMode2d"; label: "2D"; on: !pop.wf3d; implicitHeight: 22; onClicked: pop.wf3d = false }
+                    Pill { objectName: "maMode3d"; label: i18n.t("WATERFALL 3D", i18n.lang); on: pop.wf3d; onColor: Theme.orange; implicitHeight: 22; onClicked: pop.wf3d = true } }
+                Loader { id: wfLoad; objectName: "maWaterfallLoader"; anchors.fill: parent; anchors.topMargin: 34; anchors.margins: 8; active: pop.wf3d && pop.visible; visible: pop.wf3d
+                    sourceComponent: Component { WaterfallPanel { paused: pop.paused; sources: pop.wfSourceList } } }
+                Canvas { id: sgram; objectName: "maSpectrogram"; anchors.fill: parent; anchors.topMargin: 32; anchors.margins: 12; visible: !pop.wf3d
                     onPaint: { const g = getContext("2d"); g.fillStyle = "#06080c"; g.fillRect(0, 0, width, height); const c = pop.columns, n = 150; if (!c.length) return;
                         const cw = width / n; for (let x = 0; x < c.length; ++x) { const col = c[x], bh = height / col.length, px = (n - c.length + x) * cw;
                             for (let b = 0; b < col.length; ++b) { let v = col[b]; v = v <= 0 ? (v + 84) / 84 : Math.min(1, v); if (v <= 0.02) continue; v = Math.min(1, v);
                                 g.fillStyle = Qt.hsla(0.58 - 0.5 * v, 0.9, 0.12 + 0.5 * v, 1); g.fillRect(px, height - (b + 1) * bh, cw + 0.6, bh + 0.6) } }
                         g.font = "9px monospace"; g.fillStyle = "rgba(255,255,255,0.55)"; g.strokeStyle = "rgba(255,255,255,0.10)"; g.lineWidth = 1;   // 20 Hz at the bottom, 20 kHz at the top, logarithmic like the analyser's bands
                         for (const f of [100, 1000, 10000]) { const y = height * (1 - Math.log(f / 20) / Math.log(1000)); g.beginPath(); g.moveTo(0, y); g.lineTo(width, y); g.stroke(); g.fillText(f >= 1000 ? f / 1000 + "k" : f, 4, y - 3) } } } } }
-        Card { Layout.fillWidth: true; Layout.preferredHeight: 170; Layout.margins: 14; Layout.topMargin: 0
+        Card { Layout.fillWidth: true; Layout.preferredHeight: pop.wf3d ? 0 : 170; visible: !pop.wf3d; Layout.margins: 14; Layout.topMargin: 0
             Head { x: 14; y: 10; text: i18n.t("HISTORY", i18n.lang) }
             Row { anchors.right: parent.right; anchors.rightMargin: 14; y: 12; spacing: 12
                 Small { text: "— " + i18n.t("short-term", i18n.lang); color: Theme.amber } Small { text: "— " + i18n.t("momentary", i18n.lang); color: Theme.ink } Small { text: "- - " + i18n.t("target", i18n.lang); color: Theme.danger } Small { text: i18n.t("last 3 minutes", i18n.lang) } }

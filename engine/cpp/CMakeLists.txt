@@ -106,6 +106,9 @@ target_include_directories(amixos_measure PUBLIC app)
 add_executable(measure_test test/measure_test.cpp)
 target_link_libraries(measure_test amixos_measure)
 add_test(NAME measure COMMAND measure_test)
+add_executable(waterfall_test test/waterfall_test.cpp)   # the WATERFALL 3D view: bands, history ring, colours, view fitting
+target_link_libraries(waterfall_test amixos_measure)
+add_test(NAME waterfall COMMAND waterfall_test)
 
 add_library(amixos_paths STATIC app/paths/paths.cpp)
 target_include_directories(amixos_paths PUBLIC app)

@@ -7,6 +7,10 @@ import QtQuick.Layouts
 Flickable {
     id: page
     contentHeight: col.implicitHeight + 24; clip: true
+    // BUILT IN STAGES: the panels at the top come with the page; the others follow one per frame, so the page shows at once instead of
+    // after every panel (the language list, system figures, plug-in list ...) is built in one blocking step
+    property int stage: 0
+    Timer { interval: 16; repeat: true; running: page.stage < 8; onTriggered: page.stage++ }
     component Opt: RowLayout { id: optRow; property string label: ""; property string hint: ""; property bool more: false; Layout.fillWidth: true; spacing: 8
         ColumnLayout { Layout.preferredWidth: 260; spacing: 1
             Text { text: i18n.t(label, i18n.lang) + (optRow.hint.length > 0 ? (optRow.more ? "  ▾" : "  ⓘ") : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
@@ -81,7 +85,7 @@ Flickable {
             Text { objectName: "exportNote"; visible: exportPanel.res.ok !== undefined; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: exportPanel.res.ok ? Theme.emerald : Theme.danger
                 text: exportPanel.res.ok ? i18n.t("Saved:", i18n.lang) + " " + exportPanel.res.path + "  (" + (exportPanel.res.files ? exportPanel.res.files.length : 0) + " " + i18n.t("files", i18n.lang) + ", " + Math.max(1, Math.round((exportPanel.res.bytes || 0) / 1024)) + " KB)" : i18n.t(exportPanel.res.error || "", i18n.lang) }
         }
-        Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 1; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("FACTORY RESET", i18n.lang)
             subtitle: i18n.t("Back to the state the console left the factory in. The licence stays.", i18n.lang)
@@ -90,8 +94,8 @@ Flickable {
                     Text { id: frT; anchors.centerIn: parent; text: frBtn.sure ? i18n.t("PRESS AGAIN TO RESET", i18n.lang) : i18n.t("FACTORY RESET", i18n.lang); color: frBtn.sure ? "#fff" : Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     Timer { interval: 6000; running: frBtn.sure; onTriggered: frBtn.sure = false }
                     MouseArea { anchors.fill: parent; onClicked: { if (!frBtn.sure) frBtn.sure = true; else { frBtn.sure = false; settings.factoryReset() } } } } }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 2; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("RECORDING", i18n.lang)
             subtitle: i18n.t("● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.", i18n.lang)
@@ -101,8 +105,8 @@ Flickable {
             Opt { label: i18n.t("Format", i18n.lang); Choice { objectName: "recordFormatChoice"; options: [{t: "24-bit PCM", v: 0}, {t: "32-bit PCM", v: 3}, {t: "32-bit float", v: 1}, {t: "64-bit float", v: 2}, {t: "FLAC 24-bit (lossless)", v: 4}]; value: engine.recordFormat; onPicked: function (v) { engine.recordFormat = v } } }
             Text { visible: engine.recordMessage.length > 0; text: engine.recordMessage; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Repeater { model: engine.recordFiles; delegate: Text { text: modelData; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 3; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("MIXER DEFAULTS", i18n.lang)
             subtitle: i18n.t("How the MIXER page opens. Each can still be toggled on the page itself.", i18n.lang)
@@ -121,8 +125,8 @@ Flickable {
             Opt { label: i18n.t("Monitor (control room) panel", i18n.lang); Toggle { on: settings.monitorPanelDefault; onToggled: function (v) { settings.monitorPanelDefault = v } } }
             Opt { label: i18n.t("Plugin rack", i18n.lang); Toggle { on: settings.rackDefault; onToggled: function (v) { settings.rackDefault = v } } }
             Opt { label: i18n.t("Channel panel", i18n.lang); Toggle { on: settings.channelPanelDefault; onToggled: function (v) { settings.channelPanelDefault = v } } }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 4; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("LANGUAGE", i18n.lang) + " • " + i18n.count + i18n.t(" LANGUAGES", i18n.lang)
             subtitle: i18n.t("22 languages are checked by people; the rest are machine translations and say so in the menu. Right-to-left languages mirror the layout.", i18n.lang)
@@ -131,8 +135,8 @@ Flickable {
                     Text { id: lt; anchors.centerIn: parent; text: i18n.t(modelData.name ?? "", i18n.lang) + (modelData.auto ? i18n.t(" ·auto", i18n.lang) : ""); color: i18n.lang === modelData.code ? "#000" : (modelData.auto ? Theme.muted : Theme.ink); font.family: Theme.mono; font.pixelSize: 8 }
                     MouseArea { anchors.fill: parent; onClicked: i18n.lang = modelData.code } } }
             }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 5; sourceComponent: Component { Panel {
             id: sysPanel
             objectName: "sysPanel"
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
@@ -179,8 +183,8 @@ Flickable {
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { engine.trimMemoryNow(); sysPanel.sys = engine.systemInfo() } } }
                 Item { Layout.fillWidth: true } }
             Repeater { model: sysPanel.sys.tips; delegate: Text { Layout.fillWidth: true; text: "• " + i18n.t(modelData, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.Wrap } }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 6; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("VST3 / VST2 PLUG-INS", i18n.lang)
             subtitle: i18n.t("Where A mix OS looks for plug-ins: .vst3 bundles, and VST2 .dll (Windows) / .so (Linux) files. The platform folders are always scanned; add your own below. Plug-ins load into the PLUGIN RACK on the MIXER (generic controls, no plug-in window yet).", i18n.lang)
@@ -194,8 +198,8 @@ Flickable {
                 Repeater { model: engine.vstCatalog(); delegate: Rectangle { id: gb145; implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 7; color: Qt.rgba(0.6, 0.4, 1, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb145.color) } GradientStop { position: 1; color: Theme.btnBottom(gb145.color) } } border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.format + " · " + i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
                 Text { visible: engine.vstCatalog().length === 0; text: i18n.t("No VST3 plug-ins found yet.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
             MoreText { text: i18n.t("VST is a trademark of Steinberg Media Technologies GmbH. A mix OS hosts VST3 plug-ins through the VST 3 interface headers under their licence (drivers/vst3/sdk/LICENSE.txt) and VST2 plug-ins through the public VST 2.4 binary interface written clean-room (no Steinberg VST2 SDK file is used or shipped). It is not badged as VST and ships no plug-ins.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 7; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("FILES & DATA", i18n.lang)
             subtitle: "Everything A mix OS keeps lives in " + settings.dataFolder + " and the settings file. Nothing is sent anywhere."
@@ -218,14 +222,14 @@ Flickable {
                 Text { text: i18n.t("Back to a new desk. ", i18n.lang) + settings.factoryResetPreview().join(" · "); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true } }
             Dialog { id: confirmReset; title: i18n.t("Factory reset?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: settings.factoryReset()
                 Text { text: settings.factoryResetPreview().join("\n"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 380 } }
-        }
-        Panel {
+        } } }
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 8; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("ABOUT", i18n.lang)
             subtitle: "AmF X1 " + appVersion + " • native console by AMFB Audio • C++20 engine + Qt Quick interface, no web runtime"
             Text { text: i18n.t("Engine drivers built into this copy: ", i18n.lang) + engine.backends.join(", ").toUpperCase() + i18n.t(" • strips: ", i18n.lang) + engine.strips + i18n.t(" • edition: ", i18n.lang) + engine.edition; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9 }
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: engine.pages; delegate: Rectangle { id: gb151; implicitWidth: t.implicitWidth + 12; implicitHeight: 18; radius: 7; color: modelData.ready ? Qt.rgba(0.063, 0.725, 0.506, 0.2) : Theme.ov(0.05); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb151.color) } GradientStop { position: 1; color: Theme.btnBottom(gb151.color) } } Text { id: t; anchors.centerIn: parent; text: i18n.t(modelData.text ?? "", i18n.lang); color: modelData.ready ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } } } }
-        }
+        } } }
     }
 }

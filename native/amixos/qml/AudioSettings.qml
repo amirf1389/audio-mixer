@@ -66,7 +66,7 @@ Popup {
             Line { label: i18n.t("Input:", i18n.lang)
                 Combo { Layout.fillWidth: true; enabled: !pop.muteIn; opacity: enabled ? 1 : 0.4; readonly property var l: pop.devs(false); model: l.map(function (d) { return d.name }); currentIndex: { for (let k = 0; k < l.length; k++) if (l[k].id === pop.inId) return k; return l.length ? 0 : -1 }
                     onActivated: function (i) { pop.inId = l[i].id; pop.inCh = Math.max(1, Math.min(Math.max(pop.inCh, 2), l[i].inChannels)) } }
-                Row { spacing: 1; readonly property real db: (engine.meterTick, engine.meterAt(0).vuDb !== undefined ? engine.meterAt(0).vuDb : -120)
+                Row { spacing: 1; readonly property real db: !pop.visible ? -120 : (engine.meterTick, engine.meterAt(0).vuDb !== undefined ? engine.meterAt(0).vuDb : -120)
                     Repeater { model: 7; delegate: Rectangle { width: 8; height: 24; color: parent.db > -48 + index * 7 ? (index >= 6 ? Theme.danger : Theme.emerald) : Theme.ov(0.12) } } } }
             Line { label: i18n.t("Active output channels:", i18n.lang)
                 Box { Repeater { model: { const d = pop.dev(pop.outId); return d ? Math.min(16, Math.ceil(d.outChannels / 2)) : 0 }

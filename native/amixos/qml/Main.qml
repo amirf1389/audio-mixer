@@ -266,7 +266,7 @@ ApplicationWindow {
             NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? engine.pages : engine.pages.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                id: pageArea
+                id: pageArea; objectName: "pageArea"
                 component PageSlot: Loader {
                     property int slot: 0
                     readonly property string pid: root.pageSlots[slot]
@@ -472,7 +472,7 @@ ApplicationWindow {
     // LIVE SCREEN: all that is shown in LIVE MODE. The console behind it is covered and takes no clicks or keys; leaving needs the console's
     // PIN, so a guest at the desk (or a stream running unattended) cannot change the mix. The sound and the watchdog carry on underneath.
     Rectangle { id: liveScreen; objectName: "liveScreen"; anchors.fill: parent; z: 90; visible: engine.liveMode; color: Theme.obsidian
-        readonly property var m: (engine.meterTick, engine.meterAt(engine.liveStrip)); readonly property var st: engine.stripAt(engine.liveStrip, engine.stripTick)
+        readonly property var m: visible ? (engine.meterTick, engine.meterAt(engine.liveStrip)) : ({}); readonly property var st: visible ? engine.stripAt(engine.liveStrip, engine.stripTick) : ({})   // hidden (not in LIVE MODE): follows nothing
         property string note: ""; property bool asking: false
         function lvl(db) { return Math.max(0, Math.min(1, (db + 60) / 60)) }
         function arm() { if (Qt.platform.pluginName !== "offscreen") access.lock(); asking = false; note = "" }   // the tests look at the screen without locking their own console
@@ -486,7 +486,7 @@ ApplicationWindow {
                 Text { text: i18n.t("LIVE MODE", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 30; font.bold: true; font.letterSpacing: 6 } }
             Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10
                    text: (apps.streamApp !== "" ? apps.streamApp + i18n.t(" is running. ", i18n.lang) : "") + i18n.t("The console runs by itself: the voice chain is on the microphone, the master is limited, the watchdog restarts the sound if the sound card stops. The controls are locked.", i18n.lang) }
-            Repeater { model: [{ t: "MICROPHONE · CH " + (engine.liveStrip + 1), v: liveScreen.m.inDb ?? -120, c: Theme.cyan }, { t: "MASTER", v: engine.telv("masterPeakDb", engine.meterTick), c: Theme.orange }]
+            Repeater { model: [{ t: "MICROPHONE · CH " + (engine.liveStrip + 1), v: liveScreen.m.inDb ?? -120, c: Theme.cyan }, { t: "MASTER", v: liveScreen.visible ? engine.telv("masterPeakDb", engine.meterTick) : -120, c: Theme.orange }]
                 delegate: Column { width: parent.width; spacing: 4
                     Row { width: parent.width; Text { width: parent.width - 90; text: i18n.t(modelData.t, i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                         Text { width: 90; horizontalAlignment: Text.AlignRight; text: Theme.dbText(modelData.v) + " dBFS"; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 10 } }

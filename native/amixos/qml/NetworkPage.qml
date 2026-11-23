@@ -14,8 +14,12 @@ Item {
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
+    // A SHORT WINDOW (or a large interface zoom): the page scrolls instead of running past the bottom of the page area
+    Flickable { id: pageScroll; objectName: "pageScroll"; anchors.fill: parent; contentWidth: width; contentHeight: Math.max(height, pageCol.implicitHeight + 20); clip: true
+        boundsBehavior: Flickable.StopAtBounds; interactive: contentHeight > height + 1; ScrollIndicator.vertical: ScrollIndicator { }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 10; spacing: 8
+        id: pageCol; x: 10; y: 10; width: pageScroll.width - 20; height: pageScroll.contentHeight - 20
+        spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
             RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
                 Text { text: i18n.t("NETWORK:", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
@@ -149,5 +153,5 @@ Item {
                     ListView { id: lv; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: osc.log; onCountChanged: positionViewAtEnd()
                         delegate: Text { text: modelData; color: modelData.indexOf("unknown") >= 0 ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } }
                     Text { visible: osc.log.length === 0; text: i18n.t("No OSC traffic yet. START SERVER, point a controller at this computer's address and the RECEIVE PORT.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } } } } }
-    }
+    } }
 }

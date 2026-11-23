@@ -18,7 +18,7 @@ Popup {
     property int tick: 0
     readonly property var m: { tick; return engine.mastering() }
     readonly property var lim: { tick; return engine.masterLimiter() }
-    readonly property var tel: engine.telemetry
+    readonly property var tel: pop.visible ? engine.telemetry : ({})   // closed: follows nothing
     property int presetIndex: 0
     // our own starting points; INIT is flat with only the limiter guarding the ceiling
     readonly property var presets: [
@@ -43,7 +43,7 @@ Popup {
     property real limRed: 0
     property real compRed: 0
     onOpened: tick++
-    Connections { target: engine; function onMasterChainChanged() { pop.tick++ } function onStripsChanged() { pop.tick++ } }
+    Connections { target: engine; enabled: pop.visible; function onMasterChainChanged() { pop.tick++ } function onStripsChanged() { pop.tick++ } }   // opened: tick++ reads afresh
     Timer { interval: engine.uiAwake ? 60 : 500; running: pop.visible; repeat: true; onTriggered: { pop.compRed = engine.masteringReductionDb(); pop.limRed = engine.masterLimiterReductionDb() } }
 
     component Head: Text { color: Theme.muted; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 2 }

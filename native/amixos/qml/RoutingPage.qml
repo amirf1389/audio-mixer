@@ -14,6 +14,10 @@ Item {
     property int sTick: 0
     Binding on sTick { when: page.visible; value: engine.stripTick; restoreMode: Binding.RestoreNone }
     property int tab: 0          // 0 inputs, 1 outputs
+    // each matrix is built when its tab is first shown (the outputs matrix alone is ~1100 cells), then kept
+    property bool inSeen: false
+    property bool outSeen: false
+    onTabChanged: { if (tab === 0) inSeen = true; else outSeen = true }
     property int bank: 0         // strips in pages of 16 (inputs) ; outputs 1-16 / 17-32
     readonly property int inCols: Math.max(32, Math.min(engine.inputCap, engine.deviceInputs))   // the input columns: 32 as ever, more when a larger device is open on a larger console
     readonly property var inRoutes: engine.inputRoutes
@@ -40,6 +44,7 @@ Item {
         Rectangle {
             visible: page.tab === 0
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
+            Loader { anchors.fill: parent; active: page.tab === 0 || page.inSeen; sourceComponent: Component {
             Flickable { anchors.fill: parent; anchors.margins: 10; contentWidth: inGrid.implicitWidth; contentHeight: inGrid.implicitHeight; boundsBehavior: Flickable.StopAtBounds
                 ColumnLayout { id: inGrid; spacing: 2
                     RowLayout { spacing: 2
@@ -68,12 +73,13 @@ Item {
                                     MouseArea { anchors.fill: parent; onClicked: engine.setInputRoute(strip, index) } } } } }
                     MoreText { text: i18n.t("A dot on an unavailable input (amber) is kept and becomes live when a device with that many inputs opens. One input may feed several strips (a mic to two channels with different processing).", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
                 }
-            }
+            } } }
         }
         // SOURCES -> OUTPUTS: rows = outputs of this bank, columns = sources
         Rectangle {
             visible: page.tab === 1
             Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
+            Loader { anchors.fill: parent; active: page.tab === 1 || page.outSeen; sourceComponent: Component {
             Flickable { anchors.fill: parent; anchors.margins: 10; contentWidth: outGrid.implicitWidth; contentHeight: outGrid.implicitHeight; boundsBehavior: Flickable.StopAtBounds
                 ColumnLayout { id: outGrid; spacing: 2
                     RowLayout { spacing: 2
@@ -96,7 +102,7 @@ Item {
                                     MouseArea { anchors.fill: parent; onClicked: engine.setOutputRoute(out, modelData.index) } } } } }
                     MoreText { text: i18n.t("MONITOR is the control-room signal (master or a bus, after the monitor level, DIM, MONO and MUTE). Put MASTER on the outputs that feed the PA or recorder and MONITOR on the speakers: muting the monitor then never mutes the show. A source may go to several outputs.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.preferredWidth: 700; Layout.topMargin: 6 }
                 }
-            }
+            } } }
         }
     }
 }

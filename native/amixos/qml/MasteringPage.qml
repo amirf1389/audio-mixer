@@ -37,8 +37,12 @@ Item {
                 Text { text: i18n.t(card.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.5 }
                 Text { text: card.sub; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; Layout.fillWidth: true; elide: Text.ElideRight }
                 Btn { label: card.on ? page.t("ON") : page.t("OFF"); on: card.on; onColor: card.tint; onClicked: card.toggled() } } } }
+    // A SHORT WINDOW (or a large interface zoom): the page scrolls instead of running past the bottom of the page area
+    Flickable { id: pageScroll; objectName: "pageScroll"; anchors.fill: parent; contentWidth: width; contentHeight: Math.max(height, pageCol.implicitHeight + 20); clip: true
+        boundsBehavior: Flickable.StopAtBounds; interactive: contentHeight > height + 1; ScrollIndicator.vertical: ScrollIndicator { }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 10; spacing: 8
+        id: pageCol; x: 10; y: 10; width: pageScroll.width - 20; height: pageScroll.contentHeight - 20
+        spacing: 8
         Rectangle { Layout.fillWidth: true; implicitHeight: 38; radius: 8; color: Theme.card; border.color: Theme.line
             ScrollRow { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
                 Text { text: page.t("MASTERING:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
@@ -96,5 +100,5 @@ Item {
                 Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; text: page.t("OUTPUT pushes the mix into the limiter: louder, with less dynamics. Watch LOUDNESS for the target (-14 LUFS streaming, -23 broadcast). Saved with the console; the recorder and the monitor hear the result.") }
                 Item { Layout.fillHeight: true } }
         }
-    }
+    } }
 }
