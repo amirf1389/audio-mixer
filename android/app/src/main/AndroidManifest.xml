@@ -16,6 +16,7 @@
         <activity android:name=".MixdownActivity" android:exported="false" />
         <activity android:name=".DevicesActivity" android:exported="false" />
         <activity android:name=".PluginsActivity" android:exported="false" />
+        <activity android:name=".InsertsActivity" android:exported="false" />
         <activity android:name=".EqActivity" android:exported="false" />
         <activity android:name=".RtaEqActivity" android:exported="false" />
         <activity android:name=".SamplePadsActivity" android:exported="false" />

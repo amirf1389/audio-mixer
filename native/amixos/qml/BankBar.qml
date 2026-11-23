@@ -37,7 +37,7 @@ Row {
     // more: back, the page in use (press: every page), forward, where we are
     Key { visible: bb.paged; objectName: "bankPrev"; implicitWidth: 24; label: "‹"; opacity: bb.bank > 0 ? 1 : 0.4; onHit: if (bb.bank > 0) bb.picked(bb.bank - 1) }
     Key { id: here; visible: bb.paged; objectName: "bankHere"; implicitWidth: 96; label: bb.label(bb.bank) + "  ▾"; on: true; onHit: list.open()
-        Popup { id: list; objectName: "bankList"; y: here.height + 4; padding: 8; width: 5 * 80 + 4 * 4 + 16
+        Popup { id: list; objectName: "bankList"; margins: 8; y: here.height + 4; padding: 8; width: 5 * 80 + 4 * 4 + 16
             background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: Theme.line }
             contentItem: Flow { spacing: 4
                 Repeater { model: list.visible ? bb.banks : 0; delegate: Key { implicitWidth: 80; label: bb.label(index); on: bb.bank === index; onHit: { bb.picked(index); list.close() } } } } } }

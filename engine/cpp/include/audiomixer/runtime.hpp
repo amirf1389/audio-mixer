@@ -39,6 +39,7 @@ struct DeviceConfig {
   bool preferInt32 = true;               // WASAPI exclusive: try 32-bit integer before 32-bit float (the device's own word length first)
   // null backend only: what the "device" delivers as input (default silence); called on the audio thread before each block, frameIndex = first frame of the block
   std::function<void(float* const* in, std::size_t frames, std::uint64_t frameIndex)> nullInput;
+  std::uint64_t nullLoseAfterFrames = 0;   // null backend only (the simulated device layer of the tests): the "device" disappears after this many frames (deviceLost(), no more blocks); 0 = never
 };
 
 // in: inChannels pointers to `frames` floats each; out: outChannels pointers. Runs on the audio thread.
@@ -60,6 +61,9 @@ class Backend {
   virtual std::vector<std::string> outputNames() const { return {}; }
   // LOW LATENCY: the input and output latency the driver reports, in frames (buffer included); 0 / 0 when it says nothing
   virtual void latencyFrames(long& in, long& out) const { in = 0; out = 0; }
+  // DEVICE LOST: the system took the device away under the running stream (unplugged, disabled, its format changed, the audio service
+  // restarted: WASAPI AUDCLNT_E_DEVICE_INVALIDATED and kin). The stream delivers no more blocks; the owner stops it and opens again / fails over.
+  virtual bool deviceLost() const { return false; }
 };
 std::vector<std::string> availableBackends();                 // the ones built into this binary, "null" last
 std::unique_ptr<Backend> createBackend(const std::string& name);   // nullptr when it is not built in
@@ -132,6 +136,7 @@ class Runtime {
   std::string sampleFormat() const;
   std::vector<std::string> outputNames() const;   // see Backend::outputNames
   double inputSilentSeconds() const;   // see Backend::inputSilentSeconds; 0 when nothing is open
+  bool deviceLost() const { return backend_ && backend_->deviceLost(); }   // see Backend::deviceLost
   void latencyFrames(long& in, long& out) const;   // see Backend::latencyFrames (audiomixer/latency.hpp turns it into a report)
   // the integer word length the device takes on its output: 16 or 24 (dither at that depth), 0 for 32-bit integer / float (no dither:
   // a 32-bit converter's LSB is far below its own noise). From sampleFormat(): ASIO / WASAPI exclusive report the driver's own type.
@@ -230,7 +235,10 @@ class Runtime {
   void setExtraSource(ExtraSource* s) { extra_.store(s); }
   // a TAP sees every block on the audio thread (the recorder): the strips after trim / DSP / inserts and before the fader, then the master
   // after its chain and meters (what the show hears, before the monitor section). Must not block or allocate. nullptr detaches.
-  struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0; };
+  struct Tap { virtual ~Tap() = default; virtual void onBlock(const float* const* strips, int nStrips, const float* L, const float* R, std::size_t frames, double sampleRate) = 0;
+    // after the buses and the monitor (control room) are worked out for the block: busOut holds 2 * nBuses channels (L, R of each bus),
+    // monL / monR what goes to the monitor outputs. For analysers that look at a bus or the monitor; optional.
+    virtual void onBuses(const float* const* /*busOut*/, int /*nBuses*/, const float* /*monL*/, const float* /*monR*/, std::size_t /*frames*/) {} };
   void setTap(Tap* t) { tap_.store(t); }
   ExtraSource* extraSource() const { return extra_.load(); }   // so a short test (the ROUND TRIP click) can borrow the slot and give it back
   Tap* tap() const { return tap_.load(); }

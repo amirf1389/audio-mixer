@@ -136,7 +136,7 @@ int main() {
     std::printf("wshape_test: random moves of every control, finite, largest sample step %.3f\n", maxStep); }
   { // 9. PRESETS: nine W-SHAPE presets after the 600 others, every value known to the effect
     int n = 0; for (const auto& p : presets()) if (p.kind == "wshape") { ++n; auto w = fresh(); for (const auto& [id, v] : p.values) { bool known = false; for (const auto& q : w->params()) if (q.id == id) known = true; CHECK(known && v >= 0 && v <= 1, "%s: %s", p.name.c_str(), id.c_str()); } CHECK(p.id > 600, "%s id %d", p.name.c_str(), p.id); }
-    CHECK(n == 9 && presets().size() == 614 && preset(601)->name == "SPEECH" && preset(609)->name == "STRONG", "W-SHAPE presets: %d", n);
+    CHECK(n == 9 && presets().size() == 618 && preset(601)->name == "SPEECH" && preset(609)->name == "STRONG", "W-SHAPE presets: %d", n);
     auto w = fresh(); CHECK(w->params().size() == WShape::kParams, "params");
     std::printf("wshape_test: %d W-SHAPE presets (ids 601 .. 609)\n", n); }
   std::printf(fails ? "wshape_test: %d FAILED\n" : "wshape_test: all passed\n", fails);

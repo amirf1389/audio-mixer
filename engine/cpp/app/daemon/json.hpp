@@ -34,6 +34,7 @@ class Value {
   bool isNull() const { return type_ == Null; }
   bool isObject() const { return type_ == Object; }
   bool isArray() const { return type_ == Array; }
+  bool isNumber() const { return type_ == Number; }
   bool asBool(bool d = false) const { return type_ == Bool ? b_ : type_ == Number ? n_ != 0 : d; }
   double asNumber(double d = 0) const { return type_ == Number ? n_ : d; }
   int asInt(int d = 0) const { return type_ == Number && std::isfinite(n_) ? static_cast<int>(n_) : d; }

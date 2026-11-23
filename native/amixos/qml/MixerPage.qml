@@ -84,7 +84,8 @@ Item {
     property bool showAi: true      // the AI chip: automix (gain sharing between open microphones) + the gain it applies right now
     Connections { target: engine; function onBusesChanged() { page.sendsTick++ } function onRoutingChanged() { page.sendsTick++ } function onStateChanged() { page.sendsTick++ } }
     property var selPlugins: engine.plugins(sel)
-    Connections { target: engine; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
+    Connections { target: engine; enabled: page.visible; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
+    onVisibleChanged: if (visible) { page.selPlugins = engine.plugins(page.sel); page.sendsTick++ }   // shown again: what changed while hidden
     // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
     focus: true
     Keys.onPressed: function (e) {
@@ -105,7 +106,14 @@ Item {
     Timer { running: page.note !== ""; interval: 5000; onTriggered: page.note = "" }
     signal go(string id)
     readonly property int sel: engine.selectedStrip
-    readonly property var selSt: engine.stripAt(sel, engine.stripTick)
+    // the selected strip's state, read again only when THAT strip changed (its version): a fader moved on another strip no longer re-runs
+    // every binding of the channel panel (~3 ms per fader step)
+    // HIDDEN (another page shown; the mixer stays built): the strip tick is held, so fader moves from a remote, MIDI or a scene run none of
+    // this page's bindings; shown again, it takes the engine's tick and every strip reads afresh
+    property int sTick: 0
+    Binding on sTick { when: page.visible; value: engine.stripTick; restoreMode: Binding.RestoreNone }
+    readonly property int selVer: engine.stripVer(sel, page.sTick)
+    readonly property var selSt: engine.stripAt(sel, selVer)
     readonly property var selCh: engine.channelParams(sel)
     ColumnLayout {
         anchors.fill: parent
@@ -176,7 +184,7 @@ Item {
                         ToolTip.visible: containsMouse; ToolTip.delay: 500
                         ToolTip.text: i18n.t("The sound of one program only (Spotify, TIDAL, Deezer, Roon, a browser playing YouTube) becomes the input on CH 1-2. It is the sound Windows plays: nothing is downloaded or copied. Needs Windows 10 version 2004 or later.", i18n.lang)
                         onClicked: { appPop.apps = engine.appSources(); appPop.open() } }
-                    Popup { id: appPop; objectName: "appSoundPop"; property var apps: []; y: parent.height + 4; width: 330; padding: 10; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                    Popup { id: appPop; objectName: "appSoundPop"; margins: 8; property var apps: []; y: parent.height + 4; width: 330; padding: 10; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                         background: Rectangle { color: Theme.card; border.color: Theme.line; radius: 8 }
                         Column { width: parent.width; spacing: 4
                             Text { width: parent.width; text: i18n.t("APP SOUND: pick the program to hear on CH 1-2", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.Wrap }
@@ -265,7 +273,7 @@ Item {
                 Rectangle { id: gb93; implicitWidth: Math.max(80, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb93.color) } GradientStop { position: 1; color: Theme.btnBottom(gb93.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("RESET FADERS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.confirmDestructive ? confirmReset.open() : engine.resetFaders() } }
                 Rectangle { id: gb94; implicitWidth: Math.max(78, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb94.color) } GradientStop { position: 1; color: Theme.btnBottom(gb94.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("FLATTEN DSP", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.confirmDestructive ? confirmFlatten.open() : engine.flattenAllDsp() } }
                 Rectangle { id: gb95; implicitWidth: Math.max(70, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb95.color) } GradientStop { position: 1; color: Theme.btnBottom(gb95.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("CLEAR CLIPS", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.clearClips() } }
-                Rectangle { objectName: "limitAllBtn"; property int tick: 0; readonly property bool all: { tick; engine.stripTick; return engine.allChannelsLimited() } implicitWidth: laT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: all ? Theme.amber : Theme.ov(0.06); border.color: Theme.lineSoft
+                Rectangle { objectName: "limitAllBtn"; property int tick: 0; readonly property bool all: { tick; page.sTick; return engine.allChannelsLimited() } implicitWidth: laT.implicitWidth + 16; implicitHeight: 20; radius: 4; color: all ? Theme.amber : Theme.ov(0.06); border.color: Theme.lineSoft
                     Text { id: laT; anchors.centerIn: parent; text: i18n.t("LIMIT CHANNELS", i18n.lang); color: parent.all ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     MouseArea { anchors.fill: parent; onClicked: { engine.limitAllChannels(!parent.all); parent.tick++ } }
                     ToolTip.visible: laH.hovered && settings.tooltips; ToolTip.text: i18n.t("The channel limiter of every strip, on or off in one press: no channel can pass its ceiling.", i18n.lang); HoverHandler { id: laH } }
@@ -304,7 +312,7 @@ Item {
                         Text { text: i18n.t("SOUND SCORE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
                         Text { text: scoreBadge.sc.valid ? Math.round(scoreBadge.sc.total) + "  " + scoreBadge.sc.grade : "—"; color: scoreBadge.tone; font.family: Theme.mono; font.pixelSize: 10; font.bold: true; anchors.verticalCenter: parent.verticalCenter } }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: scorePop.open() }
-                    Popup { id: scorePop; objectName: "soundScorePop"; y: parent.height + 4; x: parent.width - width; width: 420; padding: 12
+                    Popup { id: scorePop; objectName: "soundScorePop"; margins: 8; y: parent.height + 4; x: parent.width - width; width: 420; padding: 12
                         background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: scoreBadge.tone }
                         contentItem: Column { spacing: 8
                             Rectangle { id: gb100; objectName: "scoreFullView"; implicitWidth: fvT.implicitWidth + 16; implicitHeight: 20; radius: 7; color: Theme.ov(0.06); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb100.color) } GradientStop { position: 1; color: Theme.btnBottom(gb100.color) } } border.color: scoreBadge.tone   // the whole picture: gauge, parts, history, analyzer detail
@@ -412,7 +420,7 @@ Item {
                     Text { text: i18n.t("PLUGIN RACK", i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2
                         ToolTip.visible: rackTitleHover.hovered; ToolTip.text: i18n.t("chain: Ø → DLY → GATE → X → EQ → COMP → LIM", i18n.lang); HoverHandler { id: rackTitleHover } }
                     Text { text: i18n.t("CH ", i18n.lang) + (page.sel + 1 < 10 ? "0" : "") + (page.sel + 1) + "  " + (page.selSt ? page.selSt.name : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight; Layout.preferredWidth: 96 }
-                    Text { text: (engine.stripTick, engine.pluginCount(page.sel)) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + ""; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
+                    Text { text: (page.sTick, engine.pluginCount(page.sel)) + i18n.t(" of ", i18n.lang) + (engine.pluginSlotLimit >= 64 ? i18n.t("unlimited", i18n.lang) : engine.pluginSlotLimit) + i18n.t(" used", i18n.lang) + ""; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 }
                     RowLayout { visible: engine.pluginSlotLimit > 10; spacing: 3
                         Rectangle { implicitWidth: 18; implicitHeight: 14; radius: 3; color: Theme.ov(0.08); Text { anchors.centerIn: parent; text: "‹"; color: Theme.ink; font.pixelSize: 10 } MouseArea { anchors.fill: parent; onClicked: page.rackBank = Math.max(0, page.rackBank - 1) } }
                         Text { text: (page.rackBank * 10 + 1) + " - " + Math.min(engine.pluginSlotLimit, page.rackBank * 10 + 10); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; font.bold: true }
@@ -473,7 +481,7 @@ Item {
                                 visible: (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank
                                 width: visible ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
-                                readonly property int ver: engine.stripVer(index, engine.stripTick)
+                                readonly property int ver: engine.stripVer(index, page.sTick)
                                 property var st: { ver; return engine.stripLite(index) }
                                 property var mt: visible ? (page.tick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
                                 property color sc: Theme.stripColors[st ? st.color : 0]
@@ -794,7 +802,9 @@ Item {
                         // sends
                         Repeater { model: engine.busState; delegate: RowLayout { Layout.fillWidth: true; spacing: 4
                             property var sd: engine.send(page.sel, index)
-                            Connections { target: engine; function onStripsChanged() { sd = engine.send(page.sel, index) } function onSelectedStripChanged() { sd = engine.send(page.sel, index) } }
+                            function reread() { const n = engine.send(page.sel, index); if (!sd || !n || n.db !== sd.db || n.pre !== sd.pre) sd = n }   // a new value only when the send changed
+                            Connections { target: engine; enabled: page.visible; function onStripsChanged() { reread() } function onSelectedStripChanged() { reread() } }
+                            Connections { target: page; function onSendsTickChanged() { reread() } }
                             Text { text: i18n.t(modelData.name ?? "", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 7; Layout.preferredWidth: 36; elide: Text.ElideRight }
                             MSlider { Layout.fillWidth: true; Layout.minimumWidth: 40; implicitWidth: 60; from: -60; to: 10; value: sd ? sd.db : -60; onMoved: engine.setSend(page.sel, index, value, sd ? sd.pre : false) }
                             Rectangle { implicitWidth: 30; Layout.minimumWidth: 30; implicitHeight: 14; radius: 2; color: sd && sd.pre ? Theme.cyan : Theme.ov(0.08); Text { anchors.centerIn: parent; text: sd && sd.pre ? i18n.t("PRE", i18n.lang) : i18n.t("POST", i18n.lang); color: sd && sd.pre ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.setSend(page.sel, index, sd ? sd.db : -60, !(sd && sd.pre)) } } } }
@@ -811,7 +821,7 @@ Item {
                 id: masterMod
                 Layout.preferredWidth: 140; Layout.fillHeight: true; tint: Theme.orange
                 readonly property real lufs: engine.telv("shortTerm", page.tick) === undefined ? -120 : engine.telv("shortTerm", page.tick)
-                readonly property var lim: { engine.stripTick; return engine.masterLimiter() }
+                readonly property var lim: { page.sTick; return engine.masterLimiter() }
                 RowLayout { Layout.fillWidth: true; spacing: 6
                     Lamp { tint: engine.masterMuted || engine.masterDb <= -60 ? Theme.danger : Theme.emerald; lit: engine.running }
                     Text { text: i18n.t("MASTER", i18n.lang); color: Theme.orange; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 3 }

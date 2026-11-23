@@ -26,6 +26,9 @@
 
 namespace am::net {
 
+// SSRCs of the streams this process is sending right now: a receiver drops their packets (its own master coming back = a feedback loop)
+bool isOwnStream(std::uint32_t ssrc) noexcept;
+
 struct SendStats { bool running = false; std::uint64_t packets = 0, droppedFrames = 0; bool rateMismatch = false; };
 class Sender : public Runtime::Tap {
  public:
@@ -41,10 +44,10 @@ class Sender : public Runtime::Tap {
   void loop();
   StreamDesc d_; std::string iface_; bool announce_ = true; Sock sock_ = kNoSock, sap_ = kNoSock;
   std::vector<float> ring_; std::size_t cap_ = 0; std::atomic<std::uint64_t> w_{0}, r_{0};   // frames written / read (single producer: audio thread, single consumer: loop)
-  std::atomic<bool> run_{false}, mismatch_{false}; std::atomic<std::uint64_t> packets_{0}, dropped_{0}; std::thread th_;
+  std::atomic<bool> run_{false}, mismatch_{false}; std::atomic<std::uint64_t> packets_{0}, dropped_{0}; std::thread th_; int slot_ = -1;
 };
 
-struct RecvStats { bool running = false; std::uint64_t packets = 0, lost = 0, late = 0, underruns = 0, resyncs = 0; double fillMs = 0; int idleMs = -1; std::string from; };
+struct RecvStats { bool running = false; std::uint64_t packets = 0, lost = 0, late = 0, underruns = 0, resyncs = 0, selfLoop = 0; double fillMs = 0; int idleMs = -1; std::string from; };
 class Receiver : public Runtime::NetInput {
  public:
   ~Receiver() override { stop(); }
@@ -54,16 +57,17 @@ class Receiver : public Runtime::NetInput {
   void stop();
   bool running() const { return run_.load(); }
   const StreamDesc& desc() const { return d_; }
+  void setRejectOwn(bool on) { rejectOwn_ = on; }   // default on: packets of a stream this process sends are dropped (tests of the wire turn it off)
   int port() const { return port_; }   // the port really bound (d.port 0 = any free one)
   RecvStats stats() const;
   void pull(float* const* ch, int channels, std::size_t frames, double sampleRate) override;
  private:
   void loop();
   float at(std::uint64_t frame, int c) const { return ring_[static_cast<std::size_t>(frame % cap_) * static_cast<std::size_t>(d_.channels) + static_cast<std::size_t>(c)]; }
-  StreamDesc d_; int latencyMs_ = 20, port_ = 0; Sock sock_ = kNoSock;
+  StreamDesc d_; int latencyMs_ = 20, port_ = 0; Sock sock_ = kNoSock; std::atomic<bool> rejectOwn_{true};
   std::vector<float> ring_; std::uint64_t cap_ = 1; std::atomic<std::uint64_t> w_{0}, r_{0};   // frames (single producer: loop, single consumer: audio thread)
   double frac_ = 0, fillAvg_ = 0; bool primed_ = false;                                       // audio thread only
-  std::atomic<bool> run_{false}; std::atomic<std::uint64_t> packets_{0}, lost_{0}, late_{0}, under_{0}, resync_{0}; std::atomic<std::int64_t> lastNs_{0}; std::atomic<std::uint32_t> fromIp_{0};
+  std::atomic<bool> run_{false}; std::atomic<std::uint64_t> packets_{0}, lost_{0}, late_{0}, under_{0}, resync_{0}, self_{0}; std::atomic<std::int64_t> lastNs_{0}; std::atomic<std::uint32_t> fromIp_{0};
   std::atomic<double> fillMs_{0}; std::thread th_;
 };
 

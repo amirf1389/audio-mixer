@@ -16,6 +16,7 @@
 //                REW / miniDSP / Equalizer APO filter list and as JSON
 //   Offline      the same analysis from a recorded sweep in a WAV (the console reads the file; this takes the samples)
 #pragma once
+#include <complex>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -91,4 +92,7 @@ struct MonitorEqMode {
   bool eqOn() const { return mode != Off && !filters.empty(); }
 };
 
+// THE FFT the console's analysers share (the ACOUSTICS RTA here, the scope's 1/3-octave bands and the WATERFALL): iterative radix-2,
+// forward, in place; n a power of two. No allocation.
+void fftInPlace(std::complex<double>* x, std::size_t n);
 }  // namespace am::measure

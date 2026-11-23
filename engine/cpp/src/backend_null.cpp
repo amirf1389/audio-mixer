@@ -28,12 +28,14 @@ class NullBackend : public Backend {
   bool start(std::string&) override { stop_ = false; thread_ = std::thread([this] { loop(); }); return true; }
   void stop() override { stop_ = true; if (thread_.joinable()) thread_.join(); }
   std::uint64_t xruns() const override { return late_; }
+  bool deviceLost() const override { return lost_.load(); }
  private:
   void loop() {
     using clock = std::chrono::steady_clock;
     const auto period = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(cfg_.frames / cfg_.sampleRate));
     auto next = clock::now(); std::uint64_t frame = 0;
     while (!stop_) {
+      if (cfg_.nullLoseAfterFrames && frame >= cfg_.nullLoseAfterFrames) { lost_ = true; break; }   // the simulated device was pulled out: no more blocks
       if (cfg_.nullInput) cfg_.nullInput(const_cast<float* const*>(inp_.data()), cfg_.frames, frame);
       else for (auto& v : in_) std::fill(v.begin(), v.end(), 0.0f);
       cb_(inp_.data(), const_cast<float* const*>(outp_.data()), cfg_.frames);
@@ -43,7 +45,7 @@ class NullBackend : public Backend {
     }
   }
   DeviceConfig cfg_; AudioCallback cb_; std::vector<std::vector<float>> in_, out_; std::vector<const float*> inp_; std::vector<float*> outp_;
-  std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> late_{0};
+  std::thread thread_; std::atomic<bool> stop_{false}, lost_{false}; std::atomic<std::uint64_t> late_{0};
 };
 }  // namespace
 std::unique_ptr<Backend> makeNullBackend() { return std::make_unique<NullBackend>(); }

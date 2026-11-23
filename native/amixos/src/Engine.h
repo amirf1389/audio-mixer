@@ -25,6 +25,7 @@
 #include <thread>
 #include "audiomixer/onevoice.hpp"
 #include "audiomixer/watchdog.hpp"
+#include "audiomixer/device_watch.hpp"
 #include "audiomixer/dynamics.hpp"
 #include <vector>
 
@@ -391,10 +392,11 @@ class Engine : public QObject {
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
   bool oneVoice() const { return oneVoice_; } void setOneVoice(bool on); QString oneVoiceNote() const { return oneVoiceNote_; }
-  bool watchdog() const { return watchdog_; } void setWatchdog(bool on); QString watchdogNote() const { return watchdogNote_; } int failovers() const { return failovers_; }
+  bool watchdog() const { return watchdog_; } void setWatchdog(bool on); void keepSavedWatchdog() { saveWatchdog_ = false; } QString watchdogNote() const { return watchdogNote_; } int failovers() const { return failovers_; }
   Q_INVOKABLE bool failover(const QString& why);   // stop and start again: the same device, else AUTO DETECT (also what the watchdog calls)
   Q_INVOKABLE void undoOneVoice();   // CH 1 back on input 1, and the rule rests until the next device opens
   bool oneVoice_ = true, oneVoiceActed_ = false; QString oneVoiceNote_; am::OneVoice ov_;
+  bool saveWatchdog_ = true;   // false in test runs: their watchdog changes are never written to the settings
   bool watchdog_ = true; QString watchdogNote_; int failovers_ = 0; am::Watchdog wd_; QElapsedTimer wdClock_;
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
   bool freshInstall_ = false; QString installId_;
@@ -447,6 +449,7 @@ class Engine : public QObject {
   void setMediaSource(am::Runtime::ExtraSource* s) { sources_.c.store(s); }
   void setSampleSource(am::Runtime::ExtraSource* s) { sources_.d.store(s); }
   void setMeasureIo(am::Runtime::Tap* t, am::Runtime::ExtraSource* s) { taps_.c.store(t); sources_.e.store(s); }
+  ScopeTap& scope() { return scope_; }   // the WATERFALL reads the analyser ring (C++ only)
   // 360 AUDIO: a strip around the head (headphones). az degrees (0 front, 90 right), el -90..90, dist metres, spread 0..1
   // MASTER CHAIN: the PROGRAM EQ (strip index -1 in setEq / eqBand / setGraphicEq: the RTA EQ page's own rack) and MASTERING after it
   // EQUALIZER APO: the filter text that Equalizer APO (the open-source system-wide equaliser for Windows) reads and writes: "Preamp: -3 dB",
@@ -917,7 +920,7 @@ class Engine : public QObject {
   bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const; void secureInputFor(am::DeviceConfig& cfg);
   QString autoStatus_ = "off"; class QFileSystemWatcher* keyWatch_ = nullptr; QTimer keyScan_;
   QString lastRoute_; am::Runtime::ExtraSource* extra_ = nullptr; am::rec::Recorder recorder_; std::bitset<kStrips> armed_; QString recMsg_; double clipDb_ = -0.1; int peakHoldMs_ = 1400;
-  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = true; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_;
+  struct MonitorUi { int source = 0; double db = 0; bool dim = false, mono = false, mute = false, sync = false; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_; double monOff_ = 0;   // SYNC is off by default; monOff_ = monitor - master as last set by hand
   am::measure::MonitorEqMode monEq_; int monEqTick_ = 0; void pushMonitorEq();   // the control room's EQ (AI EQ AUTO under DUAL LISTEN)   // sync: the monitor fader moves with the master fader (and back)
   int vuRef_ = -18; double vu_[kStrips] = {}; double vuMaster_ = 0;                     // VU ballistics (300 ms to 99 %), run on the UI timer
   std::optional<QJsonObject> clipboard_;
@@ -927,6 +930,9 @@ class Engine : public QObject {
   bool askedMic_ = false;   // INPUT: MIC pressed: the user asked for the microphone, so the automatic headset rule does not take it away
   struct Dock { QWindow* win = nullptr; std::shared_ptr<am::host::Plugin> pl; int strip = -1, slot = -1; QPointer<QQuickItem> area; } dock_; QTimer dockTimer_; void placeDock();
   QTimer timer_; QTimer hotplug_; std::string fingerprint_; bool simulated_ = false;
+  // HOT-PLUG WHILE CAPTURING: the system's notifications (devWatch_) mark devMon_ and poll at once (devNotify_ debounces a burst); the
+  // fingerprint runs on its own short thread (never behind a stuck audio-service job); a rescan asked during a scan runs right after it
+  std::unique_ptr<am::DeviceChangeWatch> devWatch_; am::DeviceMonitor devMon_; QTimer devNotify_; QElapsedTimer fpSince_; bool rescanAgain_ = false;
   bool live_ = false; int liveStrip_ = 0;
   mutable QSettings settings_;
 };

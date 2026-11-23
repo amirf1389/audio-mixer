@@ -193,6 +193,7 @@ AMIX_API int   amix_rt_net_send_start(amix_rt*, const char* name, const char* ad
 AMIX_API void  amix_rt_net_send_stop(amix_rt*);
 AMIX_API int   amix_rt_net_receive_start(amix_rt*, const char* address, int port, int channels, int bits, int rate, int latency_ms, const char* iface, char* err, size_t err_len);
 AMIX_API void  amix_rt_net_receive_stop(amix_rt*);
+AMIX_API void  amix_rt_net_receive_own(amix_rt*, int accept);   /* default 0: packets of the stream this process sends are dropped (no feedback loop). 1 accepts them, for a deliberate loopback test on one machine */
 AMIX_API char* amix_rt_net_stats_json(amix_rt*);         /* {"send":{"running","packets","droppedFrames",...},"receive":{"running","packets","lost","late","underruns","fillMs","idleMs","from",...}} */
 AMIX_API char* amix_net_discover_json(int wait_ms, const char* iface);   /* listens for announcements for wait_ms: [{"name","origin","address","port","channels","bits","rate","ptimeMs","refClock"}] */
 AMIX_API char* amix_net_transports_json(void);           /* [{"id","name","available","note"}] */

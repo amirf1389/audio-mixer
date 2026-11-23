@@ -20,6 +20,7 @@
 
 #include "audiomixer/sysopt.hpp"
 #include "audiomixer/app_sound.hpp"
+#include "audiomixer/device_watch.hpp"
 #include "backends.hpp"
 
 namespace am {
@@ -133,10 +134,11 @@ class WasapiBackend : public Backend {
   bool start(std::string& err) override {
     if (out_ && FAILED(out_->Start())) { err = "cannot start the render stream"; return false; }
     if (in_ && FAILED(in_->Start())) { err = "cannot start the capture stream"; return false; }
-    stop_ = false; thread_ = std::thread([this] { loop(); }); return true;
+    stop_ = false; lost_ = false; thread_ = std::thread([this] { loop(); }); return true;
   }
   void stop() override { stop_ = true; if (ev_) SetEvent(ev_); if (thread_.joinable()) thread_.join(); if (out_) out_->Stop(); if (in_) in_->Stop(); }
   std::uint64_t xruns() const override { return xruns_; }
+  bool deviceLost() const override { return lost_.load(); }
   // LOW LATENCY: Windows' stream latency plus the stream's buffer, each direction (GetStreamLatency leaves the buffer out)
   void latencyFrames(long& in, long& out) const override {
     in = out = 0; const double rate = cfg_.sampleRate > 0 ? cfg_.sampleRate : 48000;
@@ -233,9 +235,10 @@ class WasapiBackend : public Backend {
       if (stop_) break;
       if (capture_) {                                                          // everything the capture side has: into per-channel FIFOs
         UINT32 n = 0;
-        while (SUCCEEDED(capture_->GetNextPacketSize(&n)) && n > 0) {
+        HRESULT pr = S_OK;
+        while (SUCCEEDED(pr = capture_->GetNextPacketSize(&n)) && n > 0) {
           BYTE* data; UINT32 got; DWORD fl;
-          if (FAILED(capture_->GetBuffer(&data, &got, &fl, nullptr, nullptr))) break;
+          if (FAILED(pr = capture_->GetBuffer(&data, &got, &fl, nullptr, nullptr))) break;
           const std::size_t sb = sIn_.bytes();
           { bool zero = (fl & AUDCLNT_BUFFERFLAGS_SILENT) != 0;   // exact silence from the system (flagged, or every byte zero): counted, see inputSilentSeconds
             if (!zero) { zero = true; const std::size_t nb = static_cast<std::size_t>(got) * static_cast<std::size_t>(ci) * sb; for (std::size_t b = 0; b < nb && zero; ++b) zero = data[b] == 0; }
@@ -243,16 +246,17 @@ class WasapiBackend : public Backend {
           for (UINT32 i = 0; i < got; ++i) for (int c = 0; c < ci; ++c) fifo_[static_cast<std::size_t>(c)].push((fl & AUDCLNT_BUFFERFLAGS_SILENT) ? 0.0f : loadSample(data + (static_cast<std::size_t>(i) * static_cast<std::size_t>(ci) + static_cast<std::size_t>(c)) * sb, sIn_));
           capture_->ReleaseBuffer(got);
         }
+        if (lostBy(pr)) break;
       }
       UINT32 pad = 0, room = bufFrames;
       if (out_ && cfg_.exclusive) room = bufFrames;   // exclusive: each event wants the whole buffer (the padding has no meaning there)
-      else if (out_ && SUCCEEDED(out_->GetCurrentPadding(&pad))) room = pad <= bufFrames ? bufFrames - pad : 0;
+      else if (out_) { const HRESULT pr = out_->GetCurrentPadding(&pad); if (lostBy(pr)) break; room = SUCCEEDED(pr) && pad <= bufFrames ? bufFrames - pad : 0; }
       else if (!out_) room = ci > 0 ? static_cast<UINT32>(fifo_[0].size() / cfg_.frames * cfg_.frames) : cfg_.frames;   // input only: every whole block the capture side has delivered (this loop used to start with room = 0, the callback never ran)
       while (room >= cfg_.frames && !stop_) {
         for (int c = 0; c < ci; ++c) { auto& q = fifo_[static_cast<std::size_t>(c)]; for (UINT32 i = 0; i < cfg_.frames; ++i) { if (q.size() == 0) { inBuf_[static_cast<std::size_t>(c)][i] = 0.0f; ++xruns_; } else inBuf_[static_cast<std::size_t>(c)][i] = q.pop(); } }
         cb_(inp_.data(), outp_.data(), cfg_.frames);
         if (render_) {
-          BYTE* data; if (FAILED(render_->GetBuffer(cfg_.frames, &data))) break;
+          BYTE* data; const HRESULT gr = render_->GetBuffer(cfg_.frames, &data); if (FAILED(gr)) { lostBy(gr); break; }
           const std::size_t sb = sOut_.bytes();
           for (UINT32 i = 0; i < cfg_.frames; ++i) for (int c = 0; c < co; ++c) storeSample(data + (static_cast<std::size_t>(i) * static_cast<std::size_t>(co) + static_cast<std::size_t>(c)) * sb, outBuf_[static_cast<std::size_t>(c)][i], sOut_);
           render_->ReleaseBuffer(cfg_.frames, 0);
@@ -260,14 +264,18 @@ class WasapiBackend : public Backend {
         room -= cfg_.frames;
         if (!out_ && !capture_) break;
       }
+      if (lost_) break;
       for (auto& q : fifo_) q.trim(static_cast<std::size_t>(cfg_.frames) * 16);      // never let the capture side run away
     }
     if (mm) AvRevertMmThreadCharacteristics(mm);
   }
+  // DEVICE INVALIDATED (unplugged, disabled, format changed, audio service restarted): the stream is dead; said once, the loop ends and
+  // the owner sees deviceLost() (it used to spin on the failing calls: silence, a frozen console, the device list never told)
+  bool lostBy(HRESULT r) { if (classifyStreamError(r) != StreamFault::Lost) return false; lost_ = true; return true; }
   void closeAll() { release(render_); release(capture_); release(out_); release(in_); if (ev_) { CloseHandle(ev_); ev_ = nullptr; } }
   DeviceConfig cfg_; AudioCallback cb_; IAudioClient *out_ = nullptr, *in_ = nullptr; IAudioRenderClient* render_ = nullptr; IAudioCaptureClient* capture_ = nullptr; HANDLE ev_ = nullptr; Sample sOut_, sIn_;
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<const float*> inp_; std::vector<float*> outp_; std::vector<Fifo> fifo_;
-  bool captureEvent_ = false, loopback_ = false; std::thread thread_; std::atomic<bool> stop_{false}; std::atomic<std::uint64_t> xruns_{0}, silentFrames_{0};
+  bool captureEvent_ = false, loopback_ = false; std::thread thread_; std::atomic<bool> stop_{false}, lost_{false}; std::atomic<std::uint64_t> xruns_{0}, silentFrames_{0};
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }

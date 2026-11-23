@@ -52,8 +52,13 @@ Item {
     }
     Timer { interval: engine.uiAwake ? 150 : 500; running: page.visible && page.tab === 1 && engine.running; repeat: true; onTriggered: { page.rtaData = measure.rta(page.strip, page.rtaBpo, page.rtaAvg); rtaPlot.requestPaint() } }
     Connections { target: measure; function onChanged() { respPlot.requestPaint(); etcPlot.requestPaint(); eqPlot.requestPaint(); if (measure.state === "done") { page.water = measure.waterfall(24); page.spec = measure.spectrogram(); waterPlot.requestPaint(); specPlot.requestPaint() } } }
-    function pageShown() { roomData = measure.room(rm[0], rm[1], rm[2], rm[3], rm[4], rm[5], rm[6], rm[7], rm[8], rm[9]) }   // also when shown again from the page cache
-    Component.onCompleted: pageShown()
+    // the ROOM prediction only depends on the room's figures: worked out when the ROOM tab is shown and the figures changed, not on every
+    // visit (it took ~100 ms each time the page was opened or shown again from the cache)
+    property string roomKey: ""
+    function ensureRoom() { if (page.tab !== 3) return; const k = rm.join(","); if (k === roomKey && roomData.freq) return; roomKey = k; roomData = measure.room(rm[0], rm[1], rm[2], rm[3], rm[4], rm[5], rm[6], rm[7], rm[8], rm[9]); roomPlot.requestPaint() }
+    function pageShown() { ensureRoom() }   // also when shown again from the page cache
+    onTabChanged: ensureRoom()
+    Component.onCompleted: ensureRoom()
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 22; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
@@ -62,16 +67,20 @@ Item {
     component Note: Text { Layout.fillWidth: true; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap }
     component Num: TextField { implicitWidth: 64; implicitHeight: 22; font.family: Theme.mono; font.pixelSize: 9; color: Theme.ink; selectByMouse: true; background: Rectangle { radius: 4; color: Theme.ov(0.06); border.color: Theme.lineSoft } }
     component Plot: Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.chrome; border.color: Theme.line; clip: true }
+    // A SHORT WINDOW (or a large interface zoom): the page scrolls instead of running past the bottom of the page area
+    Flickable { id: pageScroll; objectName: "pageScroll"; anchors.fill: parent; contentWidth: width; contentHeight: Math.max(height, pageCol.implicitHeight + 20); clip: true
+        boundsBehavior: Flickable.StopAtBounds; interactive: contentHeight > height + 1; ScrollIndicator.vertical: ScrollIndicator { }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: 10; spacing: 8
-        Rectangle { Layout.fillWidth: true; implicitHeight: 34; radius: 8; color: Theme.card; border.color: Theme.line
-            RowLayout { anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
-                Text { text: page.t("ACOUSTICS:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
+        id: pageCol; x: 10; y: 10; width: pageScroll.width - 20; height: pageScroll.contentHeight - 20
+        spacing: 8
+        Rectangle { Layout.fillWidth: true; implicitHeight: hdrFlow.implicitHeight + 12; radius: 8; color: Theme.card; border.color: Theme.line
+            Flow { id: hdrFlow; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6   // a narrow page: the controls wrap to a second line
+                Text { height: 22; verticalAlignment: Text.AlignVCenter; text: page.t("ACOUSTICS:"); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; font.letterSpacing: 2 }
                 Repeater { model: page.tabs; delegate: Btn { label: page.t(modelData); on: page.tab === index; onClicked: page.tab = index } }
-                Item { Layout.fillWidth: true }
-                Lab { text: page.t("MIC ON CH") } Num { text: page.strip + 1; implicitWidth: 40; onEditingFinished: page.strip = Math.max(0, Math.min(31, parseInt(text) - 1 || 0)) }
+                Item { width: 12; height: 22 }
+                Lab { height: 22; verticalAlignment: Text.AlignVCenter; text: page.t("MIC ON CH") } Num { text: page.strip + 1; implicitWidth: 40; onEditingFinished: page.strip = Math.max(0, Math.min(31, parseInt(text) - 1 || 0)) }
                 Btn { label: measure.calibrated ? page.t("MIC CAL: ON") : page.t("MIC CAL: NONE"); on: measure.calibrated; onColor: Theme.emerald; onClicked: if (measure.calibrated) measure.clearCalibration(); else calRow.visible = !calRow.visible }
-                Lab { text: page.t("SPL OFFSET") } Num { text: measure.splOffset.toFixed(1); onEditingFinished: measure.splOffset = parseFloat(text) || 0 } } }
+                Lab { height: 22; verticalAlignment: Text.AlignVCenter; text: page.t("SPL OFFSET") } Num { text: measure.splOffset.toFixed(1); onEditingFinished: measure.splOffset = parseFloat(text) || 0 } } }
         RowLayout { id: calRow; visible: false; Layout.fillWidth: true; spacing: 6
             Num { id: calPath; Layout.fillWidth: true; placeholderText: page.t("path of the microphone calibration file (.txt / .cal: frequency dB per line)") }
             Btn { label: page.t("LOAD"); on: calPath.text.length > 2; onClicked: if (measure.loadCalibration(calPath.text)) calRow.visible = false }
@@ -174,5 +183,5 @@ Item {
                             Btn { Layout.fillWidth: true; label: page.t("EXPORT JSON"); on: measure.filters.length > 0; onClicked: measure.exportFilters("", true) } } } }
                 Note { text: page.t("Peaking filters fitted to the last measured response inside the range (20 - 400 Hz by default: the range where a room, not the speaker, sets the response). Cuts are preferred to boosts (at most +6 dB). The export is the generic filter text external DSP units and Equalizer APO read; the files go to the data folder.") } }
         }
-    }
+    } }
 }

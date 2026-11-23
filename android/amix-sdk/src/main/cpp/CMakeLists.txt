@@ -15,7 +15,7 @@ add_library(amix SHARED
   # HIGH-RESOLUTION AUDIO (engine/cpp/app/hires): r8brain resampling, dr_wav / dr_flac reading, libFLAC writing. libsoxr (LGPL) is not built in here.
   # the AmF X1 rack effects (engine/cpp/app/fx) as inserts on the phone mixer; the sample player and file reading they use
   ${ROOT}/engine/cpp/app/fx/fx.cpp ${ROOT}/engine/cpp/app/fx/fx_ms.cpp ${ROOT}/engine/cpp/app/fx/fx_dyn.cpp ${ROOT}/engine/cpp/app/fx/fx_more.cpp ${ROOT}/engine/cpp/app/fx/fx_iamf.cpp ${ROOT}/engine/cpp/app/fx/fx_frame.cpp
-  ${ROOT}/engine/cpp/app/fx/fx_dyneq.cpp ${ROOT}/engine/cpp/app/fx/presets.cpp
+  ${ROOT}/engine/cpp/app/fx/fx_dyneq.cpp ${ROOT}/engine/cpp/app/fx/fx_dehiss.cpp ${ROOT}/engine/cpp/app/fx/presets.cpp
   ${ROOT}/engine/cpp/app/samples/samples.cpp ${ROOT}/engine/cpp/app/samples/sfx.cpp ${ROOT}/engine/cpp/app/samples/padbank.cpp ${ROOT}/engine/cpp/app/arrange/arrange.cpp ${ROOT}/engine/cpp/app/arrange/decode.cpp ${ROOT}/engine/cpp/app/arrange/ffmpeg_dyn.cpp
   ${ROOT}/engine/cpp/app/sdk/amix_hires_c.cpp ${ROOT}/engine/cpp/app/hires/hires.cpp ${ROOT}/engine/cpp/app/hires/r8brain/r8bbase.cpp ${HIRES_FLAC_SRC}
   amix_jni.cpp)

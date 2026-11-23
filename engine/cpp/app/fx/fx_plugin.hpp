@@ -16,7 +16,7 @@ class FxPlugin final : public host::Plugin {
   static std::unique_ptr<host::Plugin> make(const std::string& kind, double fs) { auto e = fx::make(kind, fs); if (!e) return nullptr; return std::unique_ptr<host::Plugin>(new FxPlugin(std::move(e), kind)); }
   const host::Info& info() const override { return info_; }
   const std::string& modulePath() const override { return path_; }
-  int inputChannels() const override { return 2; } int outputChannels() const override { return 2; } std::uint32_t latencySamples() const override { return 0; }
+  int inputChannels() const override { return 2; } int outputChannels() const override { return 2; } std::uint32_t latencySamples() const override { return e_->latencySamples(); }
   std::vector<host::ParamInfo> params() const override { std::vector<host::ParamInfo> v; std::uint32_t id = 0; for (const Param& p : e_->params()) { host::ParamInfo q; q.id = id++; q.title = p.title; q.units = p.units; q.normalized = p.value; q.defaultNormalized = p.def; v.push_back(q); }
     host::ParamInfo m; m.id = id; m.title = "MIX"; m.normalized = e_->mix(); m.defaultNormalized = defMix_; v.push_back(m); return v; }
   double param(std::uint32_t id) const override { const auto ps = e_->params(); return id < ps.size() ? ps[id].value : e_->mix(); }

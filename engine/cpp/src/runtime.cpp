@@ -357,6 +357,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
     if (tone0 > 0) { long expect = tone0; toneLeft_.compare_exchange_strong(expect, tone); }   // a new testTone() during the block wins
     monPk_[0] = std::max(pl, monPk_[0] * 0.8); monPk_[1] = std::max(pr, monPk_[1] * 0.8);
     if (monDual_ && frames) for (int k = 0; k < kMonBands; ++k) monBand_[k] += (bandAcc[k] * inv - monBand_[k]) * 0.02; }
+  if (Tap* tap = tap_.load()) tap->onBuses(busOut, kMaxBuses, monL_.data(), monR_.data(), frames);   // the analysers that look at a bus or the monitor
   // the output matrix: every device output carries one source
   for (int c = 0; c < nOut_; ++c) {
     if (!out || !out[c]) continue;

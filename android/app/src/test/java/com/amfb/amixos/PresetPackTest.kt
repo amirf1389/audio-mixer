@@ -27,10 +27,10 @@ class PresetPackTest {
 
     @Test fun builtInPackParsesWithTheOwnersPresets() {
         val p = PresetPack.builtIn(ctx); assertNotNull("the pack is bundled as an asset", p); p!!
-        assertEquals(10, p.mastering.size); assertEquals(609, p.effects.size); assertTrue(p.tone.size >= 25)
+        assertEquals(10, p.mastering.size); assertEquals(618, p.effects.size); assertTrue(p.tone.size >= 25)
         assertEquals(listOf("AMFB SIGNATURE", "TRANSPARENT", "STREAMING", "WARM", "PUNCH", "LOUD", "BROADCAST VOICE", "SHORT VIDEO / LIVE", "METAL", "HARD ROCK"), p.mastering.map { it.name })
         assertEquals(2.5, (p.mastering.first { it.name == "WARM" }.params["low"] as Number).toDouble(), 0.0)
-        assertEquals(setOf("reverb", "delay", "chorus", "drive", "pingpong", "wshape"), p.effects.map { it.kind }.toSet())
+        assertEquals(setOf("reverb", "delay", "chorus", "drive", "pingpong", "wshape", "dyneq", "dehiss"), p.effects.map { it.kind }.toSet())
         assertEquals(PresetPack.sha256(repoPack()), PresetPack.sha256(ctx.assets.open("presets-pack.json").readBytes()))   // the asset is the repository's pack, byte for byte
         assertNull(PresetPack.parse("{}")); assertNull(PresetPack.parse("not json"))
         assertTrue(PresetPack.newer("2026.11.20", "2026.11.3")); assertTrue(!PresetPack.newer("2026.1.1", "2026.1.1"))
@@ -51,7 +51,7 @@ class PresetPackTest {
         a.showMasteringPresets(); var d = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
         assertEquals(10, d.listView.adapter.count); assertEquals("AMFB SIGNATURE", d.listView.adapter.getItem(0))
         a.showAllPresets(); d = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
-        assertEquals(3, d.listView.adapter.count); assertTrue(d.listView.adapter.getItem(1).toString().contains("609"))
+        assertEquals(3, d.listView.adapter.count); assertTrue(d.listView.adapter.getItem(1).toString().contains("618"))
     }
 
     @Test fun aDownloadedPackNeedsTheSignedSha() {

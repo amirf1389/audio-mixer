@@ -25,6 +25,7 @@ class Effect : public BusProcessor {
   virtual std::string text(const std::string& id, double v) const = 0;
   virtual void setSampleRate(double fs) = 0;
   virtual void reset() = 0;                        // clears delay lines
+  virtual std::uint32_t latencySamples() const { return 0; }   // fixed delay of the processed sound (the host compensates it)
   void setBypass(bool b) { bypass_.store(b); }
   bool bypass() const { return bypass_.load(); }
   void setMix(double wet) { mix_.store(wet < 0 ? 0 : wet > 1 ? 1 : wet); }   // 1 = fully wet (a send effect), 0 = dry
@@ -571,5 +572,30 @@ class DynEq final : public Effect {
   double gNow_[kBands] = {};   // the dynamic gain last designed (dB)
   std::atomic<float> dynDb_[kBands];
   std::atomic<float> ring_[2][kRing]; std::atomic<std::uint32_t> w_{0};
+};
+// AmF DE-HISS: spectral reduction of broadband hiss. STFT of 1024 points, hop 256 (75 % overlap), Hann analysis and synthesis windows,
+// overlap-add; L and R share one complex FFT (L real, R imaginary) and one linked gain per bin, so the stereo image holds. The noise
+// profile per bin is learned while LEARN is on (the mean power) or, with AUTO, followed from the bins near the floor (their mean; above
+// the floor it rises at most 10 dB/s). Gain per bin: Wiener-style 1 - noise / power over a power smoothed in time and frequency, floored at
+// REDUCTION, then smoothed in time (ATTACK when it opens, RELEASE when it closes) and across neighbouring bins against musical noise.
+// Below FREQ the depth is half (or none with HF ONLY). LISTEN plays only what is taken away. Fixed latency of 1024 samples at any rate;
+// bypass and MIX run through the same path, so the delay never changes. Fixed arrays, nothing allocated or locked in process().
+class DeHiss final : public Effect {
+ public:
+  static constexpr int kN = 1024, kHop = 256, kBins = kN / 2 + 1;
+  explicit DeHiss(double fs);
+  const char* kind() const override { return "dehiss"; } const char* name() const override { return "AmF DE-HISS"; }
+  std::vector<Param> params() const override; void set(const std::string& id, double v) override; std::string text(const std::string& id, double v) const override;
+  void setSampleRate(double fs) override; void reset() override; void process(float* L, float* R, std::size_t n) override;
+  std::uint32_t latencySamples() const override { return kN; }
+  float reductionDb() const { return red_.load(); }   // the mean gain over the bins in the last frame (<= 0)
+ private:
+  void frame(); static void fft(float* re, float* im, const float* c, const float* s, const std::uint16_t* rev, bool inverse);
+  double fs_; std::atomic<double> amount_{0.3}, thresh_{0.5}, freq_{0.6667}, hfonly_{0}, attack_{0.349}, release_{0.54}, learn_{0}, auto_{1}, listen_{0};
+  alignas(32) float inL_[kN] = {}, inR_[kN] = {}, outL_[kN] = {}, outR_[kN] = {}, fifoL_[kHop] = {}, fifoR_[kHop] = {}, re_[kN] = {}, im_[kN] = {};
+  alignas(32) float win_[kN] = {}, cos_[kN / 2] = {}, sin_[kN / 2] = {};
+  alignas(32) float pow_[kBins] = {}, noise_[kBins] = {}, acc_[kBins] = {}, gs_[kBins] = {}, g_[kBins] = {}, tmp_[kBins] = {};
+  std::uint16_t rev_[kN] = {}; int pos_ = 0, learnFrames_ = 0; bool learning_ = false, primed_ = false;
+  std::atomic<float> red_{0};
 };
 }  // namespace am::fx

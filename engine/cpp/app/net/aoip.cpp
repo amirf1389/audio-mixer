@@ -24,6 +24,8 @@ struct FineTimer {   // Windows sleeps in 15 ms steps unless asked otherwise; 1 
 };
 
 // ---------------------------------------------------------------------------------------------------------------- sender
+namespace { constexpr int kOwnSlots = 8; std::atomic<std::uint32_t> gOwn[kOwnSlots]; std::atomic<bool> gOwnUsed[kOwnSlots]; }
+bool isOwnStream(std::uint32_t ssrc) noexcept { for (int i = 0; i < kOwnSlots; ++i) if (gOwnUsed[i].load(std::memory_order_acquire) && gOwn[i].load(std::memory_order_relaxed) == ssrc) return true; return false; }
 bool Sender::start(const StreamDesc& d, const std::string& iface, bool announce, std::string& err) {
   stop();
   if (d.channels < 1 || d.channels > 64 || (d.bits != 16 && d.bits != 24) || d.rate < 8000 || d.port < 1 || d.port > 65535) { err = "stream format out of range"; return false; }
@@ -43,6 +45,7 @@ bool Sender::start(const StreamDesc& d, const std::string& iface, bool announce,
 void Sender::stop() {
   if (!run_.exchange(false)) { if (th_.joinable()) th_.join(); return; }
   if (th_.joinable()) th_.join();
+  if (slot_ >= 0) { gOwnUsed[slot_].store(false, std::memory_order_release); slot_ = -1; }
   if (sap_ != kNoSock) { const auto bye = sapBuild(d_, true); udpSendTo(sap_, kSapGroup, kSapPort, bye.data(), bye.size()); }
   udpClose(sock_); udpClose(sap_);
 }
@@ -67,6 +70,7 @@ void Sender::onBlock(const float* const* strips, int nStrips, const float* L, co
 void Sender::loop() {
   FineTimer fine; std::mt19937 rng(static_cast<unsigned>(nowNs()));
   RtpHeader h; h.pt = static_cast<std::uint8_t>(d_.pt); h.seq = static_cast<std::uint16_t>(rng()); h.ts = static_cast<std::uint32_t>(rng()); h.ssrc = static_cast<std::uint32_t>(rng());
+  for (int i = 0; i < kOwnSlots && slot_ < 0; ++i) { bool f = false; if (gOwnUsed[i].compare_exchange_strong(f, true)) { gOwn[i].store(h.ssrc); slot_ = i; } }   // known before the first packet leaves
   const std::size_t fpp = static_cast<std::size_t>(d_.framesPerPacket()), ch = static_cast<std::size_t>(d_.channels);
   std::vector<float> frame(fpp * ch); std::vector<std::uint8_t> pkt(kRtpHeader + fpp * ch * static_cast<std::size_t>(d_.bits / 8));
   const std::int64_t stepNs = static_cast<std::int64_t>(1e9 * static_cast<double>(fpp) / d_.rate);
@@ -102,7 +106,7 @@ bool Receiver::start(const StreamDesc& d, const std::string& iface, int latencyM
   port_ = udpLocalPort(sock_); udpTimeout(sock_, 100);
   cap_ = static_cast<std::uint64_t>(d_.rate) * 2;   // two seconds
   ring_.assign(static_cast<std::size_t>(cap_) * static_cast<std::size_t>(d_.channels), 0.0f);
-  w_ = 0; r_ = 0; frac_ = 0; fillAvg_ = 0; primed_ = false; packets_ = 0; lost_ = 0; late_ = 0; under_ = 0; resync_ = 0; lastNs_ = 0; fromIp_ = 0; fillMs_ = 0;
+  w_ = 0; r_ = 0; frac_ = 0; fillAvg_ = 0; primed_ = false; packets_ = 0; lost_ = 0; late_ = 0; under_ = 0; resync_ = 0; self_ = 0; lastNs_ = 0; fromIp_ = 0; fillMs_ = 0;
   run_ = true; th_ = std::thread([this] { loop(); });
   return true;
 }
@@ -110,7 +114,7 @@ bool Receiver::start(const StreamDesc& d, const std::string& iface, int latencyM
 void Receiver::stop() { run_ = false; if (th_.joinable()) th_.join(); udpClose(sock_); }
 
 RecvStats Receiver::stats() const {
-  RecvStats s; s.running = run_.load(); s.packets = packets_.load(); s.lost = lost_.load(); s.late = late_.load(); s.underruns = under_.load(); s.resyncs = resync_.load(); s.fillMs = fillMs_.load();
+  RecvStats s; s.running = run_.load(); s.packets = packets_.load(); s.lost = lost_.load(); s.late = late_.load(); s.underruns = under_.load(); s.resyncs = resync_.load(); s.selfLoop = self_.load(); s.fillMs = fillMs_.load();
   const std::int64_t last = lastNs_.load(); s.idleMs = last ? static_cast<int>((nowNs() - last) / 1'000'000) : -1;
   if (const std::uint32_t ip = fromIp_.load()) s.from = ipToString(ip);
   return s;
@@ -133,6 +137,7 @@ void Receiver::loop() {
     RtpHeader h; std::size_t off = 0, len = 0;
     if (!rtpParse(buf.data(), static_cast<std::size_t>(n), h, off, len) || len == 0 || len % bytes != 0) continue;
     const std::size_t frames = len / bytes;
+    if (rejectOwn_.load(std::memory_order_relaxed) && isOwnStream(h.ssrc)) { self_.fetch_add(1, std::memory_order_relaxed); continue; }   // our own send looped back (multicast loopback, same group/port): never mixed in again
     if (have && h.ssrc != ssrc) { const std::int64_t idle = nowNs() - lastNs_.load(); if (idle < 500'000'000) continue; have = false; }   // a second sender on the same address is ignored while the first one is alive
     if (!have) { have = true; ssrc = h.ssrc; expect = h.seq; resync_.fetch_add(1); }
     const std::int16_t diff = static_cast<std::int16_t>(h.seq - expect);

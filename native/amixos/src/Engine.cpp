@@ -115,6 +115,7 @@ Engine::Engine(QObject* parent) : QObject(parent) {
   if (settings_.value("spatial/front10", false).toBool()) { spkOn_ = true; spkSaved_ = settings_.value("spatial/front10Saved").toMap(); }   // the speaker array was on when the program closed: the saved console already holds its feeds
 }
 Engine::~Engine() {
+  devWatch_.reset();   // unregistered first: no system notification reaches a half-destroyed console
   closePluginWindows(); save(); stop();
   { std::lock_guard<std::mutex> l(svcM_); svcStop_ = true; svcQ_.clear(); } svcCv_.notify_all();
   if (svcThread_.joinable()) svcThread_.detach();   // a call stuck in the audio service must not hold the exit; the process ends anyway
@@ -131,14 +132,27 @@ void Engine::svcPost(std::function<void()> job) {
 
 QStringList Engine::backends() const { QStringList l; for (const auto& b : am::availableBackends()) l << QString::fromStdString(b); return l; }
 
-void Engine::setHotplugWatch(bool on) { if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); } } else hotplug_.stop(); emit stateChanged(); }
+void Engine::setHotplugWatch(bool on) {
+  if (on) { if (!hotplug_.isActive()) { hotplug_.setInterval(3000); connect(&hotplug_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection); hotplug_.start(); }
+    // LIVE HOT-PLUG: Windows says at once when an endpoint is added, removed, enabled / disabled or becomes the default (IMMNotificationClient,
+    // on its own MTA thread); the 3 s poll stays as the safety net. The callback only marks and posts: nothing blocks on the system's thread.
+    if (!devWatch_ && !simulated_) { devNotify_.setSingleShot(true); devNotify_.setInterval(400); connect(&devNotify_, &QTimer::timeout, this, &Engine::checkHotplug, Qt::UniqueConnection);
+      devWatch_ = std::make_unique<am::DeviceChangeWatch>([this] { devMon_.notify(); QMetaObject::invokeMethod(this, [this] { devNotify_.start(); }, Qt::QueuedConnection); }); } }
+  else { hotplug_.stop(); devWatch_.reset(); }
+  emit stateChanged(); }
 void Engine::checkHotplug() {
-  if (simulated_ || fpBusy_) return; fpBusy_ = true;   // on the audio service worker: enumerating endpoints can block (see svcPost)
-  svcPost([this] { const std::string f = am::deviceFingerprint(); QMetaObject::invokeMethod(this, [this, f] { fpBusy_ = false; applyFingerprint(f); }, Qt::QueuedConnection); });
+  if (simulated_) return;
+  if (fpBusy_ && fpSince_.isValid() && fpSince_.elapsed() < 20000) return;   // one at a time; a check stuck for 20 s (a hung endpoint) no longer blocks hot-plug for good
+  fpBusy_ = true; fpSince_.start(); const qint64 gen = fpSince_.msecsSinceReference();
+  // its own short thread, not the audio service worker: a volume / mute call stuck there (a Bluetooth device going away mid-capture) used to
+  // hold fpBusy_ forever, and no device was ever detected again until the program restarted
+  QPointer<Engine> self(this);
+  std::thread([self, gen] { const std::string f = am::deviceFingerprint();
+    if (QCoreApplication* app = QCoreApplication::instance()) QMetaObject::invokeMethod(app, [self, gen, f] { if (!self || self->fpSince_.msecsSinceReference() != gen) return; self->fpBusy_ = false; self->applyFingerprint(f); }, Qt::QueuedConnection); }).detach();
 }
 void Engine::applyFingerprint(const std::string& f) {
-  if (simulated_ || f == fingerprint_) return;
-  const bool first = fingerprint_.empty(); fingerprint_ = f; if (first) return;   // the first poll only learns the baseline
+  if (simulated_) return;
+  fingerprint_ = f; if (!devMon_.feed(f)) return;   // the first poll only learns the baseline; then a changed fingerprint or a system notification rescans
   const QStringList before = [&] { QStringList l; for (const QVariant& v : devices_) l << v.toMap()["name"].toString(); return l; }();
   refreshDevices();
   QStringList after; for (const QVariant& v : devices_) after << v.toMap()["name"].toString();
@@ -182,13 +196,17 @@ bool Engine::guarded(std::function<bool()> work, int timeoutMs) {
 }
 void Engine::refreshDevices() {
   if (simulated_) { emit devicesChanged(); return; }
-  if (scanning_) return;   // a scan is already running (the interface stays live during it)
+  if (scanning_) { rescanAgain_ = true; return; }   // a scan is already running (the interface stays live during it): RESCAN pressed now runs right after it, never lost
   scanning_ = true; emit busyChanged();
   auto found = std::make_shared<std::vector<am::DeviceInfo>>(); auto eps = std::make_shared<std::vector<am::EndpointInfo>>();
-  guarded([found, eps] { *eps = am::listEndpoints(); *found = am::listDevices(); return true; }, 8000);
+  // WHILE CAPTURING ON ASIO: the driver this console holds open is listed without loading it a second time (one client per driver: the
+  // probe used to hang the scan for 8 s, or take the driver away from the running stream)
+  const std::string heldAsio = am::asioDriverToSkip(rt_ != nullptr, curBackend_, curIn_, curOut_);
+  guarded([found, eps, heldAsio] { *eps = am::listEndpoints(); *found = am::listDevicesExcept(true, heldAsio); return true; }, 8000);
   absent_.clear();   // endpoints that exist but cannot be opened now: headphones on an empty jack, a device switched off in Windows
   for (const am::EndpointInfo& ep : *eps) if (ep.state != "active") absent_ << QVariantMap{{"name", QString::fromStdString(ep.name)}, {"flow", QString::fromStdString(ep.flow)}, {"state", QString::fromStdString(ep.state)}, {"kind", QString::fromStdString(ep.kind)}};
-  if (timedOut_) { found = std::make_shared<std::vector<am::DeviceInfo>>(am::listDevices(false)); status_ = QStringLiteral("A driver did not answer the scan in 8 s: the list is shown without loading ASIO drivers (channel counts assumed 2 / 2). SOFT RESTART scans again."); qWarning("device scan timed out: the list was built without probing ASIO drivers"); }
+  if (timedOut_) { auto quick = std::make_shared<std::vector<am::DeviceInfo>>(); guarded([quick] { *quick = am::listDevices(false); return true; }, 4000); found = quick; timedOut_ = true;   // off the interface thread too (the flag stays: the counts were not read)
+    status_ = QStringLiteral("A driver did not answer the scan in 8 s: the list is shown without loading ASIO drivers (channel counts assumed 2 / 2). SOFT RESTART scans again."); qWarning("device scan timed out: the list was built without probing ASIO drivers"); }
   scanning_ = false; emit busyChanged();
   devices_.clear();
   for (const am::DeviceInfo& d : *found) {
@@ -197,11 +215,16 @@ void Engine::refreshDevices() {
     { static const QStringList wired{"digital", "line", "interface", "dac", "wrapper", "virtual", "app"};   // a cable or a converter: a brand in the name ("JBL", "Bose", "wireless") does not make it Bluetooth
       m["bluetooth"] = d.kind == "bluetooth" || (!wired.contains(m["kind"].toString()) && looksBluetooth(m["name"].toString())); } m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
+    // IN USE: held in exclusive mode (by another program, or this console) or the ASIO driver this console runs on: listed, never hidden
+    const bool ours = rt_ && d.backend == curBackend_ && (d.id == curOut_ || d.id == curIn_);
+    if (ours && d.backend == "asio") { if (devIn_ > 0) m["inChannels"] = devIn_; if (devOut_ > 0) m["outChannels"] = devOut_; }
     if (d.backend == "asio") { m["probeError"] = QString::fromStdString(d.probeError); annotateAsio(m, !timedOut_); }
+    m["inUse"] = ours || !d.probeError.empty(); if (m["inUse"].toBool()) m["inUseText"] = ours ? QStringLiteral("in use by this console") : QString::fromStdString(d.probeError);
     if (!bluetoothAudio() && (m["bluetooth"].toBool() || d.kind == "bluetooth")) continue;   // BLUETOOTH AUDIO switched off
     devices_ << m;
   }
   emit devicesChanged();
+  if (rescanAgain_) { rescanAgain_ = false; QTimer::singleShot(0, this, [this] { refreshDevices(); }); }
 }
 
 // DEVICES ON / OFF: a device switched OFF on CONNECTIONS is never picked by AUTO DETECT / auto start (neither as the device nor as the
@@ -617,7 +640,8 @@ void Engine::setColor(int i, int c) { if (i < 0 || i >= kStrips) return; strips_
 void Engine::setMaster(double db) {
   startNote_.clear();
   const double was = masterDb_; masterDb_ = std::clamp(db, -60.0, 10.0); pushMasterLevel();
-  if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(mon_.db + (masterDb_ - was), -60.0, 10.0); if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
+  if (mon_.sync && masterDb_ != was) { mon_.db = std::clamp(masterDb_ + monOff_, -60.0, 10.0);   // the offset set by hand is kept exactly: a trip to -inf and back does not creep the monitor
+    if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); emit monitorChanged(); }
   stripsTouched(); syncSystemSound();
 }
 void Engine::setWindowsMuteSync(bool on) { if (winSync_ == on) return; winSync_ = on; QSettings().setValue("mixer/windowsMuteSync", on); syncSystemSound(); emit systemSoundChanged(); }
@@ -929,6 +953,7 @@ struct RoundTripProbe : am::Runtime::ExtraSource, am::Runtime::Tap {
     if (prevTap) prevTap->onBlock(strips, n, L, R, frames, rate);
     const std::size_t p = inPos.load(); if (n > 0 && strips[0]) for (std::size_t i = 0; i < frames && p + i < rec.size(); ++i) rec[p + i] = strips[0][i];
     inPos.store(p + frames); }
+  void onBuses(const float* const* busOut, int nBuses, const float* monL, const float* monR, std::size_t frames) override { if (prevTap) prevTap->onBuses(busOut, nBuses, monL, monR, frames); }
 };
 QVariantMap Engine::startRoundTrip() {
   if (!rt_) return {{"ok", false}, {"note", QStringLiteral("Start the sound card first.")}};
@@ -1116,10 +1141,11 @@ void Engine::setMonitor(int source, double db, bool dim, bool mono, bool mute) {
   const double was = mon_.db;
   mon_.source = std::clamp(source, 0, kBuses); mon_.db = std::clamp(db, -60.0, 10.0); mon_.dim = dim; mon_.mono = mono; mon_.mute = mute;
   if (rt_) rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute);
-  if (mon_.sync && mon_.db != was) { masterDb_ = std::clamp(masterDb_ + (mon_.db - was), -60.0, 10.0); pushMasterLevel(); stripsTouched(); syncSystemSound(); }
+  if (!mon_.sync) monOff_ = mon_.db - masterDb_;
+  else if (mon_.db != was) { const double want = mon_.db - monOff_; masterDb_ = std::clamp(want, -60.0, 10.0); if (masterDb_ != want) monOff_ = mon_.db - masterDb_; pushMasterLevel(); stripsTouched(); syncSystemSound(); }
   emit monitorChanged();
 }
-void Engine::setMonitorSync(bool on) { mon_.sync = on; emit monitorChanged(); }
+void Engine::setMonitorSync(bool on) { mon_.sync = on; monOff_ = mon_.db - masterDb_; emit monitorChanged(); }
 void Engine::resetStripDsp(int i) { if (i < 0 || i >= kStrips) return; strips_[static_cast<std::size_t>(i)].dsp.set(am::dsp::ChannelParams{}); if (rt_) pushAll(); stripsTouched(); }
 // The factory channel layout: CH 1-2 MAIN (the device's inputs 1-2, a linked stereo pair), CH 3-4 LIVE (a linked stereo pair for the
 // live source), CH 5-7 RESERVE (free for whatever the user wants; open in every edition), the rest numbered.
@@ -1210,7 +1236,7 @@ void Engine::factoryReset() {
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); loudUi_ = LoudUi{}; pushLoudAll(); emit loudChanged(); autoProp_.clear();
   for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
-  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
+  masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monOff_ = 0; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
   graveTimer_.start(); if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
   stripsTouched(); emit busesChanged(); emit groupsChanged(); emit scenesChanged(); emit presetsChanged(); emit selectedStripChanged(); emit monitorChanged(); emit routingChanged(); emit clipboardChanged(); emit historyChanged();
@@ -1728,7 +1754,9 @@ QVariantList Engine::storeItems() const {
     m["loads"] = m["installed"].toBool() && probed[QString::fromLatin1(name)].isEmpty(); m["error"] = probed[QString::fromLatin1(name)];
     m["on"] = !off.contains(QString::fromLatin1(id)); l << m; }
   for (const auto& [k, n] : am::fx::catalog()) { const QString id = QStringLiteral("fx:") + QString::fromStdString(k);
-    QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id); l << m; }
+    QVariantMap m; m["id"] = id; m["name"] = QString::fromStdString(n); m["kind"] = "effect"; m["note"] = "built-in rack effect"; m["installed"] = true; m["on"] = !off.contains(id);
+    if (k == "dehiss") { m["kind"] = "extension"; m["loads"] = true; m["note"] = "spectral hiss removal: learned or auto-learned noise profile, insert effect; also as AmF DE-HISS.vst3"; }   // AmF DE-HISS: a system extension in the store
+    l << m; }
   return l;
 }
 void Engine::setStoreEnabled(const QString& id, bool on) {
@@ -2001,7 +2029,7 @@ QVariantMap Engine::systemInfo() const {
 void Engine::setOneVoice(bool on) { if (on == oneVoice_) return; oneVoice_ = on; settings_.setValue("audio/oneVoice", on); ov_.reset(); emit oneVoiceChanged(); }
 void Engine::undoOneVoice() { if (!oneVoiceActed_) return; setInputRoute(0, 0); oneVoiceNote_.clear(); ov_.reset(); emit oneVoiceChanged(); }   // oneVoiceActed_ stays: not again on this device
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
-void Engine::setWatchdog(bool on) { if (on == watchdog_) return; watchdog_ = on; settings_.setValue("audio/watchdog", on); wd_.reset(); emit watchdogChanged(); }
+void Engine::setWatchdog(bool on) { if (on == watchdog_) return; watchdog_ = on; if (saveWatchdog_) settings_.setValue("audio/watchdog", on); wd_.reset(); emit watchdogChanged(); }
 bool Engine::failover(const QString& why) {
   if (opening_) return false;
   const QString backend = QString::fromStdString(curBackend_), in = QString::fromStdString(curIn_), out = QString::fromStdString(curOut_);
@@ -2016,6 +2044,13 @@ bool Engine::failover(const QString& why) {
 }
 void Engine::tick() {
   QVariantList m; QVariantMap t;
+  // DEVICE INVALIDATED: Windows took the device away under the stream (unplugged, disabled, its format changed, the audio service restarted).
+  // The stream said so (Runtime::deviceLost): open it again, else fail over to the best device left, and read the list again; never a frozen console
+  if (rt_ && !opening_ && rt_->deviceLost()) QMetaObject::invokeMethod(this, [this] { if (!rt_ || opening_ || !rt_->deviceLost()) return;
+      const QString was = outDevName_.isEmpty() ? inDevName_ : outDevName_;
+      if (watchdog_) failover(QStringLiteral("%1 was disconnected or reset by Windows").arg(was.isEmpty() ? QStringLiteral("the sound card") : was));
+      else { stop(); status_ = QStringLiteral("The sound card was disconnected or reset by Windows: %1. Pick a device and press START.").arg(was); emit stateChanged(); }
+      refreshDevices(); }, Qt::QueuedConnection);
   if (rt_) {
     const am::Snapshot s = rt_->snapshot();
     // WATCHDOG: no new block for three seconds while the engine is running: the device stalled; start again (three times a minute at most)
@@ -2115,7 +2150,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
   if (root.contains("inputRoutes")) { const QJsonArray ir = root.value("inputRoutes").toArray(); for (int i = 0; i < kStrips && i < ir.size(); ++i) inRoute_[i] = cleanRoute(ir[i].toInt(i)); emit routingChanged(); }
   if (root.contains("outputRoutes")) { const QJsonArray orr = root.value("outputRoutes").toArray(); for (int o = 0; o < kOutputs && o < orr.size(); ++o) outRoute_[o] = orr[o].toInt(0) == am::Runtime::kSrcMasterMono ? am::Runtime::kSrcMasterMono : std::clamp(orr[o].toInt(0), 0, am::Runtime::kSrcBus0L + 2 * kBuses - 1); emit routingChanged(); }
   if (root.contains("amps")) { for (auto& a : ampUi_) a.clear(); for (const QJsonValue& v : root.value("amps").toArray()) { const QJsonObject a = v.toObject(); const int o = a.value("out").toInt(-1); if (o >= 0 && o < 64) { QVariantMap m = a.toVariantMap(); m.remove("out"); ampUi_[o] = m; if (rt_) rt_->setAmp(o, ampFromMap(m)); } } emit ampChanged(); }
-  if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(true); mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
+  if (root.contains("monitor")) { const QJsonObject mo = root.value("monitor").toObject(); mon_.source = std::clamp(mo.value("source").toInt(0), 0, kBuses); mon_.db = std::clamp(mo.value("db").toDouble(0), -60.0, 10.0); mon_.sync = mo.value("sync").toBool(false); monOff_ = mon_.db - masterDb_; mon_.dim = mo.value("dim").toBool(); mon_.mono = mo.value("mono").toBool(); mon_.mute = false; emit monitorChanged(); }   // never recall a muted control room
   const QJsonArray arr = root.value("strips").toArray(); keepStrips_ = std::max(keepStrips_, std::min(kStrips, static_cast<int>(arr.size())));
   for (int i = 0; i < kStrips && i < arr.size(); ++i) { if (respectSafe && recallSafe_.test(static_cast<std::size_t>(i))) continue; { const int left = stripFromJson(strips_[static_cast<std::size_t>(i)], arr[i].toObject()); if (left > 0) startNote_ = QStringLiteral("%1 had more than 10 plug-ins: the first 10 are kept (%2 left out).").arg(strips_[static_cast<std::size_t>(i)].name).arg(left); } }
   const QJsonArray buses = root.value("buses").toArray(); for (int k = 0; k < kBuses && k < buses.size(); ++k) { const QJsonObject o = buses[k].toObject(); if (o.contains("name")) buses_[k].name = o.value("name").toString().left(16); buses_[k].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); buses_[k].returnDb = std::clamp(o.value("returnDb").toDouble(-60), -60.0, 10.0); buses_[k].mute = o.value("mute").toBool();

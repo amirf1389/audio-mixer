@@ -100,7 +100,7 @@ static void midi() {
 
 // a 1 kHz sine through sender -> UDP -> receiver, fed and pulled in real time by this thread
 static void stream(int bits, int txRate, int rxDeviceRate, int channels) {
-  std::string err; Receiver rx; StreamDesc d; d.address = "127.0.0.1"; d.port = 0; d.channels = channels; d.bits = bits; d.rate = txRate;
+  std::string err; Receiver rx; rx.setRejectOwn(false); StreamDesc d; d.address = "127.0.0.1"; d.port = 0; d.channels = channels; d.bits = bits; d.rate = txRate;
   CHECK(rx.start(d, "", 20, err)); d.port = rx.port(); CHECK(d.port > 0);
   Sender tx; CHECK(tx.start(d, "", false, err));
   const std::size_t N = 256; std::vector<float> L(N), R(N), s0(N); const float* strips[1] = {s0.data()};
@@ -120,11 +120,19 @@ static void stream(int bits, int txRate, int rxDeviceRate, int channels) {
   if (rs.underruns > 2) std::printf("  note: %llu underruns (a loaded machine)\n", static_cast<unsigned long long>(rs.underruns));
   CHECK(rs.underruns <= 6);
   // the tone that came out: level 0.5 peak (rms 0.3536) at 1 kHz, measured over the stretches that are not silence
-  double e = 0, re = 0, im = 0; std::size_t n = 0; const double wr = 2 * M_PI * 1000.0 / rxDeviceRate;
-  for (std::size_t i = 0; i < rec.size(); ++i) { e += rec[i] * rec[i]; re += rec[i] * std::cos(wr * static_cast<double>(i)); im += rec[i] * std::sin(wr * static_cast<double>(i)); ++n; }
+  double e = 0; std::size_t n = 0; const double wr = 2 * M_PI * 1000.0 / rxDeviceRate;
+  for (std::size_t i = 0; i < rec.size(); ++i) { e += rec[i] * rec[i]; ++n; }
   const double rms = std::sqrt(e / static_cast<double>(n));
   CHECK(rms > 0.33 && rms < 0.36);
-  if (rs.underruns == 0 && txRate == rxDeviceRate) { const double tone = 2 * std::sqrt(re * re + im * im) / static_cast<double>(n); CHECK(tone > 0.49 && tone < 0.51); }   // all of it at 1 kHz: no gaps, no clicks
+  // all of it at 1 kHz, no gaps, no clicks: the 1 kHz level of every 10 ms stretch (10 whole cycles). Measured per stretch, not over the
+  // whole take: the receiver follows the sender's clock (up to 0.3 % faster or slower when a loaded machine delivers the packets late),
+  // which turns the phase slowly and would make one long measurement read low although every stretch is clean
+  if (rs.underruns == 0 && txRate == rxDeviceRate) {
+    const std::size_t W = static_cast<std::size_t>(rxDeviceRate / 100); double worst = 1, best = 0;
+    for (std::size_t s0i = 0; s0i + W <= rec.size(); s0i += W) { double cr = 0, ci = 0; for (std::size_t i = 0; i < W; ++i) { cr += rec[s0i + i] * std::cos(wr * static_cast<double>(i)); ci += rec[s0i + i] * std::sin(wr * static_cast<double>(i)); }
+      const double t = 2 * std::sqrt(cr * cr + ci * ci) / static_cast<double>(W); worst = std::min(worst, t); best = std::max(best, t); }
+    if (!(worst > 0.49 && best < 0.51)) std::printf("  tone per 10 ms: %.4f .. %.4f (resyncs %llu, fill %.1f ms)\n", worst, best, static_cast<unsigned long long>(rs.resyncs), rs.fillMs);
+    CHECK(worst > 0.49 && best < 0.51); }
   double e2 = 0; for (float v : rec2) e2 += v * v; const double rms2 = std::sqrt(e2 / static_cast<double>(rec2.size()));
   if (channels > 2) CHECK(std::fabs(rms2 - 0.25) < 0.01); else if (channels == 2) CHECK(std::fabs(rms2 - rms) < 0.01);   // channel 3 = strip 1 before its fader; channel 2 = right
   for (int k = channels; k < 16; ++k) for (std::size_t i = 0; i < M; ++i) if (out[k][i] != 0) { CHECK(false); break; }
@@ -151,7 +159,7 @@ static void lossAndRuntime() {
     cfg.nullInput = [](float* const* in, std::size_t frames, std::uint64_t f0) { for (std::size_t i = 0; i < frames; ++i) { in[0][i] = static_cast<float>(0.25 * std::sin(2 * M_PI * 440.0 * static_cast<double>(f0 + i) / 48000.0)); in[1][i] = 0; } };
     CHECK(rt.open(cfg, err) && rt.start(err));
     rt.setGainDb(0, 0); rt.setPan(0, -1); rt.setLimiter(false); for (int s = 1; s < 4; ++s) rt.setGainDb(s, -120);
-    Aoip net(rt); StreamDesc d; d.address = "127.0.0.1"; d.port = 0; d.channels = 2; d.bits = 24; d.rate = 48000;
+    Aoip net(rt); net.receiver().setRejectOwn(false); StreamDesc d; d.address = "127.0.0.1"; d.port = 0; d.channels = 2; d.bits = 24; d.rate = 48000;
     CHECK(net.receiveStart(d, "", 20, err)); d.port = net.receiver().port(); d.name = "Loop";
     CHECK(net.sendStart(d, "", false, err));
     rt.setInputRoute(2, Runtime::kNetInBase); rt.setInputRoute(3, Runtime::kNetInBase + 1);
@@ -184,10 +192,29 @@ static void ptp() {
   CHECK(!am::net::parsePtp(a.data(), 20, k)); CHECK(am::net::ptpClockName(6).find("GPS") != std::string::npos);
 }
 
+// the feedback that hissed on the NETWORK page: the receiver on the same group/port as our own send got the master back,
+// patched it onto strips that feed the master again. Own packets are now dropped: tone in -> no return; silence in -> exact silence out.
+static void selfLoop() {
+  std::string err; Runtime rt(4); DeviceConfig cfg; cfg.backend = "null"; cfg.inChannels = 2; cfg.outChannels = 2; cfg.frames = 256;
+  cfg.nullInput = [](float* const* in, std::size_t frames, std::uint64_t) { for (std::size_t i = 0; i < frames; ++i) { in[0][i] = 0; in[1][i] = 0; } };
+  CHECK(rt.open(cfg, err) && rt.start(err)); rt.setLimiter(false); for (int s = 0; s < 4; ++s) rt.setGainDb(s, 0);   // every strip at 0 dB into the master: a real loop if anything came back
+  Aoip net(rt); StreamDesc d; d.address = "127.0.0.1"; d.port = 0; d.channels = 2; d.bits = 16; d.rate = 48000;
+  CHECK(net.receiveStart(d, "", 20, err)); d.port = net.receiver().port(); CHECK(net.sendStart(d, "", false, err));
+  rt.setInputRoute(2, Runtime::kNetInBase); rt.setInputRoute(3, Runtime::kNetInBase + 1);
+  ms(700); const Snapshot sn = rt.snapshot(); const RecvStats rs = net.receiver().stats();
+  CHECK(rs.selfLoop > 100 && rs.packets == 0);                                       // own packets seen, none mixed in
+  CHECK(sn.strips[2].inPk == 0 && sn.strips[3].inPk == 0);                           // silence in -> silence out: no noise floor at all (< -90 dBFS), no denormals
+  float L[256], R[256]; const float* st[1] = {L}; for (int i = 0; i < 256; ++i) { L[i] = 1e-39f; R[i] = 0; }   // denormal input is flushed by the 16 bit wire
+  Receiver rx2; rx2.setRejectOwn(false); StreamDesc d2 = d; d2.port = 0; CHECK(rx2.start(d2, "", 5, err)); d2.port = rx2.port(); Sender tx2; CHECK(tx2.start(d2, "", false, err));
+  std::vector<float> o(512); float* op[1] = {o.data()}; for (int b = 0; b < 60; ++b) { tx2.onBlock(st, 1, L, R, 256, 48000); ms(5); }
+  rx2.pull(op, 1, 256, 48000); for (float v : o) { CHECK(v == 0 || std::fabs(v) < 3.2e-5f); CHECK(v == 0 || std::fpclassify(v) == FP_NORMAL); }   // below -90 dBFS, never subnormal
+  tx2.stop(); rx2.stop(); net.sendStop(); net.receiveStop(); ms(60); rt.stop();
+}
+
 int main() {
   wire(); midi(); ptp();
   stream(24, 48000, 48000, 2); stream(16, 48000, 48000, 1); stream(24, 48000, 48000, 4); stream(24, 44100, 48000, 2);
-  lossAndRuntime();
+  lossAndRuntime(); selfLoop();
   if (fails) { std::printf("net_test: %d FAILED\n", fails); return 1; }
   std::printf("net_test: ok\n"); return 0;
 }

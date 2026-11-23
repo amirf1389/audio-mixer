@@ -2,7 +2,7 @@
   "product": "audio-mixer",
   "version": "1.25.0.0",
   "channel": "stable",
-  "released": "2026-11-22",
+  "released": "2026-11-23",
   "notes": [],
   "features": [
     {
@@ -263,14 +263,14 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.25.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 28322555,
-      "sha256": "97b75130b477e3349384d27920d6113af2cc29f15b21c13755b10bb7c6dacd16"
+      "size": 28469295,
+      "sha256": "cf5337aaec2fc242f4ff4dac0c6661c9b4f4d8fe6222ffc73190491d19a8737a"
     },
     "android-apk": {
       "name": "AmF-X1-1.25.0.0-b8-android.apk",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b8-android.apk",
-      "size": 14990744,
-      "sha256": "d2ce43de30bc74627649293025d0f5bdc1738f7a70930bf5532918ffac20a01b",
+      "size": 15066716,
+      "sha256": "06afb7b785696105982d673341cdd2d8ca7172ce3532cce65cf881ad0dbf1ee2",
       "package": "com.amfb.amixos",
       "build": 8,
       "versionCode": 125000008,
@@ -279,8 +279,8 @@
     "android-mixer-apk": {
       "name": "AmF-X1-Mixer-1.25.0.0-b8-android.apk",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b8-android.apk",
-      "size": 14976730,
-      "sha256": "87e505abb7e3df495dd088e235aa8e6514d7b0cb62993719c7ab05115fca28b5",
+      "size": 15052398,
+      "sha256": "69874f5a7db28325977ac79af3bf3fb338e2ce5c991f6aaad38ae50dc03d1f75",
       "package": "com.amfb.amixos.mixer",
       "build": 8,
       "versionCode": 125000008,
@@ -289,9 +289,9 @@
   },
   "plugins": [],
   "presets": {
-    "version": "2026.11.22",
+    "version": "2026.11.23",
     "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/presets/presets-pack.json",
-    "size": 169546,
-    "sha256": "f46daa881c8ec09904950385ad231ca5e37c081b758cbb727fba0168c171dc20"
+    "size": 170793,
+    "sha256": "be3268c4a382a5696d521ce1cdf87acdc4b4a9f817105f7c8e0a1dc6283bc4ed"
   }
 }

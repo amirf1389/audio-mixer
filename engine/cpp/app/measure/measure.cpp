@@ -7,16 +7,20 @@
 #include <sstream>
 
 namespace am::measure {
+void fftInPlace(std::complex<double>* x, std::size_t N) {
+  constexpr double pi = 3.14159265358979323846;
+  for (std::size_t i = 1, j = 0; i < N; ++i) { std::size_t bit = N >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) std::swap(x[i], x[j]); }
+  for (std::size_t len = 2; len <= N; len <<= 1) { const double ang = -2 * pi / static_cast<double>(len); const std::complex<double> wl(std::cos(ang), std::sin(ang));
+    for (std::size_t i = 0; i < N; i += len) { std::complex<double> w(1, 0); for (std::size_t k = 0; k < len / 2; ++k) { const std::complex<double> u = x[i + k], v = x[i + k + len / 2] * w; x[i + k] = u + v; x[i + k + len / 2] = u - v; w *= wl; } } }
+}
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 using cd = std::complex<double>;
 std::size_t pow2(std::size_t n) { std::size_t p = 1; while (p < n) p <<= 1; return p; }
-void fft(std::vector<cd>& x, bool inverse) {   // iterative radix-2, in place; x.size() a power of two
-  const std::size_t N = x.size();
-  for (std::size_t i = 1, j = 0; i < N; ++i) { std::size_t bit = N >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) std::swap(x[i], x[j]); }
-  for (std::size_t len = 2; len <= N; len <<= 1) { const double ang = (inverse ? 2 : -2) * kPi / static_cast<double>(len); const cd wl(std::cos(ang), std::sin(ang));
-    for (std::size_t i = 0; i < N; i += len) { cd w(1, 0); for (std::size_t k = 0; k < len / 2; ++k) { const cd u = x[i + k], v = x[i + k + len / 2] * w; x[i + k] = u + v; x[i + k + len / 2] = u - v; w *= wl; } } }
-  if (inverse) for (auto& v : x) v /= static_cast<double>(N);
+void fft(std::vector<cd>& x, bool inverse) {   // in place; x.size() a power of two (the inverse by conjugation around the shared forward one)
+  const std::size_t N = x.size(); if (inverse) for (auto& v : x) v = std::conj(v);
+  fftInPlace(x.data(), N);
+  if (inverse) for (auto& v : x) v = std::conj(v) / static_cast<double>(N);
 }
 double db(double a) { return a > 1e-12 ? 20 * std::log10(a) : -240; }
 double dbp(double p) { return p > 1e-24 ? 10 * std::log10(p) : -240; }
@@ -165,9 +169,14 @@ Response roomResponse(const Room& r, int ppo, double fLo, double fHi, double c) 
   Response out; out.freq = logGrid(ppo, fLo, fHi); out.magDb.assign(out.freq.size(), 0); out.phaseDeg.assign(out.freq.size(), 0);
   const auto modes = roomModes(r, fHi * 1.5, c); const double delta = 6.91 / std::max(0.05, r.rt60);   // modal damping from the decay time
   auto shape = [](int n, double x, double L) { return std::cos(n * kPi * x / L); };
-  for (std::size_t g = 0; g < out.freq.size(); ++g) { const double f = out.freq[g], w = 2 * kPi * f; cd p(0, 0);
-    for (const Mode& m : modes) { const double wm = 2 * kPi * m.freq, src = shape(m.nx, r.sx, r.L) * shape(m.ny, r.sy, r.W) * shape(m.nz, r.sz, r.H), lis = shape(m.nx, r.lx, r.L) * shape(m.ny, r.ly, r.W) * shape(m.nz, r.lz, r.H); const double eps = (m.nx ? 2 : 1) * (m.ny ? 2 : 1) * (m.nz ? 2 : 1); p += cd(src * lis * eps, 0) / cd(wm * wm - w * w, 2 * delta * w); }
-    out.magDb[g] = db(std::abs(p) * 1e4); out.phaseDeg[g] = std::arg(p) * 180 / kPi; }
+  // each mode's weight (source and listener coupling) and its squared angular frequency do not depend on the frequency: worked out once
+  std::vector<double> weight(modes.size()), wm2(modes.size());
+  for (std::size_t k = 0; k < modes.size(); ++k) { const Mode& m = modes[k]; const double wm = 2 * kPi * m.freq; wm2[k] = wm * wm;
+    const double src = shape(m.nx, r.sx, r.L) * shape(m.ny, r.sy, r.W) * shape(m.nz, r.sz, r.H), lis = shape(m.nx, r.lx, r.L) * shape(m.ny, r.ly, r.W) * shape(m.nz, r.lz, r.H);
+    weight[k] = src * lis * (m.nx ? 2 : 1) * (m.ny ? 2 : 1) * (m.nz ? 2 : 1); }
+  for (std::size_t g = 0; g < out.freq.size(); ++g) { const double f = out.freq[g], w = 2 * kPi * f, im = 2 * delta * w; double re = 0, ii = 0;
+    for (std::size_t k = 0; k < modes.size(); ++k) { const double a = wm2[k] - w * w, d = a * a + im * im; re += weight[k] * a / d; ii -= weight[k] * im / d; }   // weight / (a + i im)
+    const cd p(re, ii); out.magDb[g] = db(std::abs(p) * 1e4); out.phaseDeg[g] = std::arg(p) * 180 / kPi; }
   double mean = 0; for (double m : out.magDb) mean += m; mean /= static_cast<double>(std::max<std::size_t>(1, out.magDb.size())); for (double& m : out.magDb) m -= mean; return out;
 }
 

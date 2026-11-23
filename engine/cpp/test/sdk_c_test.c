@@ -50,6 +50,7 @@ int main(void) {
   }
   { /* network audio: send to this machine and receive it back on the network inputs */
     char e[128] = ""; char* j;
+    amix_rt_net_receive_own(rt, 1);   /* this test sends to itself on purpose */
     CHECK(amix_rt_net_receive_start(rt, "127.0.0.1", 47318, 2, 24, 48000, 20, NULL, e, sizeof e) == 0);
     CHECK(amix_rt_net_send_start(rt, "SDK test", "127.0.0.1", 47318, 2, 24, NULL, 0, e, sizeof e) == 0);
     CHECK(amix_rt_net_send_start(rt, "bad", "nowhere", 1, 2, 24, NULL, 0, e, sizeof e) < 0 && strlen(e) > 3);

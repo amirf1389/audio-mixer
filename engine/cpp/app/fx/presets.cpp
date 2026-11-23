@@ -111,6 +111,12 @@ std::vector<Preset> build() {
           {p + "dyn", b.dyn ? 1.0 : 0.0}, {p + "thresh", 1 + b.thr / 60}, {p + "range", b.range / 60 + 0.5}}); }
       add(d.name, "dyneq", "Dynamic EQ", std::move(v), 1.0); }
   }
+  { // ---- AmF DE-HISS: 4 (reduction dB, threshold dB, from Hz, HF only, attack ms, release ms)
+    struct H { const char* name; double red, thr, hz; bool hf; double att, rel; };
+    const H hs[] = {{"DE-HISS TAPE HISS", 14, 6, 3000, false, 5, 150}, {"DE-HISS MIC PREAMP HISS", 10, 4, 1500, false, 8, 200}, {"DE-HISS CASSETTE", 18, 8, 2500, true, 4, 120}, {"DE-HISS LIGHT", 6, 3, 4000, true, 10, 250}};
+    for (const H& h : hs) add(h.name, "dehiss", "De-Hiss", {{"reduce", h.red / 40}, {"thresh", (h.thr + 6) / 24}, {"freq", std::log(h.hz / 20) / std::log(1000.0)}, {"hfonly", h.hf ? 1.0 : 0.0},
+      {"attack", std::log(h.att) / std::log(100.0)}, {"release", std::log(h.rel / 10) / std::log(100.0)}, {"auto", 1.0}}, 1.0);
+  }
   return out;
 }
 }  // namespace

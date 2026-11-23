@@ -32,6 +32,7 @@ qt_add_executable(amixos
     src/Update.cpp src/Update.h
     src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
+    src/Waterfall.cpp src/Waterfall.h
     src/I18n.cpp src/I18n.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp/app/qr/qrcodegen.cpp)   # the pairing QR code (Project Nayuki, MIT)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
@@ -74,6 +75,7 @@ qt_add_qml_module(amixos
         qml/AoipPanel.qml
         qml/VolumeEnhancer.qml qml/AudioSettings.qml
         qml/MasterAnalyzer.qml
+        qml/WaterfallPanel.qml
         qml/MicEqPage.qml
         qml/LiveSourcesPage.qml
         qml/ToolsPage.qml
@@ -194,6 +196,10 @@ endif()
 enable_testing()
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
 set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software" TIMEOUT 60)
+# PAGE BUDGET: every page and every popup opens within its time budget (built from nothing 600 ms, cached 150 ms) and its content stays
+# inside the page area / the window (amixos --bench, AMIX_BENCH_BUDGET; see main.cpp)
+add_test(NAME amixos_page_budget COMMAND amixos --bench)
+set_tests_properties(amixos_page_budget PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_BENCH_BUDGET=600;AMIX_BUDGET_CACHED=150;AMIX_BUDGET_SIZES=1280x720,1920x1080" TIMEOUT 900)
 
 # AmF X1 PLUG-IN BUILDER: the builder as its own program (shares the builder page, Theme, the language tables and the plug-in shell)
 file(GLOB AMIX_I18N_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} i18n/verified-22.json i18n/auto-58.json i18n/ui/*.json)
