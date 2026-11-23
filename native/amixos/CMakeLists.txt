@@ -14,6 +14,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network)
+if(NOT ANDROID AND NOT IOS)
+  find_package(Qt6 6.4 COMPONENTS Widgets)   # the TRAY ICON and its menu (QSystemTrayIcon); without it the console runs without a tray
+endif()
 qt_standard_project_setup()
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp ${CMAKE_BINARY_DIR}/engine)
@@ -30,6 +33,7 @@ qt_add_executable(amixos
     src/Samples.cpp src/Samples.h
     src/Links.cpp src/Links.h src/Apps.cpp src/Apps.h src/SysNotify.cpp src/SysNotify.h src/AppWindows.cpp src/AppWindows.h
     src/Update.cpp src/Update.h
+    src/Volume.cpp src/Volume.h
     src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
     src/Waterfall.cpp src/Waterfall.h
@@ -124,6 +128,9 @@ qt_add_qml_module(amixos
         qml/LoudnessPage.qml
         qml/SettingsPage.qml
         qml/ComingPage.qml
+        qml/HeaderVolume.qml
+        qml/AppVolumePanel.qml
+        qml/TrayPopup.qml
     RESOURCES
         icons/amfx1.png
         skin/wood.png
@@ -175,6 +182,10 @@ if(AMIXOS_TEST_LICENSE)
   target_compile_definitions(amixos PRIVATE AMIXOS_TEST_LICENSE)
 endif()
 target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
+if(TARGET Qt6::Widgets)
+  target_link_libraries(amixos PRIVATE Qt6::Widgets)
+  target_compile_definitions(amixos PRIVATE AMIX_TRAY)
+endif()
 # libsoxr (LGPL 2.1) stays its own library next to the program, loaded at run time (app/hires): copied beside amixos on every build
 if(TARGET amix_soxr)
   add_dependencies(amixos amix_soxr)
