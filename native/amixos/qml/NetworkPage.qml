@@ -114,9 +114,11 @@ Item {
                         Component.onCompleted: if (visible) redraw()
                         // the code is always shown whole: square, centred, a 4-module quiet zone, whole device pixels per module (crisp at any DPI);
                         // it grows with the row (168 .. 300 px) and never shrinks below what a camera reads. ENLARGE shows it over the whole window.
-                        QrView { id: qrSmall; objectName: "pairQr"; mods: qrRow.mods; Layout.alignment: Qt.AlignTop
-                                 readonly property real side: Math.max(168, Math.min(300, qrRow.width * 0.38)); Layout.preferredWidth: side; Layout.preferredHeight: side; Layout.minimumWidth: 168; Layout.minimumHeight: 168
-                                 Btn { objectName: "pairQrEnlarge"; label: "ENLARGE"; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 2; implicitHeight: 18; onClicked: qrBig.open() } }
+                        ColumnLayout { spacing: 4; Layout.alignment: Qt.AlignTop
+                            // nothing may sit on the code: a button over its corner stopped phone cameras reading it
+                            QrView { id: qrSmall; objectName: "pairQr"; mods: qrRow.mods
+                                 readonly property real side: Math.max(168, Math.min(300, qrRow.width * 0.38)); Layout.preferredWidth: side; Layout.preferredHeight: side; Layout.minimumWidth: 168; Layout.minimumHeight: 168 }
+                            Btn { objectName: "pairQrEnlarge"; label: "ENLARGE"; Layout.alignment: Qt.AlignHCenter; implicitHeight: 18; onClicked: qrBig.open() } }
                         ColumnLayout { Layout.fillWidth: true; spacing: 5
                             Head { text: i18n.t("SCAN TO CONNECT", i18n.lang) }
                             Note { text: i18n.t("Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.", i18n.lang) }
