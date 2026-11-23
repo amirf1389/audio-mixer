@@ -392,10 +392,11 @@ class Engine : public QObject {
   QVariantMap autoDetectFor(const QString& prefer) const;
   void annotateAsio(QVariantMap& m, bool probed);
   bool oneVoice() const { return oneVoice_; } void setOneVoice(bool on); QString oneVoiceNote() const { return oneVoiceNote_; }
-  bool watchdog() const { return watchdog_; } void setWatchdog(bool on); QString watchdogNote() const { return watchdogNote_; } int failovers() const { return failovers_; }
+  bool watchdog() const { return watchdog_; } void setWatchdog(bool on); void keepSavedWatchdog() { saveWatchdog_ = false; } QString watchdogNote() const { return watchdogNote_; } int failovers() const { return failovers_; }
   Q_INVOKABLE bool failover(const QString& why);   // stop and start again: the same device, else AUTO DETECT (also what the watchdog calls)
   Q_INVOKABLE void undoOneVoice();   // CH 1 back on input 1, and the rule rests until the next device opens
   bool oneVoice_ = true, oneVoiceActed_ = false; QString oneVoiceNote_; am::OneVoice ov_;
+  bool saveWatchdog_ = true;   // false in test runs: their watchdog changes are never written to the settings
   bool watchdog_ = true; QString watchdogNote_; int failovers_ = 0; am::Watchdog wd_; QElapsedTimer wdClock_;
   void freshInstallReset();   // install.id changed: clear the console state of an earlier install
   bool freshInstall_ = false; QString installId_;

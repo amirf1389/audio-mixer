@@ -263,14 +263,14 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.25.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 28464855,
-      "sha256": "b08bc2203b54b5695bb5b35e47063db580c33d19ee000e14537dcb8240cd0e53"
+      "size": 28469295,
+      "sha256": "cf5337aaec2fc242f4ff4dac0c6661c9b4f4d8fe6222ffc73190491d19a8737a"
     },
     "android-apk": {
       "name": "AmF-X1-1.25.0.0-b8-android.apk",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-1.25.0.0-b8-android.apk",
-      "size": 15039896,
-      "sha256": "426f0a7dd282073bedcdd1a06bfdc3e3e4e67700ea39262ca277d0a6e27c5782",
+      "size": 15066716,
+      "sha256": "06afb7b785696105982d673341cdd2d8ca7172ce3532cce65cf881ad0dbf1ee2",
       "package": "com.amfb.amixos",
       "build": 8,
       "versionCode": 125000008,
@@ -279,8 +279,8 @@
     "android-mixer-apk": {
       "name": "AmF-X1-Mixer-1.25.0.0-b8-android.apk",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/android/AmF-X1-Mixer-1.25.0.0-b8-android.apk",
-      "size": 15025882,
-      "sha256": "be732f02a33639187c806a9fd63654d2ffaec978705e361f955986e1c7d9ceaf",
+      "size": 15052398,
+      "sha256": "69874f5a7db28325977ac79af3bf3fb338e2ce5c991f6aaad38ae50dc03d1f75",
       "package": "com.amfb.amixos.mixer",
       "build": 8,
       "versionCode": 125000008,
@@ -289,9 +289,9 @@
   },
   "plugins": [],
   "presets": {
-    "version": "2026.11.22",
+    "version": "2026.11.23",
     "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/presets/presets-pack.json",
-    "size": 169546,
-    "sha256": "f46daa881c8ec09904950385ad231ca5e37c081b758cbb727fba0168c171dc20"
+    "size": 170793,
+    "sha256": "be3268c4a382a5696d521ce1cdf87acdc4b4a9f817105f7c8e0a1dc6283bc4ed"
   }
 }

@@ -210,6 +210,7 @@ int amix_rt_net_receive_start(amix_rt* r, const char* address, int port, int cha
   return r->net.receiveStart(d, iface ? iface : "", latency_ms, e) ? 0 : netFail(e, err, n);
 }
 void amix_rt_net_receive_stop(amix_rt* r) { if (r) r->net.receiveStop(); }
+void amix_rt_net_receive_own(amix_rt* r, int accept) { if (r) r->net.receiver().setRejectOwn(accept == 0); }
 char* amix_rt_net_stats_json(amix_rt* r) { return dup(r ? r->net.statsJson() : std::string("{}")); }
 char* amix_net_discover_json(int wait_ms, const char* iface) {
   am::net::Discovery d; std::string e, o = "[";

@@ -37,6 +37,7 @@ its AES67 mode.
 | --- | --- |
 | `amix_rt_net_send_start(rt, name, address, port, channels, bits, iface, announce, err, n)` | The master as one stream (1 = mono sum, 2 = master, more = the strips before their faders follow) |
 | `amix_rt_net_receive_start(rt, address, port, channels, bits, rate, latency_ms, iface, err, n)` | One stream as up to `AMIX_NET_INPUTS` extra inputs: `amix_rt_set_input_route(rt, strip, AMIX_NET_INPUT_BASE + k)` |
+| `amix_rt_net_receive_own(rt, accept)` | 0 (default): the packets of the stream this process sends are dropped, so the master is never fed back into itself; 1 accepts them, for a deliberate loopback test on one machine |
 | `amix_rt_net_stats_json(rt)` | Packets, lost, late, gaps, buffer fill |
 | `amix_net_discover_json(wait_ms, iface)` | The streams announced on the network |
 | `amix_net_transports_json()` | What this build can carry, and what it cannot and why |

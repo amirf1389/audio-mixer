@@ -28,7 +28,8 @@ Item {
                 for (let y = 0; y < k; ++y) for (let x = 0; x < k; ++x) if (m[1 + y * k + x]) ctx.fillRect((x + 4) * px, (y + 4) * px, px, px) } } }
     Popup { id: qrBig; objectName: "pairQrBig"; parent: Overlay.overlay; x: 0; y: 0; width: parent ? parent.width : 0; height: parent ? parent.height : 0; modal: true; padding: 0
         background: Rectangle { color: "#ffffff" }
-        QrView { anchors.centerIn: parent; width: Math.min(parent.width, parent.height) - 40; height: width; radius: 0; mods: qrRow.mods }
+        // made only while the popup is open: a window-sized Canvas repainted on every PIN change would slow the page down for nothing
+        Loader { anchors.fill: parent; active: qrBig.visible; sourceComponent: Item { QrView { anchors.centerIn: parent; width: Math.min(parent.width, parent.height) - 40; height: width; radius: 0; mods: qrRow.mods } } }
         Text { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; text: i18n.t("Click or press Esc to close", i18n.lang); color: "#444"; font.family: Theme.mono; font.pixelSize: 10 }
         MouseArea { anchors.fill: parent; onClicked: qrBig.close() } }
     // A SHORT WINDOW (or a large interface zoom): the page scrolls instead of running past the bottom of the page area

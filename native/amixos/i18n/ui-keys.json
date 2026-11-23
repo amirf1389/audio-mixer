@@ -2359,5 +2359,8 @@
 "Up to 10 inserts per channel, from the computer's scanned VST2 / VST3 plug-ins and the built-in effects.",
 "No inserts on this channel.",
 "preset…",
-"Remove %1?"
+"Remove %1?",
+"Click or press Esc to close",
+"ENLARGE",
+"LOOP STOPPED: the receiver hears this computer's own send (same address and port). Those packets are muted so the master is not fed back into itself; pick another stream to receive."
 ]

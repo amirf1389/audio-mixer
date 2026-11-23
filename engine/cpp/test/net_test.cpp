@@ -120,11 +120,19 @@ static void stream(int bits, int txRate, int rxDeviceRate, int channels) {
   if (rs.underruns > 2) std::printf("  note: %llu underruns (a loaded machine)\n", static_cast<unsigned long long>(rs.underruns));
   CHECK(rs.underruns <= 6);
   // the tone that came out: level 0.5 peak (rms 0.3536) at 1 kHz, measured over the stretches that are not silence
-  double e = 0, re = 0, im = 0; std::size_t n = 0; const double wr = 2 * M_PI * 1000.0 / rxDeviceRate;
-  for (std::size_t i = 0; i < rec.size(); ++i) { e += rec[i] * rec[i]; re += rec[i] * std::cos(wr * static_cast<double>(i)); im += rec[i] * std::sin(wr * static_cast<double>(i)); ++n; }
+  double e = 0; std::size_t n = 0; const double wr = 2 * M_PI * 1000.0 / rxDeviceRate;
+  for (std::size_t i = 0; i < rec.size(); ++i) { e += rec[i] * rec[i]; ++n; }
   const double rms = std::sqrt(e / static_cast<double>(n));
   CHECK(rms > 0.33 && rms < 0.36);
-  if (rs.underruns == 0 && txRate == rxDeviceRate) { const double tone = 2 * std::sqrt(re * re + im * im) / static_cast<double>(n); CHECK(tone > 0.49 && tone < 0.51); }   // all of it at 1 kHz: no gaps, no clicks
+  // all of it at 1 kHz, no gaps, no clicks: the 1 kHz level of every 10 ms stretch (10 whole cycles). Measured per stretch, not over the
+  // whole take: the receiver follows the sender's clock (up to 0.3 % faster or slower when a loaded machine delivers the packets late),
+  // which turns the phase slowly and would make one long measurement read low although every stretch is clean
+  if (rs.underruns == 0 && txRate == rxDeviceRate) {
+    const std::size_t W = static_cast<std::size_t>(rxDeviceRate / 100); double worst = 1, best = 0;
+    for (std::size_t s0i = 0; s0i + W <= rec.size(); s0i += W) { double cr = 0, ci = 0; for (std::size_t i = 0; i < W; ++i) { cr += rec[s0i + i] * std::cos(wr * static_cast<double>(i)); ci += rec[s0i + i] * std::sin(wr * static_cast<double>(i)); }
+      const double t = 2 * std::sqrt(cr * cr + ci * ci) / static_cast<double>(W); worst = std::min(worst, t); best = std::max(best, t); }
+    if (!(worst > 0.49 && best < 0.51)) std::printf("  tone per 10 ms: %.4f .. %.4f (resyncs %llu, fill %.1f ms)\n", worst, best, static_cast<unsigned long long>(rs.resyncs), rs.fillMs);
+    CHECK(worst > 0.49 && best < 0.51); }
   double e2 = 0; for (float v : rec2) e2 += v * v; const double rms2 = std::sqrt(e2 / static_cast<double>(rec2.size()));
   if (channels > 2) CHECK(std::fabs(rms2 - 0.25) < 0.01); else if (channels == 2) CHECK(std::fabs(rms2 - rms) < 0.01);   // channel 3 = strip 1 before its fader; channel 2 = right
   for (int k = channels; k < 16; ++k) for (std::size_t i = 0; i < M; ++i) if (out[k][i] != 0) { CHECK(false); break; }

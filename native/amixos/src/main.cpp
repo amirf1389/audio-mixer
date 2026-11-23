@@ -9,6 +9,7 @@
 //   amixos --shots DIR  like --smoke, and saves a PNG of every ported page into DIR (visual check without a display: QT_QPA_PLATFORM=offscreen)
 //   amixos --lang CODE  start in that language (one of the 80+; also applies to --shots)
 #include <QGuiApplication>
+#include <QPointer>
 #ifdef _WIN32
 #include <objbase.h>
 #endif
@@ -212,10 +213,10 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("access", &access);
   qml.rootContext()->setContextProperty("osc", &osc);
   qml.rootContext()->setContextProperty("media", &media);
-  const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) engine.setWatchdog(false);   // test runs: no automatic restarts under the other checks
-  // ... and the SAVED choice stays what it was: a test run must not leave the watchdog switched off for the next start. LIVE MODE switches
-  // the watchdog on and back (to "off", as it finds it here), which wrote "off" to the settings; it is put back now and again at the end.
-  if (smoke || bench || !shots.isEmpty()) { QSettings().setValue("audio/watchdog", watchdogWas); QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [watchdogWas] { QSettings().setValue("audio/watchdog", watchdogWas); QSettings().sync(); }); }
+  // test runs: no automatic restarts under the other checks, and the SAVED choice stays what it was. The switch (and LIVE MODE switching it
+  // on and back) is not written to the settings at all: writing "off" and putting it back later lost to the engine's own pending write when
+  // its QSettings synced last, which left the next start (and the next --smoke) with the watchdog off
+  const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) { engine.keepSavedWatchdog(); engine.setWatchdog(false); }
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
   qml.rootContext()->setContextProperty("appWindows", &appWindows); qml.addImageProvider(QStringLiteral("appwin"), new AppWindowImages(&appWindows));   // the engine owns the provider
@@ -1983,7 +1984,7 @@ int main(int argc, char* argv[]) {
               std::fprintf(stderr, "amixos --shots: FAILED the RTA EQ sliders do not follow on the master EQ (fader %.1f, band %.1f, then %.1f q %.2f; program %d strip %d band %d engine %.1f visible %d)\n", g3, now, bn["gainDb"].toDouble(), bn["q"].toDouble(), int(rp->property("program").toBool()), rp->property("strip").toInt(), rp->property("band").toInt(), engine.eqBand(-1, 3)["gainDb"].toDouble(), int(rp->property("visible").toBool()));
             else std::printf("amixos --shots: RTA EQ sliders follow on the master EQ\n");
             QMetaObject::invokeMethod(rp, "apply", Q_ARG(QVariant, QVariant(keep))); waitMs(80); } }
-          if (QString::fromLatin1(id) == "network") { if (QObject* np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
+          if (QString::fromLatin1(id) == "network") { if (QPointer<QObject> np = win->findChild<QObject*>("networkPage")) {   // the AUDIO + MIDI view with a stream running to this machine and back
             const QString rxA = net.rxAddress(), txA = net.txAddress(); const int rxP = net.rxPort(), txP = net.txPort(), first = net.rxFirstStrip();
             net.setRxAddress("127.0.0.1"); net.setRxPort(47422); net.setTxAddress("127.0.0.1"); net.setTxPort(47422); net.startReceive(); net.startSend(); net.setRxFirstStrip(7); net.midiIn(0xb1, 7, 96);
             np->setProperty("view", 1); waitMs(900); win->grabWindow().save(shots + "/network-audio-midi.png"); std::printf("amixos --shots: network-audio-midi\n");
@@ -1993,18 +1994,19 @@ int main(int argc, char* argv[]) {
               net.setMidiNetPort(47421); if (net.setMidiNet(true) || net.midiNetOn()) { std::fprintf(stderr, "amixos --shots: network MIDI opened on the AES67 receiver's port\n"); std::exit(217); }
               net.setMidiNet(false); net.setMidiNetPort(keepMidi); std::printf("amixos --shots: UDP port clash refused\n"); }
             if (!win->findChild<QObject*>("aoipPanel")) { std::fprintf(stderr, "amixos --shots: FAILED the AUDIO + MIDI panel is missing\n"); }
-            net.stopSend(); net.stopReceive(); net.setRxFirstStrip(first); net.setRxAddress(rxA); net.setTxAddress(txA); net.setRxPort(rxP); net.setTxPort(txP); engine.setGain(1, 0); np->setProperty("view", 0); } }
+            net.stopSend(); net.stopReceive(); net.setRxFirstStrip(first); net.setRxAddress(rxA); net.setTxAddress(txA); net.setRxPort(rxP); net.setTxPort(txP); engine.setGain(1, 0); if (np) np->setProperty("view", 0); } }
           if (QString::fromLatin1(id) == "network" && remote.available()) {   // PHONE REMOTE running: the pairing PIN and its QR code (scan to connect)
             const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
             remote.start(true); waitMs(1800);
-            std::vector<QQuickItem*> qrRows; QObject* qrPage = nullptr;   // the page on screen (a cached page is not a QObject child of the window: walk the items)
+            std::vector<QPointer<QQuickItem>> qrRows; QPointer<QObject> qrPage;   // the page on screen (a cached page is not a QObject child of the window: walk the items).
+            // Guarded pointers: a page the cache lets go while the shot waits is deleted, and a plain pointer to its rows then crashed the run
             { std::function<void(QQuickItem*)> walk = [&](QQuickItem* it) { if (!it->isVisible() && it->objectName() != "pairQrRow") return; if (it->objectName() == "networkPage") qrPage = it; if (it->objectName() == "pairQrRow" || it->objectName() == "pairNoAddress") qrRows.push_back(it); for (QQuickItem* ch : it->childItems()) walk(ch); }; walk(win->contentItem()); }
             if (remote.addresses().isEmpty()) {   // a machine with no Wi-Fi address (CI): the code for an example LAN address, to show it drawn
-              for (QQuickItem* r : qrRows) if (r->objectName() == "pairQrRow") r->setProperty("demoAddress", QStringLiteral("http://192.168.1.20:%1").arg(remote.port()));
+              for (const auto& r : qrRows) if (r && r->objectName() == "pairQrRow") r->setProperty("demoAddress", QStringLiteral("http://192.168.1.20:%1").arg(remote.port()));
               std::printf("amixos --shots: example QR address on %d row(s)\n", int(qrRows.size())); waitMs(400); }
             win->grabWindow().save(shots + "/network-remote-qr.png");
-            if (QObject* big = qrPage ? qrPage->findChild<QObject*>("pairQrBig") : nullptr) { QMetaObject::invokeMethod(big, "open"); waitMs(500); win->grabWindow().save(shots + "/network-remote-qr-big.png"); QMetaObject::invokeMethod(big, "close"); waitMs(200); }
-            for (QQuickItem* r : qrRows) if (r->objectName() == "pairQrRow") r->setProperty("demoAddress", QString());
+            if (QPointer<QObject> big = qrPage ? qrPage->findChild<QObject*>("pairQrBig") : nullptr) { QMetaObject::invokeMethod(big, "open"); waitMs(500); win->grabWindow().save(shots + "/network-remote-qr-big.png"); if (big) QMetaObject::invokeMethod(big, "close"); waitMs(200); }
+            for (const auto& r : qrRows) if (r && r->objectName() == "pairQrRow") r->setProperty("demoAddress", QString());
             std::printf("amixos --shots: network-remote-qr (%d address(es))\n", int(remote.addresses().size()));
             remote.stop(); waitMs(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); waitMs(300); }   // the sound card back exactly as it was
           if (QString::fromLatin1(id) == "fx") { if (QObject* fp = win->findChild<QObject*>("effectsPage")) { fp->setProperty("browse", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/fx-presets.png"); fp->setProperty("browse", false); std::printf("amixos --shots: fx-presets\n"); } }

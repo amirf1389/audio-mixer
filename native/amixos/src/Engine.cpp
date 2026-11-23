@@ -2029,7 +2029,7 @@ QVariantMap Engine::systemInfo() const {
 void Engine::setOneVoice(bool on) { if (on == oneVoice_) return; oneVoice_ = on; settings_.setValue("audio/oneVoice", on); ov_.reset(); emit oneVoiceChanged(); }
 void Engine::undoOneVoice() { if (!oneVoiceActed_) return; setInputRoute(0, 0); oneVoiceNote_.clear(); ov_.reset(); emit oneVoiceChanged(); }   // oneVoiceActed_ stays: not again on this device
 void Engine::setEcoUi(bool on) { if (on == ecoUi_) return; ecoUi_ = on; settings_.setValue("ui/eco", on); applyUiRate(); emit ecoUiChanged(); }
-void Engine::setWatchdog(bool on) { if (on == watchdog_) return; watchdog_ = on; settings_.setValue("audio/watchdog", on); wd_.reset(); emit watchdogChanged(); }
+void Engine::setWatchdog(bool on) { if (on == watchdog_) return; watchdog_ = on; if (saveWatchdog_) settings_.setValue("audio/watchdog", on); wd_.reset(); emit watchdogChanged(); }
 bool Engine::failover(const QString& why) {
   if (opening_) return false;
   const QString backend = QString::fromStdString(curBackend_), in = QString::fromStdString(curIn_), out = QString::fromStdString(curOut_);
