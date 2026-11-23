@@ -133,12 +133,50 @@ bool Daemon::start(std::string& err) {
   // WINDOWS VOLUME: this computer's output slider, watched twice a second (only where there is one: the first read must work)
   if (!volGet_) volGet_ = [](float& f) { return systemVolumeGet(f); }; if (!volSet_) volSet_ = [](float f) { return systemVolumeSet(f); };
   { float f = 0; if (volGet_(f)) { pollVolume(); volWatch_ = std::thread([this] { while (running_) { for (int i = 0; i < 10 && running_; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50)); if (running_) pollVolume(); } }); } }
+  if (!appLayer_) { appLayer_ = vol::makeSystemLayer(); wireApps(); }
   return true;
+}
+
+void Daemon::setAppLayer(std::unique_ptr<vol::SessionLayer> layer) { appLayer_ = std::move(layer); appsStale_ = true; wireApps(); }
+void Daemon::wireApps() {
+  if (!appLayer_) return;
+  appLayer_->onListChanged = [this] { appsStale_ = true; ++version_; };
+  appLayer_->onVolume = [this](const std::string& id, float v, bool m, bool ours) { bool moved = false; { std::lock_guard<std::mutex> g(appsM_); moved = apps_.report(id, v, m, ours); } if (moved) ++version_; };
+}
+json::Value Daemon::appsJson() const {
+  if (appLayer_ && appLayer_->available() && appsStale_.exchange(false)) { std::vector<vol::Session> fresh = appLayer_->list(); std::lock_guard<std::mutex> g(appsM_); apps_.update(std::move(fresh)); }
+  json::Value a = json::Value::array(); std::lock_guard<std::mutex> g(appsM_);
+  for (const vol::Session& x : apps_.sessions()) { json::Value o = json::Value::object(); o.set("id", x.id); o.set("name", x.name); o.set("pid", static_cast<double>(x.pid));
+    o.set("volume", std::round(x.volume * 1000.0) / 10.0); o.set("mute", x.muted); o.set("system", x.system); a.push(o); }
+  return a;
+}
+// a remote's per-app change: checked against the list, rate limited, then handed to Windows (its echo does not come back as a move)
+json::Value Daemon::appCommand(const json::Value& cmd, std::string& err) {
+  json::Value ok = json::Value::object(); ok.set("ok", true);
+  const std::string op = cmd["op"].asString(), id = cmd["id"].type() == json::Value::String ? cmd["id"].asString() : std::string();
+  if (!appLayer_ || !appLayer_->available()) { err = "no per-app volume on this computer"; return {}; }
+  appsJson();   // the list as Windows has it now
+  // checked and noted under the list's lock; handed to Windows after it (the layer may report the change back at once, on this thread)
+  const bool isVol = op == "appVolume"; float f = 0; bool on = false;
+  { std::lock_guard<std::mutex> g(appsM_);
+    if (!appBucket_.take(30, 30)) { err = "too many changes: slow down"; return {}; }
+    if (isVol) {
+      const json::Value& v = cmd["volume"]; const double pct = v.isNumber() ? v.asNumber(-1) : -1;
+      if (!vol::validVolumeRequest(apps_, id, pct, err)) return {};
+      f = static_cast<float>(pct / 100.0); apps_.noteSet(id, f);
+    } else {
+      if (cmd["on"].type() != json::Value::Bool) { err = "on: true or false"; return {}; }
+      if (!vol::validVolumeRequest(apps_, id, 0, err)) return {};
+      on = cmd["on"].asBool(); apps_.noteMute(id, on);
+    } }
+  if (!(isVol ? appLayer_->setVolume(id, f) : appLayer_->setMute(id, on))) { err = "Windows refused the change"; return {}; }
+  ++version_; return ok;
 }
 
 void Daemon::stop() {
   if (!running_.exchange(false)) return;
   if (volWatch_.joinable()) volWatch_.join();
+  appLayer_.reset();
   http_.stop();
   std::lock_guard<std::mutex> g(m_);
   if (rt_) { rt_->setTap(nullptr); rta_.next.store(nullptr); rec_.stop(); rt_->stop(); rt_.reset(); }
@@ -517,6 +555,7 @@ json::Value Daemon::state() const {
     o.set("dcas", dcas); }
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("mute", masterMute_); m.set("dim", masterDim_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   o.set("settings", settingsJson());
+  o.set("apps", appsJson()); o.set("appsAvailable", appLayer_ && appLayer_->available());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
   o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson());
@@ -560,6 +599,7 @@ json::Value Daemon::control(const json::Value& cmd, std::string& err) {
     json::Value r = apply(openCmd(keep, in, in == "-" ? 0 : 2), err);   // "-": outputs only
     if (!err.empty()) { const std::string why = err; std::string e2; apply(openCmd(keep, keep.inDevice, keep.inChannels), e2); err = why; return {}; }   // could not open it: the sound comes back as it was
     ++version_; return r; }
+  if (cmd["op"].asString() == "appVolume" || cmd["op"].asString() == "appMute") return appCommand(cmd, err);   // PER-APP VOLUME: Windows, not the engine (no engine lock)
   json::Value out = apply(cmd, err);
   if (err.empty() && cmd["op"].asString() != "clearClips") ++version_;
   return out;

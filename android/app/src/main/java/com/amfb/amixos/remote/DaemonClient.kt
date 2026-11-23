@@ -26,7 +26,7 @@ data class Rta(val src: Int, val f: List<Double>, val db: List<Double>)
 data class ProgramEq(val on: Boolean = false, val gains: List<Double> = List(10) { 0.0 })
 /** a DCA group channel of the console (id 1..8): its fader is an offset on its members' level, MUTE mutes them; members = strip numbers */
 data class DcaState(val id: Int, val name: String, val db: Double, val mute: Boolean, val color: Int, val members: List<Int>)
-data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound(), val dcas: List<DcaState> = emptyList(), val masterMute: Boolean = false, val masterDim: Boolean = false)   // v: the console's change counter (LIVE SYNC)
+data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound(), val dcas: List<DcaState> = emptyList(), val masterMute: Boolean = false, val masterDim: Boolean = false, val apps: List<AppVolume> = emptyList(), val appsAvailable: Boolean = false)   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
 /** loudness of the master (LUFS momentary / short-term / integrated, range LU, true peak dBTP) */
 data class Loudness(val m: Double = -120.0, val s: Double = -120.0, val i: Double = -120.0, val lra: Double = 0.0, val tp: Double = -120.0)
@@ -100,7 +100,7 @@ class DaemonClient(val ep: Endpoint) {
         }
         fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
             return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo"), it.num("trim"), it.obj("tone").let { t -> Tone(t.num("low"), t.num("mid"), t.num("midHz", 1000.0), t.num("high"), t["on"] != false) }, (it["eq"] as? List<*>).orEmpty().map { b -> nums(b) }) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) },
-                o.list("dcas").map { DcaState(it.int("id"), it.str("name"), it.num("db"), it.bool("mute"), it.int("color"), (it["members"] as? List<*>).orEmpty().mapNotNull { x -> (x as? Number)?.toInt() }) }, m.bool("mute"), m.bool("dim"))
+                o.list("dcas").map { DcaState(it.int("id"), it.str("name"), it.num("db"), it.bool("mute"), it.int("color"), (it["members"] as? List<*>).orEmpty().mapNotNull { x -> (x as? Number)?.toInt() }) }, m.bool("mute"), m.bool("dim"), AppVolumes.parse(o), AppVolumes.available(o))
         }
         fun nums(v: Any?): List<Double> = (v as? List<*>).orEmpty().map { (it as? Number)?.toDouble() ?: 0.0 }
         fun parseProgramEq(o: Map<String, Any?>): ProgramEq { val p = o.obj("programEq"); val g = nums(p["gains"])
@@ -136,6 +136,9 @@ class DaemonClient(val ep: Endpoint) {
     /** MASTER MUTE / DIM (-20 dB): sent alone, so the fader's value is never re-sent with them */
     fun masterMute(on: Boolean) = push(mapOf("op" to "master", "mute" to on))
     fun masterDim(on: Boolean) = push(mapOf("op" to "master", "dim" to on))
+    /** PER-APP VOLUME on the console's computer (the Windows volume mixer's programs): volume 0..100, mute; checked before they go */
+    fun appVolume(id: String, volume: Double) = AppVolumes.volumeCommand(id, volume)?.let { push(it) }
+    fun appMute(id: String, on: Boolean) = AppVolumes.muteCommand(id, on)?.let { push(it) }
     /** CHANNEL INSERTS: what may be added (the console's scanned plug-ins and the built-in effects, by opaque id), and the changes */
     fun insertCatalog(): List<Inserts.Entry> = Inserts.catalog(getObj("/api/inserts"))
     fun insertSlots(strip: Int): List<Inserts.Slot> = Inserts.slots(racks(strip))

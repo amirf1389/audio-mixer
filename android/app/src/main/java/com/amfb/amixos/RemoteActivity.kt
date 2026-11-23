@@ -650,6 +650,24 @@ class RemoteActivity : FitActivity() {
         box.addView(SeekBar(this).apply { max = 200; progress = ((ceil + 20) * 10).toInt().coerceIn(0, 200)
             setOnSeekBarChangeListener(change { p -> ceil = p / 10.0 - 20; ui.post { t.text = String.format("CEILING  %.1f dBFS", ceil) }; c.limiter(on, ceil) }) })
         box.addView(TextView(this).apply { text = "The limiter keeps the master under the ceiling (no clipping on the output)."; setTextColor(Color.parseColor("#C2C7CF")) })
+        // APPS: each program's volume and mute, as the Windows volume mixer of the console's computer has them
+        if (st?.appsAvailable == true) {
+            box.addView(TextView(this).apply { text = getString(R.string.apps_title); setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(0, 28, 0, 6) })
+            if (st.apps.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.apps_none); setTextColor(Color.parseColor("#C2C7CF")); textSize = 12f })
+            for (a in st.apps) {
+                val lab = TextView(this).apply { text = com.amfb.amixos.remote.AppVolumes.label(a); setTextColor(Color.WHITE); textSize = 13f }
+                box.addView(lab)
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                var cur = a
+                row.addView(SeekBar(this).apply { max = 100; progress = Math.round(a.volume).toInt(); contentDescription = getString(R.string.apps_volume, a.name); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(s: SeekBar, p: Int, u: Boolean) { if (!u) return; cur = cur.copy(volume = p.toDouble()); lab.text = com.amfb.amixos.remote.AppVolumes.label(cur); live.submit("app${a.id}") { c.appVolume(a.id, p.toDouble()) } }
+                        override fun onStartTrackingTouch(s: SeekBar) { touching++ }; override fun onStopTrackingTouch(s: SeekBar) { touching = maxOf(0, touching - 1) } }) })
+                row.addView(ToggleButton(this).apply { textOn = getString(R.string.master_muted); textOff = getString(R.string.master_mute); isChecked = a.mute; contentDescription = getString(R.string.apps_mute, a.name)
+                    setOnCheckedChangeListener { b, v -> buzz(b); cur = cur.copy(mute = v); lab.text = com.amfb.amixos.remote.AppVolumes.label(cur); live.submit("appMute${a.id}") { c.appMute(a.id, v) } } })
+                box.addView(row)
+            }
+        }
         // WINDOWS: the computer's own output slider, and GAIN MODE (that slider as a trim after the master)
         val w = st?.windows ?: com.amfb.amixos.remote.WindowsSound()
         box.addView(TextView(this).apply { text = getString(R.string.win_title); setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(0, 28, 0, 6) })

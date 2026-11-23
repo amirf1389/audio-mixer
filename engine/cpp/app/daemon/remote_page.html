@@ -109,6 +109,7 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 <div class="row"><span>Peak</span><b id="xPk" class="db">—</b></div></div>
 <div class="card" id="xWinC"><h2>WINDOWS VOLUME<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">the computer's own output volume</small></h2>
 <div class="row"><span>Volume</span><span style="flex:1;max-width:60%;display:flex;gap:8px;align-items:center"><input id="xWin" class="h" type="range" min="0" max="100" step="1" aria-label="Windows volume"><b id="xWinV" style="min-width:48px;text-align:right">—</b></span></div></div>
+<div class="card" id="xAppsC" style="display:none"><h2>APPS<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">each program's volume, as the Windows volume mixer has it</small></h2><div id="xApps"></div></div>
 </div><p class="note">Every change is sent at most once a frame; what the console or another remote moves shows here as it happens.</p></section>
 <section id="mon" class="page"><div class="grid">
 <div class="card"><h2>MONITOR · CONTROL ROOM</h2>
@@ -564,7 +565,20 @@ function masterPage(){if(!state||!state.master)return;const M=state.master,f=$("
  for(const [id,k,c] of [["#xDim","dim","amb"],["#xMute","mute","red"]]){const b=$(id);b.classList.add(c);if(!mine("x"+k))b.classList.toggle("on",!!M[k]);b.onclick=()=>{buzz();M[k]=!b.classList.contains("on");b.classList.toggle("on",M[k]);sendFrame("x"+k,{op:"master",[k]:M[k]})}}
  const S=state.settings||{},has=S.winVolume>=0,w=$("#xWin");$("#xWinC").style.display=has?"":"none";
  if(has&&free(w)&&!mine("xw")){w.value=S.winVolume;$("#xWinV").textContent=S.winVolume+"%"}
- w.oninput=()=>{const v=+w.value;$("#xWinV").textContent=v+"%";S.winVolume=v;sendFrame("xw",{op:"setting",key:"winVolume",value:v})};w.onpointerdown=()=>{drag=w}}
+ w.oninput=()=>{const v=+w.value;$("#xWinV").textContent=v+"%";S.winVolume=v;sendFrame("xw",{op:"setting",key:"winVolume",value:v})};w.onpointerdown=()=>{drag=w};appsCard()}
+// PER-APP VOLUME: one slider and one MUTE per program playing on the computer (the Windows volume mixer's list). Built with textContent
+// only (a program's name is never markup); the rows are made again only when the programs change, otherwise just their values move.
+let appsKey="";function appsCard(){const A=(state&&state.apps)||[],box=$("#xApps");$("#xAppsC").style.display=state&&state.appsAvailable?"":"none";
+ const key=A.map(a=>a.id).join("\n");if(key!==appsKey){appsKey=key;box.textContent="";
+  if(!A.length){const p=document.createElement("p");p.className="note";p.textContent="No program is playing sound.";box.appendChild(p)}
+  A.forEach((a,i)=>{const r=document.createElement("div");r.className="row";const n=document.createElement("span");n.textContent=a.name;n.style.cssText="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+   const c=document.createElement("span");c.style.cssText="flex:1;max-width:64%;display:flex;gap:8px;align-items:center";const sl=document.createElement("input");sl.type="range";sl.className="h";sl.min=0;sl.max=100;sl.step=1;sl.setAttribute("aria-label",a.name+" volume");sl.dataset.i=i;
+   const v=document.createElement("b");v.style.cssText="min-width:42px;text-align:right";const m=document.createElement("button");m.textContent="MUTE";m.className="red";
+   c.append(sl,v,m);r.append(n,c);box.appendChild(r)})}
+ [...box.querySelectorAll("input")].forEach(sl=>{const a=A[+sl.dataset.i];if(!a)return;const v=sl.nextSibling,m=v.nextSibling,k="app"+a.id;
+  if(free(sl)&&!mine(k)){sl.value=Math.round(a.volume);v.textContent=Math.round(a.volume)+"%"}if(!mine(k+"m"))m.classList.toggle("on",!!a.mute);
+  sl.oninput=()=>{v.textContent=sl.value+"%";a.volume=+sl.value;sendFrame(k,{op:"appVolume",id:a.id,volume:+sl.value})};sl.onpointerdown=()=>{drag=sl};
+  m.onclick=()=>{buzz();a.mute=!m.classList.contains("on");m.classList.toggle("on",a.mute);sendFrame(k+"m",{op:"appMute",id:a.id,on:a.mute})}})}
 // CHANNEL INSERTS: the channel's slots (0..9) as the console has them; add from the console's own list (by id), remove, move, bypass, parameters, presets
 let insCat=null,insKey="",insOpen=-1;
 async function inserts(){if(!state||!token)return;if(!insCat){insCat=[];try{insCat=(await api("/api/inserts")).plugins||[]}catch(e){}
