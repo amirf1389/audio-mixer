@@ -1647,7 +1647,8 @@ int main(int argc, char* argv[]) {
         net.setRxFirstStrip(7); if (engine.inputRoutes()[6].toInt() != 256 || engine.inputRoutes()[7].toInt() != 257) { std::fprintf(stderr, "amixos --smoke: network inputs not patched\n"); return 184; }
         QElapsedTimer nt; nt.start(); while (nt.elapsed() < 600) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         const QVariantMap ns = net.stats();
-        if (ns["txPackets"].toULongLong() < 200 || ns["rxPackets"].toULongLong() < 200 || ns["rxLost"].toULongLong() != 0 || !ns["rxLive"].toBool()) { std::fprintf(stderr, "amixos --smoke: network stream did not flow (tx %llu rx %llu)\n", ns["txPackets"].toULongLong(), ns["rxPackets"].toULongLong()); return 185; }
+        // our own send on our own receiver is a feedback loop: every packet must come back (rxSelfLoop) and none be mixed in (rxPackets 0)
+        if (ns["txPackets"].toULongLong() < 200 || ns["rxSelfLoop"].toULongLong() < 200 || ns["rxPackets"].toULongLong() != 0) { std::fprintf(stderr, "amixos --smoke: network self loop not stopped (tx %llu self %llu rx %llu)\n", ns["txPackets"].toULongLong(), ns["rxSelfLoop"].toULongLong(), ns["rxPackets"].toULongLong()); return 185; }
         net.stopReceive(); net.stopSend(); if (net.txOn() || net.rxOn() || engine.inputRoutes()[6].toInt() != 6) { std::fprintf(stderr, "amixos --smoke: network stream stop / strips back to their inputs\n"); return 186; }
         net.setRxFirstStrip(keepFirst); net.setRxAddress(keepRx); net.setTxAddress(keepTx); net.setRxPort(keepRxPort); net.setTxPort(keepTxPort);
         const double before = engine.stripState()[2].toMap()["db"].toDouble(); net.midiIn(0xb2, 7, 100); if (std::fabs(engine.stripState()[2].toMap()["db"].toDouble()) > 1e-6) { std::fprintf(stderr, "amixos --smoke: MIDI fader\n"); return 187; }
@@ -1995,7 +1996,15 @@ int main(int argc, char* argv[]) {
             net.stopSend(); net.stopReceive(); net.setRxFirstStrip(first); net.setRxAddress(rxA); net.setTxAddress(txA); net.setRxPort(rxP); net.setTxPort(txP); engine.setGain(1, 0); np->setProperty("view", 0); } }
           if (QString::fromLatin1(id) == "network" && remote.available()) {   // PHONE REMOTE running: the pairing PIN and its QR code (scan to connect)
             const bool wasRunning = engine.running(); const QString wb = engine.backend(); const double wr = engine.sampleRate(); const int wf = engine.blockFrames(), wi = engine.deviceInputs(), wo = engine.deviceOutputs();
-            remote.start(true); waitMs(1800); win->grabWindow().save(shots + "/network-remote-qr.png");
+            remote.start(true); waitMs(1800);
+            std::vector<QQuickItem*> qrRows; QObject* qrPage = nullptr;   // the page on screen (a cached page is not a QObject child of the window: walk the items)
+            { std::function<void(QQuickItem*)> walk = [&](QQuickItem* it) { if (!it->isVisible() && it->objectName() != "pairQrRow") return; if (it->objectName() == "networkPage") qrPage = it; if (it->objectName() == "pairQrRow" || it->objectName() == "pairNoAddress") qrRows.push_back(it); for (QQuickItem* ch : it->childItems()) walk(ch); }; walk(win->contentItem()); }
+            if (remote.addresses().isEmpty()) {   // a machine with no Wi-Fi address (CI): the code for an example LAN address, to show it drawn
+              for (QQuickItem* r : qrRows) if (r->objectName() == "pairQrRow") r->setProperty("demoAddress", QStringLiteral("http://192.168.1.20:%1").arg(remote.port()));
+              std::printf("amixos --shots: example QR address on %d row(s)\n", int(qrRows.size())); waitMs(400); }
+            win->grabWindow().save(shots + "/network-remote-qr.png");
+            if (QObject* big = qrPage ? qrPage->findChild<QObject*>("pairQrBig") : nullptr) { QMetaObject::invokeMethod(big, "open"); waitMs(500); win->grabWindow().save(shots + "/network-remote-qr-big.png"); QMetaObject::invokeMethod(big, "close"); waitMs(200); }
+            for (QQuickItem* r : qrRows) if (r->objectName() == "pairQrRow") r->setProperty("demoAddress", QString());
             std::printf("amixos --shots: network-remote-qr (%d address(es))\n", int(remote.addresses().size()));
             remote.stop(); waitMs(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); waitMs(300); }   // the sound card back exactly as it was
           if (QString::fromLatin1(id) == "fx") { if (QObject* fp = win->findChild<QObject*>("effectsPage")) { fp->setProperty("browse", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/fx-presets.png"); fp->setProperty("browse", false); std::printf("amixos --shots: fx-presets\n"); } }

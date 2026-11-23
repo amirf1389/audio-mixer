@@ -89,6 +89,8 @@ Item {
                         Val { text: i18n.t("PACKETS ", i18n.lang) + panel.st.rxPackets } Val { text: i18n.t("LOST ", i18n.lang) + panel.st.rxLost; color: panel.st.rxLost > 0 ? Theme.amber : Theme.cyan }
                         Val { text: i18n.t("GAPS ", i18n.lang) + panel.st.rxUnderruns; color: panel.st.rxUnderruns > 1 ? Theme.amber : Theme.cyan } Val { text: i18n.t("BUFFER ", i18n.lang) + Number(panel.st.rxFillMs).toFixed(0) + " ms" }
                         Val { visible: panel.st.rxFrom !== ""; text: i18n.t("FROM ", i18n.lang) + panel.st.rxFrom } }
+                    Text { objectName: "aoipLoopWarn"; visible: panel.st.rxSelfLoop > 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
+                           text: i18n.t("LOOP STOPPED: the receiver hears this computer's own send (same address and port). Those packets are muted so the master is not fed back into itself; pick another stream to receive.", i18n.lang) }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }
                     RowLayout { spacing: 8
                         Head { text: i18n.t("STREAMS ON THIS NETWORK", i18n.lang) } Item { Layout.fillWidth: true }

@@ -70,6 +70,7 @@ QVariantMap Net::stats() const {
   QVariantMap m; const SendStats t = tx_.stats(); const RecvStats r = rx_.stats();
   m["txPackets"] = static_cast<qulonglong>(t.packets); m["txDropped"] = static_cast<qulonglong>(t.droppedFrames); m["txMismatch"] = t.rateMismatch; m["txRate"] = tx_.desc().rate;
   m["rxPackets"] = static_cast<qulonglong>(r.packets); m["rxLost"] = static_cast<qulonglong>(r.lost); m["rxLate"] = static_cast<qulonglong>(r.late); m["rxUnderruns"] = static_cast<qulonglong>(r.underruns);
+  m["rxSelfLoop"] = static_cast<qulonglong>(r.selfLoop);   // packets of our own send that came back and were dropped (a feedback loop stopped)
   m["rxFillMs"] = r.fillMs; m["rxIdleMs"] = r.idleMs; m["rxFrom"] = QString::fromStdString(r.from); m["rxLive"] = r.running && r.idleMs >= 0 && r.idleMs < 1000;
   const RtpMidiStats ms = rtpMidi_.stats(); m["midiPeers"] = ms.peers; m["midiPeer"] = QString::fromStdString(ms.lastPeer);
   return m;
