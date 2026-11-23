@@ -2429,5 +2429,11 @@
 "NOTIFICATIONS",
 "No notifications",
 "GROUP FADERS",
-"SEND TO"
+"SEND TO",
+"VU: ANALOG",
+"VU: DIGITAL",
+"VU meters",
+"DIGITAL: bars with peak hold. ANALOG: needle faces (VU ballistics). On every fader page.",
+"L",
+"R"
 ]

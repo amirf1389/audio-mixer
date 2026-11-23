@@ -65,7 +65,7 @@ Item {
                         Text { text: page.t(modelData[0]); color: !modelData[2] ? Theme.muted : modelData[1] ? Theme.emerald : Theme.dim; font.family: Theme.mono; font.pixelSize: 7; font.bold: modelData[2] } } }
                 Item { Layout.fillWidth: true } } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
-        BigVu { objectName: "masteringBigVu"; visible: page.visible; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 96; Layout.preferredHeight: 220; lDb: engine.telv("masterLDb", engine.meterTick) ?? -120; rDb: engine.telv("masterRDb", engine.meterTick) ?? -120; rmsDb: engine.telv("masterRmsDb", engine.meterTick) ?? -120; clip: !!engine.telv("masterClip", engine.meterTick) }
+        BigVu { objectName: "masteringBigVu"; vuDb: engine.telv("masterVuDb", engine.meterTick) ?? -120; visible: page.visible; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 96; Layout.preferredHeight: 220; lDb: engine.telv("masterLDb", engine.meterTick) ?? -120; rDb: engine.telv("masterRDb", engine.meterTick) ?? -120; rmsDb: engine.telv("masterRmsDb", engine.meterTick) ?? -120; clip: !!engine.telv("masterClip", engine.meterTick) }
         GridLayout { Layout.fillWidth: true; Layout.fillHeight: true; columns: width > 1000 ? 3 : 2; columnSpacing: 8; rowSpacing: 8
             Card { title: page.t("TONE"); sub: page.t("shelves"); on: page.m.toneOn; onToggled: page.put("toneOn", !page.m.toneOn)
                 Knob { label: page.t("LOW 100 Hz"); value: page.m.low; from: -12; to: 12; unit: "dB"; onMoved: function (v) { page.put("low", v) } }

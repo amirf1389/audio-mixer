@@ -37,6 +37,7 @@ class Settings : public QObject {
   Q_PROPERTY(QString zoomNote READ zoomNote CONSTANT)
   Q_PROPERTY(double liveZoom READ liveZoom WRITE setLiveZoom NOTIFY changed)   // ZOOM IN / OUT at once (Ctrl + / - / 0, Ctrl + wheel): 0.5 .. 2.0 on top of the interface zoom
   Q_PROPERTY(bool vuDefault READ vuDefault WRITE setVuDefault NOTIFY changed)
+  Q_PROPERTY(QString vuStyle READ vuStyle WRITE setVuStyle NOTIFY changed)   // the meters on every fader page: "digital" (bars) or "analog" (needle faces)
   Q_PROPERTY(bool bootAnimation READ bootAnimation WRITE setBootAnimation NOTIFY changed)   // the opening animation
   Q_PROPERTY(bool bootSound READ bootSound WRITE setBootSound NOTIFY changed)               // its chord on the master (only when the engine is already running)
   Q_PROPERTY(bool monitorPanelDefault READ monitorPanelDefault WRITE setMonitorPanelDefault NOTIFY changed)
@@ -87,6 +88,7 @@ class Settings : public QObject {
   bool bootAnimation() const { return s_.value("ui/bootAnimation", true).toBool(); } void setBootAnimation(bool v) { set("ui/bootAnimation", v); }
   bool bootSound() const { return s_.value("ui/bootSound", true).toBool(); } void setBootSound(bool v) { set("ui/bootSound", v); }
   bool vuDefault() const { return s_.value("mixer/vu", false).toBool(); } void setVuDefault(bool v) { set("mixer/vu", v); }
+  QString vuStyle() const { return vuDefault() ? QStringLiteral("analog") : QStringLiteral("digital"); } void setVuStyle(const QString& v) { setVuDefault(v == QLatin1String("analog")); }   // one setting: ANALOG = the VU faces
   bool monitorPanelDefault() const { return s_.value("mixer/monitor", true).toBool(); } void setMonitorPanelDefault(bool v) { set("mixer/monitor", v); }
   bool rackCompactDefault() const { return s_.value("mixer/rackCompact", false).toBool(); } void setRackCompactDefault(bool v) { set("mixer/rackCompact", v); }
   bool rackDefault() const { return s_.value("mixer/rack", true).toBool(); } void setRackDefault(bool v) { set("mixer/rack", v); }

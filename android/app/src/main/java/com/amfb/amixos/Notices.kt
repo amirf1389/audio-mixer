@@ -8,7 +8,7 @@ class Notices(private val max: Int = 50) {
     data class Event(val atMs: Long, val kind: Kind, val text: String)
     private val list = ArrayDeque<Event>()
     val history: List<Event> get() = list.toList()
-    private var running: Boolean? = null; private var device: String? = null; private var xruns = -1L; private var lastCpuMs = 0L; private var clipOn = false
+    private var running: Boolean? = null; private var device: String? = null; private var xruns = -1L; private var lastCpuMs = -60_000L; private var clipOn = false
     private fun add(now: Long, k: Kind, t: String): Event { val e = Event(now, k, t); list.addFirst(e); while (list.size > max) list.removeLast(); return e }
     /** the console's version against the one this phone saw last: a new one is "what's new" */
     fun versionSeen(now: Long, version: String, seenBefore: String?): Event? = if (version.isNotBlank() && seenBefore != null && seenBefore != version) add(now, Kind.WHATS_NEW, "What's new: the console is now $version") else null

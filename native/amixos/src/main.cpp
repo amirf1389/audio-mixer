@@ -2150,7 +2150,7 @@ int main(int argc, char* argv[]) {
                   const int got = engine.readAsioChannels("{a1}"); if (got != engine.deviceInputs() || got != 2 || !engine.asioNote().contains("2 input channel")) { std::fprintf(stderr, "amixos --shots: the device's channels were not read (%d of %d: %s)\n", got, engine.deviceInputs(), qPrintable(engine.asioNote())); std::exit(215); }
                   engine.open("null", "-", "", 48000, 256, 0, 2); if (engine.readAsioChannels("{a1}") != 0 || !engine.asioNote().contains("outputs only")) std::exit(216);   // no input asked for by name ("-"): outputs only
                   engine.open("null", "", "", 48000, 256, 2, 2); engine.resetRouting(); } }
-              mixer->setProperty("vuMode", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); mixer->setProperty("vuMode", false); std::printf("amixos --shots: mixer-vu\n"); }
+              settings.setVuStyle(QStringLiteral("analog")); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/mixer-vu.png"); settings.setVuStyle(QStringLiteral("digital")); std::printf("amixos --shots: mixer-vu\n"); }
           }
         }
       }

@@ -16,6 +16,14 @@ Item {
     property real floorDb: -60
     property real topDb: 6
     property real warnDb: -3            // amber from here
+    // VU ANALOG / DIGITAL (SETTINGS > VU meters, MIXER view options): one setting for every page. ANALOG shows needle face(s) in the same box
+    // (L / R faces when wide and stereo), the engine's VU ballistics in vuDb (NaN: the RMS / peak stands in), the peak lamp = the clip latch.
+    property string style: settings.vuStyle
+    readonly property bool analog: style === "analog"
+    property real vuDb: NaN
+    property real rVuDb: NaN
+    readonly property real needleL: !isNaN(vuDb) ? vuDb : rmsDb > -119 ? rmsDb : lDb
+    readonly property real needleR: !isNaN(rVuDb) ? rVuDb : !isNaN(rDb) ? (rmsDb > -119 ? Math.min(rmsDb, rDb) : rDb) : needleL
     property bool merged: width < 90     // a strip passes its own width (< 90 px: one merged bar)
     readonly property real rVal: isNaN(rDb) ? lDb : rDb
     readonly property real maxDb: Math.max(lDb, rVal)
@@ -66,5 +74,13 @@ Item {
     Text { objectName: "bigVuReadout"; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; anchors.horizontalCenter: parent.horizontalCenter
         text: vu.holdDb <= -119 ? "-inf" : (vu.holdDb > 0 ? "+" : "") + vu.holdDb.toFixed(1)
         color: vu.latched ? (flashT.on ? Theme.ink : Theme.danger) : vu.holdDb >= vu.warnDb ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: vu.latched }
+    Rectangle { objectName: "bigVuAnalog"; visible: vu.analog; anchors.fill: parent; radius: 4; color: Theme.deep; border.color: vu.latched ? Theme.danger : Theme.line
+        Row { anchors.centerIn: parent; spacing: 3
+            readonly property bool two: vu.width >= 120 && !isNaN(vu.rDb)
+            Repeater { model: parent.two ? 2 : 1
+                VuMeter { width: (vu.width - 8 - (parent.two ? 3 : 0)) / (parent.two ? 2 : 1); height: Math.min(vu.height - 20, width * 0.72)
+                    vuDb: index === 0 ? vu.needleL : vu.needleR; refDb: engine.vuRefDb; peakLamp: vu.latched; label: parent.two ? (index === 0 ? "L" : "R") : i18n.t("VU", i18n.lang) } } }
+        Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 1; anchors.horizontalCenter: parent.horizontalCenter; text: vu.holdDb <= -119 ? "-inf" : (vu.holdDb > 0 ? "+" : "") + vu.holdDb.toFixed(1)
+            color: vu.latched ? (flashT.on ? Theme.ink : Theme.danger) : vu.holdDb >= vu.warnDb ? Theme.amber : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: vu.latched } }
     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: vu.clear() }
 }
