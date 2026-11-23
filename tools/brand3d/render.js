@@ -7,12 +7,15 @@ const [first, last, outDir, shots = path.resolve(__dirname, "../../screenshots-a
 const roots = { "/three/": path.join(__dirname, "node_modules/three/"), "/shots/": shots + "/", "/fonts/": "/usr/share/fonts/opentype/inter/", "/mono/": "/usr/share/fonts/truetype/dejavu/" };
 const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".otf": "font/otf", ".ttf": "font/ttf" };
 const server = http.createServer((req, res) => {
-  const u = decodeURIComponent(req.url.split("?")[0]); let file = null;
-  for (const [p, d] of Object.entries(roots)) if (u.startsWith(p)) file = path.join(d, u.slice(p.length));
+  let u; try { u = decodeURIComponent(req.url.split("?")[0]); } catch (_) { res.writeHead(400); res.end(); return; }
+  let file = null, base = __dirname;
+  for (const [p, d] of Object.entries(roots)) if (u.startsWith(p)) { base = d; file = path.join(d, u.slice(p.length)); }
   if (!file) file = path.join(__dirname, u === "/" ? "scene.html" : u);
+  // only files inside the folder the prefix maps to ("/fonts/../../etc/passwd" is refused)
+  const inside = path.relative(path.resolve(base), path.resolve(file)); if (!inside || inside.startsWith("..") || path.isAbsolute(inside)) { res.writeHead(404); res.end(); return; }
   fs.readFile(file, (e, b) => { if (e) { res.writeHead(404); res.end(); return; } res.writeHead(200, { "Content-Type": types[path.extname(file)] || "application/octet-stream" }); res.end(b); });
 });
-server.listen(0, async () => {
+server.listen(0, "127.0.0.1", async () => {   // this computer only: the page is only for the headless browser below
   const port = server.address().port; fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
   const page = await browser.newPage({ viewport: VERT ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 }, deviceScaleFactor: 1 });

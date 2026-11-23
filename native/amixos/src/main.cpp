@@ -1,4 +1,6 @@
 #include <tuple>
+#include <functional>
+#include <memory>
 #include <chrono>
 #include <thread>
 // A mix OS: the native console. Qt Quick interface (qml/) on the C++20 engine (Engine.h -> am::Runtime). No browser, no web runtime.
@@ -11,6 +13,7 @@
 #include <objbase.h>
 #endif
 #include <QQmlApplicationEngine>
+#include <QQmlIncubationController>
 #include "fx/fx_plugin.hpp"
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -71,6 +74,9 @@
 #include "Frame.h"
 #include "measure/measure.hpp"
 #include "Engine.h"
+#include "WindowPlace.h"
+#include <QCursor>
+#include <QScreen>
 #include "Graphics.h"
 #include "license/license.hpp"
 #include "I18n.h"
@@ -240,8 +246,52 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("asyncPages", !smoke || qEnvironmentVariableIsSet("AMIX_ASYNC_PAGES"));   // pages build without blocking the click (the tests: synchronous, unless asked)
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);
   qml.addImportPath(QStringLiteral("qrc:/qt/qml"));   // the console's own module (AmixOS, with the Theme singleton) lives in the resources: Qt 6.4 on Windows does not search there by itself, and every Theme.* colour came out undefined (black on white)
+  // BLANK HUNT: pages built over several frames, as on a desktop (the offscreen platform has no frame-driven incubation: there an
+  // asynchronous page is built at once, and a page not yet shown could never be seen)
+  struct FrameIncubation : QQmlIncubationController { QTimer t; FrameIncubation() { t.setInterval(16); QObject::connect(&t, &QTimer::timeout, &t, [this] { incubateFor(4); }); t.start(); } };
+  std::unique_ptr<FrameIncubation> frameIncubation; if (bench && qEnvironmentVariableIsSet("AMIX_BENCH_BLANK")) { frameIncubation = std::make_unique<FrameIncubation>(); qml.setIncubationController(frameIncubation.get()); }
   qml.load(QUrl(QStringLiteral("qrc:/qt/qml/AmixOS/qml/Main.qml")));   // Qt 6.4 (loadFromModule is 6.5+)
   if (!qml.rootObjects().isEmpty()) graphics.attach(qobject_cast<QQuickWindow*>(qml.rootObjects().first()));
+  // THE WINDOW OPENS PLACED: built first (Main.qml starts hidden), then put centred on the work area of the screen under the mouse
+  // (the taskbar left out, in that monitor's own scale), or back where it was closed when that place is still on a connected screen
+  // (a monitor unplugged since: pulled onto a visible one), maximised when the designed size does not fit; only then shown
+  if (auto* win = qml.rootObjects().isEmpty() ? nullptr : qobject_cast<QQuickWindow*>(qml.rootObjects().first())) {
+    const bool offscreen = QGuiApplication::platformName() == QLatin1String("offscreen"), testRun = smoke || bench || !shots.isEmpty() || !film.isEmpty();
+    const bool placeTest = qEnvironmentVariableIsSet("AMIX_PLACE_TEST");   // the placement checked on the offscreen platform with simulated screens (its configfile)
+    const bool placeOff = qEnvironmentVariableIsSet("AMIX_PLACE_OFF");   // the window shown unplaced, as before (where the system puts a new window): the before / after of the placement check
+    if ((!offscreen || placeTest) && !placeOff) {
+      QScreen* home = QGuiApplication::screenAt(QCursor::pos()); if (!home) home = QGuiApplication::primaryScreen();
+      if (home && win->screen() != home) win->setScreen(home);
+      win->create(); const QMargins frame = win->frameMargins().isNull() ? QMargins(8, 31, 8, 8) : win->frameMargins();   // the frame is known once the native window exists
+      QList<QRect> areas; for (QScreen* sc : QGuiApplication::screens()) areas << sc->availableGeometry();
+      const QRect avail = home ? home->availableGeometry() : QRect(0, 0, 1920, 1040);
+      QSettings st; const QRect saved = testRun ? QRect() : st.value("window/geometry").toRect(); const bool wasMax = !testRun && st.value("window/maximized", false).toBool();
+      const QSize want(win->width(), win->height()), minimum(win->minimumWidth(), win->minimumHeight());
+      const QRect r = winplace::choose(want, minimum, saved, areas, avail, frame);
+      win->setGeometry(r);
+      const bool tooBig = want.width() + 24 > avail.width() || want.height() + 48 > avail.height();
+      if (wasMax || settings.uiZoom() == -1 || (!saved.isValid() && tooBig)) win->setVisibility(QWindow::Maximized); else win->setVisible(true);
+      // a window closed in its normal state is remembered there; maximised, the normal place it had before is kept
+      if (!testRun) QObject::connect(&app, &QCoreApplication::aboutToQuit, win, [win] { QSettings s; const bool mx = win->visibility() == QWindow::Maximized;
+        s.setValue("window/maximized", mx); if (!mx && win->visibility() != QWindow::Minimized && win->visibility() != QWindow::FullScreen) s.setValue("window/geometry", win->geometry()); });
+      // MOVED TO ANOTHER MONITOR (another scale), or the monitor it was on removed: kept on a visible screen and redrawn at once
+      QObject::connect(qApp, &QGuiApplication::screenRemoved, win, [win](QScreen*) { QTimer::singleShot(0, win, [win] {
+        if (win->visibility() != QWindow::Windowed || !win->screen()) return; const QRect a = win->screen()->availableGeometry();
+        if (!a.intersects(win->geometry())) win->setGeometry(winplace::centred(win->size(), a, win->frameMargins())); else win->setGeometry(winplace::clamp(win->geometry(), a, win->frameMargins(), win->minimumSize())); win->update(); }); });
+      if (placeTest) QTimer::singleShot(qEnvironmentVariableIntValue("AMIX_PLACE_TEST") > 1 ? qEnvironmentVariableIntValue("AMIX_PLACE_TEST") : 2500, &app, [win, &app] { const QRect g = win->geometry(), a = win->screen()->availableGeometry();
+        std::printf("amixos: PLACE window %d,%d %dx%d on screen %s (work area %d,%d %dx%d, scale %.2f), %s\n", g.x(), g.y(), g.width(), g.height(), qPrintable(win->screen()->name()), a.x(), a.y(), a.width(), a.height(), win->screen()->devicePixelRatio(),
+                    win->visibility() == QWindow::Maximized ? "maximised" : win->isVisible() ? "shown" : "hidden"); std::fflush(stdout); app.quit(); });
+    } else win->setVisible(true);
+    if (placeTest && placeOff) QTimer::singleShot(2500, &app, [win, &app] { const QRect g = win->geometry(), a = win->screen()->availableGeometry();
+      std::printf("amixos: PLACE (unplaced) window %d,%d %dx%d on screen %s (work area %d,%d %dx%d)\n", g.x(), g.y(), g.width(), g.height(), qPrintable(win->screen()->name()), a.x(), a.y(), a.width(), a.height()); std::fflush(stdout); app.quit(); });
+    // NEVER A BLANK WINDOW: a frame is asked for again when the window comes back from minimised, changes screen (another scale), or
+    // the graphics device was lost (a driver update, a GPU reset, remote desktop): then the scene's resources are dropped and rebuilt
+    // instead of the window staying empty
+    QObject::connect(win, &QWindow::visibilityChanged, win, [win](QWindow::Visibility v) { if (v != QWindow::Minimized && v != QWindow::Hidden) QTimer::singleShot(0, win, [win] { win->update(); }); });
+    QObject::connect(win, &QWindow::screenChanged, win, [win](QScreen*) { QTimer::singleShot(0, win, [win] { win->update(); }); });
+    QObject::connect(win, &QQuickWindow::sceneGraphError, win, [win](QQuickWindow::SceneGraphError, const QString& m) {
+      qWarning("amixos: the graphics device reported an error (%s); the interface is drawn again", qPrintable(m)); QTimer::singleShot(200, win, [win] { win->releaseResources(); win->update(); }); });
+  }
   if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
   // AUTO AUDIO INTERFACE: when an interface is plugged in (hot-plug) and the engine is idle, start it (the remembered device if it is the one, else AUTO DETECT)
   QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& what) { if (!added || engine.running() || !settings.autoStart()) return; QTimer::singleShot(1500, &app, [&] { if (!engine.running()) settings.startLastDevice(); }); qInfo("hot-plug: %s", qPrintable(what)); });
@@ -330,8 +380,87 @@ int main(int argc, char* argv[]) {
   }
   if (bench) {   // --bench: CPU time of the interface thread on the MIXER page, idle (meters running) and while faders move
     auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
+    // BLANK HUNT: every frame shown with no page on it (still building) is counted, and those with no sign of building either (a blank)
+    static int emptyFrames = 0, silentEmpty = 0, framesSeen = 0; static QMap<QString, int> silentOn;
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_BLANK")) { QQuickItem* busy = win->findChild<QQuickItem*>("pageBusy");
+      QObject::connect(win, &QQuickWindow::frameSwapped, win, [win, busy] { ++framesSeen; if (win->property("current").toString().isEmpty() || win->property("pageReady").toBool()) return;
+        ++emptyFrames; if (!busy || !busy->isVisible()) { ++silentEmpty; ++silentOn[win->property("current").toString()]; } }); }
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_LAG")) {   // INPUT LAG: a fader dragged with a 1000 Hz mouse, a button clicked, cached pages switched; each to the frame that shows it
+      std::function<QQuickItem*(QQuickItem*, const QString&)> walk = [&](QQuickItem* r, const QString& n) -> QQuickItem* { if (!r->isVisible()) return nullptr; if (r->objectName() == n && r->width() > 0) return r; for (QQuickItem* ch : r->childItems()) if (QQuickItem* f = walk(ch, n)) return f; return nullptr; };
+      auto find = [&](const char* name) { return walk(win->contentItem(), QString::fromLatin1(name)); };
+      auto post = [&](QEvent::Type ty, QPointF p, Qt::MouseButtons bs) { QCoreApplication::postEvent(win, new QMouseEvent(ty, p, p, win->mapToGlobal(p), Qt::LeftButton, bs, Qt::NoModifier)); };
+      qint64 swaps = 0; QElapsedTimer clk; clk.start(); qint64 lastSwap = 0; auto c = QObject::connect(win, &QQuickWindow::frameSwapped, win, [&] { ++swaps; lastSwap = clk.nsecsElapsed(); }, Qt::DirectConnection);
+      auto emitCost = [&] { waitMs(200); QElapsedTimer e; e.start(); for (int k = 0; k < 20; ++k) engine.setGain(3, -10.0 - k * 0.1); return e.nsecsElapsed() / 1e6 / 20; };
+      if (qEnvironmentVariableIsSet("AMIX_LAG_EACH")) { win->setProperty("current", "mixer"); waitMs(1500); std::printf("amixos --bench: LAG strip change, mixer only: %.2f ms\n", emitCost());
+        for (const char* pg : {"home", "asio", "dsp", "routing", "meter", "fx"}) { win->setProperty("current", QString::fromLatin1(pg)); waitMs(400); win->setProperty("current", "mixer"); std::printf("amixos --bench: LAG strip change, + %s cached: %.2f ms\n", pg, emitCost()); } }
+      for (const char* pg : {"home", "asio", "dsp", "routing", "meter", "fx"}) { win->setProperty("current", QString::fromLatin1(pg)); waitMs(400); }
+      win->setProperty("current", "mixer"); waitMs(1500);
+      if (QQuickItem* f = find("stripFader")) {
+        const QPointF top = f->mapToScene(QPointF(f->width() / 2, 20)), bot = f->mapToScene(QPointF(f->width() / 2, f->height() - 20));
+        const int t0 = engine.stripTick(); const double c0 = 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; const qint64 s0 = swaps;
+        double lagSum = 0, lagMax = 0, stall = 0; int lagN = 0, moves = 0; post(QEvent::MouseButtonPress, bot, Qt::LeftButton);
+        QElapsedTimer t; t.start(); qint64 last = 0, pending = -1;
+        while (t.elapsed() < 3000) {   // the mouse reports every millisecond; the event loop takes what it can
+          const double ph = std::fmod(t.elapsed() / 1500.0, 1.0); const double k = ph < 0.5 ? ph * 2 : 2 - ph * 2;
+          post(QEvent::MouseMove, bot + (top - bot) * k, Qt::LeftButton); ++moves; if (pending < 0) pending = clk.nsecsElapsed();
+          const qint64 before = lastSwap; QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+          if (lastSwap != before && pending >= 0) { const double l = (lastSwap - pending) / 1e6; lagSum += l; lagMax = std::max(lagMax, l); ++lagN; pending = -1; }
+          const qint64 now = t.elapsed(); stall = std::max(stall, double(now - last)); last = now; QThread::usleep(1000 - 0); }
+        post(QEvent::MouseButtonRelease, bot, Qt::NoButton); waitMs(300);
+        std::printf("amixos --bench: LAG fader drag 3 s, %d mouse moves at 1 kHz: %d engine strip updates, %lld frames, GUI CPU %.0f ms/s, input-to-frame mean %.1f ms / worst %.1f ms, longest event-loop stall %.1f ms\n",
+                    moves, engine.stripTick() - t0, swaps - s0, (1000.0 * double(std::clock()) / CLOCKS_PER_SEC - c0) / 3.0, lagN ? lagSum / lagN : 0.0, lagMax, stall);
+      } else { int n = 0, v = 0; for (QQuickItem* it : win->contentItem()->findChildren<QQuickItem*>()) { if (it->objectName() == "stripFader") { ++n; if (it->isVisible()) ++v; } } QObject* mp = win->findChild<QObject*>("mixerPage"); std::printf("amixos --bench: LAG no strip fader found (%d, %d visible; mixer page %p visible %d, current %s)\n", n, v, (void*)mp, mp ? mp->property("visible").toBool() : -1, qPrintable(win->property("current").toString())); }
+      if (QQuickItem* b = find("masterMuteBtn")) {
+        const QPointF p = b->mapToScene(QPointF(b->width() / 2, b->height() / 2)); double sum = 0, worst = 0;
+        for (int k = 0; k < 10; ++k) { const qint64 at = clk.nsecsElapsed(); post(QEvent::MouseButtonPress, p, Qt::LeftButton); post(QEvent::MouseButtonRelease, p, Qt::NoButton);
+          bool seen = false; qint64 shown = 0; const qint64 s0 = swaps; QElapsedTimer t; t.start();
+          while (t.elapsed() < 1000) { QCoreApplication::processEvents(QEventLoop::AllEvents, 1); if (!seen) { seen = true; win->update(); } if (seen && swaps > s0 && lastSwap > at) { shown = lastSwap; break; } }
+          const double ms = (shown - at) / 1e6; sum += ms; worst = std::max(worst, ms); waitMs(120); }
+        std::printf("amixos --bench: LAG button click to frame: mean %.1f ms, worst %.1f ms (10 clicks)\n", sum / 10, worst);
+      }
+      { double sum = 0, worst = 0; int n = 0;
+        for (int r = 0; r < 3; ++r) for (const char* pg : {"home", "asio", "dsp", "routing", "meter", "fx", "mixer"}) { const qint64 at = clk.nsecsElapsed(); win->setProperty("current", QString::fromLatin1(pg)); if (qEnvironmentVariableIsSet("AMIX_LAG_EACH")) std::printf("amixos --bench: LAG   switch %s: %.1f ms in the click itself\n", pg, (clk.nsecsElapsed() - at) / 1e6);
+          QElapsedTimer t; t.start(); bool ready = false; while (t.elapsed() < 2000) { ready = win->property("pageReady").toBool(); if (ready && lastSwap > at) break; if (ready) win->update(); QCoreApplication::processEvents(QEventLoop::AllEvents, 1); }
+          const double ms = (lastSwap - at) / 1e6; if (qEnvironmentVariableIsSet("AMIX_LAG_EACH")) std::printf("amixos --bench: LAG   switch %s: %.1f ms to the frame\n", pg, ms); if (r > 0) { sum += ms; worst = std::max(worst, ms); ++n; } waitMs(250); }
+        std::printf("amixos --bench: LAG cached page switch to frame: mean %.1f ms, worst %.1f ms (%d switches)\n", sum / std::max(1, n), worst, n); }
+      { QElapsedTimer g; g.start(); qml.collectGarbage(); std::printf("amixos --bench: LAG one JavaScript garbage collection %.1f ms\n", g.nsecsElapsed() / 1e6); }
+      { double c0 = 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; const qint64 s0 = swaps; waitMs(3000); std::printf("amixos --bench: LAG mixer idle: GUI CPU %.0f ms/s, %.0f frames/s\n", (1000.0 * double(std::clock()) / CLOCKS_PER_SEC - c0) / 3.0, (swaps - s0) / 3.0); }
+      QObject::disconnect(c); engine.stop(); return 0; }
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_BLANK")) {   // BLANK PAGE HUNT (with AMIX_ASYNC_PAGES=1, pages built over frames as on a desktop): fast page switches, minimise / restore and resizes; after each, the page shown must be drawn
+      // (a built page, fully opaque, with something on it) and a page held while hidden must show the engine's current state again
+      const int cycles = std::max(1, qEnvironmentVariableIntValue("AMIX_BENCH_BLANK")); QStringList ids; for (const QVariant& v : engine.pages()) ids << v.toMap().value("id").toString();
+      engine.open("null", "", "", 48000, 256, 2, 2); std::srand(7); int blank = 0, stale = 0, notReady = 0, checks = 0; QStringList bad;
+      auto shownLoader = [&]() -> QObject* { QObject* hit = nullptr; std::function<void(QQuickItem*)> walk = [&](QQuickItem* p) { for (QQuickItem* it : p->childItems()) {
+          if (!it->isVisible()) continue; if (it->inherits("QQuickLoader") && it->property("item").value<QObject*>() && it->width() > 300 && it->height() > 200 && it->z() < 100) { if (!hit) hit = it; continue; } walk(it); } };
+        walk(win->contentItem()); return hit; };
+      auto check = [&](const QString& why) {
+        const QString id = win->property("current").toString(); QElapsedTimer t; t.start(); while (!win->property("pageReady").toBool() && t.elapsed() < 4000) waitMs(10); waitMs(160);   // the fade-in done
+        ++checks; QObject* l = shownLoader(); auto* li = qobject_cast<QQuickItem*>(l); auto* item = l ? qobject_cast<QQuickItem*>(l->property("item").value<QObject*>()) : nullptr;
+        if (!win->property("pageReady").toBool() || !item) { ++notReady; bad << QString("%1 %2: no page built (status %3)").arg(why, id).arg(l ? l->property("status").toInt() : -1); return; }
+        const QImage img = win->grabWindow(); const QPointF tl = li->mapToScene(QPointF(0, 0)); const qreal d = img.devicePixelRatio();
+        const QRect area = QRectF(tl.x() * d, tl.y() * d, li->width() * d, li->height() * d).toRect().intersected(img.rect()); QSet<QRgb> colours;
+        for (int y = area.top(); y < area.bottom(); y += 3) for (int x = area.left(); x < area.right(); x += 3) colours.insert(img.pixel(x, y) & 0xF0F0F0);
+        const double op = li->opacity() * item->opacity();
+        if (colours.size() < 6 || op < 0.99 || !item->isVisible()) { ++blank; bad << QString("%1 %2: blank (%3 colours, opacity %4)").arg(why, id).arg(colours.size()).arg(op, 0, 'f', 2);
+          if (blank <= 3) img.save(QString("%1/blank-%2.png").arg(qEnvironmentVariable("AMIX_BENCH_BLANK_DIR", "/tmp"), id)); }
+        // held while hidden (the lag fix): shown again, the page's held tick is the engine's
+        if (item->property("sTick").isValid() && item->property("sTick").toInt() != engine.property("stripTick").toInt()) { ++stale; const int was = item->property("sTick").toInt(); waitMs(600); bad << QString("%1 %2: strip state not current (page %3, engine %4, after 600 ms %5, class %6)").arg(why, id).arg(was).arg(engine.property("stripTick").toInt()).arg(item->property("sTick").toInt()).arg(item->metaObject()->className()); }
+        if (item->property("mTick").isValid() && item->property("mTick").toInt() + 3 < engine.property("meterTick").toInt()) { ++stale; bad << why + " " + id + ": meters not current"; }
+      };
+      for (int c = 0; c < cycles; ++c) {
+        for (int k = 0; k < 6; ++k) { win->setProperty("current", ids[std::rand() % ids.size()]); waitMs(std::rand() % 40); }   // a burst of clicks on the rail
+        engine.setGain(std::rand() % 8, -30.0 + std::rand() % 36); engine.setName(std::rand() % 8, QString("CH %1").arg(c));   // the console changes behind the hidden pages
+        check("burst"); const int r = std::rand() % 3;
+        if (r == 0) { win->showMinimized(); waitMs(60); win->setProperty("current", ids[std::rand() % ids.size()]); waitMs(30); win->showNormal(); check("restore"); }
+        else if (r == 1) { win->resize(720 + std::rand() % 900, 480 + std::rand() % 500); waitMs(30); check("resize"); }
+        else { const QString back = win->property("current").toString(); win->setProperty("current", ids[std::rand() % ids.size()]); waitMs(20); win->setProperty("current", back); check("back"); }
+        if (c % 10 == 9) std::printf("amixos --bench: BLANK cycle %d: %d checks, %d blank, %d not built, %d stale\n", c + 1, checks, blank, notReady, stale); }
+      for (const QString& b : bad.mid(0, 30)) std::printf("amixos --bench: BLANK  %s\n", qPrintable(b));
+      for (auto it = silentOn.cbegin(); it != silentOn.cend(); ++it) std::printf("amixos --bench: BLANK  %s: %d frames with no page and no sign of building\n", qPrintable(it.key()), it.value());
+      std::printf("amixos --bench: BLANK %d cycles, %d checks: %d blank, %d not built, %d stale; %d of %d frames drawn with no page yet, %d of them with no sign of it building\n", cycles, checks, blank, notReady, stale, emptyFrames, framesSeen, silentEmpty);
+      engine.stop(); return blank || notReady || stale || silentEmpty ? 9 : 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_FRAMES")) {   // FRAME TIME: every page with the meters running, AMIX_BENCH_FRAMES ms each (default 3000)
       const int ms = std::max(500, qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") > 1 ? qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") : 3000);
       double sumMean = 0, worstP95 = 0, worstMax = 0; long frames = 0; int n = 0; QString worstId;
@@ -2041,6 +2170,46 @@ int main(int argc, char* argv[]) {
                       params, tools, qPrintable(ui.left(24)), ab, drag, raw, stopped, quiz, locked, learning, presets, trainOff, same);
           if (!params || !tools || !ab || !drag || !raw || !stopped || !quiz || !locked || !learning || !presets || !trainOff || !same) std::exit(827);
         } else { std::fprintf(stderr, "amixos --smoke: no plug-in editor\n"); std::exit(827); } }
+      { // NEVER BLANK, ALWAYS CENTRED: every page switched to has a built, opaque page with something drawn on it (also after a minimise
+        // and restore, and a resize); the window placement rules (work area without the taskbar, a saved place on a monitor that is gone,
+        // two screens, a window larger than the screen); the boxes centred and whole in a small window
+        auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); int empty = 0; QStringList emptyIds; const QSize was = win->size();
+        auto shown = [&]() -> QQuickItem* { QQuickItem* hit = nullptr; std::function<void(QQuickItem*)> walk = [&](QQuickItem* p) { for (QQuickItem* it : p->childItems()) {
+            if (!it->isVisible()) continue; if (it->inherits("QQuickLoader") && it->z() < 100 && it->width() > 300 && it->height() > 200) { if (!hit) hit = it; continue; } walk(it); } };
+          walk(win->contentItem()); return hit; };
+        auto drawn = [&](const QString& id) { QCoreApplication::processEvents(); QQuickItem* l = shown(); auto* item = l ? qobject_cast<QQuickItem*>(l->property("item").value<QObject*>()) : nullptr;
+          bool ok = l && item && item->isVisible() && l->opacity() > 0.99 && win->property("pageReady").toBool();
+          if (ok) { const QImage img = win->grabWindow(); const qreal d = img.devicePixelRatio(); const QPointF tl = l->mapToScene(QPointF(0, 0)); QSet<QRgb> c;
+            const QRect a = QRectF(tl.x() * d, tl.y() * d, l->width() * d, l->height() * d).toRect().intersected(img.rect());
+            for (int y = a.top(); y < a.bottom(); y += 4) for (int x = a.left(); x < a.right(); x += 4) c.insert(img.pixel(x, y) & 0xF0F0F0); ok = c.size() >= 6; }
+          if (!ok) { ++empty; emptyIds << id; } };
+        QStringList ids; for (const QVariant& v : engine.pages()) ids << v.toMap().value("id").toString();
+        for (const QString& id : ids) { win->setProperty("current", id); drawn(id); }
+        for (int k = 0; k < 3; ++k) { const QString id = ids[(k * 7) % ids.size()]; win->showMinimized(); QCoreApplication::processEvents(); win->setProperty("current", id); win->showNormal(); drawn(id + "/restored");
+          win->resize(720 + k * 300, 480 + k * 180); drawn(id + "/resized"); }
+        win->resize(was); win->setProperty("current", "mixer"); drawn("mixer/back");
+        using namespace winplace; const QMargins f(8, 31, 8, 8); const QSize want(1380, 860), mn(720, 480);
+        const QRect laptop(0, 0, 1536, 824);   // 1920 x 1080 at 125 %, the taskbar (40 px) left out
+        const QRect c1 = choose(want, mn, QRect(), {laptop}, laptop, f);
+        const bool centred = std::abs((c1.left() - f.left()) - (laptop.right() - (c1.right() + f.right()))) <= 1 && std::abs((c1.top() - f.top()) - (laptop.bottom() - (c1.bottom() + f.bottom()))) <= 1;
+        const QRect second(1536, -100, 1280, 800);   // a second monitor to the right, 150 %
+        const QRect gone = choose(want, mn, QRect(3000, 200, 1380, 860), {laptop}, laptop, f);   // closed on a monitor unplugged since
+        const QRect kept = choose(want, mn, QRect(1600, 0, 1000, 600), {laptop, second}, laptop, f);   // closed on the second monitor: stays there, whole
+        const QRect over = choose(want, mn, QRect(1200, 600, 1000, 700), {laptop}, laptop, f);   // hanging over the corner: pulled in
+        const QRect tiny = choose(want, mn, QRect(), {QRect(0, 0, 1024, 728)}, QRect(0, 0, 1024, 728), f);   // a small screen: fits it
+        const bool place = centred && laptop.contains(gone.adjusted(-8, -31, 8, 8)) && second.contains(kept.adjusted(-8, -31, 8, 8)) && kept.topLeft() == QPoint(1600, 0)
+                           && laptop.contains(over.adjusted(-8, -31, 8, 8)) && QRect(0, 0, 1024, 728).contains(tiny.adjusted(-8, -31, 8, 8)) && tiny.width() >= 720;
+        // THE BOXES in a small window: centred on it, and whole (drawn smaller when the window is smaller than they are)
+        win->resize(760, 500); QCoreApplication::processEvents(); int boxes = 0, offBoxes = 0; QStringList offNames;
+        for (const char* n : {"audioSettings", "volumeEnhancer", "masterAnalyzer", "aboutPop"}) { QObject* p = win->findChild<QObject*>(n); if (!p) continue; ++boxes;
+          QMetaObject::invokeMethod(p, "open"); waitMs(400); auto* pi = qobject_cast<QQuickItem*>(p->property("contentItem").value<QObject*>()); QQuickItem* bg = pi ? pi->parentItem() : nullptr;
+          if (!bg) { ++offBoxes; offNames << n; continue; } const QRectF r = bg->mapRectToScene(QRectF(0, 0, bg->width(), bg->height()));
+          const bool mid = std::abs(r.center().x() - win->width() / 2.0) <= 2 && std::abs(r.center().y() - win->height() / 2.0) <= 2, whole = r.left() >= -0.5 && r.top() >= -0.5 && r.right() <= win->width() + 0.5 && r.bottom() <= win->height() + 0.5;
+          if (!mid || !whole) { ++offBoxes; offNames << QString("%1 %2,%3 %4x%5").arg(n).arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height()); } QMetaObject::invokeMethod(p, "close"); waitMs(250); }
+        win->resize(was); QCoreApplication::processEvents();
+        std::printf("amixos --smoke: NEVER BLANK: %d pages + 3 minimise / restore + 3 resizes, %d empty%s%s; placement (centred on the work area, monitor gone, second monitor, over an edge, small screen) %d; %d boxes, %d off-centre or clipped%s%s\n",
+                    int(ids.size()), empty, empty ? ": " : "", qPrintable(emptyIds.join(' ')), place, boxes, offBoxes, offBoxes ? ": " : "", qPrintable(offNames.join("; ")));
+        if (empty || !place || boxes < 3 || offBoxes) std::exit(841); }
       std::printf("amixos --smoke: interface loaded, %s backend, %llu blocks in 1.2 s, xruns %llu, master %.1f dBFS, %d pages\n", qPrintable(engine.backend()), blocks, m.value("xruns").toULongLong(), m.value("masterPeakDb").toDouble(), engine.pageCount());
       arrange.newProject(); QFile::remove(smokeWav); QFile::remove(smokeOut);   // the smoke's demo arrangement is not kept
       for (int k = 0; k < 6; ++k) engine.setPlugin(0, k, "");

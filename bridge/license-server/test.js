@@ -308,8 +308,9 @@ test('staff sign-in, JWT, staff accounts and the CRM (encrypted at rest)', async
   try {
     // the pages: each with its own CSP naming only the CDN hosts it uses, files pinned by SRI
     const login = await fetch(base + '/admin/login'); const lh = await login.text();
-    assert.strictEqual(login.status, 200); assert.match(login.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.tailwindcss\.com\/3\.4\.16;/);
-    assert.match(lh, /cdn\.tailwindcss\.com\/3\.4\.16"/); assert.match(lh, /font-awesome\/6\.5\.2\/css\/all\.min\.css" integrity="sha384-/);
+    assert.strictEqual(login.status, 200); assert.match(login.headers.get('content-security-policy'), /script-src 'self';/);
+    assert.match(lh, /<script src="tailwind\.js"><\/script>/); assert.doesNotMatch(lh, /cdn\.tailwindcss\.com/);
+    const tw = await fetch(base + '/admin/tailwind.js'); assert.strictEqual(tw.status, 200); assert.ok((await tw.text()).length > 100000, 'the local Tailwind copy is served'); assert.match(lh, /font-awesome\/6\.5\.2\/css\/all\.min\.css" integrity="sha384-/);
     const crm = await fetch(base + '/admin/crm'); const ch = await crm.text();
     assert.match(crm.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.jsdelivr\.net\/npm\/bootstrap@5\.3\.3\/dist\/;/); assert.ok(!/unsafe-inline/.test(crm.headers.get('content-security-policy')));
     assert.match(ch, /bootstrap@5\.3\.3\/dist\/css\/bootstrap\.min\.css" integrity="sha384-/); assert.ok(!/style="/.test(ch), 'no inline style attributes under a CSP without unsafe-inline');

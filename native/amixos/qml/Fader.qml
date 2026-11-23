@@ -59,19 +59,28 @@ Item {
             Text { id: bubT; anchors.centerIn: parent; text: fader.value <= fader.from + 0.05 ? "-∞" : (fader.value > 0 ? "+" : "") + fader.value.toFixed(1) + " dB"; color: "#0b0f14"; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
     }
     Timer { id: bubbleT; interval: 900 }
+    // ONE ENGINE WRITE PER FRAME: a mouse reports up to 1000 times a second and each write updates every strip binding of the console, so a
+    // drag sends the first position at once and then the latest one every 16 ms (the cap itself follows every report); the release, a
+    // double click and the wheel send at once, so the last value always reaches the engine
+    property real pendingDb: NaN
+    function send(v) { if (sendT.running) { pendingDb = v; return } pendingDb = NaN; fader.moved(v); sendT.start() }
+    function flush() { sendT.stop(); if (!isNaN(pendingDb)) { const v = pendingDb; pendingDb = NaN; fader.moved(v) } }
+    Timer { id: sendT; interval: 16; onTriggered: if (!isNaN(fader.pendingDb)) { const v = fader.pendingDb; fader.pendingDb = NaN; fader.moved(v); sendT.start() } }
     MouseArea {
         id: drag
         enabled: !access.surfaceLocked   // ACCOUNT > LOCK CONSOLE: the surface is read-only until the PIN
         anchors.fill: parent
         property real y0: 0; property real v0: 0
         // a plain drag follows the pointer (and catches at 0 dB); with SHIFT held the fader moves finely: 1 dB for 50 pixels, from where it was
-        onPressed: function (m) { y0 = m.y; v0 = fader.value; if (m.modifiers & Qt.ShiftModifier) return; var v = fader.dbAt(m.y); fader.value = v; fader.moved(v) }
+        onPressed: function (m) { y0 = m.y; v0 = fader.value; if (m.modifiers & Qt.ShiftModifier) return; var v = fader.dbAt(m.y); fader.value = v; fader.send(v) }
         onPositionChanged: function (m) { if (!pressed) return; var v
             if (m.modifiers & Qt.ShiftModifier) v = Math.max(fader.from, Math.min(fader.to, Math.round((v0 + (y0 - m.y) / 50) * 10) / 10))
             else { v = fader.dbAt(m.y); if (Math.abs(v) < 0.4) v = 0; y0 = m.y; v0 = v }
-            fader.value = v; fader.moved(v) }
-        onDoubleClicked: { fader.value = 0; fader.moved(0) }
+            fader.value = v; fader.send(v) }
+        onReleased: fader.flush()
+        onCanceled: fader.flush()
+        onDoubleClicked: { fader.flush(); fader.value = 0; fader.moved(0) }
         // the wheel: half a dB a notch, a tenth with SHIFT
-        onWheel: function (w) { var st = (w.modifiers & Qt.ShiftModifier) ? 0.1 : 0.5; var v = Math.max(fader.from, Math.min(fader.to, Math.round((fader.value + (w.angleDelta.y > 0 ? st : -st)) * 10) / 10)); fader.value = v; fader.moved(v); bubbleT.restart() }
+        onWheel: function (w) { var st = (w.modifiers & Qt.ShiftModifier) ? 0.1 : 0.5; var v = Math.max(fader.from, Math.min(fader.to, Math.round((fader.value + (w.angleDelta.y > 0 ? st : -st)) * 10) / 10)); fader.flush(); fader.value = v; fader.moved(v); bubbleT.restart() }
     }
 }

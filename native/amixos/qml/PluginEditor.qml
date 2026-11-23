@@ -71,7 +71,8 @@ Popup {
     DynEqEditor { id: dynEd; parent: ed.parent }   // the AmF DYNAMIC EQ has its own editor (curve, spectrum, nodes)
     function openFor(strip_, slot_, kind_, title_) { if (kind_ === "fx:dyneq") { dynEd.openFor(strip_, slot_, title_); return } nativeNote = ""; strip = strip_; slot = slot_; kind = kind_; title = title_; presets = engine.rackPresets(kind_); presetAt = -1; stateA = null; stateB = null; side = "A"; wTrainStop(); quizScore = 0; quizTotal = 0; quizNote = ""; reload(); abLoad(); x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2); open() }
     function recentre() { if (visible && parent) { x = Math.max(4, (parent.width - width) / 2); y = Math.max(4, (parent.height - height) / 2) } }
-    onWidthChanged: recentre(); onHeightChanged: recentre()
+    onWidthChanged: recentre(); onHeightChanged: recentre(); onOpened: recentre()
+    Connections { target: ed.parent; ignoreUnknownSignals: true; function onWidthChanged() { ed.recentre() } function onHeightChanged() { ed.recentre() } }   // the window resized: still centred
     function reload() { params = engine.pluginParams(strip, slot); const p = engine.plugins(strip)[slot]; bypass = p ? p.bypass : false; rev++ }
     function setParam(i, v) { engine.setPluginParam(strip, slot, params[i].id, v); const t = engine.pluginParams(strip, slot); if (t.length === params.length) params = t; presetAt = -1 }
     // the printed ends of a knob's scale: what the plug-in itself calls its lowest and highest position, without the unit when both share it

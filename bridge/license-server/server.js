@@ -579,14 +579,17 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   // key traded for the licence key, the downloads. Public files; everything it shows comes from /status, /deactivate, /redeem and /portal/*
   const account = path.join(__dirname, '..', '..', 'management', 'customer');
   app.get('/account', c => c.send(301, '', { location: '/account/' }));
-  let accountPage = null;   // one inline file (Tailwind Play CDN + its script): the CSP allows that script by its hash only
+  let accountPage = null;   // one inline file (Tailwind + its script): the CSP allows that script by its hash, tailwind.js by 'self'
+  const tailwindFile = path.join(__dirname, 'dashboard', 'vendor', 'tailwindcss-play-3.4.16.js');   // a pinned local copy: no third-party script at run time
+  app.static({ '/account/tailwind.js': [tailwindFile, 'text/javascript; charset=utf-8'] });
   app.get('/account/', c => { if (!accountPage) accountPage = require('../../management/inline-page').inlinePage(path.join(account, 'index.html'));
     return c.send(200, accountPage.body, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': accountPage.csp }); });
   // the management page: three fixed files; it asks for the token itself, so the files carry nothing secret
   const dash = path.join(__dirname, 'dashboard');
-  // the staff pages load pinned CDN files (Tailwind Play CDN, Bootstrap, Font Awesome) checked by their SRI hash; each page gets a CSP naming exactly those hosts
+  // the staff pages load pinned CDN files (Bootstrap, Font Awesome) checked by their SRI hash; each page gets a CSP naming exactly those hosts.
+  // Tailwind (sign-in page) is served from here (/admin/tailwind.js): its CDN cannot be checked with SRI (no CORS), so it is never loaded from there
   const CDN_CSP = {
-    login: "default-src 'none'; script-src 'self' https://cdn.tailwindcss.com/3.4.16; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    login: "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     crm: "default-src 'none'; script-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/; style-src 'self' https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/ https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; font-src https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   };
   const page = (file, csp) => c => { let data; try { data = fs.readFileSync(path.join(dash, file)); } catch (_) { throw new HttpError(404, 'not found'); } return c.send(200, data, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': csp }); };
@@ -594,7 +597,7 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   app.get('/admin/crm', page('crm.html', CDN_CSP.crm));
   app.get('/admin/system', page('system.html', CDN_CSP.crm));
   app.get('/admin/website', page('website.html', CDN_CSP.crm));
-  app.static({ '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'], '/admin/system.js': [path.join(dash, 'system.js'), 'text/javascript; charset=utf-8'], '/admin/website.js': [path.join(dash, 'website.js'), 'text/javascript; charset=utf-8'] });
+  app.static({ '/admin/tailwind.js': [tailwindFile, 'text/javascript; charset=utf-8'], '/admin/login.js': [path.join(dash, 'login.js'), 'text/javascript; charset=utf-8'], '/admin/crm.js': [path.join(dash, 'crm.js'), 'text/javascript; charset=utf-8'], '/admin/system.js': [path.join(dash, 'system.js'), 'text/javascript; charset=utf-8'], '/admin/website.js': [path.join(dash, 'website.js'), 'text/javascript; charset=utf-8'] });
   app.get('/admin', c => c.send(301, '', { location: '/admin/' }));
   app.static({ '/admin/': [path.join(dash, 'index.html'), 'text/html; charset=utf-8'], '/admin/app.js': [path.join(dash, 'app.js'), 'text/javascript; charset=utf-8'], '/admin/style.css': [path.join(dash, 'style.css'), 'text/css; charset=utf-8'] });
   return http.createServer(app.handler);

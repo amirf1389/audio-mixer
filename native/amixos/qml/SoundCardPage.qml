@@ -10,7 +10,10 @@ Item {
     // AUDIO ACCESS changed: restart a running sound card under the new rule (what SOFT RESTART does); a stopped one is not started
     function applyAccess() { if (engine.running) { const w = page.Window.window; if (w && w.softRestart) w.softRestart(); else { engine.stop(); settings.startLastDevice() } } else engine.refreshDevices() }
     objectName: "soundCardPage"
-    readonly property var tel: engine.telemetry
+    // the telemetry only while the page is shown (it converts the whole map on every meter update, and this page is built ahead, behind
+    // the mixer); hidden, the last reading is kept
+    property var tel: ({ loadPct: 0, blockUs: 0, maxBlockUs: 0, jitterUs: 0, xruns: 0, blocks: 0 })
+    Binding on tel { when: page.visible; value: engine.telemetry; restoreMode: Binding.RestoreNone }
     readonly property var last: settings.lastDevice
     property var plan: []
     property string rateNote: ""

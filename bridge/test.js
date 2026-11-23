@@ -3829,7 +3829,7 @@ test('OTA server: the staff sign-in shared with the licence server opens the adm
   const plain = createOta({ dataDir: path.join(tmp, 'data2'), token: 'secret-token-1234567890', jwk, allowHttp: true }), s2 = http.createServer(plain.handler);
   await new Promise(r => s2.listen(0, '127.0.0.1', r)); const base2 = `http://127.0.0.1:${s2.address().port}`;
   try {
-    const page = await fetch(base + '/admin/login'); assert.strictEqual(page.status, 200); assert.match(page.headers.get('content-security-policy'), /cdn\.tailwindcss\.com/);
+    const page = await fetch(base + '/admin/login'); assert.strictEqual(page.status, 200); assert.match(page.headers.get('content-security-policy'), /script-src 'self';/); assert.strictEqual((await fetch(base + '/admin/tailwind.js')).status, 200);
     assert.strictEqual((await fetch(base + '/admin/login.js')).status, 200);
     const bad = await fetch(base + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ops@amfb.my', password: 'wrong wrong wrong' }) }); assert.strictEqual(bad.status, 401);
     const li = await (await fetch(base + '/admin/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ops@amfb.my', password: 'a long staff password' }) })).json();

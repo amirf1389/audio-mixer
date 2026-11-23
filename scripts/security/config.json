@@ -1,0 +1,60 @@
+{
+  "_comment": "Security audit settings. Every entry here is an explicit, reviewed exception or expectation: keep a reason on each. Do not add entries to make the audit pass without fixing the cause.",
+
+  "publicKeys": [
+    {
+      "name": "vendor licence / update / preset-pack verification key (P-256, public half only)",
+      "x": "qs3G8HQmgXrE0oAJn9Vj9jNg15YaPWuclESZ01899Fw",
+      "y": "sugiBjJ1wcFHZRerQRq4VMEFSWrGDc6ts9cnD0x-_i0",
+      "mustBePinnedIn": [
+        "bridge/license-public.json",
+        "npm-installer/lib/public-key.json",
+        "engine/cpp/app/license/license.cpp",
+        "android/app/src/main/java/com/amfb/amixos/PresetPack.kt"
+      ]
+    }
+  ],
+
+  "secretAllow": [
+    { "path": "native/asio/src/examples/**", "reason": "upstream asio (Boost licence) SSL example certificates and keys for its demo programs; not ours, never shipped, never used by any build target" },
+    { "path": "native/asio/src/tests/**", "reason": "upstream asio unit-test material" }
+  ],
+
+  "signatureVerifiers": [
+    { "file": "bridge/update.js", "title": "desktop update manifest is verified (ECDSA P-256 / SHA-256) with the pinned vendor key", "must": ["crypto\\.verify\\(\\s*'sha256'", "PUBLIC_JWK"] },
+    { "file": "bridge/license.js", "title": "licence keys are verified with the pinned vendor key", "must": ["license-public\\.json", "verify"] },
+    { "file": "engine/cpp/app/license/license.cpp", "title": "console (C++) verifies licences with the pinned vendor key", "must": ["kVendorJwk", "[Vv]erify"] },
+    { "file": "android/app/src/main/java/com/amfb/amixos/PresetPack.kt", "title": "Android verifies signed manifests (SHA256withECDSA) with the pinned key", "must": ["SHA256withECDSA", "initVerify", "VENDOR_X"] },
+    { "file": "android/app/src/main/java/com/amfb/amixos/AppUpdater.kt", "title": "Android self-update: signed manifest + sha256 of the APK before PackageInstaller", "must": ["verifiedManifest\\(", "sha256", "PackageInstaller"] },
+    { "file": "native/amixos/src/Update.cpp", "title": "console updater verifies update.json (ECDSA P-256, pinned kVendorJwk) and the sha256 of the download", "must": ["ecdsaP256Verify", "kVendorJwk", "sha256"] },
+    { "file": "engine/cpp/app/win_tools.cpp", "title": "Windows updater tool verifies the manifest signature (fails closed without the key)", "must": ["verifySignature", "sig\\.size\\(\\) != 64"] },
+    { "file": "npm-installer/lib/manifest.js", "title": "npm installer verifies the signed manifest with the pinned key", "must": ["public-key\\.json|PUBLIC", "verify"] },
+    { "file": "client/verify.js", "title": "command-line client verifies downloads", "must": ["verify|sha256"] }
+  ],
+
+  "signers": [
+    { "file": "scripts/license.js", "title": "the vendor private key lives outside the repository (~/.audio-mixer-vendor or AUDIO_MIXER_VENDOR_DIR)", "must": ["homedir\\(\\)", "AUDIO_MIXER_VENDOR_DIR"] },
+    { "file": "scripts/make-update.js", "title": "update.json is signed with the key from the vendor folder", "must": ["signManifest", "vendorDir"] }
+  ],
+
+  "vendored": [
+    { "path": "native/asio", "name": "asio (standalone)", "licence": "Boost Software License 1.0" },
+    { "path": "drivers/vst3/sdk", "name": "Steinberg VST 3 SDK interfaces", "licence": "Steinberg VST3 licence / GPLv3 dual" },
+    { "path": "drivers/asio/sdk", "name": "Steinberg ASIO SDK headers", "licence": "Steinberg ASIO licence agreement", "licenceFile": "Steinberg ASIO Licensing Agreement.pdf" },
+    { "path": "engine/cpp/app/hires/flac", "name": "libFLAC", "licence": "Xiph BSD-3-Clause" },
+    { "path": "engine/cpp/app/hires/r8brain", "name": "r8brain-free-src", "licence": "MIT" },
+    { "path": "engine/cpp/app/hires/soxr", "name": "libsoxr", "licence": "LGPL-2.1" },
+    { "path": "engine/cpp/app/hires/dr", "name": "dr_libs (dr_wav, dr_flac)", "licence": "Public domain / MIT-0", "inlineLicence": true },
+    { "path": "engine/cpp/app/qr", "name": "QR Code generator (Nayuki)", "licence": "MIT" },
+    { "path": "bridge/license-server/dashboard/vendor", "name": "Tailwind CSS Play CDN build 3.4.16 (served locally to the staff / customer pages)", "licence": "MIT" }
+  ],
+
+  "networkFiles": {
+    "_comment": "extra files to treat as network servers even when the generic detection misses them",
+    "cpp": ["engine/cpp/app/daemon/httpd.cpp", "engine/cpp/app/daemon/daemon.cpp", "engine/cpp/app/net/sock.cpp"]
+  },
+
+  "publicWebRoots": ["deploy/website"],
+
+  "clangTidyFocus": ["engine/cpp/app/daemon", "engine/cpp/app/net", "engine/cpp/app/license"]
+}
