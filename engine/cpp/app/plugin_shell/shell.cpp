@@ -53,6 +53,12 @@ std::string modulePath() {
 }
 const am::shell::Design& design() {
   static am::shell::Design d; static std::once_flag once;
+#ifdef AMF_SHELL_BUILTIN
+  // a product plug-in built from this shell with one fixed design (AMF_SHELL_BUILTIN = the effect kind): every knob of the block exposed
+  std::call_once(once, [] { d.name = AMF_SHELL_NAME; d.uid = AMF_SHELL_UID; d.category = AMF_SHELL_CATEGORY; d.version = "1.0.0"; d.blocks.push_back({AMF_SHELL_BUILTIN, {}});
+    if (auto e = am::fx::make(AMF_SHELL_BUILTIN, 48000)) for (const auto& p : e->params()) d.params.push_back({p.title, p.id, 0, p.def}); });
+  return d;
+#endif
   std::call_once(once, [] {
     std::string p = modulePath(); for (int up = 0; up < 2; ++up) { const auto s = p.find_last_of('/'); if (s != std::string::npos) p.resize(s); }   // -> <bundle>/Contents
     std::ifstream f(p + "/Resources/design.json", std::ios::binary); std::stringstream ss; ss << f.rdbuf(); std::string err;
@@ -95,7 +101,7 @@ class Shell : public IComponent, public IAudioProcessor, public IEditController 
   }
   tresult PLUGIN_API getBusArrangement(BusDirection, int32 i, SpeakerArrangement& a) override { if (i != 0) return kResultFalse; a = channels_ == 1 ? SpeakerArr::kMono : SpeakerArr::kStereo; return kResultOk; }
   tresult PLUGIN_API canProcessSampleSize(int32 s) override { return s == kSample32 ? kResultOk : kResultFalse; }
-  uint32 PLUGIN_API getLatencySamples() override { return 0; }
+  uint32 PLUGIN_API getLatencySamples() override { return latency_; }
   tresult PLUGIN_API setupProcessing(ProcessSetup& s) override { build(s.sampleRate); scratch_.assign(2 * static_cast<std::size_t>(std::max(1, s.maxSamplesPerBlock)), 0.f); return kResultOk; }   // allocation here, never in process()
   tresult PLUGIN_API setProcessing(TBool) override { return kResultOk; }
   tresult PLUGIN_API process(ProcessData& data) override {
@@ -109,7 +115,7 @@ class Shell : public IComponent, public IAudioProcessor, public IEditController 
     const float* inL = data.numInputs > 0 && data.inputs && data.inputs[0].numChannels > 0 ? data.inputs[0].channelBuffers32[0] : nullptr;
     const float* inR = data.numInputs > 0 && data.inputs && data.inputs[0].numChannels > 1 ? data.inputs[0].channelBuffers32[1] : inL;
     for (int32 i = 0; i < n; ++i) { L[i] = inL ? inL[i] : 0.f; if (R) R[i] = inR ? inR[i] : 0.f; }
-    if (bypass_) return kResultOk;
+    if (bypass_ && !latency_) return kResultOk;   // a latent chain (DE-HISS) is bypassed inside its blocks: the delay stays the same
     float* r = R; if (!r) { if (scratch_.size() < static_cast<std::size_t>(n)) return kResultOk; r = scratch_.data(); std::memcpy(r, L, sizeof(float) * static_cast<std::size_t>(n)); }   // mono: the chain runs on a copy as the right side
     for (auto& e : fx_) e->process(L, r, static_cast<std::size_t>(n));
     return kResultOk;
@@ -133,20 +139,21 @@ class Shell : public IComponent, public IAudioProcessor, public IEditController 
   ParamValue PLUGIN_API plainParamToNormalized(ParamID, ParamValue v) override { return v; }
   ParamValue PLUGIN_API getParamNormalized(ParamID id) override { if (id == kBypassId) return bypass_ ? 1.0 : 0.0; return id < nv_ ? values_[id].load() : 0.0; }
   tresult PLUGIN_API setParamNormalized(ParamID id, ParamValue v) override {
-    if (id == kBypassId) { bypass_ = v >= 0.5; return kResultOk; } if (id >= nv_) return kResultFalse;
+    if (id == kBypassId) { bypass_ = v >= 0.5; if (latency_) for (auto& e : fx_) e->setBypass(bypass_); return kResultOk; } if (id >= nv_) return kResultFalse;
     values_[id] = std::clamp(v, 0.0, 1.0); push(static_cast<int>(id)); return kResultOk;
   }
   tresult PLUGIN_API setComponentHandler(IComponentHandler*) override { return kResultOk; }
   IPlugView* PLUGIN_API createView(FIDString) override { return nullptr; }   // the DAW's own parameter editor shows the knobs
  private:
   void build(double fs) {   // the chain at this rate, the fixed settings, then the exposed knobs
-    fx_.clear();
-    for (const auto& b : d_.blocks) { auto e = am::fx::make(b.kind, fs); if (!e) continue; for (const auto& [k, v] : b.set) e->set(k, v); fx_.push_back(std::move(e)); }
+    fx_.clear(); latency_ = 0;
+    for (const auto& b : d_.blocks) { auto e = am::fx::make(b.kind, fs); if (!e) continue; for (const auto& [k, v] : b.set) e->set(k, v); latency_ += e->latencySamples(); fx_.push_back(std::move(e)); }
+    if (latency_) for (auto& e : fx_) e->setBypass(bypass_);
     for (std::size_t i = 0; i < d_.params.size(); ++i) push(static_cast<int>(i));
   }
   void push(int i) { const auto& pa = d_.params[static_cast<std::size_t>(i)]; if (pa.block < static_cast<int>(fx_.size())) fx_[static_cast<std::size_t>(pa.block)]->set(pa.id, values_[static_cast<std::size_t>(i)].load()); }   // Effect::set is lock-free
   const am::shell::Design& d_; std::vector<std::unique_ptr<am::fx::Effect>> fx_; std::unique_ptr<std::atomic<double>[]> values_; std::size_t nv_ = 0;   // atomics: the DAW sets them from its threads, the audio thread reads
-  std::vector<float> scratch_; std::atomic<uint32> refs_{1}; std::atomic<bool> bypass_{false}; int channels_ = 2;
+  std::vector<float> scratch_; std::atomic<uint32> refs_{1}; std::atomic<bool> bypass_{false}; int channels_ = 2; uint32 latency_ = 0;
 };
 
 class Factory : public IPluginFactory2 {

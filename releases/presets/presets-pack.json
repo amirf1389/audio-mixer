@@ -1,6 +1,6 @@
 {
- "version": "2026.11.22",
- "generated": "2026-11-22",
+ "version": "2026.11.23",
+ "generated": "2026-11-23",
  "mastering": [
   {
    "name": "AMFB SIGNATURE",
@@ -8941,6 +8941,70 @@
     "b3_thresh": 1,
     "b3_type": 0.8333333333333334,
     "mix": 1
+   }
+  },
+  {
+   "category": "De-Hiss",
+   "id": 615,
+   "kind": "dehiss",
+   "name": "DE-HISS TAPE HISS",
+   "values": {
+    "attack": 0.3494850021680094,
+    "auto": 1,
+    "freq": 0.7253637530185604,
+    "hfonly": 0,
+    "mix": 1,
+    "reduce": 0.35,
+    "release": 0.5880456295278406,
+    "thresh": 0.5
+   }
+  },
+  {
+   "category": "De-Hiss",
+   "id": 616,
+   "kind": "dehiss",
+   "name": "DE-HISS MIC PREAMP HISS",
+   "values": {
+    "attack": 0.4515449934959717,
+    "auto": 1,
+    "freq": 0.6250204211305667,
+    "hfonly": 0,
+    "mix": 1,
+    "reduce": 0.25,
+    "release": 0.6505149978319905,
+    "thresh": 0.4166666666666667
+   }
+  },
+  {
+   "category": "De-Hiss",
+   "id": 617,
+   "kind": "dehiss",
+   "name": "DE-HISS CASSETTE",
+   "values": {
+    "attack": 0.30102999566398114,
+    "auto": 1,
+    "freq": 0.6989700043360189,
+    "hfonly": 1,
+    "mix": 1,
+    "reduce": 0.45,
+    "release": 0.5395906230238123,
+    "thresh": 0.5833333333333334
+   }
+  },
+  {
+   "category": "De-Hiss",
+   "id": 618,
+   "kind": "dehiss",
+   "name": "DE-HISS LIGHT",
+   "values": {
+    "attack": 0.5,
+    "auto": 1,
+    "freq": 0.7670099985546603,
+    "hfonly": 1,
+    "mix": 1,
+    "reduce": 0.15,
+    "release": 0.6989700043360187,
+    "thresh": 0.375
    }
   }
  ],

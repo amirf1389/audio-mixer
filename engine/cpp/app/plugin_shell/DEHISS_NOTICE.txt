@@ -1,0 +1,8 @@
+AmF DE-HISS (VST3) - spectral hiss removal by AMFB Audio, part of AmF X1.
+
+The DSP (STFT noise reduction) and the plug-in code are AMFB Audio's own work.
+
+VST is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.
+This plug-in is built against the Steinberg VST3 interface headers (pluginterfaces), used under the
+Steinberg VST3 License (the alternative GPL v3 licence of the SDK is not used). The SDK licence text is
+included next to this file as VST3_SDK_LICENSE.txt; see also www.steinberg.net/sdklicenses_vst3
