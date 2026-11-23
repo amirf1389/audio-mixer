@@ -258,6 +258,7 @@ int main(int argc, char* argv[]) {
   qml.rootContext()->setContextProperty("appVersion", QStringLiteral(AMIX_VERSION));
   qml.rootContext()->setContextProperty("buildStamp", QStringLiteral(AMIX_BUILD_STAMP));   // when this build was made (UTC)
   qml.rootContext()->setContextProperty("noBoot", smoke);
+  qml.rootContext()->setContextProperty("quietToasts", bench && qEnvironmentVariableIsSet("AMIX_BENCH_FIT"));   // FIT bench: the toasts (transient overlays) are not part of any page layout
   qml.rootContext()->setContextProperty("pageCacheOff", qEnvironmentVariable("AMIX_PAGE_CACHE") == "0");   // the page cache off: the before/after of the SWITCH bench
   qml.rootContext()->setContextProperty("asyncPages", !smoke || qEnvironmentVariableIsSet("AMIX_ASYNC_PAGES"));   // pages build without blocking the click (the tests: synchronous, unless asked)
   QObject::connect(&qml, &QQmlApplicationEngine::objectCreationFailed, &app, [] { std::fprintf(stderr, "amixos: the interface could not be created\n"); QCoreApplication::exit(2); }, Qt::QueuedConnection);

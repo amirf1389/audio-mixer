@@ -55,12 +55,14 @@ Item {
     onUpdStateChanged: if (updState === "available" || updState === "downloaded") push("update", i18n.t("Update ready: ", i18n.lang) + updater.latest)
     Component.onCompleted: if (updater.newFeatures > 0) push("new", i18n.t("What's new: ", i18n.lang) + updater.newFeatures + i18n.t(" new features", i18n.lang))
     // the toasts
-    Column { id: toastCol; objectName: "noticeToasts"; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 16; spacing: 6; z: 90
+    Popup { id: toastPop; visible: toasts.count > 0 && !quietToasts; closePolicy: Popup.NoAutoClose; modal: false; focus: false; padding: 0; background: null   // an overlay, like the menus: over the page, not part of it
+        x: nc.width - width - 16; y: nc.height - height - 16; width: toastCol.width; height: toastCol.height
+    Column { id: toastCol; objectName: "noticeToasts"; spacing: 6
         Repeater { model: toasts
             Rectangle { width: Math.min(360, nc.width - 32); height: tt.implicitHeight + 16; radius: 8; color: Theme.cardSolid; border.color: nc.kindColor(model.kind); border.width: 1.5
                 Rectangle { width: 4; height: parent.height - 10; y: 5; x: 5; radius: 2; color: nc.kindColor(model.kind) }
                 Text { id: tt; x: 16; width: parent.width - 24; anchors.verticalCenter: parent.verticalCenter; text: model.text; color: Theme.ink; wrapMode: Text.WordWrap; font.family: Theme.mono; font.pixelSize: 10; font.bold: true }
-                MouseArea { anchors.fill: parent; onClicked: { toasts.remove(index); nc.toggle() } } } } }
+                MouseArea { anchors.fill: parent; onClicked: { toasts.remove(index); nc.toggle() } } } } } }
     // the history
     Popup { id: panel; objectName: "noticePanel"; x: nc.width - width - 12; y: 52; width: Math.min(380, nc.width - 24); height: Math.min(420, nc.height - 80); padding: 10
         background: Rectangle { radius: 8; color: Theme.cardSolid; border.color: Theme.line }
