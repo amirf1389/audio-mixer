@@ -22,6 +22,12 @@ std::string fingerprint(const Jwk& k);                   // "3D0E-717F-366A-EA41
 struct Plan { const char* id; const char* name; int channels; int rank; };
 const Plan* plan(const std::string& id);                 // nullptr for an unknown plan
 const Plan& basic();
+// DCA GROUPS BY EDITION: BASIC 1, PRO 4, STUDIO / MASTER / ULTIMATE all 8. Only the plan the licence check returned counts.
+inline int dcaLimit(const std::string& planId) {
+  if (planId == "pro") return 4;
+  if (planId == "studio" || planId == "master" || planId == "ultimate") return 8;
+  return 1;
+}
 
 struct Verdict {
   bool ok = false;

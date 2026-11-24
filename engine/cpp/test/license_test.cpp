@@ -13,6 +13,8 @@
 using namespace am;
 
 int main(int argc, char** argv) {
+  { using am::lic::dcaLimit; if (dcaLimit("basic") != 1 || dcaLimit("pro") != 4 || dcaLimit("studio") != 8 || dcaLimit("master") != 8 || dcaLimit("ultimate") != 8 || dcaLimit("") != 1 || dcaLimit("PRO") != 1) { std::printf("license_test: DCA limits by edition FAILED\n"); return 1; } }
+
   // hashes
   { const char* m = "abc"; const auto h = crypto::sha256(reinterpret_cast<const std::uint8_t*>(m), 3); CHECK(crypto::hex(h.data(), 32, false) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     const auto s1 = crypto::sha1(reinterpret_cast<const std::uint8_t*>(m), 3); CHECK(crypto::hex(s1.data(), 20, false) == "a9993e364706816aba3e25717850c26c9cd0d89d");

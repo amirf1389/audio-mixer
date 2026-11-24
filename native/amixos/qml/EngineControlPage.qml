@@ -77,6 +77,11 @@ Flickable {
             RowLayout { spacing: 6
                 Btn { objectName: "ecCheck"; label: i18n.t("CHECK NOW", i18n.lang); on: true; onClicked: updater.check() }
                 Btn { label: i18n.t("ADMIN", i18n.lang); onClicked: page.Window.window.current = "admin" } }
+            // UPDATE SOURCE: the public OTA server by default; an OTA server on this computer as an option. The same signed list either way.
+            RowLayout { spacing: 6
+                Text { text: i18n.t("UPDATE SOURCE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                Btn { objectName: "ecSrcPublic"; label: i18n.t("PUBLIC OTA SERVER", i18n.lang); on: updater.source === "public"; tone: Theme.emerald; onClicked: { updater.useSource("public"); linkIn.text = updater.url } }
+                Btn { objectName: "ecSrcLocal"; label: i18n.t("LOCAL SERVER (THIS COMPUTER)", i18n.lang); on: updater.source === "local"; onClicked: { updater.useSource("local"); linkIn.text = updater.url } } }
             Text { text: i18n.t("UPDATE SERVER LINK", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
             RowLayout { spacing: 6
                 Field { id: linkIn; objectName: "ecLink"; Layout.fillWidth: true; implicitHeight: 26; text: updater.url; font.family: Theme.mono; font.pixelSize: 8; selectByMouse: true }

@@ -87,6 +87,7 @@
 #include "Waterfall.h"
 #include <QtQml/qqml.h>
 #include "license/license.hpp"
+#include "update_logic.hpp"
 #include "I18n.h"
 
 // real time passes (processEvents alone returns at once when the queue is empty)
@@ -1445,6 +1446,11 @@ int main(int argc, char* argv[]) {
       { // the update link is open to any https host (and to nothing else); the licence server takes https or this computer; a product key needs 25 characters and a server
         const QString keepUrl = update.url(), keepLic = update.licenseServer();
         if (update.setServerLink("http://updates.example.org/update.json") || update.setServerLink("https://user@updates.example.org/x") || !update.setServerLink("https://updates.example.org/amfx1/update.json") || update.url() != "https://updates.example.org/amfx1/update.json") { std::fprintf(stderr, "amixos --smoke: the update link rule is wrong\n"); return 207; }
+        // UPDATE SOURCE: the public OTA server is the default; LOCAL (127.0.0.1) is one press away; both read the same signed list
+        { QSettings().remove("update/url"); const bool def = update.url() == QLatin1String(am::upd::publicManifestUrl()) && update.source() == "public";
+          update.useSource("local"); const bool loc = update.source() == "local" && update.url().startsWith("http://127.0.0.1:");
+          update.useSource("public"); const bool pub = update.source() == "public";
+          if (!def || !loc || !pub) { std::fprintf(stderr, "amixos --smoke: update source (default %d, local %d, public %d)\n", def, loc, pub); return 208; } }
         update.setLicenseServer("http://licence.example.org"); if (update.licenseServer() == "http://licence.example.org") return 208;
         update.setLicenseServer(""); update.redeemProductKey("AAAAA-BBBBB-CCCCC-DDDDD-EEEEE"); if (update.redeemState().isEmpty() || update.redeemState() == "asking") return 209;
         update.setLicenseServer("https://licence.example.org/"); if (update.licenseServer() != "https://licence.example.org") return 210;
@@ -1486,7 +1492,8 @@ int main(int argc, char* argv[]) {
           QNetworkReply* r = body.isEmpty() ? nam.get(q) : nam.post(q, body); QElapsedTimer t; t.start(); while (!r->isFinished() && t.elapsed() < 3000) app.processEvents(QEventLoop::AllEvents, 20);
           if (!r->isFinished() || r->error() != QNetworkReply::NoError) lastHttpErr = path + ": " + (r->isFinished() ? r->errorString() : QStringLiteral("no answer in 3 s"));
           const QVariantMap m = QJsonDocument::fromJson(r->readAll()).toVariant().toMap(); r->deleteLater(); return m; };
-        const double seeded = http("/api/state", {})["strips"].toList().value(0).toMap()["db"].toDouble();
+        // the service may still be loading a big console (racks, pads) when the first question comes: ask again until it answers (8 s at most)
+        double seeded = 0; { QElapsedTimer ts0; ts0.start(); do { const QVariantList st = http("/api/state", {})["strips"].toList(); if (!st.isEmpty()) { seeded = st.value(0).toMap()["db"].toDouble(); lastHttpErr.clear(); break; } wait(200); } while (ts0.elapsed() < 8000); }
         // a "phone" watching the live stream (it counts as a connected remote), and the MIXER page on screen for AMIX_SYNC_SHOT
         const bool shot = qEnvironmentVariableIsSet("AMIX_SYNC_SHOT");
         QTcpSocket phone; if (shot) phone.connectToHost("127.0.0.1", 8765); if (shot && phone.waitForConnected(2000)) { phone.write(("GET /ws/meters?token=" + QUrl::toPercentEncoding(remote.token()) + " HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")); phone.flush(); }
@@ -1779,6 +1786,19 @@ int main(int argc, char* argv[]) {
       waitMs(300); if (!engine.meters()[0].toMap().contains("amGainDb") || !engine.telemetry().contains("autoLevelDb")) { std::fprintf(stderr, "amixos --smoke: automix / auto level telemetry\n"); return 102; }
       engine.setAutoLevelOn(false); engine.setAutomix(0, false, 1); engine.setAutomix(1, false, 1);
       // DCA GROUP CHANNELS: a group's fader is an offset on its members (their faders stay), its mute mutes them; colour and count
+      // DCA BY EDITION: BASIC (this run) has one DCA; a second group is refused by the engine itself, not only hidden
+      { if (engine.dcaLimit() != (engine.edition() == "BASIC" ? 1 : engine.dcaLimit()) || am::lic::dcaLimit("basic") != 1 || am::lic::dcaLimit("pro") != 4 || am::lic::dcaLimit("studio") != 8 || am::lic::dcaLimit("master") != 8 || am::lic::dcaLimit("forged") != 1) { std::fprintf(stderr, "amixos --smoke: DCA limit by edition\n"); return 840; }
+        if (engine.edition() == "BASIC") { engine.setDca(4, 2); engine.setDcaLevel(2, -20); const QVariantList ds = engine.dcaState();
+          if (engine.stripState()[4].toMap()["dca"].toInt() != 0 || std::fabs(ds[1].toMap()["db"].toDouble()) > 1e-9 || ds[0].toMap()["locked"].toBool() || !ds[1].toMap()["locked"].toBool()) { std::fprintf(stderr, "amixos --smoke: BASIC took a second DCA\n"); return 841; } }
+        // WINDOWS VOLUME: DCA 1 drives the Windows volume; its members keep their own gain and mute
+        float wl = 0.5f; bool wm = false; engine.setSystemVolumeBackend([&](float& v) { v = wl; return true; }, [&](float v) { wl = v; return true; }); engine.syncSystemVolume();
+        engine.setDca(6, 1); engine.setGain(6, -3); engine.setDcaWinVol(1, true); engine.setDcaLevel(1, -6.0206);
+        const bool winOk = engine.windowsVolume() == 50 && std::fabs(engine.effectiveDb(6) + 3) < 1e-9 && engine.dcaState()[0].toMap()["winVol"].toBool();
+        engine.setDcaMute(1, true); const bool memberOpen = !engine.effectiveMute(6); engine.setDcaMute(1, false); Q_UNUSED(wm);
+        engine.setDcaWinVol(1, false); engine.setDcaLevel(1, -6); const bool back = std::fabs(engine.effectiveDb(6) + 9) < 1e-9;
+        engine.setDcaLevel(1, 0); engine.setDca(6, 0); engine.setGain(6, 0); engine.setSystemVolumeBackend([](float&) { return false; }, [](float) { return false; }); engine.syncSystemVolume();
+        if (!winOk || !memberOpen || !back) { std::fprintf(stderr, "amixos --smoke: DCA WINDOWS VOLUME (win %d, open %d, back %d, vol %d)\n", winOk, memberOpen, back, engine.windowsVolume()); return 842; } }
+      engine.setTestDcaLimit(8);   // the multi-group checks below (DCA 3, AUTO DCA, the ducker on two groups) as on STUDIO / MASTER
       { engine.setGain(2, -10); engine.setDca(2, 3); engine.setDca(3, 3); engine.setDcaLevel(3, -6); engine.setDcaColor(3, 4);
         const QVariantMap g = engine.dcaState()[2].toMap();
         if (g.value("count").toInt() != 2 || g.value("color").toInt() != 4 || std::fabs(engine.effectiveDb(2) + 16) > 1e-9 || std::fabs(engine.stripState()[2].toMap()["db"].toDouble() + 10) > 1e-9) { std::fprintf(stderr, "amixos --smoke: DCA strip state\n"); return 800; }
@@ -1813,6 +1833,7 @@ int main(int argc, char* argv[]) {
         engine.setDuck({{"on", false}, {"keyDca", 0}, {"targetDca", 0}, {"targetStrips", QVariantList{}}, {"depth", -12.0}, {"attack", 20.0}, {"lift", 0.0}});
         for (int i = 0; i < 6; ++i) { engine.setDca(i, 0); engine.setMute(i, false); }
         for (int g = 1; g <= 8; ++g) engine.setDcaName(g, QStringLiteral("DCA %1").arg(g)); }
+      engine.setTestDcaLimit(0);
       {  // LOUDNESS MANAGER: master preset, per-channel AUTO FADER / AUTO ON/OFF, class targets, saved with the console, meters, ALL ON / OFF
         engine.setLoud({{"preset", "BROADCAST"}, {"masterOn", true}, {"speed", "slow"}});
         QVariantMap L = engine.loudState(); if (!L.value("masterOn").toBool() || std::fabs(L.value("masterTarget").toDouble() + 23) > 1e-9 || std::fabs(L.value("up").toDouble() - 1.5) > 1e-9) { std::fprintf(stderr, "amixos --smoke: loudness manager master preset\n"); return 820; }
@@ -1841,6 +1862,16 @@ int main(int argc, char* argv[]) {
       volume.setTarget(0); volume.setStepDb(2); volume.setMediaKeys(false); engine.setMaster(-7);
       const bool up = volume.press(0, false); const double afterUp = engine.masterDb(); const bool media = volume.press(1, true);
       volume.press(2, false); const bool muted = engine.masterMuted(); volume.press(0, false); const bool back = !engine.masterMuted();
+      // ARROW KEYS (1.26): Up / Down master 1 dB, Shift 0.1 dB, Ctrl the selected channel; nothing while a text field has the focus; media keys never taken
+      { const double m0 = engine.masterDb(); engine.setMasterMuted(false); engine.setMaster(-10); engine.setSelectedStrip(4); engine.setGain(4, -5);
+        const bool a1 = volume.arrowKey(Qt::Key_Up, 0, false) && std::fabs(engine.masterDb() + 9) < 1e-9;
+        const bool a2 = volume.arrowKey(Qt::Key_Down, Qt::ShiftModifier, false) && std::fabs(engine.masterDb() + 9.1) < 1e-9;
+        const bool a3 = !volume.arrowKey(Qt::Key_Up, 0, true) && std::fabs(engine.masterDb() + 9.1) < 1e-9;
+        const bool a4 = volume.arrowKey(Qt::Key_Up, Qt::ControlModifier, false) && std::fabs(engine.stripAt(4).value("db").toDouble() + 4) < 1e-9 && std::fabs(engine.masterDb() + 9.1) < 1e-9;
+        const bool a5 = volume.arrowKey(Qt::Key_Down, Qt::ControlModifier | Qt::ShiftModifier, false) && std::fabs(engine.stripAt(4).value("db").toDouble() + 4.1) < 1e-9;
+        volume.setMediaKeys(true); const bool a6 = !volume.mediaKeys() && !volume.press(0, true);
+        engine.setGain(4, 0); engine.setSelectedStrip(0); engine.setMaster(m0);
+        if (!(a1 && a2 && a3 && a4 && a5 && a6)) { std::fprintf(stderr, "amixos --smoke: arrow keys %d %d %d %d %d %d\n", a1, a2, a3, a4, a5, a6); return 843; } }
       auto mem = std::make_unique<am::vol::MemoryLayer>(); am::vol::MemoryLayer* L = mem.get(); L->add({"a", 1, "Player", "", 1.f, false, false}); volume.setLayer(std::move(mem));
       int changes = 0; auto c = QObject::connect(&volume, &Volume::appsChanged, &app, [&] { ++changes; });
       const int w0 = volume.writes(); for (int i = 0; i < 50; ++i) volume.setAppVolume("a", i); volume.flush(); QCoreApplication::processEvents();

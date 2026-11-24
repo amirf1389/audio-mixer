@@ -68,9 +68,8 @@ Popup {
             Repeater { model: [1, 2, 3]; delegate: Seg { required property int modelData; label: modelData + " dB"; on: volume.stepDb === modelData; onHit: volume.stepDb = modelData } } }
         RowLayout { spacing: 6
             Seg { label: "Ctrl+Alt+↑ ↓ M"; on: volume.hotkeys; onHit: volume.hotkeys = !volume.hotkeys }
-            Seg { label: "KEYBOARD VOLUME KEYS"; on: volume.mediaKeys; onHit: volume.mediaKeys = !volume.mediaKeys }
             Seg { label: "TRAY ICON"; visible: volume.trayAvailable; on: volume.tray; onHit: volume.tray = !volume.tray } }
         Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8
-            text: (volume.keysNote ? volume.keysNote + "\n" : "") + i18n.t("The keyboard's volume keys stay with Windows and other programs unless KEYBOARD VOLUME KEYS is on.", i18n.lang) }
+            text: (volume.keysNote ? volume.keysNote + "\n" : "") + i18n.t("The keyboard's volume and media keys always control the Windows volume. In the console: Up / Down = master, Ctrl+Up / Down = the selected channel, 1 dB a press (Shift 0.1 dB); not while typing in a text field.", i18n.lang) }
     }
 }

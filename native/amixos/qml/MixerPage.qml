@@ -724,7 +724,7 @@ Item {
                         }
                         Repeater {   // DCA GROUP CHANNELS: each group in use is a strip of its own, after the inputs and before the master
                             model: engine.dcaState
-                            delegate: DcaStrip { d: modelData; tick: page.tick; visible: modelData.count > 0; width: visible ? 96 : 0; height: strips.height; onAssign: function (g) { dcaPanels.openAssign(g, -1) } }
+                            delegate: DcaStrip { d: modelData; tick: page.tick; visible: modelData.count > 0 && !modelData.locked; width: visible ? 96 : 0; height: strips.height; onAssign: function (g) { dcaPanels.openAssign(g, -1) } }
                         }
                     }
                 }

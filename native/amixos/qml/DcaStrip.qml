@@ -26,6 +26,9 @@ Rectangle {
         Rectangle { objectName: "dcaMute" + (ds.d.index || 0); Layout.fillWidth: true; implicitHeight: 20; radius: 5; color: ds.d.mute ? Theme.danger : Theme.ov(0.08); border.color: Theme.lineSoft
             Text { anchors.centerIn: parent; text: i18n.t("MUTE", i18n.lang); color: ds.d.mute ? "#fff" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setDcaMute(ds.d.index, !ds.d.mute) } }
+        Rectangle { objectName: "dcaWinVolBtn" + (ds.d.index || 0); Layout.fillWidth: true; implicitHeight: 20; radius: 5; color: ds.d.winVol ? Theme.cyan : Theme.ov(0.06); border.color: Theme.lineSoft
+            Text { anchors.centerIn: parent; text: i18n.t("WIN VOL", i18n.lang); color: ds.d.winVol ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.setDcaWinVol(ds.d.index, !ds.d.winVol) } }
         Rectangle { objectName: "dcaAssignBtn" + (ds.d.index || 0); Layout.fillWidth: true; implicitHeight: 20; radius: 5; color: Theme.ov(0.06); border.color: ds.dc
             Text { anchors.centerIn: parent; text: i18n.t("ASSIGN", i18n.lang); color: ds.dc; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ds.assign(ds.d.index) } }

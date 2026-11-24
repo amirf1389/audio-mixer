@@ -573,4 +573,7 @@
     <string name="apps_mute">Mute %1$s</string>
     <string name="set_hide_capture">Hide from screenshots &amp; screen sharing</string>
     <string name="set_hide_capture_note">On: screenshots, screen recordings and screen sharing show this app as black. Turn off while streaming or recording (TikTok LIVE Studio, OBS); captured windows show black. It cannot stop someone photographing the screen with a camera.</string>
+    <string name="lm_solo">SOLO</string>
+    <string name="qm_level">MASTER %1$+.1f dB</string>
+    <string name="qm_muted">MASTER · MUTED</string>
 </resources>

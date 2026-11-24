@@ -10,6 +10,9 @@
 #include <cmath>
 #include <utility>
 
+#include <QGuiApplication>
+#include <QKeyEvent>
+#include <QWindow>
 #include "Apps.h"
 #include "Engine.h"
 #include "audiomixer/runtime.hpp"
@@ -35,7 +38,7 @@ Volume::Volume(Engine* engine, Apps* apps, QObject* parent) : QObject(parent), e
   QSettings s;
   cfg_.target = s.value("volume/target", 0).toInt() == 1 ? am::vol::Target::Windows : am::vol::Target::Console;
   cfg_.stepDb = am::vol::clampStep(s.value("volume/stepDb", 2).toInt());
-  cfg_.mediaKeys = s.value("volume/mediaKeys", false).toBool();   // off by default: the keyboard's volume keys stay with Windows
+  cfg_.mediaKeys = false;   // the keyboard's volume / media keys always stay with Windows (1.26: never taken)
   cfg_.hotkeys = s.value("volume/hotkeys", true).toBool();
   tray_ = s.value("volume/tray", true).toBool();
   sendT_.setInterval(16); sendT_.setSingleShot(true); connect(&sendT_, &QTimer::timeout, this, &Volume::flush);
@@ -43,6 +46,7 @@ Volume::Volume(Engine* engine, Apps* apps, QObject* parent) : QObject(parent), e
   if (capture_) connect(capture_, &Apps::changed, this, &Volume::notify);   // APP SOUND: which strips hear a program
   setLayer(am::vol::makeSystemLayer());
   QCoreApplication::instance()->installNativeEventFilter(this);
+  QCoreApplication::instance()->installEventFilter(this);   // ARROW KEYS: Up / Down master, Ctrl+Up / Down the selected channel
   QTimer::singleShot(0, this, [this] { if (!quiet_) { registerKeys(); makeTray(); } });
 }
 
@@ -153,7 +157,7 @@ void Volume::save() const {
 }
 void Volume::setTarget(int t) { const auto n = t == 1 ? am::vol::Target::Windows : am::vol::Target::Console; if (n == cfg_.target) return; cfg_.target = n; save(); emit settingsChanged(); }
 void Volume::setStepDb(int st) { st = am::vol::clampStep(st); if (st == cfg_.stepDb) return; cfg_.stepDb = st; save(); emit settingsChanged(); }
-void Volume::setMediaKeys(bool on) { if (on == cfg_.mediaKeys) return; cfg_.mediaKeys = on; save(); registerKeys(); emit settingsChanged(); }
+void Volume::setMediaKeys(bool on) { Q_UNUSED(on); if (!cfg_.mediaKeys) return; cfg_.mediaKeys = false; save(); registerKeys(); emit settingsChanged(); }   // the keyboard's volume keys are Windows' own
 void Volume::setHotkeys(bool on) { if (on == cfg_.hotkeys) return; cfg_.hotkeys = on; save(); registerKeys(); emit settingsChanged(); }
 void Volume::setTray(bool on) { if (on == tray_) return; tray_ = on; save(); makeTray(); emit settingsChanged(); }
 
@@ -227,4 +231,25 @@ void Volume::makeTray() {
   }
   icon_->show();
 #endif
+}
+
+// ---- ARROW KEYS: Up / Down = the master, Ctrl+Up / Down = the selected channel; 1 dB a press, Shift 0.1 dB. Never while a text field
+// has the focus (the arrows move its cursor there). The keyboard's volume / media keys are not looked at: they stay with Windows.
+bool Volume::textHasFocus() {
+  QObject* f = QGuiApplication::focusObject();
+  for (const QMetaObject* m = f ? f->metaObject() : nullptr; m; m = m->superClass()) { const QByteArray n(m->className()); if (n == "QQuickTextInput" || n == "QQuickTextEdit" || n == "QLineEdit" || n == "QTextEdit" || n == "QPlainTextEdit") return true; }
+  return false;
+}
+bool Volume::arrowKey(int key, int modifiers, bool textFocus) {
+  if (!engine_ || textFocus || (key != Qt::Key_Up && key != Qt::Key_Down) || (modifiers & (Qt::AltModifier | Qt::MetaModifier))) return false;
+  const int dir = key == Qt::Key_Up ? 1 : -1; const double step = (modifiers & Qt::ShiftModifier) ? 0.1 : 1.0;
+  const auto next = [&](double db) { return std::clamp(std::round(((db < -60 ? -60 : db) + dir * step) * 10.0) / 10.0, -60.0, 10.0); };
+  if (modifiers & Qt::ControlModifier) { const int i = engine_->selectedStrip(); const QVariantMap st = engine_->stripAt(i); if (st.isEmpty()) return false; engine_->setGain(i, next(st.value("db").toDouble())); return true; }
+  if (engine_->masterMuted() && dir > 0) engine_->setMasterMuted(false);
+  engine_->setMaster(next(engine_->masterDb())); return true;
+}
+bool Volume::eventFilter(QObject* o, QEvent* e) {
+  if (e->type() == QEvent::KeyPress && qobject_cast<QWindow*>(o)) { auto* k = static_cast<QKeyEvent*>(e);
+    if ((k->key() == Qt::Key_Up || k->key() == Qt::Key_Down) && arrowKey(k->key(), static_cast<int>(k->modifiers() & ~Qt::KeypadModifier), textHasFocus())) return true; }
+  return QObject::eventFilter(o, e);
 }

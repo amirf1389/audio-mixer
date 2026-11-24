@@ -67,10 +67,11 @@ object Nav {
                 addView(TextView(a).apply { text = t.glyph; textSize = 18f; setTextColor(a.getColor(if (on) R.color.md_on_secondary_container else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; includeFontPadding = false
                     background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 16 * d; setColor(if (on) a.getColor(R.color.md_secondary_container) else Color.TRANSPARENT) }
                     layoutParams = LinearLayout.LayoutParams((64 * d).toInt(), (32 * d).toInt()) })
-                addView(TextView(a).apply { text = a.getString(t.label); textSize = 12f; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
+                addView(TextView(a).apply { text = a.getString(t.label); textSize = 13f; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
                     typeface = Typeface.create(if (on) "sans-serif-medium" else "sans-serif", Typeface.NORMAL); letterSpacing = 0.03f }) })
         }
-        root.addView(bar); fitSystemBars(root); fitBar(a, bar); return root
+        if (a !is LocalMixerActivity) root.addView(QuickMaster.bar(a)); root.addView(bar);   // QUICK MASTER: every screen but the phone mixer (its master strip is there)
+        fitSystemBars(root); fitBar(a, bar); return root
     }
     /** ON ITS SIDE the screen is short: the bar becomes a thin row of icons (no labels); upright it is the usual bar. */
     private fun fitBar(a: Activity, bar: LinearLayout) {

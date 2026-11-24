@@ -24,6 +24,7 @@ class Update : public QObject {
   Q_PROPERTY(QVariantMap file READ file NOTIFY changed)           // {key, name, url, size, sha256} for this platform, or empty
   Q_PROPERTY(QString downloaded READ downloaded NOTIFY changed)   // the verified local file after download()
   Q_PROPERTY(QString url READ url WRITE setUrl NOTIFY changed)
+  Q_PROPERTY(QString source READ source NOTIFY changed)          // public (the public OTA server, default) | local (127.0.0.1) | custom
   Q_PROPERTY(bool checkAtStart READ checkAtStart WRITE setCheckAtStart NOTIFY changed)
   Q_PROPERTY(QString lastCheck READ lastCheck NOTIFY changed)
   Q_PROPERTY(QString current READ current CONSTANT)
@@ -56,6 +57,8 @@ class Update : public QObject {
   Q_PROPERTY(QString redeemState READ redeemState NOTIFY changed)                              // "" | asking | done | the reason it failed
   QString licenseServer() const { return s_.value("licence/server", QStringLiteral("https://licence.amirfakhribadri.my")).toString(); }   /* the vendor's licence server unless another is typed */ void setLicenseServer(const QString& u);
   QString redeemState() const { return redeem_; }
+  QString source() const;
+  Q_INVOKABLE void useSource(const QString& which);           // "public" or "local": the signature check is the same for both
   Q_INVOKABLE bool setServerLink(const QString& url);          // the update server link: any https host; its list must still be signed
   Q_INVOKABLE void redeemProductKey(const QString& code);
   // MANAGE LICENCE ONLINE: <licence server>/licence/?machine=<code>&edition=<plan> (the customer licence site), "" without a usable https server

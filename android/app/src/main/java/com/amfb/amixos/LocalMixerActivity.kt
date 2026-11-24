@@ -53,8 +53,15 @@ class LocalMixerActivity : FitActivity() {
         /** the engine strips of a channel (input s = s, deck d = 100 + d) */
         /** what the engine gets for a channel (input s = s, deck d = 100 + d): its fader with its group's offset (dB) and MUTE (own or group) */
         fun channelLevel(p: android.content.SharedPreferences, ch: Int): Pair<Double, Boolean> =
-            if (ch >= 100) Dca.effectiveDb(p, ch, p.getFloat("deckDb${ch - 100}", 0f).toDouble()) to Dca.effectiveMute(p, ch, p.getBoolean("deckMute${ch - 100}", false))
-            else Dca.effectiveDb(p, ch, p.getFloat("db$ch", 0f).toDouble()) to Dca.effectiveMute(p, ch, p.getBoolean("mute$ch", false))
+            if (ch >= 100) Dca.effectiveDb(p, ch, p.getFloat("deckDb${ch - 100}", 0f).toDouble()) to (Dca.effectiveMute(p, ch, p.getBoolean("deckMute${ch - 100}", false)) || soloCut(p, ch))
+            else Dca.effectiveDb(p, ch, p.getFloat("db$ch", 0f).toDouble()) to (Dca.effectiveMute(p, ch, p.getBoolean("mute$ch", false)) || soloCut(p, ch))
+        /** SOLO: while any channel is soloed, the channels that are not are cut from the master */
+        fun soloKey(ch: Int) = if (ch >= 100) "deckSolo${ch - 100}" else "solo$ch"
+        fun allChannels(): List<Int> = (0 until INPUTS).toList() + (0 until DECKS).map { 100 + it }
+        fun anySolo(p: android.content.SharedPreferences) = allChannels().any { p.getBoolean(soloKey(it), false) }
+        fun soloCut(p: android.content.SharedPreferences, ch: Int) = anySolo(p) && !p.getBoolean(soloKey(ch), false)
+        /** the master the engine gets: the fader (+ the loudness rider), nothing while MASTER MUTE is on */
+        fun masterOut(p: android.content.SharedPreferences, riderDb: Double): Double { val user = p.getFloat("masterDb", 0f).toDouble(); return if (p.getBoolean("masterMute", false)) -120.0 else if (user <= -60) user else user + riderDb }
         fun chStrips(ch: Int): List<Int> = if (ch >= 100) deckStrip(ch - 100).let { listOf(it, it + 1) } else listOf(ch)
         fun deckName(d: Int) = ('A' + d).toString()
         /** the engine strips one rack works on: a deck's rack is put on its left and its right strip alike */
@@ -111,11 +118,14 @@ class LocalMixerActivity : FitActivity() {
     private val compact by lazy { !Nav.standalone(this) }
     private fun baseAcross(land: Boolean) = if (compact) RemoteActivity.compactAcrossFor(land) else RemoteActivity.acrossFor(land)
     private fun maxAcross() = if (compact) 10 else 8
-    private fun across(land: Boolean) = (baseAcross(land) + prefs().getInt("stripZoom", 0)).coerceIn(3, maxAcross())
+    private fun across(land: Boolean) = (MixerFit.across(resources.displayMetrics.widthPixels, resources.displayMetrics.density, land, baseAcross(land)) + prefs().getInt("stripZoom", 0)).coerceIn(3, if (land) 12 else maxAcross())
     private fun stripZoom(d: Int) { val l = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val now = across(l); val next = (now + d).coerceIn(3, maxAcross()); if (next == now) return
         prefs().edit().putInt("stripZoom", next - baseAcross(l)).apply(); render() }
-    private fun stripWidth(screenPx: Int, n: Int) = if (compact) RemoteActivity.compactStripWidthFor(screenPx, n, resources.displayMetrics.density) else RemoteActivity.stripWidthFor(screenPx, n)
+    /** the master's width: as before on a big screen, never more than about a fifth of a small one */
+    private fun masterW(land: Boolean) = minOf(if (land) 340 else 252, (resources.displayMetrics.widthPixels * 0.22).toInt())
+    private fun stripWidth(screenPx: Int, n: Int) = if (compact) RemoteActivity.compactStripWidthFor(screenPx, n, resources.displayMetrics.density)
+        else maxOf((60 * resources.displayMetrics.density).toInt(), (screenPx - 40 - (masterW(land) + 8)) / maxOf(1, n) - 8)   // every channel finger-wide, as many as asked across
     /** a strip key's height and look: compact in the AmF X1 app, as before in the AmF X1 Mixer app */
     private fun keyH(h: Int = 84) = if (compact) ConsoleUi.dp(this, ConsoleUi.KEY_DP) else h
     private fun <T : android.widget.TextView> key(v: T): T = if (compact) ConsoleUi.compact(v, ConsoleUi.KEY_DP, 11).apply { setPadding(4, 0, 4, 0) } else v
@@ -136,7 +146,7 @@ class LocalMixerActivity : FitActivity() {
         runCatching { Engine.setDirs(filesDir.absolutePath, cacheDir.absolutePath, cacheDir.absolutePath) }
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(20, 20, 20, 16); setBackgroundColor(Color.parseColor("#0B0F15")) }
         setContentView(Nav.wrap(this, body, Nav.Tab.MIXER))   // the MIXER tab, THIS PHONE mode
-        render()
+        render(); QuickMaster.listener = quickHook
         ui.post(object : Runnable { override fun run() { showMeters(); loudTick(0.05); ui.postDelayed(this, 50) } })
     }
 
@@ -220,15 +230,17 @@ class LocalMixerActivity : FitActivity() {
             for (d in 2 * r..2 * r + 1) deckRow.addView(deckCard(d).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(if (d % 2 == 0) 0 else 6, 0, if (d % 2 == 0) 6 else 0, 0) } })
             deckBox.addView(deckRow) }
         // the channels side by side, four across in portrait, six in landscape (swipe for the rest), the master fixed on the right: every fader stays finger-wide
-        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = stripWidth(resources.displayMetrics.widthPixels - (if (land) 88 else 0), across(land))   // on its side the master is 88 px wider (its two keys stand side by side)
+        val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = stripWidth(resources.displayMetrics.widthPixels - (if (compact && land) 88 else 0), across(land))   // on its side the master is 88 px wider (its two keys stand side by side)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until INPUTS) chans.addView(fixed(stripView(s)))   // CH 1 .. CH 6, then the decks: ten channels
         if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) chans.addView(fixed(playersStripView()))   // beside the inputs: on screen without a swipe
         for (d in 0 until DECKS) chans.addView(fixed(deckStripView(d)))
         for (g in 0 until Dca.COUNT) { val n = Dca.members(prefs(), g, dcaChannels()).size; if (n > 0) chans.addView(fixed(dcaStripView(g, n))) }   // GROUP FADERS: one per group in use
         desk.addView(android.widget.HorizontalScrollView(this).apply { isFillViewport = true; addView(chans, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
-        desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(if (land) 340 else 252, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
+        desk.addView(stripView(-1).apply { layoutParams = LinearLayout.LayoutParams(masterW(land), LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }); body.addView(desk); showDecks()
         desk.tag = "secFaders"
+        // FADERS FIT THE SCREEN: once the desk has its real height the strip keys are sized for it (MixerFit), on any phone and either way up
+        desk.addOnLayoutChangeListener { v, _, t, _, b, _, ot, _, ob -> if (b - t != ob - ot && b > t) v.post { MixerFit.fit(v, resources.displayMetrics.density, land) } }
         // THE MINI PLAYER: the PLAYERS link plays in a small video pane right above the faders (beside them when the phone lies on its
         // side), so the video and the faders are on one screen. It shows only in FADERS, and only when it is switched on and a link exists.
         if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) {
@@ -269,12 +281,15 @@ class LocalMixerActivity : FitActivity() {
             col.addView(full(PadButton(this, getString(R.string.lm_limit), ConsoleUi.GREEN, 12f).apply { on = p.getBoolean("limiter", true)
                 setOnClickListener { val v = !p.getBoolean("limiter", true); p.edit().putBoolean("limiter", v).apply(); engine?.setLimiter(v, -0.5, 100.0); on = v } }))
             if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_limit_at); setTextColor(dim); textSize = 9f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 6) })
+            col.addView(full(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { contentDescription = "masterMute"; on = p.getBoolean("masterMute", false)
+                setOnClickListener { setMasterMute(!p.getBoolean("masterMute", false)) } }.also { masterMuteKey = it }))
         } else {
             val defPan = if (two) (if (s == 0) -1f else 1f) else 0f
             if (!land) col.addView(KnobView(this, color).apply { value = p.getFloat("pan$s", defPan); layoutParams = LinearLayout.LayoutParams(if (compact) ConsoleUi.dp(this@LocalMixerActivity, RemoteActivity.PAN_DP) else 150, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onChange = { v -> p.edit().putFloat("pan$s", v).apply(); engine?.setPan(s, v.toDouble()) } })
             col.addView(full(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("mute$s", false)
-                setOnClickListener { val v = !p.getBoolean("mute$s", false); p.edit().putBoolean("mute$s", v).apply(); applyLevel(engine, s); on = v } }))
+                contentDescription = "mute_$s"; setOnClickListener { val v = !p.getBoolean("mute$s", false); p.edit().putBoolean("mute$s", v).apply(); applyLevel(engine, s); on = v } }))
+            col.addView(full(soloKeyView(s)))
         }
         pairKeys(col)
         val key = if (master) "masterDb" else "db$s"; val readout = ConsoleUi.dbReadout(this)
@@ -282,7 +297,7 @@ class LocalMixerActivity : FitActivity() {
         val db0 = p.getFloat(key, 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
         col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (master) engine?.setMaster(if (set <= -60) set else set + masterRider.gainDb) else { lmTouch(s); applyLevel(engine, s) } } }.also { faders[s] = it })
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (master) engine?.setMaster(masterOut(p, masterRider.gainDb)) else { lmTouch(s); applyLevel(engine, s) } } }.also { faders[s] = it })
         col.addView(readout)
         return col
     }
@@ -400,7 +415,7 @@ class LocalMixerActivity : FitActivity() {
             e.setGain(l, db); e.setGain(l + 1, db); e.setPan(l, -1.0); e.setPan(l + 1, 1.0); e.setMute(l, mu); e.setMute(l + 1, mu) }
         for (ch in (0 until INPUTS) + (0 until DECKS).map { 100 + it }) { applyLevel(e, ch); applyEq(e, ch) }   // each channel with its group fader and group mute, and its EQ
         PhoneDucker.apply(e, PhoneDucker.load(p), duckRoles())   // DUCKER: CH (voice) over the DECKS (music)
-        e.setMaster(p.getFloat("masterDb", 0f).toDouble()); e.setLimiter(p.getBoolean("limiter", true), -0.5, 100.0)
+        e.setMaster(masterOut(p, 0.0)); e.setLimiter(p.getBoolean("limiter", true), -0.5, 100.0)
         for (s in listOf(-1) + (0 until INPUTS) + (0 until DECKS).map { deckStrip(it) }) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty()) for (t in mates(s)) if (e.insert(t, slot, k) == 0)
             p.getString(paramKey(s, slot), "").orEmpty().split(';').filter { '=' in it }.forEach { e.insertSet(t, slot, it.substringBefore('='), it.substringAfter('=').toDoubleOrNull() ?: 0.0) } }
     }
@@ -489,7 +504,7 @@ class LocalMixerActivity : FitActivity() {
     }
     override fun onResume() { super.onResume(); val e = StreamPlayerActivity.lastEmbed(this); if (e != null && miniWeb != null && miniUrl != e.url) closeMini(); miniUrl = e?.url; showMini() }
     private var miniUrl: String? = null
-    override fun onDestroy() { stopTone(); closeMini(); deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
+    override fun onDestroy() { if (QuickMaster.listener === quickHook) QuickMaster.listener = null; stopTone(); closeMini(); deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
 
     // ---- DECKS
     private fun loadDeck(d: Int, u: android.net.Uri, fresh: Boolean) {
@@ -575,6 +590,15 @@ class LocalMixerActivity : FitActivity() {
     internal fun dcaChannels(): List<Int> = (0 until INPUTS).toList() + (0 until DECKS).map { 100 + it }   // all ten channels
     private fun chName(ch: Int) = if (ch >= 100) getString(R.string.lm_deck, deckName(ch - 100)) else getString(R.string.lm_channel, ch + 1, "").trim()
     /** puts one channel's level and mute into the engine: its own fader and MUTE with its group's offset and MUTE */
+    /** QUICK MASTER (the row over the bottom bar on every screen): the engine and the master fader follow it */
+    private val quickHook: () -> Unit = { ui.post { val p = prefs(); engine?.setMaster(masterOut(p, masterRider.gainDb)); masterMuteKey?.on = p.getBoolean("masterMute", false); faders[-1]?.progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(p.getFloat("masterDb", 0f).toDouble().let { if (it <= -60) -120.0 else it }) * 1000).toInt() } }
+    private val soloKeys = HashMap<Int, PadButton>(); private var masterMuteKey: PadButton? = null
+    private fun soloKeyView(ch: Int) = PadButton(this, getString(R.string.lm_solo), ConsoleUi.AMBER, 12f).apply { contentDescription = "solo_$ch"; on = prefs().getBoolean(soloKey(ch), false); setOnClickListener { toggleSolo(ch) } }.also { soloKeys[ch] = it }
+    /** SOLO: one channel (or several) alone on the master; every channel's level is sent again */
+    internal fun toggleSolo(ch: Int) { val p = prefs(); val v = !p.getBoolean(soloKey(ch), false); p.edit().putBoolean(soloKey(ch), v).commit()
+        for (c in allChannels()) { applyLevel(engine, c); soloKeys[c]?.on = p.getBoolean(soloKey(c), false) } }
+    /** MASTER MUTE (also the quick bar's MUTE on every screen) */
+    internal fun setMasterMute(on: Boolean) { val p = prefs(); p.edit().putBoolean("masterMute", on).commit(); engine?.setMaster(masterOut(p, masterRider.gainDb)); masterMuteKey?.on = on; QuickMaster.changed(this) }
     internal fun applyLevel(e: Engine?, ch: Int) { e ?: return; val p = prefs()
         val (db, mu) = channelLevel(p, ch); val off = lmOffset[ch] ?: 0.0
         val g = if (off <= PhoneLoudness.FLOOR + 0.1 || db <= -60) -120.0 else minOf(PhoneLoudness.MAX_DB, db + off)   // LOUDNESS MANAGER: fader + DCA, then the ride and auto on/off
@@ -689,7 +713,7 @@ class LocalMixerActivity : FitActivity() {
         }
         val mp = masterPeak ?: loop?.lastPeaks?.let { maxOf(it.getOrElse(STRIPS) { 0f }, it.getOrElse(STRIPS + 1) { 0f }).toDouble() } ?: 0.0
         val before = masterRider.gainDb; val g = masterRider.step(mp, dt, v)
-        if (kotlin.math.abs(g - before) > 0.005 || (!v.masterOn && before != 0.0)) { val user = p.getFloat("masterDb", 0f).toDouble(); engine?.setMaster(if (user <= -60) user else user + g) }
+        if (kotlin.math.abs(g - before) > 0.005 || (!v.masterOn && before != 0.0)) engine?.setMaster(masterOut(p, g))
     }
     private fun loudSection(box: LinearLayout) {
         val p = prefs(); sectionTitle(box, getString(R.string.lm_loud_title)); loudKeys.clear()
@@ -755,7 +779,8 @@ class LocalMixerActivity : FitActivity() {
             setOnClickListener { showRack(l) } }.also { fxBtns[l] = it })   // the deck's own rack: the same effects on its left and its right
         col.addView(key(eqKey(100 + d)).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) } })
         col.addView(key(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f)).apply { on = p.getBoolean("deckMute$d", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) }
-            setOnClickListener { val v = !p.getBoolean("deckMute$d", false); p.edit().putBoolean("deckMute$d", v).apply(); applyLevel(engine, 100 + d); on = v } })
+            contentDescription = "deckMute_$d"; setOnClickListener { val v = !p.getBoolean("deckMute$d", false); p.edit().putBoolean("deckMute$d", v).apply(); applyLevel(engine, 100 + d); on = v } })
+        col.addView(key(soloKeyView(100 + d)).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) } })
         pairKeys(col)
         val readout = ConsoleUi.dbReadout(this); fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
         val db0 = p.getFloat("deckDb$d", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)

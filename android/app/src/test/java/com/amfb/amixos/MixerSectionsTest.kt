@@ -31,9 +31,10 @@ class MixerSectionsTest {
         val again = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get(); assertEquals(listOf("secSetup"), shown(again))   // the section is remembered
         find(again.window.decorView, "sec_faders")!!.performClick(); assertEquals(listOf("secFaders"), shown(again))
         org.robolectric.shadows.ShadowLooper.idleMainLooper(); again.window.decorView.let { it.measure(View.MeasureSpec.makeMeasureSpec(it.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(it.height, View.MeasureSpec.EXACTLY)); it.layout(0, 0, it.width, it.height) }
-        // upright: the faders are taller than half the screen (the decks and the setup no longer stand above them)
+        // upright: the faders take most of the screen (the decks and the setup no longer stand above them; the quick master row and the
+        // SOLO key take a little of it since 1.26)
         val f = faders(again.window.decorView); assertTrue(f.isNotEmpty())
-        assertTrue("fader ${f[0].height} of ${again.resources.displayMetrics.heightPixels}", f[0].height > again.resources.displayMetrics.heightPixels * 0.5)
+        assertTrue("fader ${f[0].height} of ${again.resources.displayMetrics.heightPixels}", f[0].height > again.resources.displayMetrics.heightPixels * 0.4)
     }
 
     @Test @Config(qualifiers = "w891dp-h411dp-land-xxhdpi") fun onItsSideSixChannelsStandAcrossAndTheFadersUseTheHeight() {
@@ -89,6 +90,7 @@ class MixerSectionsTest {
         try { val a = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get()
             val w = (find(a.window.decorView, "localChannels") as ViewGroup).getChildAt(0).layoutParams.width
             assertEquals(RemoteActivity.stripWidthFor(a.resources.displayMetrics.widthPixels, 4), w)
-            assertEquals(84, find(a.window.decorView, "eq_0")!!.layoutParams.height) } finally { Nav.standaloneForTests = null }
+            val k = find(a.window.decorView, "eq_0")!!.layoutParams.height; val dn = a.resources.displayMetrics.density   // keys sized from the screen (MixerFit)
+            assertTrue("key $k px", k >= (MixerFit.MIN_KEY_DP * dn).toInt() && k <= (MixerFit.MAX_KEY_DP * dn).toInt()) } finally { Nav.standaloneForTests = null }
     }
 }
