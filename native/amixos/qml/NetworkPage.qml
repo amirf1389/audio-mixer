@@ -14,22 +14,31 @@ Item {
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(56, bl.implicitWidth + 16); implicitHeight: 24; radius: 8; gradient: Gradient { GradientStop { position: 0; color: on ? Theme.btnTop(onColor) : Theme.ov(0.11) } GradientStop { position: 1; color: on ? Theme.btnBottom(onColor) : Theme.ov(0.08) } } color: on ? onColor : Theme.ov(0.08); border.color: Theme.lineSoft
         Rectangle { anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, parent.radius - 1); color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, parent.on ? 0.30 : 0.07) }
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
-    // a QR code drawn with whole device pixels per module, a 4-module quiet zone on white, square and centred in whatever space it gets
-    component QrView: Rectangle { id: qv; property var mods: []; radius: 8; color: "#ffffff"; onModsChanged: qc.requestPaint()
-        Canvas { id: qc; readonly property real dpr: Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
+    // a QR code drawn with whole device pixels per module, a 4-module quiet zone on white, square and centred in whatever space it gets.
+    // Drawn on a Canvas; when the Canvas does not draw it (not available, or no paint within 800 ms: seen with some Windows Direct3D 11
+    // drivers) the same modules are shown as an Image (img: Remote.qrImage, a PNG), so the code is never a white square.
+    component QrView: Rectangle { id: qv; property var mods: []; property string img: ""; property bool forceImage: false; property bool painted: false; property bool late: false
+        readonly property bool useImage: img !== "" && (forceImage || (late && !painted))
+        readonly property bool drawn: mods && mods.length > 1 && (useImage ? qi.status === Image.Ready : painted)   // the code is on screen
+        radius: 8; color: "#ffffff"; onModsChanged: { painted = false; late = false; lateTimer.restart(); qc.requestPaint() }
+        Timer { id: lateTimer; interval: 800; onTriggered: qv.late = true }
+        Canvas { id: qc; visible: !qv.useImage; readonly property real dpr: Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
             readonly property int n: (qv.mods && qv.mods.length > 1) ? qv.mods[0] : 21
             readonly property int px: Math.max(1, Math.floor(Math.min(qv.width, qv.height) * dpr / (n + 8)))   // device pixels per module
             width: px * (n + 8) / dpr; height: width; anchors.centerIn: parent
             canvasSize: Qt.size(px * (n + 8), px * (n + 8)); renderTarget: Canvas.Image; smooth: false
             onAvailableChanged: if (available) requestPaint()   // a paint asked for before the Canvas is ready is dropped
             onPxChanged: requestPaint(); onNChanged: requestPaint()
-            onPaint: { const ctx = getContext("2d"); ctx.reset(); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvasSize.width, canvasSize.height)
+            onPaint: { const ctx = getContext("2d"); if (!ctx) return; ctx.reset(); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvasSize.width, canvasSize.height)
                 const m = qv.mods; if (!m || m.length < 2) return; const k = m[0]; ctx.fillStyle = "#000000"
-                for (let y = 0; y < k; ++y) for (let x = 0; x < k; ++x) if (m[1 + y * k + x]) ctx.fillRect((x + 4) * px, (y + 4) * px, px, px) } } }
+                for (let y = 0; y < k; ++y) for (let x = 0; x < k; ++x) if (m[1 + y * k + x]) ctx.fillRect((x + 4) * px, (y + 4) * px, px, px)
+                qv.painted = true } }
+        Image { id: qi; objectName: "qrImage"; visible: qv.useImage; source: qv.useImage ? qv.img : ""; anchors.centerIn: parent; width: Math.min(qv.width, qv.height); height: width
+            fillMode: Image.PreserveAspectFit; smooth: false; mipmap: false; cache: false } }
     Popup { id: qrBig; objectName: "pairQrBig"; parent: Overlay.overlay; x: 0; y: 0; width: parent ? parent.width : 0; height: parent ? parent.height : 0; modal: true; padding: 0
         background: Rectangle { color: "#ffffff" }
         // made only while the popup is open: a window-sized Canvas repainted on every PIN change would slow the page down for nothing
-        Loader { anchors.fill: parent; active: qrBig.visible; sourceComponent: Item { QrView { anchors.centerIn: parent; width: Math.min(parent.width, parent.height) - 40; height: width; radius: 0; mods: qrRow.mods } } }
+        Loader { anchors.fill: parent; active: qrBig.visible; sourceComponent: Item { QrView { anchors.centerIn: parent; width: Math.min(parent.width, parent.height) - 40; height: width; radius: 0; mods: qrRow.mods; img: qrRow.img; forceImage: qrSmall.useImage } } }
         Text { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; text: i18n.t("Click or press Esc to close", i18n.lang); color: "#444"; font.family: Theme.mono; font.pixelSize: 10 }
         MouseArea { anchors.fill: parent; onClicked: qrBig.close() } }
     // A SHORT WINDOW (or a large interface zoom): the page scrolls instead of running past the bottom of the page area
@@ -94,6 +103,8 @@ Item {
                     Text { Layout.fillWidth: true; text: remote.available ? remote.status : i18n.t("The remote service program (amixos-daemon) is not installed next to the console.", i18n.lang); color: remote.running ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "   " + i18n.t("← type this into the phone app", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "/remote   " + i18n.t("← or open this in any browser (phone, tablet, laptop) and type the PIN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                    Note { visible: remote.running && remote.otherAddresses.length > 0; text: i18n.t("Other addresses (no router, VPN, mobile or public network, IPv6; a phone on the Wi-Fi does not reach these):", i18n.lang) + " " + remote.otherAddresses.join("  ") }
+                    Text { objectName: "feedbackNote"; visible: remote.feedbackNote !== ""; Layout.fillWidth: true; text: remote.feedbackNote; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; wrapMode: Text.WordWrap }
                     Text { visible: remCard.shown !== ""; text: i18n.t("TOKEN  ", i18n.lang) + remCard.shown; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere }
                     RowLayout { id: pinRow; objectName: "pairPinRow"; visible: remote.running; spacing: 10; property string pin: ""; property int secs: 0
                         Timer { interval: 1000; running: pinRow.visible; repeat: true; triggeredOnStart: true; onTriggered: { pinRow.pin = remote.pairPin(); pinRow.secs = remote.pairSecondsLeft() } }
@@ -103,31 +114,54 @@ Item {
                         Note { text: i18n.t("Type this PIN into the phone once. It gets its own token for 30 days, tied to that phone's address. A new PIN every minute; one phone per PIN; five wrong tries close pairing until the next PIN.", i18n.lang) } }
                     // PAIRING QR CODE: scan it with the phone camera (opens the browser remote, which pairs by itself) or with SCAN QR in the
                     // Android app. It carries this computer's address and the minute's PIN, so it is redrawn when the PIN changes.
-                    RowLayout { id: qrRow; objectName: "pairQrRow"; visible: remote.running && (remote.addresses.length > 0 || demoAddress !== ""); spacing: 14; Layout.fillWidth: true
+                    // Never a blank area: the code when the service runs and a phone can reach an address; otherwise the reason, the address
+                    // to type and (with the service off) START. Without a PIN yet (no token) the code opens the remote, which asks for the PIN.
+                    RowLayout { id: qrRow; objectName: "pairQrRow"; visible: true; spacing: 14; Layout.fillWidth: true
                         property string demoAddress: ""   // screenshots on a machine with no LAN address: an example address to draw the code for
                         onDemoAddressChanged: redraw()
-                        property int pick: 0; property string url: ""; property var mods: []
-                        function redraw() { const a = remote.addresses.length ? remote.addresses : (demoAddress ? [demoAddress] : []); if (qrRow.pick >= a.length) qrRow.pick = 0; qrRow.url = a.length ? remote.pairUrl(a[qrRow.pick]) : ""; qrRow.mods = qrRow.url ? remote.qr(qrRow.url) : [] }
+                        // tests: the states the code must explain (undefined: as they really are)
+                        property var simRunning: undefined; property var simAddresses: undefined; property var simPin: undefined
+                        onSimRunningChanged: redraw(); onSimAddressesChanged: redraw(); onSimPinChanged: redraw()
+                        readonly property bool up: simRunning !== undefined ? simRunning : remote.running
+                        property int pick: 0; property string url: ""; property string qrText: ""; property var mods: []; property string img: ""; property string reason: ""; property var addrs: []
+                        readonly property bool codeShown: qrText !== "" && qrSmall.drawn
+                        readonly property bool reasonShown: reason !== "" && pairReason.visible
+                        function redraw() {
+                            const a = simAddresses !== undefined ? simAddresses : (remote.addresses.length ? remote.addresses : (demoAddress ? [demoAddress] : [])); qrRow.addrs = a
+                            if (qrRow.pick >= a.length) qrRow.pick = 0
+                            const base = a.length ? a[qrRow.pick] : "", pin = simPin !== undefined ? simPin : remote.pairPin()
+                            qrRow.url = base ? base + "/remote" : ""
+                            qrRow.qrText = up && base ? (pin ? base + "/remote#pin=" + pin : base + "/remote") : ""
+                            qrRow.mods = qrRow.qrText ? remote.qr(qrRow.qrText) : []; qrRow.img = qrRow.qrText ? remote.qrImage(qrRow.qrText) : ""
+                            qrRow.reason = !remote.available ? i18n.t("No QR code: the remote service program (amixos-daemon) is not installed next to the console.", i18n.lang)
+                                : !up ? (remote.status !== "" && remote.status !== "off" ? i18n.t("No QR code: the remote service is not running. It said:", i18n.lang) + " " + remote.status : i18n.t("No QR code yet: the remote service is off. Press START to start it for the phones on this network.", i18n.lang))
+                                : !base ? i18n.t("No QR code: this computer has no Wi-Fi or network address that a phone can reach. Connect it to the same Wi-Fi as the phone; the code appears by itself.", i18n.lang)
+                                : !pin ? i18n.t("No pairing PIN yet: the service has not written its token. The code opens the remote; type the PIN there once it shows here.", i18n.lang) : ""
+                            if (qrRow.mods.length < 2 && qrRow.qrText !== "") qrRow.reason = i18n.t("The QR code could not be made for this address: type it into the phone.", i18n.lang) }
                         Connections { target: pinRow; function onPinChanged() { qrRow.redraw() } }
-                        Connections { target: remote; function onChanged() { if (qrRow.visible) qrRow.redraw() } }   // the service started, a network came or went: the code follows
+                        Connections { target: remote; function onChanged() { qrRow.redraw() } }   // the service started or stopped, a network came or went: the code follows
+                        Timer { interval: 2000; running: qrRow.visible && !qrRow.up; repeat: true; onTriggered: qrRow.redraw() }   // the status while it is off
                         onVisibleChanged: if (visible) redraw()
-                        Component.onCompleted: if (visible) redraw()
+                        Component.onCompleted: redraw()
                         // the code is always shown whole: square, centred, a 4-module quiet zone, whole device pixels per module (crisp at any DPI);
                         // it grows with the row (168 .. 300 px) and never shrinks below what a camera reads. ENLARGE shows it over the whole window.
-                        ColumnLayout { spacing: 4; Layout.alignment: Qt.AlignTop
+                        ColumnLayout { spacing: 4; Layout.alignment: Qt.AlignTop; visible: qrRow.qrText !== ""
                             // nothing may sit on the code: a button over its corner stopped phone cameras reading it
-                            QrView { id: qrSmall; objectName: "pairQr"; mods: qrRow.mods
+                            QrView { id: qrSmall; objectName: "pairQr"; mods: qrRow.mods; img: qrRow.img
                                  readonly property real side: Math.max(168, Math.min(300, qrRow.width * 0.38)); Layout.preferredWidth: side; Layout.preferredHeight: side; Layout.minimumWidth: 168; Layout.minimumHeight: 168 }
                             Btn { objectName: "pairQrEnlarge"; label: "ENLARGE"; Layout.alignment: Qt.AlignHCenter; implicitHeight: 18; onClicked: qrBig.open() } }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 5
+                        Rectangle { objectName: "pairNoCode"; visible: qrRow.qrText === ""; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 168; Layout.preferredHeight: 168; radius: 8; color: Theme.ov(0.05); border.color: Theme.amber
+                            ColumnLayout { anchors.centerIn: parent; width: parent.width - 20; spacing: 8
+                                Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("NO CODE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                                Btn { objectName: "pairStart"; visible: !qrRow.up && remote.available; Layout.alignment: Qt.AlignHCenter; label: i18n.t("START", i18n.lang); on: true; onColor: Theme.emerald; onClicked: remote.start(true) } } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 5; Layout.alignment: Qt.AlignTop
                             Head { text: i18n.t("SCAN TO CONNECT", i18n.lang) }
-                            Note { text: i18n.t("Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.", i18n.lang) }
-                            Text { objectName: "pairQrUrl"; text: qrRow.url.replace(/#pin=.*/, ""); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                            Flow { Layout.fillWidth: true; spacing: 4; visible: remote.addresses.length > 1
-                                Repeater { model: remote.addresses; delegate: Btn { label: modelData.replace("http://", "").replace(/:\d+$/, ""); on: qrRow.pick === index; onColor: Theme.cyan; onClicked: { qrRow.pick = index; qrRow.redraw() } } } }
-                            Note { visible: remote.addresses.length > 1; text: i18n.t("More than one network: pick the address of the Wi-Fi the phone is on.", i18n.lang) } } }
-                    Text { objectName: "pairNoAddress"; visible: remote.running && remote.addresses.length === 0 && qrRow.demoAddress === ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true
-                           text: i18n.t("No QR code: this computer has no Wi-Fi or network address that a phone can reach. Connect it to the same Wi-Fi as the phone; the code appears by itself.", i18n.lang) }
+                            Text { id: pairReason; objectName: "pairNoAddress"; visible: qrRow.reason !== ""; text: qrRow.reason; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            Note { visible: qrRow.qrText !== ""; text: i18n.t("Phone camera: opens the browser remote on this computer and pairs by itself. AmF X1 app: REMOTE → SCAN QR. The code holds this computer's address and the PIN of this minute, so it changes with the PIN.", i18n.lang) }
+                            Text { objectName: "pairQrUrl"; text: qrRow.url !== "" ? qrRow.url : (qrRow.up ? "http://127.0.0.1:" + remote.port + "/remote   " + i18n.t("(this computer only)", i18n.lang) : ""); visible: text !== ""; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere }
+                            Flow { Layout.fillWidth: true; spacing: 4; visible: qrRow.addrs.length > 1
+                                Repeater { model: qrRow.addrs; delegate: Btn { label: modelData.replace("http://", "").replace(/:\d+$/, "") + (remote.adapterName(modelData) ? "  " + remote.adapterName(modelData) : ""); on: qrRow.pick === index; onColor: Theme.cyan; onClicked: { qrRow.pick = index; qrRow.redraw() } } } }
+                            Note { visible: qrRow.addrs.length > 1; text: i18n.t("More than one network: pick the address of the Wi-Fi the phone is on.", i18n.lang) } } }
                     Note { objectName: "pairHelp"; visible: remote.running && remote.addresses.length > 0
                            text: i18n.t("If the phone cannot connect after scanning: the phone and this computer must be on the same Wi-Fi (not mobile data, not a guest network); pick the right address above when there is more than one; and Windows Firewall must allow AmF X1 on private networks (the setup program adds this rule, the zip version does not).", i18n.lang) }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.lineSoft }

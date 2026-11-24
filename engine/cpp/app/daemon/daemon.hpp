@@ -18,6 +18,7 @@
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
 // encrypted on the wire; put the nginx TLS front (deploy/nginx) in front of it for anything beyond a trusted home / studio network.
 #pragma once
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <thread>
@@ -33,6 +34,7 @@
 #include "audiomixer/app_volume.hpp"
 #include "plugin/plugin.hpp"
 #include "rta.hpp"
+#include "howl.hpp"
 #include "audiomixer/onevoice.hpp"
 #include "samples/pad_player.hpp"
 #include "samples/padbank.hpp"
@@ -49,7 +51,9 @@ class Daemon {
   // PLUG-INS: makes one plug-in from a rack slot's kind ("vst3:<module>|<class>", "vst2:<module>", "fx:<effect>") at the engine's rate;
   // the network extension gives the real loaders, tests a stand-in. Empty: racks are listed but not played.
   using PluginFactory = std::function<std::unique_ptr<host::Plugin>(const std::string& kind, double rate, int maxBlock, std::string& err)>;
-  struct Options { PluginFactory pluginFactory; std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; std::string padsFile; };   // padsFile: the 1000 CUSTOM PADS shared with the console (<data>/pads.json; "" = in memory)   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
+  struct Options { PluginFactory pluginFactory; std::string bind = "127.0.0.1"; unsigned short port = 8765; std::string token; int strips = 32; std::string version = "0.1.0"; bool localOnly = true; std::string tokenStore; std::string consoleInfo; std::string plan; std::string seed; std::string padsFile;
+    bool feedbackGuard = true;   // FEEDBACK GUARD (howl.hpp): a strip that howls is muted and reported (--no-feedback-guard turns it off)
+    std::function<void(float* const* in, std::size_t frames, std::uint64_t frameIndex)> nullInput; };   // tests: what the null device's inputs carry   // padsFile: the 1000 CUSTOM PADS shared with the console (<data>/pads.json; "" = in memory)   // seed: the console's mixer (remote-seed.json) loaded at start, so the phones begin where the console was   // plan: the console's licence plan name (BASIC / PRO / ...), shown to the phone   // consoleInfo: the console's plug-in / rack snapshot (remote-console.json), served read-only   // tokenStore: the file of the named tokens ("" = only the master token)   // localOnly: the local policy (private-network peers only)
   explicit Daemon(Options o);
   ~Daemon();
   bool start(std::string& err);
@@ -111,7 +115,15 @@ class Daemon {
   // Windows says a program came or went; a move in the Windows mixer reaches the remotes as a new state, the console's own does not echo.
   void setAppLayer(std::unique_ptr<vol::SessionLayer> layer);   // tests (start() takes this computer's own when none was set)
   json::Value appsJson() const;
+  // --open on the command line as an "open" command: in "-" (or empty) opens NO input, "default" the system's default input, else that id
+  struct OpenArgs { std::string backend = "auto", in = "-", out; double rate = 0; int frames = 0, inChannels = -1, outChannels = -1; };
+  static json::Value openCommand(const OpenArgs& a);
   bool loadSeed(const std::string& file, std::string& err);   // {"strips":[{name,db,pan,mute,solo}],"master":{"db"}}
+  // FEEDBACK GUARD (howl.hpp): one pass over the strips that read a device input and are heard (the guard thread runs it every 20 ms;
+  // tests call it). A strip that howls is muted (its own MUTE, so the console and every remote follow) and the state's "feedback" says
+  // which, at what frequency: {"count", "strip", "name", "hz", "db", "at", "text"}. Returns how many strips it muted in this pass.
+  int feedbackCheck();
+  json::Value feedbackJson() const;
   json::Value meters() const;
   // SECURITY: which web pages may read the replies (only pages served from this computer), and which Host a request may name while the
   // local policy is on (an address or localhost: a made-up domain pointed at 127.0.0.1 by a hostile page is refused)
@@ -128,10 +140,13 @@ class Daemon {
  private:
   // a strip: fader, pan, mute, solo; its input GAIN (trim, dB) and the console's analog 3-band channel EQ (LOW shelf 100 Hz, MID bell
   // 100 Hz .. 8 kHz, HIGH shelf 10 kHz, ±15 dB each, the engine's bands 10..12), kept here so every remote shows them
-  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true;
+  // groupMute / groupDb: what the console's DCA group and MUTE GROUPS do to the strip on top of its own fader and MUTE (the console
+  // sends them: op "group", and the seed): a strip the console holds silent through its DCA stays silent while the service plays
+  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; bool groupMute = false; double groupDb = 0;
     struct Band { int type = 0; double freq = 1000, q = 0.707, gain = 0; };   // the channel's parametric EQ, bands 0..7 (type: dsp::FilterType)
     Band eq[8]; };
   void pushTone(Runtime& rt, int i) const;
+  void pushLevel(Runtime& rt, int i) const;   // the strip's fader and mute with its groups, to the engine
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
   // DCA GROUP CHANNELS as the console has them (the console applies them to its own mix; the service keeps them so every remote shows the
   // same group strips, and a remote's move of one reaches the console): id 1..8, members = strip numbers
@@ -151,7 +166,10 @@ class Daemon {
   // ROUTING, kept here so the phones show it and a fresh device gets it: per strip the device input it reads (-1 none), per output its source
   int inRoute_[kMaxStrips] = {}; int outRoute_[Runtime::kMaxOutputs] = {}; bool routesInit_ = false; void initRoutes();
   json::Value routingJson() const;
-  Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1}; std::string masterPreset_;   // the MASTERING PRESET picked last (its name)
+  json::Value fbJsonLocked() const; std::mutex guardM_; unsigned long long rtGen_ = 0, guardGen_ = ~0ull;   // the device the guard last saw
+  std::unique_ptr<HowlGuard> guard_ = std::make_unique<HowlGuard>(); std::vector<HowlDetector> howl_; std::vector<unsigned> howlRead_; std::vector<bool> howlArmed_; std::thread guardThread_;
+  int fbCount_ = 0, fbStrip_ = -1; double fbHz_ = 0, fbDb_ = -120; long long fbAt_ = 0; std::string fbText_;   // the last howl the guard stopped (m_ held)
+    Rta rta_; std::atomic<long long> rtaUntil_{0}; MasterChain master_; MasterChain::Params mp_; std::atomic<unsigned long long> masterV_{1}; std::string masterPreset_;   // the MASTERING PRESET picked last (its name)
   json::Value programEqJson() const;
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
   struct Bucket { double tokens = -1; std::chrono::steady_clock::time_point at; bool take(double perSecond, double burst); };

@@ -22,7 +22,9 @@ class Remote : public QObject {
   Q_PROPERTY(bool available READ available CONSTANT)          // the service program is next to the console
   Q_PROPERTY(QString status READ status NOTIFY changed)
   Q_PROPERTY(int port READ port CONSTANT)
-  Q_PROPERTY(QStringList addresses READ addresses NOTIFY changed)   // http://<private address>:<port> of this computer
+  Q_PROPERTY(QStringList addresses READ addresses NOTIFY changed)   // http://<private address>:<port> of this computer, the one a phone reaches first
+  Q_PROPERTY(QStringList otherAddresses READ otherAddresses NOTIFY changed)   // the rest: no-network (169.254), carrier / public, IPv6 (listed, not for the code)
+  Q_PROPERTY(QString feedbackNote READ feedbackNote NOTIFY changed)   // the service's FEEDBACK GUARD muted a strip that howled ("" until it does)
   Q_PROPERTY(QString tokenFile READ tokenFile CONSTANT)
   Q_PROPERTY(QVariantList tokens READ tokens NOTIFY changed)     // the named tokens [{id, name, role, state}]: never the tokens themselves
   Q_PROPERTY(QString tokenNote READ tokenNote NOTIFY changed)
@@ -37,7 +39,25 @@ class Remote : public QObject {
   bool running() const { return ext_.running() || proc_.state() != QProcess::NotRunning; }
   bool inProcess() const { return ext_.running(); }   // the service runs as an extension inside the console
   bool available() const; QString status() const { return status_; } int port() const { return 8765; }
-  QStringList addresses() const; QString tokenFile() const;
+  QStringList addresses() const; QStringList otherAddresses() const; QString tokenFile() const;
+  Q_INVOKABLE QString adapterName(const QString& address) const;   // the network card an address belongs to ("Wi-Fi", "Ethernet"), for the address picker
+  QString feedbackNote() const { return running() ? feedbackNote_ : QString(); }
+  // THE SOUND CARD HANDED OVER: the service opens exactly what the console plays now (backend, output, input or none, rate, buffer), so
+  // starting it never swaps the console's devices for the system defaults (the default input is the microphone: it howled through the
+  // speakers). A console with no input open hands over no input. When the service stops, the console reopens what it had.
+  struct Takeover { bool running = false; QString backend, in, out; double rate = 0; int frames = 0, inChannels = 0, outChannels = 0; };
+  Takeover takeover() const;   // what the console plays now (or, with its engine off, the remembered device with no input)
+  static QStringList openArgs(const Takeover& t) {   // the service's --open arguments for it
+    QStringList a{QStringLiteral("--open"), t.backend.isEmpty() ? QStringLiteral("auto") : t.backend};
+    if (!t.out.isEmpty() && t.out != QLatin1String("-")) a << QStringLiteral("--out") << t.out;
+    const bool in = t.running && t.inChannels > 0 && t.in != QLatin1String("-");
+    a << QStringLiteral("--in") << (in ? (t.in.isEmpty() ? QStringLiteral("default") : t.in) : QStringLiteral("-"));
+    if (in) a << QStringLiteral("--in-channels") << QString::number(t.inChannels);
+    if (t.rate > 0) a << QStringLiteral("--rate") << QString::number(t.rate, 'g', 10);
+    if (t.frames > 0) a << QStringLiteral("--frames") << QString::number(t.frames);
+    if (t.outChannels > 0) a << QStringLiteral("--out-channels") << QString::number(t.outChannels);
+    return a; }
+  const Takeover& handedOver() const { return took_; }
   Q_INVOKABLE bool start(bool wifi);        // wifi false = this computer only (127.0.0.1)
   Q_INVOKABLE void stop();
   void writeConsoleInfo() const;   // remote-console.json for the phone's PLUG-INS page
@@ -47,6 +67,7 @@ class Remote : public QObject {
   // by itself), the Android app's SCAN QR reads host, port and PIN from it. The PIN rides in the #fragment: browsers never send it in a request.
   Q_INVOKABLE QString pairUrl(const QString& address) const;
   Q_INVOKABLE QVariantList qr(const QString& text) const;   // [size, row-major 0/1 modules...] for a Canvas; empty when it does not fit
+  Q_INVOKABLE QString qrImage(const QString& text) const;   // the same code as a PNG (data: URL, 8 px a module, quiet zone): the page's fallback when its Canvas does not draw
   Q_INVOKABLE void refreshTokens();
   Q_INVOKABLE QString newToken(const QString& name, const QString& role, int days);   // returns the token once ("" on failure); days 0 = no end
   Q_INVOKABLE bool revokeToken(const QString& id);
@@ -74,7 +95,8 @@ class Remote : public QObject {
   // every phone and browser. Each side is compared with the last value both agreed on, so neither echoes the other back.
   struct SyncStrip;
   static QVariantList eqList(const SyncStrip& s);
-  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; QString name; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true;
+  // gMute / gDb: what the strip's DCA and MUTE GROUPS do to it on top of its own MUTE and fader
+  struct SyncStrip { double db = 0, pan = 0; bool mute = false, solo = false; bool gMute = false; double gDb = 0; QString name; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true;
     struct Band { int type = 0; double freq = 1000, q = 0.707, gain = 0; bool operator!=(const Band& o) const { return type != o.type || std::abs(freq - o.freq) > 0.5 || std::abs(q - o.q) > 0.005 || std::abs(gain - o.gain) > 0.05; } };
     Band eq[8]; };   // the channel's parametric EQ, bands 0..7   // + GAIN and the 3-band channel EQ
   static QString syncName(int i, const QString& n) { return n.isEmpty() ? QStringLiteral("CH %1").arg(i + 1) : n; }
@@ -104,4 +126,6 @@ class Remote : public QObject {
   quint64 masterV_ = 0;   // the RTA EQ changes a remote made, taken back   // the plug-ins a phone changed, taken back into the console's racks
   QVariantList links_; QString linkNote_; QTimer linkTimer_; bool linksGetting_ = false;
   void ensureToken(); QNetworkRequest api(const QString& path) const;
+  Takeover took_; bool restore_ = false, reuseTook_ = false; void giveBack();   // the console's sound card, given back when the service stops
+  QString feedbackNote_; int feedbackSeen_ = 0; mutable QHash<QString, QString> adapters_;
 };

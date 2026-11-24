@@ -211,6 +211,11 @@ if(ANDROID)
 endif()
 
 enable_testing()
+# the remote service's --open arguments for each state of the console (Remote::openArgs: never the default microphone by itself)
+add_executable(remote_args_test test/remote_args_test.cpp)
+target_include_directories(remote_args_test PRIVATE src)
+target_link_libraries(remote_args_test PRIVATE Qt6::Core Qt6::Network)
+add_test(NAME remote_args COMMAND remote_args_test)
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
 set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1" TIMEOUT 60)   # AMIX_ALLOW_CAPTURE: the repository's own tooling may capture the window
 # PAGE BUDGET: every page and every popup opens within its time budget (built from nothing 600 ms, cached 150 ms) and its content stays

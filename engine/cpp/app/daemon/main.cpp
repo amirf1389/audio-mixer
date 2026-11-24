@@ -1,5 +1,8 @@
 // amixos-daemon: the A mix OS engine as a background service with a local JSON API. See daemon.hpp for the routes.
-//   amixos-daemon [--port 8765] [--allow-lan] [--token-file PATH | --token T] [--strips 32] [--open BACKEND]
+//   amixos-daemon [--port 8765] [--allow-lan] [--token-file PATH | --token T] [--strips 32] [--open BACKEND [--out ID] [--in ID|default|-]
+//                 [--rate HZ] [--frames N] [--in-channels N] [--out-channels N]] [--no-feedback-guard]
+// --open takes the sound card the console had: the console passes its exact backend, output, input, rate and buffer (Remote::openArgs).
+// Without --in NO input is opened: the system's default input is the microphone, and a microphone opened by itself next to the speakers howls.
 // --allow-lan binds 0.0.0.0: the token still protects control, but nothing is encrypted on the wire. Use deploy/nginx for TLS beyond a trusted LAN.
 #include <atomic>
 #include <chrono>
@@ -30,7 +33,7 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
     std::string k = kind.substr(5), module = k, cid; const auto bar = k.rfind('|'); if (bar != std::string::npos) { module = k.substr(0, bar); cid = k.substr(bar + 1); }
     if (v3) return am::vst3::Plugin::load(module, cid, rate, block, err);
     return am::vst2::Plugin::load(module, rate, block, err); };
-  std::string tokenFile = am::paths::file("daemon.token"), openBackend, openIn; bool lan = false, tokenArg = false;
+  std::string tokenFile = am::paths::file("daemon.token"), openBackend, openIn = "-", openOut; bool lan = false, tokenArg = false; double openRate = 0; int openFrames = 0, openInCh = -1, openOutCh = -1;
   std::string tokensFile = am::paths::file("daemon.tokens.json"), newName, newRole = "control", revokeId; int newDays = 0; bool doNew = false, doList = false, doRevoke = false;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i]; auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
@@ -49,10 +52,16 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
     else if (a == "--strips") o.strips = std::atoi(next().c_str());
     else if (a == "--plan") o.plan = next();
     else if (a == "--open") openBackend = next();
-    else if (a == "--in") openIn = next();   // the input --open takes: "-" none, "loopback:system" the computer's sound, a device id
+    else if (a == "--in") openIn = next();   // the input --open takes: "-" none (the default), "default" the system's default input, "loopback:system" the computer's sound, a device id
+    else if (a == "--out") openOut = next();   // the output --open takes ("" the system's default)
+    else if (a == "--rate") openRate = std::atof(next().c_str());
+    else if (a == "--frames") openFrames = std::atoi(next().c_str());
+    else if (a == "--in-channels") openInCh = std::atoi(next().c_str());
+    else if (a == "--out-channels") openOutCh = std::atoi(next().c_str());
+    else if (a == "--no-feedback-guard") o.feedbackGuard = false;
     else if (a == "--version") o.version = next();
     else if (a == "--seed") o.seed = next();   // the console's mixer to start from (the console writes remote-seed.json)
-    else if (a == "--help" || a == "-h") { say(fmt("AmF X1 Network (amixos-daemon) [--port 8765] [--allow-lan] [--allow-any-address] [--bind ADDR] [--token-file PATH | --token T] [--strips 32] [--open BACKEND]\n  tokens: --new-token NAME [--role control|view] [--days N] | --list-tokens | --revoke-token ID  [--tokens-file PATH]\n  --allow-lan: phones on the same network may connect (local policy: private addresses only; the token is still needed; not encrypted).\n")); return 0; }
+    else if (a == "--help" || a == "-h") { say(fmt("AmF X1 Network (amixos-daemon) [--port 8765] [--allow-lan] [--allow-any-address] [--bind ADDR] [--token-file PATH | --token T] [--strips 32] [--open BACKEND [--out ID] [--in ID|default|-] [--rate HZ] [--frames N] [--in-channels N] [--out-channels N]] [--no-feedback-guard]\n  --open opens no input unless --in names one.\n  tokens: --new-token NAME [--role control|view] [--days N] | --list-tokens | --revoke-token ID  [--tokens-file PATH]\n  --allow-lan: phones on the same network may connect (local policy: private addresses only; the token is still needed; not encrypted).\n")); return 0; }
     else { say(fmt("unknown option %s\n", a.c_str())); return 2; }
   }
   if (lan) o.bind = "0.0.0.0";
@@ -69,9 +78,11 @@ int run(int argc, char** argv, std::atomic<bool>& g_quit, std::function<void(con
   am::Daemon d(o);
   if (!d.start(err)) { say(fmt("amixos-daemon: %s\n", err.c_str())); return 1; }
   if (!openBackend.empty()) {
-    // --in: the input to open ("-" none, "loopback:system" the computer's sound, an id); without it the system's default input, which on a
-    // PC is the microphone. An input that does not open falls back to no input: the outputs still start.
-    am::json::Value c = am::json::Value::object(); c.set("op", "open"); c.set("backend", openBackend); if (openIn == "-") c.set("inChannels", 0); else if (!openIn.empty()) c.set("in", openIn);
+    // --in: the input to open ("-" none, "default" the system's default input, "loopback:system" the computer's sound, an id); without it
+    // none: the system's default input is the microphone, and opened by itself next to the speakers it howled. An input that does not
+    // open falls back to no input: the outputs still start.
+    am::Daemon::OpenArgs oa; oa.backend = openBackend; oa.in = openIn; oa.out = openOut; oa.rate = openRate; oa.frames = openFrames; oa.inChannels = openInCh; oa.outChannels = openOutCh;
+    am::json::Value c = am::Daemon::openCommand(oa);
     std::string e; d.control(c, e);
     if (!e.empty() && !openIn.empty() && openIn != "-") { say(fmt("amixos-daemon: input %s did not open (%s): outputs only\n", openIn.c_str(), e.c_str())); e.clear(); c.set("in", std::string()); c.set("inChannels", 0); d.control(c, e); }
     if (!e.empty()) say(fmt("amixos-daemon: open %s: %s\n", openBackend.c_str(), e.c_str())); }

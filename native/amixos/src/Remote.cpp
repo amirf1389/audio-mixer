@@ -1,5 +1,20 @@
+#ifdef _WIN32   // the default gateway of each network card (GetAdaptersAddresses): a phone reaches the card that has one
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#endif
 #include <QElapsedTimer>
 #include "Remote.h"
+#include <QBuffer>
+#include <QImage>
+#include <algorithm>
+#include <cstring>
 #include <QSet>
 #include <cmath>
 #include <QSettings>
@@ -27,16 +42,19 @@ Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engin
   connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
   proc_.setProcessChannelMode(QProcess::MergedChannels);
   connect(&proc_, &QProcess::readyRead, this, [this] { const QString out = QString::fromLocal8Bit(proc_.readAll()).trimmed(); if (!out.isEmpty()) { status_ = out.section('\n', -1).left(200); emit changed(); } });
-  connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); emit changed(); emit stopped(); });
+  connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); giveBack(); emit changed(); emit stopped(); });
   connect(&ext_, &Extension::changed, this, [this] { const QString out = ext_.takeOutput().trimmed(); if (!out.isEmpty()) status_ = out.section('\n', -1).left(200); emit changed(); });
-  connect(&ext_, &Extension::stopped, this, [this] { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("off"); emit changed(); emit stopped(); });
+  connect(&ext_, &Extension::stopped, this, [this] { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("off"); giveBack(); emit changed(); emit stopped(); });
   connect(&proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) { if (e == QProcess::FailedToStart) { status_ = QStringLiteral("the remote service could not be started: ") + program(); emit changed(); } });
 }
 // ---- LIVE SYNC (see Remote.h)
 QVector<Remote::SyncStrip> Remote::consoleMix() const {
-  QVector<SyncStrip> v; const QVariantList l = engine_->stripState(); const int n = qBound(1, engine_->licensedChannels(), 32);
+  QVector<SyncStrip> v; const QVariantList l = engine_->stripState(); const int n = qBound(1, engine_->licensedChannels(), 32); const QVariantList dc = engine_->dcaState();
   for (int i = 0; i < n && i < l.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip s; s.db = m.value("db").toDouble(); s.pan = m.value("pan").toDouble();
+    if (!std::isfinite(s.db) || s.db < -120) s.db = -120;   // a fader at -inf: down (JSON has no -inf; it used to arrive as 0 dB)
     s.mute = m.value("mute").toBool(); s.solo = m.value("solo").toBool(); s.name = syncName(i, m.value("name").toString());
+    s.gMute = m.value("effectiveMute").toBool() && !s.mute;   // silent through its DCA or a MUTE GROUP: silent on the service too
+    { const int g = m.value("dca").toInt(); s.gDb = g > 0 && g <= dc.size() ? std::clamp(dc[g - 1].toMap().value("db").toDouble(), -60.0, 10.0) : 0.0; }
     s.trim = engine_->trim(i); const QVariantMap t = engine_->channelEq(i); s.low = t.value("low").toDouble(); s.mid = t.value("mid").toDouble(); s.midHz = t.value("midFreq", 1000).toDouble(); s.high = t.value("high").toDouble();
     s.toneOn = t.value("on", true).toBool();   // the EQ key's own state (Engine keeps it)
     for (int b = 0; b < 8; ++b) { const QVariantMap e = engine_->eqBand(i, b); s.eq[b] = {e.value("type").toInt(), e.value("freq", 1000).toDouble(), e.value("q", 0.707).toDouble(), e.value("gainDb").toDouble()}; }
@@ -55,14 +73,16 @@ QVariantMap Remote::mastNow() const {   // MASTERING as LIVE SYNC carries it (th
 QByteArray Remote::rackJson(int strip) const { return QJsonDocument::fromVariant(engine_->remoteRack(strip)).toJson(QJsonDocument::Compact); }
 void Remote::writeSeed() {
   base_ = consoleMix(); baseMaster_ = engine_->masterDb(); baseMute_ = engine_->masterMuted(); v_ = 0; posting_ = 0; stale_ = getting_ = false; token_.clear(); syncedChanges_ = 0; remotes_ = 0; touched_.clear();
-  QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}, {"trim", s.trim},
+  if (!std::isfinite(baseMaster_) || baseMaster_ < -120) baseMaster_ = -120;
+  QVariantList l; for (const SyncStrip& s : base_) l << QVariantMap{{"name", s.name}, {"db", s.db}, {"pan", s.pan}, {"mute", s.mute}, {"solo", s.solo}, {"groupMute", s.gMute}, {"groupDb", s.gDb}, {"trim", s.trim},
                                                     {"tone", QVariantMap{{"low", s.low}, {"mid", s.mid}, {"midHz", s.midHz}, {"high", s.high}, {"on", s.toneOn}}}, {"eq", eqList(s)}};
   QFile f(QString::fromStdString(am::paths::file("remote-seed.json")));
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
   for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
+  baseDca_ = dcaSync(engine_->dcaState()); feedbackSeen_ = 0; feedbackNote_.clear();   // the DCA groups go in the seed (they hold strips silent from the first block)
   racksV_ = 0; masterV_ = 0; baseMast_ = mastNow(); baseIn_ = engine_->inputRoutes(); baseOut_ = engine_->outputRoutes(); baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}, {"mute", baseMute_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}, {"routes", QVariantMap{{"in", baseIn_}, {"out", baseOut_}}}}).toJson(QJsonDocument::Compact));
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}, {"mute", baseMute_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}, {"routes", QVariantMap{{"in", baseIn_}, {"out", baseOut_}}}, {"dcas", baseDca_}}).toJson(QJsonDocument::Compact));
 }
 QVariantMap Remote::consoleSettings() const {
   return {{"width", engine_->width()}, {"outputBits", engine_->outputBits()}, {"dcBlock", engine_->dcBlock()}, {"analog", engine_->dspMode() == QLatin1String("analog")}, {"engineer", engine_->dspMode() == QLatin1String("engineer")}, {"fast", engine_->dspMode() == QLatin1String("fast")},
@@ -114,6 +134,7 @@ void Remote::syncTick() {
     if (moved(x.pan, b.pan)) { post({{"op", "pan"}, {"strip", i}, {"pan", x.pan}}); b.pan = x.pan; }
     if (x.mute != b.mute) { post({{"op", "mute"}, {"strip", i}, {"on", x.mute}}); b.mute = x.mute; }
     if (x.solo != b.solo) { post({{"op", "solo"}, {"strip", i}, {"on", x.solo}}); b.solo = x.solo; }
+    if (x.gMute != b.gMute || moved(x.gDb, b.gDb)) { post({{"op", "group"}, {"strip", i}, {"mute", x.gMute}, {"db", x.gDb}}); b.gMute = x.gMute; b.gDb = x.gDb; }   // a DCA or MUTE GROUP moved here
     if (x.name != b.name) { post({{"op", "name"}, {"strip", i}, {"name", x.name}}); b.name = x.name; }
     if (moved(x.trim, b.trim)) { post({{"op", "trim"}, {"strip", i}, {"db", x.trim}}); b.trim = x.trim; }
     if (moved(x.low, b.low) || moved(x.mid, b.mid) || std::abs(x.midHz - b.midHz) > 1 || moved(x.high, b.high) || x.toneOn != b.toneOn) {
@@ -149,6 +170,8 @@ void Remote::syncTick() {
     if (r->error() != QNetworkReply::NoError || stale_ || !running()) return;
     const QVariantMap o = QJsonDocument::fromJson(r->readAll()).toVariant().toMap();
     if (o.contains("remotes") && o.value("remotes").toInt() != remotes_) { remotes_ = o.value("remotes").toInt(); emit synced(); }
+    { const QVariantMap fb = o.value("feedback").toMap();   // the service's FEEDBACK GUARD muted a strip that howled: said here and on the status line
+      if (fb.value("count").toInt() > feedbackSeen_) { feedbackSeen_ = fb.value("count").toInt(); feedbackNote_ = fb.value("text").toString().left(240); status_ = feedbackNote_; emit changed(); } }
     if (o.value("same").toBool() || !o.contains("strips")) return;
     { const quint64 rv = o.value("racksV").toULongLong(); if (rv && rv != racksV_) { racksV_ = rv; if (o.value("racksBy").toString() != QLatin1String("console")) takeRacks(); } }   // our own rack change is not taken back
     { const quint64 mv = o.value("masterV").toULongLong(); const QVariantMap pe = o.value("programEq").toMap();   // a remote's RTA EQ onto the console
@@ -199,7 +222,7 @@ void Remote::syncTick() {
     if (n) { syncedChanges_ += n; dApplied_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick
 }
 
-Remote::~Remote() { if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }
+Remote::~Remote() { restore_ = false; if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }
 // The service program: "AmF X1 Network" next to the console (its name in the release); the build's own name is the fallback.
 QString Remote::program() const {
   const QString d = QCoreApplication::applicationDirPath();
@@ -253,7 +276,7 @@ void Remote::refreshTokens() {
     QVariantMap m; m["id"] = f[0]; m["role"] = f[1]; m["state"] = f[2]; m["name"] = QStringList(f.mid(3)).join(' '); tokens_ << m; }
   emit changed();
 }
-void Remote::restartIfRunning() { if (!running()) return; const bool w = wifi_; stop(); start(w); }   // the service reads its tokens when it starts
+void Remote::restartIfRunning() { if (!running()) return; const bool w = wifi_, back = restore_; restore_ = false; stop(); reuseTook_ = true; start(w); restore_ = back && running(); }   // the devices handed over stay the same   // the service reads its tokens when it starts
 QString Remote::newToken(const QString& name, const QString& role, int days) {
   if (!available()) { tokenNote_ = QStringLiteral("the service program is not installed next to the console"); emit changed(); return {}; }
   QString n; for (const QChar c : name.trimmed()) if (c.isPrint() && c != '"' && n.size() < 40) n += c;
@@ -306,9 +329,11 @@ QString Remote::linkAge(int s) {
 bool Remote::available() const { return ext_.available() || QFileInfo::exists(program()); }
 QString Remote::tokenFile() const { return QString::fromStdString(am::paths::file("daemon.token")); }
 QString Remote::token() const { QFile f(tokenFile()); if (!f.open(QIODevice::ReadOnly) || f.size() > 256) return {}; return QString::fromLatin1(f.readAll()).trimmed(); }
-// The private IPv4 addresses phones can reach: interfaces that are up and running, real ones (Wi-Fi, Ethernet) first. Virtual adapters
-// (VirtualBox, VMware, Hyper-V / WSL vEthernet, Docker, VPN tunnels) come last: a phone on the Wi-Fi cannot reach them, and putting
-// one first sent phones (and the QR code) to an address that never answers.
+// The addresses phones can reach, best first: a private IPv4 address (10.x, 172.16-31.x, 192.168.x: the service's local policy answers
+// these only) of a card that is up and running and has a DEFAULT GATEWAY (the router the phone is on too), Wi-Fi and Ethernet before the
+// rest; then private addresses without a gateway; virtual adapters (VirtualBox, VMware, Hyper-V / WSL vEthernet, Docker, VPN tunnels)
+// last: a phone on the Wi-Fi cannot reach them, and putting one first sent phones (and the QR code) to an address that never answers.
+// Everything else (169.254.x: the card got no address from the router; carrier / public IPv4; IPv6) is listed apart (otherAddresses).
 // The list of network cards, read at most every 3 seconds. On Windows the system call behind it can take a good part of a second
 // (many adapters, a VPN), and the pages read it from several bindings at once: uncached, opening NETWORK or a burst of status lines
 // from the remote service held the window ("Not Responding").
@@ -317,42 +342,114 @@ static QList<QNetworkInterface> netCards() {
   if (!age.isValid() || age.elapsed() > 3000) { list = QNetworkInterface::allInterfaces(); age.restart(); }
   return list;
 }
-QStringList Remote::addresses() const {
-  QStringList real, virt;
-  static const QStringList virtualNames{"virtualbox", "vmware", "vethernet", "hyper-v", "wsl", "docker", "vbox", "tap", "tun", "vpn", "zerotier", "tailscale", "hamachi", "loopback", "bluetooth"};
+// the cards with a default gateway (Windows: interface index; elsewhere: name); *known false where the system does not say
+static QSet<QString> gatewayCards(bool* known) {
+  static QSet<QString> cards; static bool have = false; static QElapsedTimer age;
+  if (age.isValid() && age.elapsed() < 3000) { *known = have; return cards; }
+  age.restart(); cards.clear(); have = false;
+#ifdef _WIN32
+  using Gaa = ULONG(WINAPI*)(ULONG, ULONG, PVOID, PIP_ADAPTER_ADDRESSES, PULONG);
+  HMODULE h = GetModuleHandleW(L"iphlpapi.dll"); if (!h) h = LoadLibraryExW(L"iphlpapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+  if (const auto gaa = h ? reinterpret_cast<Gaa>(reinterpret_cast<void*>(GetProcAddress(h, "GetAdaptersAddresses"))) : nullptr) {
+    ULONG len = 32 * 1024; QByteArray buf; ULONG r = ERROR_BUFFER_OVERFLOW;
+    for (int tries = 0; tries < 3 && r == ERROR_BUFFER_OVERFLOW; ++tries) { buf.resize(static_cast<int>(len)); r = gaa(AF_INET, GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr, reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buf.data()), &len); }
+    if (r == NO_ERROR) { have = true;
+      for (auto* a = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buf.data()); a; a = a->Next) if (a->FirstGatewayAddress) cards << QString::number(a->IfIndex); } }
+#elif defined(__linux__)
+  QFile f(QStringLiteral("/proc/net/route"));   // Iface Destination Gateway ...: a destination of 00000000 is the default route
+  if (f.open(QIODevice::ReadOnly)) { have = true; f.readLine();
+    while (!f.atEnd()) { const QList<QByteArray> c = f.readLine().simplified().split(' '); if (c.size() > 2 && c[1] == "00000000") cards << QString::fromLatin1(c[0]); } }
+#endif
+  *known = have; return cards;
+}
+namespace {
+struct Found { QString url, card; int tier; };
+QList<Found> findAddresses(int port, QList<Found>* others) {
+  QList<Found> best;
+  static const QStringList virtualNames{"virtualbox", "vmware", "vethernet", "hyper-v", "wsl", "docker", "vbox", "tap-", "tap0", "tun", "vpn", "zerotier", "tailscale", "hamachi", "loopback", "bluetooth", "wireguard", "openvpn", "npcap", "teredo", "isatap"};
+  bool gwKnown = false; const QSet<QString> gw = gatewayCards(&gwKnown);
   for (const QNetworkInterface& ni : netCards()) {
     const auto f = ni.flags(); if (!(f & QNetworkInterface::IsUp) || !(f & QNetworkInterface::IsRunning) || (f & QNetworkInterface::IsLoopBack)) continue;
     const QString nm = (ni.humanReadableName() + " " + ni.name()).toLower(); bool isVirt = ni.type() == QNetworkInterface::Virtual;
     for (const QString& v : virtualNames) if (nm.contains(v)) isVirt = true;
-    for (const QNetworkAddressEntry& e : ni.addressEntries()) { const QHostAddress a = e.ip(); if (a.protocol() != QAbstractSocket::IPv4Protocol) continue;
-      const quint32 ip = a.toIPv4Address(); const unsigned x = ip >> 24, y = (ip >> 16) & 255;
-      if (!(x == 10 || (x == 172 && y >= 16 && y <= 31) || (x == 192 && y == 168))) continue;
-      if (x == 192 && y == 168 && ((ip >> 8) & 255) == 56) isVirt = true;   // VirtualBox host-only network
-      const QString u = QStringLiteral("http://%1:%2").arg(a.toString()).arg(port());
-      const bool wifi = ni.type() == QNetworkInterface::Wifi || ni.type() == QNetworkInterface::Ieee80211, eth = ni.type() == QNetworkInterface::Ethernet;
-      if (isVirt) virt << u; else if (wifi || eth) real.prepend(u); else real << u; } }
-  real.removeDuplicates(); for (const QString& v : virt) if (!real.contains(v)) real << v;
-  return real;
+#ifdef _WIN32
+    const bool hasGw = !gwKnown || gw.contains(QString::number(ni.index()));
+#else
+    const bool hasGw = !gwKnown || gw.contains(ni.name());
+#endif
+    const bool real = ni.type() == QNetworkInterface::Wifi || ni.type() == QNetworkInterface::Ieee80211 || ni.type() == QNetworkInterface::Ethernet;
+    for (const QNetworkAddressEntry& e : ni.addressEntries()) { const QHostAddress a = e.ip();
+      if (a.protocol() == QAbstractSocket::IPv6Protocol) { if (others && !a.isLinkLocal() && !a.isLoopback()) *others << Found{QStringLiteral("http://[%1]:%2").arg(a.toString()).arg(port), ni.humanReadableName(), 9}; continue; }
+      if (a.protocol() != QAbstractSocket::IPv4Protocol) continue;
+      const quint32 ip = a.toIPv4Address(); const unsigned x = ip >> 24, y = (ip >> 16) & 255; const QString u = QStringLiteral("http://%1:%2").arg(a.toString()).arg(port);
+      if (!(x == 10 || (x == 172 && y >= 16 && y <= 31) || (x == 192 && y == 168))) { if (others && x != 127) *others << Found{u, ni.humanReadableName(), 8}; continue; }
+      const bool virt = isVirt || (x == 192 && y == 168 && ((ip >> 8) & 255) == 56);   // 192.168.56.x: the VirtualBox host-only network
+      best << Found{u, ni.humanReadableName(), virt ? 3 : (hasGw && real) ? 0 : hasGw ? 1 : 2}; } }
+  std::stable_sort(best.begin(), best.end(), [](const Found& a, const Found& b) { return a.tier < b.tier; });
+  return best;
+}
+}  // namespace
+QStringList Remote::addresses() const {
+  QStringList l; for (const Found& f : findAddresses(port(), nullptr)) if (!l.contains(f.url)) { l << f.url; adapters_[f.url] = f.card; }
+  return l;
+}
+QStringList Remote::otherAddresses() const {
+  QList<Found> o; findAddresses(port(), &o); QStringList l; for (const Found& f : o) if (!l.contains(f.url)) { l << f.url; adapters_[f.url] = f.card; }
+  return l;
+}
+QString Remote::adapterName(const QString& address) const { if (!adapters_.contains(address)) { (void)addresses(); (void)otherAddresses(); } return adapters_.value(address); }
+QString Remote::qrImage(const QString& text) const {
+  const QVariantList m = qr(text); if (m.size() < 2) return {};
+  const int n = m[0].toInt(), px = 8, side = (n + 8) * px; QImage img(side, side, QImage::Format_Grayscale8); img.fill(255);
+  for (int y = 0; y < n; ++y) for (int x = 0; x < n; ++x) if (m[1 + y * n + x].toInt()) for (int dy = 0; dy < px; ++dy) { uchar* row = img.scanLine((y + 4) * px + dy); std::memset(row + (x + 4) * px, 0, px); }
+  QByteArray png; QBuffer b(&png); b.open(QIODevice::WriteOnly); if (!img.save(&b, "PNG")) return {};
+  return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(png.toBase64());
+}
+// what the console plays now: its backend, the output by id, the input it reads (or "-": none), rate, buffer and channels. The output id
+// is the remembered device's when that is the device playing (the engine names it), else the device of that name on that backend.
+Remote::Takeover Remote::takeover() const {
+  Takeover t; const QVariantMap last = QSettings().value(QStringLiteral("audio/lastDevice")).toMap();
+  t.running = engine_->running();
+  if (!t.running) {   // the engine is off: the remembered output, and no input (nothing was open, so nothing is captured)
+    t.backend = last.value("backend").toString(); t.out = last.value("out").toString(); t.rate = last.value("rate").toDouble(); t.frames = last.value("frames").toInt();
+    t.outChannels = last.value("outChannels").toInt(); t.in = QStringLiteral("-"); t.inChannels = 0; return t; }
+  t.backend = engine_->backend(); t.rate = engine_->sampleRate(); t.frames = engine_->blockFrames(); t.outChannels = engine_->deviceOutputs();
+  const bool none = engine_->inputSource() == QLatin1String("none") || engine_->deviceInputs() <= 0;
+  t.in = none ? QStringLiteral("-") : QString::fromStdString(engine_->currentInputId()); t.inChannels = none ? 0 : engine_->deviceInputs();
+  const QString outName = engine_->outputDeviceName(); QString byName, lastOut = last.value("backend").toString() == t.backend ? last.value("out").toString() : QString(); bool lastIsIt = false;
+  for (const QVariant& v : engine_->devices()) { const QVariantMap d = v.toMap(); if (d.value("backend").toString() != t.backend || d.value("outChannels").toInt() <= 0) continue;
+    if (!lastOut.isEmpty() && d.value("id").toString() == lastOut && (outName.isEmpty() || d.value("name").toString() == outName)) lastIsIt = true;
+    if (byName.isEmpty() && !outName.isEmpty() && d.value("name").toString() == outName) byName = d.value("id").toString(); }
+  t.out = lastIsIt ? lastOut : !byName.isEmpty() ? byName : lastOut;
+  return t;
+}
+// the service has let the sound card go: the console reopens exactly what it had handed over (main's startLastDevice is the fallback)
+void Remote::giveBack() {
+  if (!restore_ || running()) return; restore_ = false;
+  const Takeover& t = took_; if (!t.running || engine_->running()) return;
+  const bool in = t.inChannels > 0 && t.in != QLatin1String("-");
+  engine_->open(t.backend, in ? t.in : QStringLiteral("-"), t.out, t.rate, t.frames, in ? t.inChannels : 0, t.outChannels);
 }
 bool Remote::start(bool wifi) {
   if (running()) return true;
   if (!available()) { status_ = QStringLiteral("the remote service program is not installed next to the console"); emit changed(); return false; }
   writeConsoleInfo();   // what the phone shows under PLUG-INS: the catalogue, the racks and the extensions, as they are now
-  writeSeed();          // LIVE SYNC: the phones start where the console is
+  writeSeed();          // LIVE SYNC: the phones start where the console is (faders, mutes, DCA groups: a muted microphone stays muted)
+  if (!reuseTook_) took_ = takeover(); reuseTook_ = false;   // THE SOUND CARD HANDED OVER: the service opens what the console plays now
   engine_->stop();   // the service opens the sound card itself
+  restore_ = took_.running;   // when the service stops (or does not start), the console takes its devices back
   wifi_ = wifi;
-  QStringList args{"--port", QString::number(port()), "--open", "auto", "--version", QCoreApplication::applicationVersion(),
+  QStringList args{"--port", QString::number(port()), "--version", QCoreApplication::applicationVersion(),
     "--strips", QString::number(qBound(1, engine_->licensedChannels(), 32)), "--plan", engine_->license().value("planName").toString()};   // the phone gets the channels of the licence plan, no more
+  args << openArgs(took_);   // the console's backend, output, input ("-" when it had none: never the default microphone), rate, buffer
   args << "--seed" << QString::fromStdString(am::paths::file("remote-seed.json"));
-  // AUTO INPUT (MICROPHONE ON AT START) off: the service opens no input either
-  if (!engine_->micAtStart()) args << "--in" << QStringLiteral("-");   // AUTO INPUT OFF: the service captures nothing (it used to take COMPUTER SOUND)
   if (wifi) args << "--allow-lan";   // phones on this network may connect (local policy stays on: private addresses only). This sat inside the comment above and was never passed: every phone was refused
   if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);
     if (rc == 0 && ext_.running()) { sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
     status_ = QStringLiteral("the network extension did not start (%1): %2").arg(rc).arg(ext_.takeOutput().trimmed().section('\n', -1).left(160)); emit changed();   // then the program next to it, if there is one
   }
-  proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("the remote service did not start"); emit changed(); return false; }
+  proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("the remote service did not start"); giveBack(); emit changed(); return false; }
   sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
 }
 void Remote::stop() { sync_.stop(); linkTimer_.stop(); if (!links_.isEmpty()) { links_.clear(); emit linksChanged(); } if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
