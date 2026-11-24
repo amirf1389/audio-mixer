@@ -47,6 +47,8 @@ class Graphics : public QObject {
   Q_PROPERTY(QString perfNote READ perfNote NOTIFY changed)
   Q_PROPERTY(bool heavyEffects READ heavyEffects NOTIFY changed)                 // moving backgrounds, pulsing lamps
   Q_PROPERTY(int meterHz READ meterHz NOTIFY changed)
+  Q_PROPERTY(bool lowPower READ lowPower NOTIFY changed)                         // the low-power profile is in use (BATTERY, or AUTO on a weak / laptop processor)
+  Q_PROPERTY(bool saver READ saver NOTIFY changed)                               // Windows battery saver is on: nothing is built ahead
   Q_PROPERTY(int frameInterval READ frameInterval NOTIFY changed)                // ms: the fastest a page timer should poll for drawing
   Q_PROPERTY(double fps READ fps NOTIFY statsChanged)
   Q_PROPERTY(double frameMs READ frameMs NOTIFY statsChanged)
@@ -78,6 +80,8 @@ class Graphics : public QObject {
   void setPerfMode(const QString& m);
   QString perfInUse() const { return battery_ ? QStringLiteral("battery") : QStringLiteral("smooth"); }
   QString perfNote() const { return perfNote_; }
+  bool lowPower() const { return battery_; }
+  bool saver() const { return saver_; }
   bool heavyEffects() const { return !battery_ && inUse() != QLatin1String("software"); }
   int meterHz() const { return meterHz_; }
   int frameInterval() const { return meterHz_ > 0 ? 1000 / meterHz_ : 33; }
@@ -106,6 +110,6 @@ class Graphics : public QObject {
   QPointer<QQuickWindow> win_; QTimer stats_, power_;
   mutable QMutex mu_; QElapsedTimer clock_; qint64 last_ = 0, syncAt_ = 0; std::vector<double> gaps_, work_;   // render thread -> GUI
   std::vector<double> allGaps_, allWork_;
-  double refresh_ = 60, dpr_ = 1, fps_ = 0, frameMs_ = 0, p95_ = 0, max_ = 0; int meterHz_ = 30; bool battery_ = false, first_ = false;
+  double refresh_ = 60, dpr_ = 1, fps_ = 0, frameMs_ = 0, p95_ = 0, max_ = 0; int meterHz_ = 30; bool battery_ = false, first_ = false, lowTdp_ = false, saver_ = false;
   QString perfNote_, driver_;
 };

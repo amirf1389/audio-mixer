@@ -81,7 +81,7 @@ Item {
                 property string shown: ""
                 id: remCard
                 Timer { id: hideTok; interval: 600000; onTriggered: remCard.shown = "" }
-                Component.onCompleted: remote.refreshTokens()
+                Timer { interval: 30; running: true; onTriggered: remote.refreshTokens() }   // after the page's first frame: listing the phones may ask the service tool (a process) and must not hold the page back
                 ColumnLayout { id: remCol; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 6
                     ScrollRow { Layout.fillWidth: true; spacing: 8
                         Head { text: i18n.t("PHONE REMOTE · WI-FI", i18n.lang) }

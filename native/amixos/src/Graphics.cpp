@@ -2,6 +2,7 @@
 #include "Graphics.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QGuiApplication>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
@@ -150,8 +151,9 @@ void Graphics::choose(bool testRun, const QStringList& args) {
   else {
     const QString lead = s_choice != QLatin1String("auto") ? QStringLiteral("%1 is not usable here (%2): ").arg(apiName(s_choice), bad.contains(s_choice) ? QStringLiteral("it failed at an earlier start") : QStringLiteral("not in this build or not installed")) : QString();
 #ifdef _WIN32
-    QStringList order{QStringLiteral("d3d11"), QStringLiteral("opengl")}; const QString good = st.value(kGood).toString();
-    if (order.contains(good)) { order.removeAll(good); order.prepend(good); }
+    // DIRECT3D 11 always first (also on integrated AMD / Intel graphics): a start that once ran on OpenGL does not keep the card on the slower
+    // OpenGL path; only a back end that failed (bad) is skipped, and software is the last resort, never a choice made for speed
+    const QStringList order{QStringLiteral("d3d11"), QStringLiteral("opengl")};
     QString why; const bool badCard = knownBad(g, &why);
     for (const QString& c : order) {
       if (badCard) break;
@@ -254,6 +256,21 @@ void Graphics::attach(QQuickWindow* w) {
   stats_.start(); recompute();
 }
 
+// the processor's rated (base) clock in MHz, 0 when it is not known: Windows keeps it in the registry, Linux in cpufreq (Intel: base_frequency)
+static int baseClockMhz() {
+  static const int mhz = [] {
+#ifdef _WIN32
+    HKEY k = nullptr; DWORD v = 0, n = sizeof v;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", 0, KEY_READ, &k) == ERROR_SUCCESS) {
+      if (RegQueryValueExW(k, L"~MHz", nullptr, nullptr, reinterpret_cast<LPBYTE>(&v), &n) != ERROR_SUCCESS) v = 0; RegCloseKey(k); }
+    return static_cast<int>(v);
+#else
+    QFile f(QStringLiteral("/sys/devices/system/cpu/cpu0/cpufreq/base_frequency")); if (!f.open(QIODevice::ReadOnly)) return 0;
+    return f.readAll().trimmed().toInt() / 1000;
+#endif
+  }();
+  return qEnvironmentVariableIsSet("AMIX_BASE_MHZ") ? qEnvironmentVariableIntValue("AMIX_BASE_MHZ") : mhz;   // AMIX_BASE_MHZ: the bench emulates a laptop processor
+}
 void Graphics::recompute() {
   QScreen* sc = win_ ? win_->screen() : QGuiApplication::primaryScreen();
   refresh_ = sc && sc->refreshRate() > 1 ? sc->refreshRate() : 60; dpr_ = win_ ? win_->devicePixelRatio() : sc ? sc->devicePixelRatio() : 1;
@@ -261,14 +278,23 @@ void Graphics::recompute() {
 #ifdef _WIN32
   SYSTEM_POWER_STATUS ps{}; if (GetSystemPowerStatus(&ps)) onBattery = ps.ACLineStatus == 0;
 #endif
+  bool saver = false;
+#ifdef _WIN32
+  saver = ps.SystemStatusFlag == 1;   // Windows battery saver is on
+#endif
+  const bool wasLow = battery_, wasSaver = saver_; saver_ = saver;
+  // A LOW-POWER LAPTOP PROCESSOR (15 W class, integrated graphics): at most 8 cores with a low base clock (the rated speed, not the boost).
+  const int baseMhz = baseClockMhz(); const bool mobile = threads > 0 && threads <= 16 && baseMhz > 0 && baseMhz < 2600;
+  lowTdp_ = mobile;
   const bool weak = threads > 0 && threads <= 4;
-  battery_ = mode == QLatin1String("battery") || (mode == QLatin1String("auto") && (weak || onBattery));
+  battery_ = mode == QLatin1String("battery") || (mode == QLatin1String("auto") && (weak || onBattery || mobile || saver));
   const int hz = battery_ ? 30 : std::clamp(static_cast<int>(std::lround(refresh_)), 24, 60);
   perfNote_ = mode == QLatin1String("battery") ? QStringLiteral("BATTERY: meters at 30 fps, moving backgrounds off")
             : mode == QLatin1String("smooth") ? QStringLiteral("SMOOTH: meters at %1 fps (the monitor runs at %2 Hz)").arg(hz).arg(refresh_, 0, 'f', 0)
-            : battery_ ? QStringLiteral("AUTO: %1, so meters at 30 fps and moving backgrounds off").arg(onBattery ? QStringLiteral("running on battery") : QStringLiteral("a processor with %1 threads").arg(threads))
+            : battery_ ? QStringLiteral("AUTO: %1, so meters at 30 fps and moving backgrounds off").arg(saver ? QStringLiteral("battery saver is on") : onBattery ? QStringLiteral("running on battery") : mobile && !weak ? QStringLiteral("a low-power laptop processor (%1 threads, %2 MHz base clock)").arg(threads).arg(baseMhz) : QStringLiteral("a processor with %1 threads").arg(threads))
                        : QStringLiteral("AUTO: meters at %1 fps (the monitor runs at %2 Hz, %3 processor threads, mains power)").arg(hz).arg(refresh_, 0, 'f', 0).arg(threads);
   if (hz != meterHz_) { meterHz_ = hz; if (onMeterHz && !s_test) onMeterHz(hz); emit changed(); }
+  else if (wasLow != battery_ || wasSaver != saver_) emit changed();
 }
 
 void Graphics::sample() {
@@ -285,5 +311,5 @@ QVariantMap Graphics::frameStats() const {
 QVariantMap Graphics::report() const {
   return {{QStringLiteral("choice"), choice()}, {QStringLiteral("inUse"), inUse()}, {QStringLiteral("safeMode"), s_safe}, {QStringLiteral("note"), s_note}, {QStringLiteral("gpu"), s_gpu}, {QStringLiteral("driver"), driver()},
           {QStringLiteral("refreshHz"), refresh_}, {QStringLiteral("dpr"), dpr_}, {QStringLiteral("renderLoop"), renderLoop()}, {QStringLiteral("perfMode"), perfMode()}, {QStringLiteral("perfInUse"), perfInUse()},
-          {QStringLiteral("meterHz"), meterHz_}, {QStringLiteral("heavyEffects"), heavyEffects()}, {QStringLiteral("fps"), fps_}, {QStringLiteral("frameMs"), frameMs_}};
+          {QStringLiteral("meterHz"), meterHz_}, {QStringLiteral("heavyEffects"), heavyEffects()}, {QStringLiteral("lowTdp"), lowTdp_}, {QStringLiteral("saver"), saver_}, {QStringLiteral("fps"), fps_}, {QStringLiteral("frameMs"), frameMs_}};
 }
