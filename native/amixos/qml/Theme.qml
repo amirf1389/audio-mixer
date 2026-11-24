@@ -22,7 +22,7 @@ QtObject {
     property bool glass: false   // FLAT: every page is flat graphite tiles on a flat desk (true brings the translucent panels over the aurora back)
     property color accent: orange                                       // the colour of the section open now (Main.qml sets it)
     readonly property color chrome: pal ? pal.chrome : glass ? (dark ? Qt.rgba(0.027, 0.039, 0.063, 0.62) : Qt.rgba(1, 1, 1, 0.70)) : (dark ? "#121418" : "#ffffff")        // the header bar
-    readonly property color card: pal ? pal.card : glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : (dark ? "#16181c" : "#f4f6f9")
+    readonly property color card: pal ? (fluid ? Qt.rgba(Qt.lighter(pal.card, 1.0).r, Qt.lighter(pal.card, 1.0).g, Qt.lighter(pal.card, 1.0).b, 0.90) : pal.card) : glass ? (dark ? Qt.rgba(0.047, 0.063, 0.094, 0.64) : Qt.rgba(1, 1, 1, 0.78)) : fluid ? (dark ? Qt.rgba(0.086, 0.094, 0.110, 0.90) : Qt.rgba(0.957, 0.965, 0.976, 0.92)) : (dark ? "#16181c" : "#f4f6f9")
     readonly property color cardSolid: pal ? pal.card : dark ? "#16181c" : "#ffffff"
     readonly property color cardRaised: pal ? pal.cardRaised : dark ? "#1d2026" : "#eef1f6"
     readonly property color head: pal ? pal.head : dark ? "#262a31" : "#d5dae2"            // the header bar of a section
@@ -47,7 +47,18 @@ QtObject {
     readonly property string vendor: "AMFB Audio"
     readonly property string mono: "JetBrains Mono, DejaVu Sans Mono, Consolas, monospace"
     readonly property string sans: "Inter, Segoe UI, Roboto, sans-serif"
-    readonly property int radius: 10
+    // FLUID GLASS (1.26): frosted panels without a real-time blur. A panel is a semi-transparent fill over a soft vertical sheen (glassTop at
+    // the top edge, the card colour below) with a hairline edge; corners follow one radius scale; state changes ease over motionMs. In the
+    // BATTERY profile (graphics.lowPower, bound in Main.qml) fluid and motion are off: solid fills, no gradients, no animation. The colour
+    // themes (CHOCOLATE, OCEAN ...) keep their own surfaces; the sheen is derived from them, so every theme stays glass on top.
+    property bool fluid: true
+    property bool motion: true
+    readonly property int motionMs: motion ? 140 : 0
+    readonly property int radiusS: 6       // buttons, chips, fields
+    readonly property int radius: 12       // tiles and panels
+    readonly property int radiusL: 16      // page-level sections
+    readonly property color glassTop: pal ? Qt.lighter(pal.card, 1.22) : dark ? Qt.rgba(0.16, 0.18, 0.22, fluid ? 0.92 : 1) : Qt.rgba(1, 1, 1, fluid ? 0.97 : 1)
+    readonly property color glassEdge: dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.16)
     readonly property var stripColors: ["#f59e0b", "#22d3ee", "#a78bfa", "#34d399", "#f472b6", "#fb923c", "#60a5fa", "#facc15"]
     // an overlay a pages puts on a panel: white on the dark theme, black on the light one, the same strength
     // BUTTON COLOUR HARMONY: every button colour passes through here, so that all of them share one saturation and lightness band

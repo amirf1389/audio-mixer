@@ -54,6 +54,7 @@ qt_add_qml_module(amixos
         qml/Theme.qml
         qml/NavRail.qml
         qml/Panel.qml
+        qml/FileAnalyzePanel.qml
         qml/MoreText.qml
         qml/Fader.qml
         qml/MSlider.qml
@@ -187,7 +188,7 @@ option(AMIXOS_TEST_LICENSE "test builds: AMIX_TEST_CHANNELS overrides the licens
 if(AMIXOS_TEST_LICENSE)
   target_compile_definitions(amixos PRIVATE AMIXOS_TEST_LICENSE)
 endif()
-target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure)
+target_link_libraries(amixos PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Network audiomixer_runtime audiomixer_engine amixos_net amixos_license amixos_arrange amixos_vst3 amixos_vst2 amixos_record amixos_fx amixos_samples amixos_measure amixos_fileanalyze)
 if(TARGET Qt6::Widgets)
   target_link_libraries(amixos PRIVATE Qt6::Widgets)
   target_compile_definitions(amixos PRIVATE AMIX_TRAY)

@@ -10,8 +10,11 @@ Rectangle {
     property bool more: false   // COMPACT: the explanation under the title opens with a click on the header (the (i) mark)
     default property alias content: body.data
     color: Theme.card
-    radius: 6
-    border.color: Theme.line
+    radius: Theme.radius
+    border.color: Theme.fluid ? Theme.glassEdge : Theme.line
+    gradient: Theme.fluid ? sheen : null   // FLUID GLASS: a soft light at the top edge, the translucent card below (no blur)
+    Gradient { id: sheen; GradientStop { position: 0; color: Theme.glassTop } GradientStop { position: 0.35; color: Theme.card } }
+    Behavior on border.color { enabled: Theme.motion; ColorAnimation { duration: Theme.motionMs } }
     border.width: 1
     implicitHeight: col.implicitHeight + 16
     implicitWidth: 320
@@ -22,7 +25,7 @@ Rectangle {
         spacing: 6
         Rectangle {   // the section's header bar: its title, and what it is for under it
             visible: panel.title.length > 0
-            Layout.fillWidth: true; implicitHeight: Math.max(28, headCol.implicitHeight + 8); radius: 4; color: Theme.head
+            Layout.fillWidth: true; implicitHeight: Math.max(28, headCol.implicitHeight + 8); radius: Theme.radiusS; color: Theme.head
             ColumnLayout { id: headCol; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 8; anchors.rightMargin: 24; spacing: 2
                 Text { text: i18n.t(panel.title, i18n.lang); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1; elide: Text.ElideRight; Layout.fillWidth: true }
                 Text { visible: panel.more && panel.subtitle.length > 0; text: i18n.t(panel.subtitle, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; Layout.fillWidth: true }

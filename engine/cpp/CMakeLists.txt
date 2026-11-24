@@ -487,3 +487,10 @@ add_test(NAME ext_test COMMAND ext_test $<TARGET_FILE:amfb_network> $<TARGET_FIL
 add_executable(ducker_test test/ducker_test.cpp)
 target_link_libraries(ducker_test PRIVATE audiomixer_runtime)
 add_test(NAME ducker_test COMMAND ducker_test)
+
+# FILE ANALYZE + AI SETUP (engine/cpp/app/analyze): offline loudness / true peak / LRA / octave balance of a file, explainable setup rules
+add_library(amixos_fileanalyze STATIC app/analyze/file_analyze.cpp)
+target_link_libraries(amixos_fileanalyze PUBLIC amixos_measure amixos_arrange)
+add_executable(file_analyze_test test/file_analyze_test.cpp)
+target_link_libraries(file_analyze_test PRIVATE amixos_fileanalyze)
+add_test(NAME file_analyze COMMAND file_analyze_test)

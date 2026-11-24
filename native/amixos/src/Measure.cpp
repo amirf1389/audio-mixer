@@ -4,8 +4,10 @@
 #include <QFileInfo>
 #include <algorithm>
 #include <cmath>
+#include <QUrl>
 
 #include "Engine.h"
+#include "arrange/decode.hpp"
 #include "arrange/arrange.hpp"
 #include "paths/paths.hpp"
 
@@ -175,4 +177,27 @@ bool Measure::loadCalibration(const QString& path) {
   QFile f(path); if (!f.open(QIODevice::ReadOnly) || f.size() > 4 * 1024 * 1024) { set(state_, "cannot read the calibration file"); return false; }
   m::Calibration c; if (!m::parseCalibration(f.readAll().toStdString(), c)) { set(state_, "not a calibration file (lines of: frequency dB)"); return false; }
   cal_ = c; set(state_, QStringLiteral("microphone calibration loaded: %1 points").arg(c.freq.size())); return true;
+}
+
+static QVariantList dbl(const double* v, int n) { QVariantList l; for (int i = 0; i < n; ++i) l << v[i]; return l; }
+QVariantMap Measure::fileSetup(const QString& target, double customLufs) const {
+  const am::fa::Setup s = am::fa::suggest(file_, target.toStdString(), customLufs); QVariantMap m;
+  m["target"] = s.targetLufs; m["gain"] = s.gainDb; m["eqOn"] = s.eqOn; m["eq"] = dbl(s.eqDb, am::fa::kBands);
+  QVariantList f; for (const auto& x : s.filters) f << QVariantMap{{"freq", x.freq}, {"q", x.q}, {"gain", x.gainDb}}; m["filters"] = f;
+  m["compOn"] = s.compOn; m["compThr"] = s.compThr; m["compRatio"] = s.compRatio; m["compKnee"] = s.compKnee; m["compAttack"] = s.compAttack; m["compRelease"] = s.compRelease;
+  m["limOn"] = s.limOn; m["limCeiling"] = s.limCeiling; m["limRelease"] = s.limRelease; m["afterLufs"] = s.afterLufs; m["afterTruePeak"] = s.afterTruePeakDb; m["afterLra"] = s.afterLra;
+  QStringList r; for (const auto& x : s.reasons) r << QString::fromStdString(x); m["reasons"] = r; return m;
+}
+QVariantMap Measure::analyzeFile(const QString& path, const QString& target, double customLufs) {
+  const QString p = path.startsWith("file:") ? QUrl(path).toLocalFile() : path;
+  file_ = am::fa::analyseFile(p.toStdString()); const am::fa::Analysis& a = file_; QVariantMap m;
+  m["ok"] = a.ok; m["error"] = QString::fromStdString(a.error); m["name"] = QFileInfo(p).fileName(); m["path"] = p;
+  if (!a.ok) return m;
+  m["seconds"] = a.seconds; m["rate"] = a.rate; m["lufs"] = a.lufs; m["lra"] = a.lra; m["truePeak"] = a.truePeakDb; m["peak"] = a.peakDb; m["rms"] = a.rmsDb; m["crest"] = a.crestDb; m["clipped"] = a.clippedRuns;
+  QVariantList ch; for (const auto& c : a.ch) ch << QVariantMap{{"peak", c.peakDb}, {"truePeak", c.truePeakDb}, {"rms", c.rmsDb}}; m["channels"] = ch;
+  m["bands"] = dbl(a.bandDb, am::fa::kBands); m["balance"] = dbl(a.balanceDb, am::fa::kBands); m["setup"] = fileSetup(target, customLufs); return m;
+}
+QStringList Measure::audioFilters() const {
+  QString e; for (const auto& x : am::arr::audioExtensions()) e += QStringLiteral("*.") + QString::fromStdString(x) + QLatin1Char(' ');
+  return {QStringLiteral("Audio files (") + e.trimmed() + QLatin1Char(')'), QStringLiteral("All files (*)")};
 }
