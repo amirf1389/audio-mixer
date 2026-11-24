@@ -16,6 +16,10 @@ int main(int argc, char** argv) {
   CHECK(!pluginFileOk(std::string(90, 'a') + ".vst3") && kMaxPluginBytes == 200ull * 1024 * 1024);
   CHECK(hostAllowed("https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json")); CHECK(hostAllowed("https://github.com/x/y/releases/download/v/a.exe"));
   CHECK(hostAllowed("https://ota.amirfakhribadri.my/update.json") && hostAllowed("https://amirfakhribadri.my/x") && !hostAllowed("http://ota.amirfakhribadri.my/update.json") && !hostAllowed("https://amirfakhribadri.my.evil.example/x") && !hostAllowed("https://evil-amirfakhribadri.my/x"));
+  // the update source: the public OTA server by default; a local OTA server on 127.0.0.1 is an option, nothing else over plain http
+  CHECK(std::string(publicManifestUrl()) == "https://ota.amirfakhribadri.my/update.json" && hostAllowed(publicManifestUrl()) && sourceOf(publicManifestUrl()) == "public");
+  CHECK(localManifest(localManifestUrl()) && sourceOf(localManifestUrl()) == "local" && localManifest("http://localhost:8780/update.json") && sourceOf("https://github.com/x") == "custom");
+  CHECK(!localManifest("http://127.0.0.1.evil.example/update.json") && !localManifest("http://127.0.0.1:/x") && !localManifest("http://127.0.0.1:80@evil/x") && !localManifest("https://127.0.0.1:8780/x") && !localManifest("http://10.0.0.2:8780/x"));
   CHECK(!hostAllowed("http://github.com/x")); CHECK(!hostAllowed("https://evil.example/a.exe")); CHECK(!hostAllowed("https://github.com.evil.example/a")); CHECK(!hostAllowed("https://user@github.com/a")); CHECK(!hostAllowed("https://evilgithub.com/a"));
   CHECK(b64url("AAECAw").size() == 4 && b64url("AAECAw")[3] == 3); CHECK(b64url("a b").empty());
   std::string s; std::size_t p = 0; CHECK(readString(std::string("\"a\\\"b\\\\c\\u0041\\/\""), p, s) && s == "a\"b\\cA/");

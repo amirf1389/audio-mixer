@@ -118,6 +118,20 @@ inline bool hostAllowed(const std::string& url) {
   return false;
 }
 
+// UPDATE SOURCE: the public OTA server (the default) or an OTA server on this computer (ota-server/server.js, plain http on 127.0.0.1).
+// Either way the list must carry the vendor's signature and each file its checksum; the source only says where it is read.
+inline const char* publicManifestUrl() { return "https://ota.amirfakhribadri.my/update.json"; }
+inline const char* localManifestUrl() { return "http://127.0.0.1:8780/update.json"; }
+inline bool localManifest(const std::string& url) {
+  for (const char* p : {"http://127.0.0.1:", "http://localhost:"}) {
+    const std::string pre(p); if (url.compare(0, pre.size(), pre) != 0) continue;
+    std::size_t i = pre.size(), d = 0; while (i < url.size() && std::isdigit(static_cast<unsigned char>(url[i]))) { ++i; ++d; }
+    return d >= 2 && d <= 5 && i < url.size() && url[i] == '/' && url.find('@') == std::string::npos;
+  }
+  return false;
+}
+inline std::string sourceOf(const std::string& url) { return url == publicManifestUrl() ? "public" : localManifest(url) ? "local" : "custom"; }
+
 inline bool isHex64(const std::string& s) { if (s.size() != 64) return false; for (char c : s) if (!std::isxdigit(static_cast<unsigned char>(c))) return false; return true; }
 // PLUG-IN DOWNLOADS: a plug-in in the signed list is one file saved into the console's own plug-in folder. Its name is used as a file
 // name on this computer, so it is held to plain characters: letters, digits, space, dot, dash, underscore and brackets, ending in .vst3,

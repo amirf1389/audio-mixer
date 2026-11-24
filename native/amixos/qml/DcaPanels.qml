@@ -35,7 +35,7 @@ Item {
             Head { text: i18n.t("DCA ASSIGN", i18n.lang) }
             Note { text: i18n.t("Pick a group, then click channels in or out of it. The group fader moves its channels' level without moving their faders.", i18n.lang) }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: engine.dcaState; delegate: Chip { objectName: "dcaPick" + modelData.index; label: modelData.index + " · " + modelData.name; on: dp.group === modelData.index; tint: Theme.stripColors[modelData.color || 0]; onHit: dp.group = modelData.index } } }
+                Repeater { model: engine.dcaState.filter(function (d) { return !d.locked }); delegate: Chip { objectName: "dcaPick" + modelData.index; label: modelData.index + " · " + modelData.name; on: dp.group === modelData.index; tint: Theme.stripColors[modelData.color || 0]; onHit: dp.group = modelData.index } } }
             Flow { Layout.fillWidth: true; spacing: 4
                 Repeater { model: dp.chans; delegate: Chip { objectName: "dcaCh" + index; readonly property var st: assignPop.visible ? engine.stripAt(index, engine.stripTick) : null; label: (index + 1) + (st && st.dca > 0 && st.dca !== dp.group ? " ·" + st.dca : "")
                         on: st && st.dca === dp.group; onHit: engine.setDca(index, st && st.dca === dp.group ? 0 : dp.group) } } }

@@ -763,6 +763,12 @@ class Engine : public QObject {
   Q_INVOKABLE void setDcaMute(int group, bool on);
   Q_INVOKABLE void setDcaName(int group, const QString& name);
   Q_INVOKABLE void setDcaColor(int group, int color);           // 0..7, the strip palette
+  // WINDOWS VOLUME: this DCA's fader and mute drive the Windows system volume instead of its members (they keep their own gain)
+  Q_INVOKABLE void setDcaWinVol(int group, bool on);
+  // DCA groups this edition may use (BASIC 1, PRO 4, STUDIO / MASTER 8): groups above it are locked; only the real licence decides
+  Q_PROPERTY(int dcaLimit READ dcaLimit NOTIFY licenseChanged)
+  int dcaLimit() const;
+  void setTestDcaLimit(int n) { testDcaLimit_ = n; emit groupsChanged(); }   // C++ only (the --smoke run's multi-group checks); 0 = the licence
   // DUCKER · VOICE OVER MUSIC (audiomixer/ducker.hpp, in the engine sample by sample): KEY = a DCA (1..8) and / or strips, TARGET the same;
   // keys: on, keyDca, targetDca, keyStrips, targetStrips, threshold, depth, attack, hold, release, lift
   QVariantMap duckState() const;
@@ -885,7 +891,7 @@ class Engine : public QObject {
   struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
   std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0; bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
-  struct DcaUi { QString name; double db = 0; bool mute = false; int color = 0; };
+  struct DcaUi { QString name; double db = 0; bool mute = false; int color = 0; bool winVol = false; };
   struct DuckUi { bool on = false; int keyDca = 0, targetDca = 0; QList<int> keyStrips, targetStrips; double thr = -40, depth = -12, att = 20, hold = 300, rel = 600, lift = 0; } duckUi_;
   void pushDuck(); QJsonObject duckJson() const; void duckFromJson(const QJsonObject& o);
   struct LoudStripUi { bool ride = false, gate = false; int cls = -1; };
@@ -919,7 +925,7 @@ class Engine : public QObject {
   int inRoute_[kStrips] = {}; int outRoute_[kOutputs] = {}; int devIn_ = 0, devOut_ = 0; QString inDevName_, outDevName_; std::string curBackend_, curIn_, curOut_; void rememberDeviceNames(const std::string& backend, const std::string& in, const std::string& out);
   int openBits_ = 0; bool openExclusive_ = false;
   bool spkOn_ = false; QVariantMap spkSaved_; void feedSpeakers(int strip);
-  QVariantMap license_; int licensedChannels_ = 10; int keepStrips_ = 32;   // keepStrips_: the most strips a loaded console carried, saved again even if the licence now shows fewer (nothing is lost while a key is away)
+  QVariantMap license_; int licensedChannels_ = 10; int testDcaLimit_ = 0; int keepStrips_ = 32;   // keepStrips_: the most strips a loaded console carried, saved again even if the licence now shows fewer (nothing is lost while a key is away)
   struct EqPresetUi { QString name; am::dsp::EqBand bands[10]; int hpOrder = 0; double hpFreq = 80; int lpOrder = 0; double lpFreq = 16000; bool used = false; };
   static const EqPresetUi* factoryEqPreset(int slot); EqPresetUi userEq_[10]; void loadUserEq(); void storeUserEq() const;
   bool nullTone_ = false; void nullInputFor(am::DeviceConfig& cfg) const; void secureInputFor(am::DeviceConfig& cfg);

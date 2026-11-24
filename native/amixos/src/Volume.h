@@ -62,7 +62,11 @@ class Volume : public QObject, public QAbstractNativeEventFilter {
   /** a key press as if it came from the keyboard: key 0 up, 1 down, 2 mute; media = the keyboard's own volume key. false: not ours */
   Q_INVOKABLE bool press(int key, bool media);
   Q_INVOKABLE QString dbText(double db) const;
-  Q_INVOKABLE double stepped(double db, int dir) const;   // the master after one step (the header knob's wheel)
+  Q_INVOKABLE double stepped(double db, int dir) const;
+  /** an arrow key: Up / Down the master, Ctrl the selected channel, Shift 0.1 dB (else 1 dB); false with a text field focused or another key */
+  Q_INVOKABLE bool arrowKey(int key, int modifiers, bool textFocus);
+  static bool textHasFocus();
+  bool eventFilter(QObject* o, QEvent* e) override;   // the master after one step (the header knob's wheel)
   void quiet();   // test runs: no tray icon, no keys taken from the system
   void flush();   // pending slider writes now (tests)
   int writes() const { return writes_; }   // writes handed to the layer (tests: the coalescing)

@@ -25,7 +25,11 @@
 #include "license/license.hpp"
 #include "update_logic.hpp"
 
-const char* Update::kDefaultUrl = "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json";
+const char* Update::kDefaultUrl = am::upd::publicManifestUrl();   // the public OTA server; LOCAL (127.0.0.1) stays one press away
+static bool sourceAllowed(const QString& u) { return am::upd::hostAllowed(u.toStdString()) || am::upd::localManifest(u.toStdString()); }
+void Update::useSource(const QString& which) {
+  s_.setValue("update/url", which == "local" ? QString::fromLatin1(am::upd::localManifestUrl()) : QString::fromLatin1(am::upd::publicManifestUrl())); s_.sync(); emit changed(); }
+QString Update::source() const { return QString::fromStdString(am::upd::sourceOf(url().toStdString())); }
 
 Update::Update(const QString& currentVersion, QObject* parent) : QObject(parent), current_(currentVersion) {
   for (const QString& h : s_.value("update/hosts").toStringList()) am::upd::extraHosts().push_back(h.toStdString());   // the hosts the owner added
@@ -184,7 +188,7 @@ bool Update::applyManifest(const QString& text) {
   return true;
 }
 void Update::check() {
-  const QString u = url(); if (!am::upd::hostAllowed(u.toStdString())) { set("error", "the manifest URL is not on one of the project's hosts"); return; }
+  const QString u = url(); if (!sourceAllowed(u)) { set("error", "the manifest URL is not on one of the project's hosts"); return; }
   set("checking", "reading " + u);
   QNetworkRequest req{QUrl(u)}; req.setTransferTimeout(15000); req.setHeader(QNetworkRequest::UserAgentHeader, "AmF-X1-console");
   QNetworkReply* r = net_.get(req);
@@ -192,7 +196,7 @@ void Update::check() {
 }
 void Update::download() {
   if (file_.isEmpty()) { set("error", "no file for this platform in the manifest"); return; }
-  const QString u = file_["url"].toString(); if (!am::upd::hostAllowed(u.toStdString())) { set("error", "the download URL is not on one of the project's hosts"); return; }
+  const QString u = file_["url"].toString(); if (!am::upd::hostAllowed(u.toStdString()) && !(am::upd::localManifest(u.toStdString()) && am::upd::localManifest(url().toStdString()))) { set("error", "the download URL is not on one of the project's hosts"); return; }
   const QString dir = QString::fromStdString(am::paths::downloadsDir()); const QString dest = dir + "/" + QFileInfo(file_["name"].toString()).fileName();
   progress_ = 0; set("downloading", "downloading " + file_["name"].toString());
   QNetworkRequest req{QUrl(u)}; req.setTransferTimeout(600000); req.setHeader(QNetworkRequest::UserAgentHeader, "AmF-X1-console"); req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::SameOriginRedirectPolicy);
