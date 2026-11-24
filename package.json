@@ -33,6 +33,9 @@
     "ota:local": "node scripts/ota-local.js",
     "engine": "node scripts/build-engine.js",
     "license:generator": "node scripts/license-generator.js --open",
+    "key-manager": "node tools/key-manager/main.js",
+    "build:key-manager": "node tools/key-manager/build.js",
+    "test:key-manager": "node --test tools/key-manager/test/key-manager.test.js",
     "perf": "node scripts/perf-controller.js",
     "native": "cmake -S native/amixos -B build/amixos && cmake --build build/amixos -j && ctest --test-dir build/amixos --output-on-failure",
     "engine:test": "cmake -S engine/cpp -B build/engine && cmake --build build/engine -j && ctest --test-dir build/engine --output-on-failure"
