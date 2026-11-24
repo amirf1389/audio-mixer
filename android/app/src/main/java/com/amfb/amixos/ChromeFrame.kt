@@ -34,7 +34,12 @@ object ChromeFrame {
     }
     /** the licence as the engine reports it */
     fun licenceText(c: Context): String = runCatching { Engine.licenseJson() }.getOrNull()?.takeIf { it.isNotBlank() && it != "null" } ?: c.getString(R.string.cb_licence_none)
-    fun showLicence(a: Activity) { androidx.appcompat.app.AlertDialog.Builder(a).setTitle(R.string.cb_licence).setMessage(licenceText(a)).setPositiveButton(android.R.string.ok, null).show() }
+    fun showLicence(a: Activity): androidx.appcompat.app.AlertDialog {
+        val json = runCatching { Engine.licenseJson() }.getOrNull(); val link = LicenceLink.forLicence(a, json)
+        val b = androidx.appcompat.app.AlertDialog.Builder(a).setTitle(R.string.cb_licence).setMessage(licenceText(a)).setPositiveButton(android.R.string.ok, null)
+        if (link != null) b.setNeutralButton(R.string.cb_manage_licence) { _, _ -> LicenceLink.open(a, link) }   // MANAGE LICENCE ONLINE: the licence site, machine code filled in
+        return b.show()
+    }
 
     fun wrap(a: Activity, content: View): View {
         val d = a.resources.displayMetrics.density

@@ -7,6 +7,6 @@
   "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "node start.js",
-    "test": "node --test --test-force-exit test/e2e.test.js"
+    "test": "node --test --test-force-exit test/e2e.test.js test/licence-site.e2e.test.js"
   }
 }

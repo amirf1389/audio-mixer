@@ -72,7 +72,11 @@ Flickable {
                         // MY ACCOUNT ONLINE: the customer page of the licence server (management/customer): plan, end date, computers, free one, downloads
                         Rectangle { id: gbAcc; objectName: "accountBtn"; readonly property bool ok: /^https:\/\//.test(updater.licenseServer); implicitWidth: accT.implicitWidth + 22; implicitHeight: 24; radius: 7; color: "transparent"; border.color: Theme.cyan; opacity: ok ? 1 : 0.4
                             Text { id: accT; anchors.centerIn: parent; text: i18n.t("MY ACCOUNT ONLINE", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
-                            MouseArea { anchors.fill: parent; enabled: gbAcc.ok; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally(updater.licenseServer.replace(/\/+$/, "") + "/account/") } } }
+                            MouseArea { anchors.fill: parent; enabled: gbAcc.ok; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally(updater.licenseServer.replace(/\/+$/, "") + "/account/") } }
+                        // MANAGE LICENCE ONLINE: the licence site of the same server (/licence/), opened with this computer's machine code and plan filled in
+                        Rectangle { id: gbMan; objectName: "manageLicenceBtn"; readonly property string link: { void updater.licenseServer; return updater.manageLicenceUrl(page.lic.machine || "", page.lic.plan || "") }   /* re-read when the server setting changes */; implicitWidth: manT.implicitWidth + 22; implicitHeight: 24; radius: 7; color: "transparent"; border.color: Theme.amber; opacity: link !== "" ? 1 : 0.4
+                            Text { id: manT; anchors.centerIn: parent; text: i18n.t("MANAGE LICENCE ONLINE", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                            MouseArea { anchors.fill: parent; enabled: gbMan.link !== ""; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally(gbMan.link) } } }
                     Text { id: pkNote; visible: text !== "" || (updater.redeemState !== "" && updater.redeemState !== "asking" && updater.redeemState !== "done"); Layout.fillWidth: true; wrapMode: Text.WordWrap; text: ""; color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9
                         Binding on text { when: updater.redeemState !== "" && updater.redeemState !== "asking" && updater.redeemState !== "done"; value: updater.redeemState } } } }
             RowLayout { spacing: 6

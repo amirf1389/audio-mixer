@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activate · AmF X1 Licence</title>
+<meta name="description" content="Activate AmF X1 on a computer online: its machine code and your licence key or product key.">
+<meta name="robots" content="index, follow">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e7490'/%3E%3Cg fill='%23fff'%3E%3Crect x='9' y='30' width='6' height='24' rx='2'/%3E%3Crect x='19' y='20' width='6' height='34' rx='2'/%3E%3Crect x='29' y='10' width='6' height='44' rx='2'/%3E%3Crect x='39' y='24' width='6' height='30' rx='2'/%3E%3Crect x='49' y='34' width='6' height='20' rx='2'/%3E%3C/g%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="preload" href="/licence/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/licence/site.css">
+<script src="/licence/site.js" defer></script>
+</head>
+<body data-page="activate">
+<a class="skip" href="#main">Skip to content</a>
+<header class="head"><div class="wrap">
+<a class="brand" href="/licence/"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e7490'/%3E%3Cg fill='%23fff'%3E%3Crect x='9' y='30' width='6' height='24' rx='2'/%3E%3Crect x='19' y='20' width='6' height='34' rx='2'/%3E%3Crect x='29' y='10' width='6' height='44' rx='2'/%3E%3Crect x='39' y='24' width='6' height='30' rx='2'/%3E%3Crect x='49' y='34' width='6' height='20' rx='2'/%3E%3C/g%3E%3C/svg%3E" alt="" width="32" height="32"><span>AmF <b>X1</b></span> <small>LICENCE</small></a>
+<nav aria-label="Licence site"><ul class="nav">
+<li><a href="/licence/">Overview</a></li>
+<li><a href="/licence/my">My licence</a></li>
+<li><a href="/licence/activate" aria-current="page">Activate</a></li>
+<li><a href="/licence/request">Request / Upgrade</a></li>
+<li><a href="/licence/downloads">Downloads</a></li>
+<li><a href="/licence/help">Help</a></li>
+</ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+<section class="section"><div class="wrap">
+<h1>Activate a computer</h1>
+<p class="lead">Type the machine code of the computer and your product key, licence key or edition token. The server checks the key and the free seats, then gives an activation for that one computer. AmF X1 then runs offline for the whole licence term.</p>
+<form id="actForm" novalidate>
+<fieldset><legend>Activation</legend>
+<div class="row">
+<div><label for="actMachine">Machine code<span class="hint">LICENSE page of AmF X1 → MACHINE CODE</span></label>
+<input id="actMachine" name="machine" data-machine autocomplete="off" spellcheck="false" required placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" aria-describedby="actMsg"></div>
+</div>
+<label for="actKey">Product key, licence key or edition token</label>
+<textarea id="actKey" name="key" autocomplete="off" spellcheck="false" required aria-describedby="actMsg"></textarea>
+<div class="btns"><button class="btn" type="submit" id="actBtn">Activate online</button></div>
+<p class="msg" id="actMsg" role="status" aria-live="polite"></p>
+</fieldset>
+</form>
+<section class="result card" id="actResult" aria-live="polite" hidden>
+<h2>Activated</h2>
+<dl class="facts" id="actFacts"></dl>
+<div class="btns"><a class="btn" id="openApp" href="#" download="amfx1-activation.amixkey">Open in AmF X1</a><button class="btn ghost" type="button" id="copyAct">Copy activation</button></div>
+<p class="msg" id="copyMsg" role="status" aria-live="polite"></p>
+<ol class="steps"><li>OPEN IN AMF X1 saves <code>amfx1-activation.amixkey</code> to your Downloads folder.</li><li>In AmF X1 open the LICENSE page with AUTO LICENCE on: it picks the file up within two seconds and activates.</li><li>Or copy the activation into a text file named <code>key.amixkey</code> in Downloads: AmF X1 picks it up the same way.</li></ol>
+<details><summary>The activation</summary><code class="token" id="actToken"></code></details>
+</section>
+</div></section>
+</main>
+<footer class="foot"><div class="wrap">
+<p>AmF X1 by AMFB Audio. Nothing here is paid online: upgrades are arranged on WhatsApp.</p>
+<ul><li><a href="https://wa.me/601120871185" rel="noopener">WhatsApp</a></li><li><a href="/licence/help">Help</a></li><li><a href="/licence/downloads">Downloads</a></li><li><a href="/licence/fonts/OFL-Inter.txt">Font licences</a></li></ul>
+</div></footer>
+</body>
+</html>

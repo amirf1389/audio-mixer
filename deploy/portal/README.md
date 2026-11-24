@@ -5,7 +5,7 @@ This folder runs three things together on one small server:
 | Part | Code | What it does |
 |---|---|---|
 | **OTA update server** | `ota-server/server.js` | Gives the console and the Android app the signed update list (`/update.json`) and the release files (`/releases/...`). It also serves a public download page (`/`). |
-| **Licence server + customer portal** | `bridge/license-server/server.js` | Issues licence keys and product keys. Activates and deactivates computers, reports key status and serves the signed revocation list. Customers use `/portal/` and `/account/`. |
+| **Licence server + customer portal** | `bridge/license-server/server.js` | Issues licence keys and product keys. Activates and deactivates computers, reports key status and serves the signed revocation list. Customers use `/portal/`, `/account/` and the licence site `/licence/` (overview, my licence, activate, request / upgrade, downloads, help; the console and the Android app open it with MANAGE LICENCE ONLINE). |
 | **Staff dashboard** | the same two servers, under `/admin/` | Covers licences, the CRM, website downloads, presets, system and backups (licence host), plus release files, manifests and the audit log (OTA host). One staff sign-in opens both. |
 | **Caddy** | `Caddyfile` | Handles HTTPS with automatic certificates, HSTS, security headers, gzip, size limits and the IP allowlist for the staff hosts. |
 
@@ -27,6 +27,8 @@ deploy/portal/
   tools/add-staff.js   creates a staff account (asks for the password)
   tools/staff-backup.js  consistent copy of the staff/CRM database
   test/e2e.test.js     end-to-end test without Docker (see "Testing")
+  test/licence-site.e2e.test.js  the licence site /licence/ in a headless browser (see "Testing")
+  test/caddy-routes.js the public host's routing, read from the Caddyfile (used by the tests)
   -- made by init / by you, never committed (.gitignore) --
   .env  secrets/  data/  site-releases/  backups/
 ```
@@ -175,6 +177,17 @@ Backup without Docker: run `LICENSE_ADMIN_TOKEN=... node tools/staff-backup.js -
 
 ```
 node --test --test-force-exit deploy/portal/test/e2e.test.js
+```
+
+The licence site (`/licence/`) has its own browser test. It runs the same portal plus a small proxy that routes as the public host of the
+Caddyfile does, issues a test licence, then uses the site as a customer: the console's MANAGE LICENCE ONLINE link (machine code filled in),
+activate online with the product key (and the `.amixkey` file for AmF X1), look the licence up by key and by serial + e-mail, free a
+computer, send a licence request, and the signed download. It also checks that no staff route answers on the public host. Playwright
+is needed (it is skipped without it):
+
+```
+NODE_PATH=/opt/node-tools/node_modules node --test --test-force-exit deploy/portal/test/licence-site.e2e.test.js
+#   AMIX_SMOKE_LOG=<output of amixos --smoke>   use the console's own link    LICSITE_SHOTS=<folder>   screenshots, desktop and phone
 ```
 
 This test starts `start.js` on random localhost ports with a throwaway key pair in a temporary folder, which it deletes afterwards. It checks:

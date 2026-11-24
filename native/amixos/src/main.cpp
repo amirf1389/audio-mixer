@@ -1449,7 +1449,14 @@ int main(int argc, char* argv[]) {
         update.setLicenseServer(""); update.redeemProductKey("AAAAA-BBBBB-CCCCC-DDDDD-EEEEE"); if (update.redeemState().isEmpty() || update.redeemState() == "asking") return 209;
         update.setLicenseServer("https://licence.example.org/"); if (update.licenseServer() != "https://licence.example.org") return 210;
         update.redeemProductKey("TOO-SHORT"); if (update.redeemState() == "asking") return 211;
-        QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic); }
+        // MANAGE LICENCE ONLINE (LICENSE page): the licence site with this computer's machine code and plan; nothing else gets into the link
+        if (update.manageLicenceUrl(" a1b2-c3d4-e5f6-0718-293a ", "PRO") != "https://licence.example.org/licence/?machine=A1B2-C3D4-E5F6-0718-293A&edition=pro"
+            || update.manageLicenceUrl("A1B2<x>&y=1#C3D4", "pro&admin=1") != "https://licence.example.org/licence/?machine=A1B2XY1C3D4") { std::fprintf(stderr, "amixos --smoke: MANAGE LICENCE ONLINE link %s\n", qPrintable(update.manageLicenceUrl("A1B2<x>&y=1#C3D4", "pro&admin=1"))); return 827; }
+        update.setLicenseServer("http://127.0.0.1:8787"); if (update.manageLicenceUrl("A1B2-C3D4-E5F6-0718-293A", "basic") != "http://127.0.0.1:8787/licence/?machine=A1B2-C3D4-E5F6-0718-293A&edition=basic") return 828;
+        QSettings().remove("update/hosts"); QSettings().setValue("update/url", keepUrl); update.setLicenseServer(keepLic);
+        const QString manage = update.manageLicenceUrl(engine.license().value("machine").toString(), engine.license().value("plan").toString());
+        if (keepLic.startsWith("https://") && !manage.startsWith(keepLic + "/licence/?machine=")) { std::fprintf(stderr, "amixos --smoke: MANAGE LICENCE ONLINE has no machine code (%s)\n", qPrintable(manage)); return 829; }
+        std::printf("amixos --smoke: MANAGE LICENCE ONLINE %s\n", qPrintable(manage)); }
       { const QString pin = remote.pairPin(); const int left = remote.pairSecondsLeft();   // the pairing PIN: six digits once the master token exists, 1..60 s to the next
         if ((!pin.isEmpty() && (pin.size() != 6 || pin.toInt() < 0)) || left < 1 || left > 60) { std::fprintf(stderr, "amixos --smoke: the pairing PIN is wrong (%s, %d s)\n", qPrintable(pin), left); return 206; } }
       { // HIGH-RESOLUTION AUDIO: r8brain, libFLAC, dr_wav / dr_flac built in; libsoxr loaded from beside the program

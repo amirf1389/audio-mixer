@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Request / Upgrade · AmF X1 Licence</title>
+<meta name="description" content="Request an AmF X1 licence key or an upgrade to Pro or Studio Master. No payment on this site.">
+<meta name="robots" content="index, follow">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e7490'/%3E%3Cg fill='%23fff'%3E%3Crect x='9' y='30' width='6' height='24' rx='2'/%3E%3Crect x='19' y='20' width='6' height='34' rx='2'/%3E%3Crect x='29' y='10' width='6' height='44' rx='2'/%3E%3Crect x='39' y='24' width='6' height='30' rx='2'/%3E%3Crect x='49' y='34' width='6' height='20' rx='2'/%3E%3C/g%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="preload" href="/licence/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/licence/site.css">
+<script src="/licence/site.js" defer></script>
+</head>
+<body data-page="request">
+<a class="skip" href="#main">Skip to content</a>
+<header class="head"><div class="wrap">
+<a class="brand" href="/licence/"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e7490'/%3E%3Cg fill='%23fff'%3E%3Crect x='9' y='30' width='6' height='24' rx='2'/%3E%3Crect x='19' y='20' width='6' height='34' rx='2'/%3E%3Crect x='29' y='10' width='6' height='44' rx='2'/%3E%3Crect x='39' y='24' width='6' height='30' rx='2'/%3E%3Crect x='49' y='34' width='6' height='20' rx='2'/%3E%3C/g%3E%3C/svg%3E" alt="" width="32" height="32"><span>AmF <b>X1</b></span> <small>LICENCE</small></a>
+<nav aria-label="Licence site"><ul class="nav">
+<li><a href="/licence/">Overview</a></li>
+<li><a href="/licence/my">My licence</a></li>
+<li><a href="/licence/activate">Activate</a></li>
+<li><a href="/licence/request" aria-current="page">Request / Upgrade</a></li>
+<li><a href="/licence/downloads">Downloads</a></li>
+<li><a href="/licence/help">Help</a></li>
+</ul></nav>
+</div></header>
+<main id="main" tabindex="-1">
+<section class="section"><div class="wrap">
+<h1>Request a key or an upgrade</h1>
+<p class="lead">Send us a request with your machine code: we reply with your key. There is no payment on this site. To upgrade, message us on WhatsApp: the message is written for you, you press send.</p>
+<div class="two">
+<form id="reqForm" novalidate>
+<fieldset><legend>Licence request</legend>
+<label for="reqPlan">Edition</label>
+<select id="reqPlan" name="plan"><option value="pro">Pro · 20 channels</option><option value="master">Studio Master · 32 channels, all access</option><option value="studio">Studio · 32 channels</option><option value="ultimate">Ultimate · 300 channels</option></select>
+<label for="reqName">Name</label>
+<input id="reqName" name="name" autocomplete="name" maxlength="80" required>
+<label for="reqEmail">E-mail<span class="hint">We send the key here</span></label>
+<input id="reqEmail" name="email" type="email" autocomplete="email" maxlength="120" required>
+<label for="reqMachine">Machine code<span class="hint">LICENSE page of AmF X1 → MACHINE CODE</span></label>
+<input id="reqMachine" name="machine" data-machine autocomplete="off" spellcheck="false" required placeholder="XXXX-XXXX-XXXX-XXXX-XXXX">
+<div class="btns"><button class="btn" type="submit">Send request</button></div>
+<p class="msg" id="reqMsg" role="status" aria-live="polite"></p>
+</fieldset>
+</form>
+<div class="card">
+<h2>Upgrade via WhatsApp</h2>
+<p>Pro or Studio Master: WhatsApp opens with your edition and machine code already written. Payment is agreed in the chat; you receive your own edition installer, which activates by itself.</p>
+<div class="btns"><a class="btn wa" id="waLink" href="https://wa.me/601120871185" rel="noopener">Upgrade via WhatsApp</a></div>
+<p class="hint">Nothing is sent until you press send in WhatsApp.</p>
+</div>
+</div>
+</div></section>
+</main>
+<footer class="foot"><div class="wrap">
+<p>AmF X1 by AMFB Audio. Nothing here is paid online: upgrades are arranged on WhatsApp.</p>
+<ul><li><a href="https://wa.me/601120871185" rel="noopener">WhatsApp</a></li><li><a href="/licence/help">Help</a></li><li><a href="/licence/downloads">Downloads</a></li><li><a href="/licence/fonts/OFL-Inter.txt">Font licences</a></li></ul>
+</div></footer>
+</body>
+</html>

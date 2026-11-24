@@ -17,6 +17,7 @@
 #include <QProcess>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QStandardPaths>
 #include <QStorageInfo>
 
@@ -66,6 +67,16 @@ void Update::setLicenseServer(const QString& link) {
   const bool local = u.scheme() == "http" && (u.host() == "127.0.0.1" || u.host() == "localhost");   // a server on this computer (the vendor's own desk)
   if (!t.isEmpty() && !(u.scheme() == "https" || local)) { redeem_ = QStringLiteral("The licence server must be an https address."); emit changed(); return; }
   s_.setValue("licence/server", t); s_.sync(); if (redeem_ != "asking") redeem_.clear(); emit changed();
+}
+QString Update::manageLicenceUrl(const QString& machine, const QString& edition) const {
+  QString base = licenseServer().trimmed(); while (base.endsWith('/')) base.chop(1);
+  const QUrl b(base); const bool local = b.scheme() == "http" && (b.host() == "127.0.0.1" || b.host() == "localhost");
+  if (base.isEmpty() || !b.isValid() || b.host().isEmpty() || !(b.scheme() == "https" || local) || !b.query().isEmpty() || !b.fragment().isEmpty()) return QString();
+  QString m; for (const QChar c : machine.trimmed().toUpper()) if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-') m += c;   // what a machine code holds, nothing else
+  m.truncate(64); if (m.size() < 8) m.clear();
+  static const QStringList plans{"basic", "pro", "studio", "master", "ultimate"}; const QString e = edition.trimmed().toLower();
+  QUrlQuery q; if (!m.isEmpty()) q.addQueryItem("machine", m); if (plans.contains(e)) q.addQueryItem("edition", e);
+  QUrl u(base + "/licence/"); u.setQuery(q); return u.toString(QUrl::FullyEncoded);
 }
 void Update::redeemProductKey(const QString& code) {
   const QString server = licenseServer();
