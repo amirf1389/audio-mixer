@@ -58,6 +58,8 @@ class Update : public QObject {
   QString redeemState() const { return redeem_; }
   Q_INVOKABLE bool setServerLink(const QString& url);          // the update server link: any https host; its list must still be signed
   Q_INVOKABLE void redeemProductKey(const QString& code);
+  // MANAGE LICENCE ONLINE: <licence server>/licence/?machine=<code>&edition=<plan> (the customer licence site), "" without a usable https server
+  Q_INVOKABLE QString manageLicenceUrl(const QString& machine, const QString& edition) const;
   // ACTIVATION (Windows-style): a product key, licence key (AMIX1.) or edition token (AMFXE1.) + this computer's code -> activated(token)
   Q_INVOKABLE void activateOnline(const QString& text, const QString& machine);
   Q_INVOKABLE void startTrial(const QString& machine);       // a 30-day trial for this computer -> activated(token)

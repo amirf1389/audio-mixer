@@ -27,6 +27,7 @@
 #include <QFileSystemWatcher>
 static bool looksBluetooth(const QString& n);
 #include <QRegularExpression>
+#include <QSet>
 #include "audiomixer/apo_info.hpp"
 #include <QProcess>
 #include "audiomixer/driver_intel.hpp"
@@ -828,6 +829,10 @@ int Engine::scanForKeys() {
   for (const QString& d : dirs) { if (d.isEmpty()) continue; QDir dir(d); if (!dir.exists()) continue;
     for (const QFileInfo& fi : dir.entryInfoList({"*.amixkey", "*.key", "key*.txt", "amix*.txt"}, QDir::Files, QDir::Time)) {
       if (fi.size() > 16384) continue; QFile f(fi.filePath()); if (!f.open(QIODevice::ReadOnly)) continue; const QString text = QString::fromUtf8(f.readAll()); ++tried;
+      // an ACTIVATION saved by the licence site (OPEN IN AMF X1 -> amfx1-activation.amixkey): stored once per token, checked like any other
+      static const QRegularExpression actRe("AMXA1\\.[A-Za-z0-9_\\-]+\\.[A-Za-z0-9_\\-]+"); static QSet<QString> actTried;
+      auto at = actRe.globalMatch(text); while (at.hasNext()) { const QString a = at.next().captured(0); if (actTried.contains(a)) continue; actTried.insert(a); const QVariantMap r = storeActivation(a);
+        if (r["ok"].toBool()) { autoStatus_ = "activated from " + fi.fileName(); emit licenseChanged(); return tried; } autoStatus_ = fi.fileName() + ": " + r["message"].toString(); }
       auto it = keyRe.globalMatch(text); while (it.hasNext()) { const QString key = it.next().captured(0); const QVariantMap r = activateKey(key);
         if (r["ok"].toBool()) { autoStatus_ = "activated from " + fi.fileName(); emit licenseChanged(); return tried; } autoStatus_ = fi.fileName() + ": " + r["message"].toString(); } } }
   if (tried == 0 && autoStatus_ != "off" && !autoStatus_.startsWith("request")) autoStatus_ = "watching for a key file (*.amixkey, *.key, key*.txt) in " + amixHome() + " or Downloads";

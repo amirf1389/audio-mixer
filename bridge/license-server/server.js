@@ -20,6 +20,8 @@
 //                                            GET|PUT /admin/website/state   POST /admin/website/publish   (the portal downloads)
 //   public                                   GET /portal/downloads   GET /portal/download/:platform/:name   (LICENSE_RELEASES_DIR, default ../../releases)
 //                                            GET|POST /admin/website/presets (staff)   GET /portal/presets (public: the published preset pack)
+//   public (licence site, /licence/)         GET /licence/ + my, activate, request, downloads, help   GET /licence/vendor-key.json (the PUBLIC key)
+//                                            POST /licence/api/lookup { serial, email }   POST /licence/api/deactivate { serial, email, ref }
 //
 // The private key is read from a file, not from the repository and not from an environment variable. It is never returned, logged or stored.
 // Keys use the same format and signature as scripts/license.js, so every installed copy that trusts the vendor public key accepts them.
@@ -354,6 +356,69 @@ function publicDownloads(site, rel) {
   return { version: ver ? ver.version : null, date: ver ? ver.date : '', title: ver ? ver.title : '', headline: pub.headline || '', note: pub.note || '', files, publishedAt: site.publishedAt || null };
 }
 
+// ── LICENCE SITE: a customer looks up a licence by its SERIAL (the 12-character licence id) and the E-MAIL it was issued to. Both must match the
+// record: a wrong serial and a wrong e-mail get the same answer, so nobody learns which serials exist or whose e-mail is on one. The answer
+// holds that one licence only, and its computers as opaque references with the last four characters of the machine code (never the code).
+const SERIAL_RE = /^[0-9A-F]{12}$/;
+const CUSTOMER_EMAIL_RE = /^[^\s@<>"',;]{1,64}@[^\s@<>"',;]{1,185}\.[A-Za-z]{2,24}$/;
+const NO_MATCH = 'no licence matches that serial and e-mail';
+const DUMMY_SEAL = new Map();
+function deviceRef(secret, id, machine) { return crypto.createHmac('sha256', String(secret)).update('amfx1-device-ref:' + id + ':' + machine).digest('base64url').slice(0, 22); }
+const emailEq = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a).trim().toLowerCase()).digest(), crypto.createHash('sha256').update(String(b).trim().toLowerCase()).digest());
+// Checks { serial, email } and finds the record. Returns { error, status } or { id, rec, reg }.
+function customerRecord({ serial, email, file, secret }) {
+  const id = String(serial || '').trim().toUpperCase(), mail = String(email || '').trim();
+  if (!SERIAL_RE.test(id)) return { status: 400, error: 'the serial is the 12-character licence id (letters A-F and digits)' };
+  if (mail.length > 120 || !CUSTOMER_EMAIL_RE.test(mail)) return { status: 400, error: 'that is not an e-mail address' };
+  const reg = loadRegistry(file), rec = Object.prototype.hasOwnProperty.call(reg, id) ? reg[id] : null;
+  const key = dataKey(reg, secret); let d = null;
+  if (rec && rec.enc) d = unseal(rec.enc, key);
+  else { if (!DUMMY_SEAL.has(key)) DUMMY_SEAL.set(key, seal({ email: '' }, key)); unseal(DUMMY_SEAL.get(key), key); }   // the same work when there is no such serial
+  if (!rec || !rec.meta || !d || !d.email || !emailEq(d.email, mail)) return { status: 404, error: NO_MATCH };
+  return { id, rec, reg };
+}
+function customerView({ id, rec, secret, now = Date.now() }) {
+  const m = rec.meta || {}, devices = Array.isArray(rec.devices) ? rec.devices.slice(0, MAX_DEVICES) : [];
+  return { ok: true, id, plan: m.plan || null, term: m.term || (m.trial ? 'trial' : m.expires ? 'limited' : 'perpetual'), issued: m.issued || null, expires: m.expires || null,
+    expired: !!(m.expires && m.expires < now), revoked: !!rec.revoked, limit: Math.min(m.seats || 1, MAX_DEVICES), devices: devices.length,
+    computers: devices.map(x => ({ ref: deviceRef(secret, id, x), ends: x.replace(/-/g, '').slice(-4) })) };
+}
+function mountLicenceSite(app, { dataFile, secret, jwk, audit, limiter }) {
+  const site = path.join(__dirname, 'licence-site');
+  const pages = { '/licence/': 'index.html', '/licence/my': 'my.html', '/licence/activate': 'activate.html', '/licence/request': 'request.html', '/licence/downloads': 'downloads.html', '/licence/help': 'help.html' };
+  // the pages' CSP: the default (only this origin, no inline script or style) plus the self-hosted fonts; the favicon is a data: image
+  const csp = SECURITY_HEADERS['content-security-policy'] + "; font-src 'self'";
+  for (const [url, f] of Object.entries(pages)) app.get(url, c => { let data; try { data = fs.readFileSync(path.join(site, f)); } catch (_) { throw new HttpError(404, 'not found'); } return c.send(200, data, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': csp }); });
+  const files = {};
+  for (const f of ['inter-latin-400-normal', 'inter-latin-500-normal', 'inter-latin-600-normal', 'space-grotesk-latin-500-normal', 'space-grotesk-latin-700-normal']) files['/licence/fonts/' + f + '.woff2'] = [path.join(site, 'fonts', f + '.woff2'), 'font/woff2'];
+  for (const f of ['OFL-Inter.txt', 'OFL-SpaceGrotesk.txt']) files['/licence/fonts/' + f] = [path.join(site, 'fonts', f), 'text/plain; charset=utf-8'];
+  files['/licence/site.css'] = [path.join(site, 'site.css'), 'text/css; charset=utf-8'];
+  files['/licence/site.js'] = [path.join(site, 'site.js'), 'text/javascript; charset=utf-8'];
+  app.get('/licence', c => c.send(301, '', { location: '/licence/' }));
+  app.static(files);
+  // the vendor PUBLIC key, so the Downloads page can check the update list's signature in the browser (public by design: it ships in every app)
+  app.get('/licence/vendor-key.json', c => c.json(200, { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }, { 'cache-control': 'public, max-age=3600' }));
+  // ten tries a minute per address (lookup and deactivate together), and one serial at most twenty a minute from all addresses together
+  const pace = c => { const r = limiter.allow('cust:' + c.ip, 10); if (!r.ok) throw new HttpError(429, 'too many requests: wait a minute', { retryAfter: r.retryAfter }); };
+  const guard = (c, b) => { const id = String(b.serial || '').trim().toUpperCase(); if (SERIAL_RE.test(id)) { const r = limiter.allow('custid:' + id, 20); if (!r.ok) throw new HttpError(429, 'too many requests: wait a minute', { retryAfter: r.retryAfter }); } };
+  app.post('/licence/api/lookup', pace, async c => {
+    const b = await c.body(); guard(c, b);
+    const r = customerRecord({ serial: b.serial, email: b.email, file: dataFile, secret });
+    if (r.error) { if (r.status === 404) audit.add('customer.lookup.refused', '-', c.ip); return c.json(r.status, { ok: false, error: r.error }); }
+    audit.add('customer.lookup', r.id, c.ip); return c.json(200, customerView({ id: r.id, rec: r.rec, secret }));
+  });
+  app.post('/licence/api/deactivate', pace, async c => {
+    const b = await c.body(); guard(c, b);
+    const ref = String(b.ref || ''); if (!/^[A-Za-z0-9_-]{22}$/.test(ref)) return c.json(400, { ok: false, error: 'choose the computer to free' });
+    const r = customerRecord({ serial: b.serial, email: b.email, file: dataFile, secret });
+    if (r.error) { if (r.status === 404) audit.add('customer.deactivate.refused', '-', c.ip); return c.json(r.status, { ok: false, error: r.error }); }
+    const devices = Array.isArray(r.rec.devices) ? r.rec.devices : [], m = devices.find(x => deviceRef(secret, r.id, x) === ref);
+    if (!m) return c.json(404, { ok: false, error: 'that computer is not on this licence' });
+    r.rec.devices = devices.filter(x => x !== m); r.reg[r.id] = r.rec; saveRegistry(dataFile, r.reg);
+    audit.add('customer.deactivate', r.id, c.ip); return c.json(200, customerView({ id: r.id, rec: r.rec, secret }));
+  });
+}
+
 function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, portalDb = process.env.PORTAL_DB, portalSecret = process.env.PORTAL_JWT_SECRET, trustProxy = process.env.LICENSE_TRUST_PROXY === '1', quiet = false, releasesDir = RELEASES_DIR, updateUrl = process.env.LICENSE_UPDATE_URL || 'https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/update.json' }) {
   const jwk = crypto.createPublicKey(privateKey).export({ format: 'jwk' });   // checks the keys this server issued, for the device lock
   const secret = dataSecret || token, audit = auditLog(dataFile), limiter = rateLimiter(), started = Date.now();
@@ -584,6 +649,9 @@ function createServer({ privateKey, token, dataFile = DATA_FILE, dataSecret, por
   app.static({ '/account/tailwind.js': [tailwindFile, 'text/javascript; charset=utf-8'] });
   app.get('/account/', c => { if (!accountPage) accountPage = require('../../management/inline-page').inlinePage(path.join(account, 'index.html'));
     return c.send(200, accountPage.body, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': accountPage.csp }); });
+  // LICENCE SITE (/licence/): the customer licence management website, static files (licence-site/) under the default strict CSP (no inline
+  // script or style, nothing from a CDN). It uses the public routes above plus the two below; never an /admin route.
+  mountLicenceSite(app, { dataFile, secret, jwk, audit, limiter });
   // the management page: three fixed files; it asks for the token itself, so the files carry nothing secret
   const dash = path.join(__dirname, 'dashboard');
   // the staff pages load pinned CDN files (Bootstrap, Font Awesome) checked by their SRI hash; each page gets a CSP naming exactly those hosts.

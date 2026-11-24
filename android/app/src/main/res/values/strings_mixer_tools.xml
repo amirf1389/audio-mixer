@@ -29,6 +29,7 @@
     <string name="cb_settings">SETTINGS</string>
     <string name="cb_licence">LICENCE</string>
     <string name="cb_licence_none">No licence information from the engine on this device.</string>
+    <string name="cb_manage_licence">MANAGE LICENCE ONLINE</string>
     <string name="cb_mode_title">CHROMEBOOK MODE</string>
     <string name="cb_mode_auto">AUTO</string>
     <string name="cb_mode_on">ON</string>

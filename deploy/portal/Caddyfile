@@ -56,8 +56,8 @@
 		respond "not found" 404
 	}
 
-	# the licence API, the customer portal and My account -> licence server (requests are small JSON: 64 KB is plenty)
-	@licence path /health /activate /deactivate /status /activate-online /trial /revocations /redeem /portal /portal/* /account /account/*
+	# the licence API, the customer portal, My account and the licence site -> licence server (requests are small JSON: 64 KB is plenty)
+	@licence path /health /activate /deactivate /status /activate-online /trial /revocations /redeem /portal /portal/* /account /account/* /licence /licence/*
 	handle @licence {
 		request_body {
 			max_size 64KB
