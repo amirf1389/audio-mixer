@@ -41,11 +41,14 @@ qt_add_executable(amixos
     src/I18n.cpp src/I18n.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../../engine/cpp/app/qr/qrcodegen.cpp)   # the pairing QR code (Project Nayuki, MIT)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)   # before qt_add_qml_module, or Theme is a plain type and every Theme.* colour is undefined
+# QML AHEAD OF TIME: every page ships precompiled to byte code (qmlcachegen), so opening a page no longer parses and compiles its source
+# first (the main cost of a first open on a 15 W laptop CPU). Byte code only: Qt 6.4's C++ code generation (qmlsc) loops forever resolving
+# the Theme singleton (lookupType); the byte code path has no such step.
+set_target_properties(amixos PROPERTIES QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode")
 qt_add_qml_module(amixos
     URI AmixOS
     VERSION 1.0
     RESOURCE_PREFIX /qt/qml
-    NO_CACHEGEN              # Qt 6.4's ahead-of-time QML compiler loops forever resolving the Theme singleton (lookupType); interpreted bindings are fine here
     QML_FILES
         qml/Main.qml
         qml/Theme.qml

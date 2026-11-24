@@ -47,7 +47,14 @@ ApplicationWindow {
     Timer { id: warmTimer; interval: 60; repeat: true; running: false
         onTriggered: { if (!root.warmQueue.length) { stop(); return }
             const n = root.warmQueue.shift(); const c = Qt.createComponent("qrc:/qt/qml/AmixOS/qml/" + n + ".qml", Component.Asynchronous); root.warmKeep.push(c) } }
-    Timer { interval: 3000; running: asyncPages; onTriggered: { warmTimer.start(); if (pageCacheOff) return; root.mixerEver = true; root.touchPage("asio", true) } }   // the most used pages (MIXER, SOUND CARD) built ahead, in the background
+    Timer { interval: 3000; running: asyncPages; onTriggered: { warmTimer.start(); if (pageCacheOff) return; root.mixerEver = true; root.touchPage("asio", true); if (!graphics.saver) preTimer.start() } }   // the most used pages (MIXER, SOUND CARD) built ahead, in the background
+    // IDLE PRE-BUILD: the next most used pages, one at a time while nothing else is being built, hidden in the page cache (oldest first to
+    // go, so memory stays within the cache's 6 pages): the first click on them is a frame. Not with Windows battery saver on.
+    property var preQueue: ["home", "dsp", "routing", "meter"]
+    Timer { id: preTimer; interval: 450; repeat: true
+        onTriggered: { if (graphics.saver || !root.preQueue.length || root.pageUsed.length >= root.pageCacheMax - 1) { stop(); return }
+            if (root.pageStatus === Loader.Loading || mixerKeep.status === Loader.Loading || engine.busy) return
+            const id = root.preQueue.shift(); if (id !== root.current && root.pageSlots.indexOf(id) < 0) root.touchPage(id, true) } }
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     Binding { target: Theme; property: "scheme"; value: settings.colorTheme }
@@ -284,7 +291,7 @@ ApplicationWindow {
                     // once; the new page fades in when ready. (The tests build synchronously unless they ask for this.)
                     asynchronous: asyncPages
                     opacity: status === Loader.Ready ? 1 : 0
-                    Behavior on opacity { enabled: asyncPages; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: asyncPages && !graphics.lowPower; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
                     sourceComponent: pid !== "" ? pageArea.pageComponent(pid) : null
                     Binding { target: root; property: "pageStatus"; value: status; when: visible; restoreMode: Binding.RestoreNone }
                     onVisibleChanged: if (visible && item && typeof item.pageShown === "function") item.pageShown()   // shown again from the cache: the page reads its data again, as a fresh one would
@@ -321,7 +328,7 @@ ApplicationWindow {
                 // THE MIXER stays built once opened: coming back to it is instant (it took ~270 ms to rebuild 32 strips each visit).
                 // Hidden, its meters and timers stop (they follow the page's visibility). A soft restart rebuilds it.
                 Loader { id: mixerKeep; objectName: "mixerKeep"; anchors.fill: parent; asynchronous: asyncPages; active: root.mixerEver; visible: root.current === "mixer"; sourceComponent: mixerC
-                    opacity: status === Loader.Ready ? 1 : 0; Behavior on opacity { enabled: asyncPages; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } } }
+                    opacity: status === Loader.Ready ? 1 : 0; Behavior on opacity { enabled: asyncPages && !graphics.lowPower; NumberAnimation { duration: 110; easing.type: Easing.OutCubic } } }
                 Component { id: frameC; FramePage {} }
                 Component { id: homeC; HomePage { onGo: function (id) { root.current = id } } }
                 Component { id: mixerC; MixerPage { onGo: function (id) { root.current = id } } }
