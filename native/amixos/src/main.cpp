@@ -1897,6 +1897,17 @@ int main(int argc, char* argv[]) {
           auto settle = [&](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); };
           win->setProperty("current", "samples"); settle(700);
           if (QObject* sp = win->findChild<QObject*>("samplesPage")) { win->grabWindow().save(shots + "/samples-pads.png"); sp->setProperty("view", "EFFECTS"); sp->setProperty("family", "Laser"); sp->setProperty("pickedSfx", 257); settle(500); win->grabWindow().save(shots + "/samples-effects.png"); sp->setProperty("view", "PADS"); }
+          { // FILE ANALYZE + AI SETUP on STREAM & MEDIA: a pink-noise WAV (quiet, a dull top) measured and the setup suggested; nothing applied
+            std::vector<float> pn(48000 * 6); unsigned r = 99; double b0 = 0, b1 = 0, b2 = 0, lp = 0; for (float& v : pn) { r = r * 1664525u + 1013904223u; const double w = (static_cast<double>(r >> 8) / 16777216.0) * 2 - 1;
+              b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913; lp = 0.6 * lp + 0.4 * (b0 + b1 + b2 + w * 0.1848); v = static_cast<float>(0.04 * lp); }
+            const QString wav = QDir(shots).filePath("analyze-pink.wav"); std::string we; am::arr::writeWav24(wav.toStdString(), pn, pn, 48000, we);
+            win->setProperty("current", "media"); settle(900);
+            if (auto* fp = win->findChild<QQuickItem*>("fileAnalyzePanel")) { QMetaObject::invokeMethod(fp, "analyze", Q_ARG(QVariant, wav)); settle(400);
+              if (!fp->property("have").toBool()) { std::fprintf(stderr, "amixos --shots: FILE ANALYZE could not read its test file\n"); QCoreApplication::exit(9); return; }
+              QQuickItem* f = fp->parentItem(); while (f && !f->inherits("QQuickFlickable")) f = f->parentItem();
+              if (f) { QQuickItem* ci = f->property("contentItem").value<QQuickItem*>(); f->setProperty("contentY", std::max(0.0, fp->mapToItem(ci, QPointF(0, 0)).y() - 8)); settle(500); }
+              win->grabWindow().save(shots + "/file-analyzer.png"); if (f) f->setProperty("contentY", 0); }
+            QFile::remove(wav); }
           win->setProperty("current", "sys"); settle(2500);
           if (auto* panel = win->findChild<QQuickItem*>("sysPanel")) { QQuickItem* f = panel->parentItem(); while (f && !f->inherits("QQuickFlickable")) f = f->parentItem();
             if (f) { QQuickItem* ci = f->property("contentItem").value<QQuickItem*>(); const QPointF at = panel->mapToItem(ci, QPointF(0, 0)); f->setProperty("contentY", std::max(0.0, at.y() - 8)); settle(600); win->grabWindow().save(shots + "/settings-processor.png"); f->setProperty("contentY", 0); } }

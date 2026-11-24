@@ -3,7 +3,7 @@
 <title>AmF X1 Remote</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/favicon.svg"><meta name="theme-color" content="#0b0f15">
 <style>
-:root{--bg:#0b0f15;--card:#121821;--line:#232c38;--text:#e6edf3;--dim:#8b98a8;--accent:#ea580c;--cyan:#22d3ee;--red:#ef4444;--amber:#fbbf24;--green:#34d399;--fh:220px;--cw:84px}
+:root{--bg:#0b0f15;--card:rgba(22,24,28,.9);--glass-top:rgba(41,46,56,.92);--glass-edge:rgba(255,255,255,.18);--r:12px;--rs:6px;--rl:16px;--motion:140ms;--line:#232c38;--text:#e6edf3;--dim:#8b98a8;--accent:#e8a93a;--cyan:#22d3ee;--red:#ef4444;--amber:#fbbf24;--green:#34d399;--fh:220px;--cw:84px}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 header{position:sticky;top:0;z-index:2;background:#0b0f15ee;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
 .top{display:flex;align-items:center;gap:10px;padding:10px 16px}
@@ -12,16 +12,16 @@ nav{display:none;gap:4px;padding:0 12px 8px;overflow-x:auto;scrollbar-width:none
 nav button{flex:0 0 auto;min-height:34px;padding:6px 12px;background:transparent;border-color:transparent;color:var(--dim);letter-spacing:.06em}
 nav button.cur{background:#1a2230;border-color:var(--line);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
 main{padding:12px 16px 32px;max-width:1400px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card{background:linear-gradient(var(--glass-top),var(--card) 35%);border:1px solid var(--glass-edge);border-radius:var(--r);transition:border-color var(--motion) ease;padding:14px}
 h2{margin:0 0 10px;font-size:12px;letter-spacing:.1em;color:var(--dim)}
 #pair{max-width:380px;margin:40px auto;display:grid;gap:10px}#pair p{margin:0;color:var(--dim)}
-input{width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:#0b0f15;color:var(--text);font:20px ui-monospace,monospace;letter-spacing:.3em;text-align:center}
-select{padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#0b0f15;color:var(--text);font:13px system-ui;min-height:40px}
-button{padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#1a2230;color:var(--text);font-weight:700;font-size:12px;cursor:pointer;min-height:40px}
-button.on.m,button.on.red{background:var(--red);border-color:var(--red)}button.on.s,button.on.amb{background:var(--amber);color:#111;border-color:var(--amber)}button.pri,button.on.acc{background:var(--accent);border-color:var(--accent)}
+input{width:100%;padding:12px;border-radius:var(--rs);border:1px solid var(--line);background:#0b0f15;color:var(--text);font:20px ui-monospace,monospace;letter-spacing:.3em;text-align:center}
+select{padding:9px 10px;border-radius:var(--rs);border:1px solid var(--line);background:#0b0f15;color:var(--text);font:13px system-ui;min-height:40px}
+button{padding:10px 12px;border-radius:var(--rs);border:1px solid var(--line);background:#1a2230;color:var(--text);font-weight:700;font-size:12px;cursor:pointer;min-height:40px;transition:background-color var(--motion) ease,border-color var(--motion) ease}
+button.on.m,button.on.red{background:var(--red);border-color:var(--red)}button.on.s,button.on.amb{background:var(--amber);color:#111;border-color:var(--amber)}button.pri,button.on.acc{background:var(--accent);border-color:var(--accent);color:#111}
 .page{display:none}.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.bar .sp{flex:1}
 #strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cw),1fr));gap:8px}
-.ch{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.ch{background:linear-gradient(var(--glass-top),var(--card) 35%);border:1px solid var(--glass-edge);border-radius:var(--r);padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .ch.master{border-color:var(--accent)}
 #strips .ch.dca .nm{color:#fbbf24}#strips.scroll{display:flex;overflow-x:auto;scroll-snap-type:x proximity;scroll-behavior:smooth;padding-bottom:6px}#strips.scroll .ch{flex:0 0 var(--cw);scroll-snap-align:start}
 .paddle{position:sticky;display:flex;gap:6px;align-items:center}.paddle button{min-width:44px;font-size:16px}
@@ -46,7 +46,7 @@ body.nometers .mt{display:none}
 .seg{display:flex;gap:4px;flex-wrap:wrap}.seg button{min-height:34px;padding:6px 10px}
 .big{font:600 34px ui-monospace,monospace;color:var(--text);letter-spacing:.04em}.big.rec{color:var(--red)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:12px ui-monospace,monospace}.kv b{color:var(--dim);font-weight:400}
-.lm{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}.lm div{background:#0b0f15;border:1px solid var(--line);border-radius:8px;padding:10px}.lm small{color:var(--dim);font-size:10px;letter-spacing:.08em}.lm b{display:block;font:600 20px ui-monospace,monospace;color:var(--cyan)}
+.lm{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}.lm div{background:#0b0f15;border:1px solid var(--line);border-radius:var(--rs);padding:10px}.lm small{color:var(--dim);font-size:10px;letter-spacing:.08em}.lm b{display:block;font:600 20px ui-monospace,monospace;color:var(--cyan)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}.dot.ok{background:var(--green)}.dot.bad{background:var(--red)}
 .note{color:var(--dim);font-size:11px;margin:8px 0 0}.note.clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;min-height:20px}.note.clip.open{white-space:normal}.note.clip::before{content:"\24D8  ";color:var(--accent)}
 .err{color:var(--red)}
@@ -66,21 +66,21 @@ button.sm{min-height:32px;padding:6px 10px;font-size:11px}.bar .seg button{min-h
 .kn{display:grid;grid-template-columns:88px 1fr 64px;align-items:center;gap:8px;padding:6px 0}.kn span{font-size:11px;color:var(--dim);letter-spacing:.06em}.kn em{font:11px ui-monospace,monospace;color:var(--cyan);text-align:right;font-style:normal}
 .kn input[type=range]{width:100%;padding:0;letter-spacing:0;accent-color:var(--accent);height:28px}
 input.t{font:14px system-ui;letter-spacing:0;text-align:left;padding:9px 10px}
-canvas.eq{width:100%;height:150px;background:#05080c;border:1px solid var(--line);border-radius:8px;display:block}body.light canvas.eq{background:#f8fafc}
+canvas.eq{width:100%;height:150px;background:#05080c;border:1px solid var(--line);border-radius:var(--rs);display:block}body.light canvas.eq{background:#f8fafc}
 .band{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}.band .hd{display:flex;align-items:center;gap:8px;margin-bottom:2px}.band .hd b{flex:1;font-size:11px;letter-spacing:.08em}
 .scn{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}.scn:first-child{border-top:0}.scn b{flex:1}.scn small{color:var(--dim);display:block;font-weight:400}
 table.dv{width:100%;border-collapse:collapse;font-size:12px}table.dv td,table.dv th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}table.dv th{color:var(--dim);font-size:10px;letter-spacing:.08em}
 .chsel{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.chsel select{flex:1;min-width:140px}
 kbd{font:11px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
 /* COMPACT: tighter cards and rows; the explanation under a setting opens with a tap on the card's title (i) */
-main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radius:8px}h2{margin:0 0 6px;font-size:11px}.row{padding:6px 0;gap:8px}
+main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radius:var(--rs)}h2{margin:0 0 6px;font-size:11px}.row{padding:6px 0;gap:8px}
 .card:not(.more) .row small{display:none}.card:has(.row small)>h2{cursor:pointer}.card:has(.row small)>h2::after{content:" \24D8";color:var(--dim);font-weight:400}.card.more:has(.row small)>h2::after{content:" \25BE"}
 .grid{gap:8px}.bar{gap:6px;margin-bottom:8px}
 #bridge .bm b.clip{animation:clipf .8s steps(2) infinite}@keyframes clipf{50%{color:var(--text,#e2e8f0)}}
-#nBell{margin-left:8px;font:700 10px ui-monospace,monospace;padding:3px 8px;border-radius:8px;border:1px solid var(--dim);background:transparent;color:inherit}#nBell b{color:#ef4444;margin-left:4px}
+#nBell{margin-left:8px;font:700 10px ui-monospace,monospace;padding:3px 8px;border-radius:var(--rs);border:1px solid var(--dim);background:transparent;color:inherit}#nBell b{color:#ef4444;margin-left:4px}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;max-width:92vw;padding:9px 14px;border-radius:10px;background:#1d2026;color:#f1f5f9;border:1px solid #fbbf24;font:600 12px ui-monospace,monospace;box-shadow:0 6px 20px rgba(0,0,0,.4)}
 #nPanel{position:fixed;right:10px;top:54px;z-index:49;width:min(340px,92vw);max-height:60vh;overflow:auto;padding:10px;border-radius:10px;background:#16181c;color:#f1f5f9;border:1px solid #475569}#nPanel h3{margin:0 0 6px;font:700 11px ui-monospace,monospace;letter-spacing:2px}#nPanel li{font:11px ui-monospace,monospace;margin:4px 0;list-style:none}#nPanel ul{padding:0;margin:0}#nPanel small{color:#94a3b8;margin-right:6px}
-</style></head><body>
+@media (prefers-reduced-motion:reduce){:root{--motion:0ms}}</style></head><body>
 <div id="toast" role="status" aria-live="polite" hidden></div><div id="nPanel" hidden><h3>NOTIFICATIONS</h3><ul id="nList"></ul><button id="nClear">Clear</button></div>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span><button id="nBell" aria-label="Notifications" title="NOTIFICATIONS: what's new, clipping, device lost / connected, CPU overload, update ready, audio loop stopped">NOTICES<b id="nCnt"></b></button></div>
 <nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">SEND TO</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUP FADERS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>

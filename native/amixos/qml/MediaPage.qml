@@ -48,6 +48,7 @@ Item {
         }
         AppCapturePanel { Layout.fillWidth: true }
         WindowsSoundPanel { Layout.fillWidth: true }
+        FileAnalyzePanel { Layout.fillWidth: true }
         // transport
         Rectangle { Layout.fillWidth: true; implicitHeight: 118; radius: Theme.radius; color: Theme.card; border.color: Theme.line
             ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 8

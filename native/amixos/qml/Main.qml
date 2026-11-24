@@ -58,6 +58,8 @@ ApplicationWindow {
     LayoutMirroring.enabled: i18n.rtl
     Binding { target: Theme; property: "dark"; value: settings.darkTheme }
     Binding { target: Theme; property: "scheme"; value: settings.colorTheme }
+    Binding { target: Theme; property: "fluid"; value: !graphics.lowPower }    // BATTERY: solid panels, no sheen
+    Binding { target: Theme; property: "motion"; value: !graphics.lowPower }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
     Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
     Aurora { anchors.fill: parent; z: -1; visible: Theme.glass; motion: Theme.glass && settings.colorMotion && graphics.heavyEffects; accent: Theme.accent }

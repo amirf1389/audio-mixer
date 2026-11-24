@@ -10,6 +10,7 @@
 
 #include "audiomixer/runtime.hpp"
 #include "measure/measure.hpp"
+#include "analyze/file_analyze.hpp"
 
 class Engine;
 
@@ -79,9 +80,17 @@ class Measure : public QObject {
    *  the filters become the current EQ (SET ON THE EQ / EXPORT of AUTO EQ apply them) and eqCurve shows the corrected prediction */
   Q_INVOKABLE bool roomCorrection(double L, double W, double H, double rt60, double sx, double sy, double sz, double lx, double ly, double lz, int maxFilters, double maxCutDb);
   Q_INVOKABLE void clearCalibration() { cal_ = am::measure::Calibration(); emit changed(); }
+  // FILE ANALYZE + AI SETUP: a file measured offline (path or file:// URL) and the setup suggested for target "stream" / "broadcast" /
+  // "custom": {ok, error, name, seconds, rate, lufs, lra, truePeak, peak, rms, crest, clipped, channels: [{peak, truePeak, rms}], bands: [dB],
+  // balance: [dB], setup: {target, gain, eqOn, eq: [10], filters: [{freq, q, gain}], compOn, compThr, compRatio, compKnee, compAttack,
+  // compRelease, limOn, limCeiling, limRelease, afterLufs, afterTruePeak, afterLra, reasons: [text]}}. Nothing is applied here.
+  Q_INVOKABLE QVariantMap analyzeFile(const QString& path, const QString& target, double customLufs);
+  Q_INVOKABLE QVariantMap fileSetup(const QString& target, double customLufs) const;   // the last file again, another target (no re-read)
+  Q_INVOKABLE QStringList audioFilters() const;   // for the file dialog
  signals:
   void changed();
  private:
+  am::fa::Analysis file_;
   void set(const QString& s, const QString& m) { state_ = s; msg_ = m; emit changed(); }
   void finish();
   void analyseSweep(const std::vector<float>& rec, double fs);
