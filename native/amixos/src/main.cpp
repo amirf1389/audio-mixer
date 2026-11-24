@@ -2064,9 +2064,38 @@ int main(int argc, char* argv[]) {
               std::printf("amixos --shots: example QR address on %d row(s)\n", int(qrRows.size())); waitMs(400); }
             win->grabWindow().save(shots + "/network-remote-qr.png");
             if (QPointer<QObject> big = qrPage ? qrPage->findChild<QObject*>("pairQrBig") : nullptr) { QMetaObject::invokeMethod(big, "open"); waitMs(500); win->grabWindow().save(shots + "/network-remote-qr-big.png"); if (big) QMetaObject::invokeMethod(big, "close"); waitMs(200); }
+            { // THE PAIRING AREA IS NEVER BLANK: the code drawn (Canvas, and the Image made from the same modules), or the reason (no token, no
+              // address, the service off) with the address to type; START on the page while the service is off
+              QPointer<QQuickItem> row; for (const auto& r : qrRows) if (r && r->objectName() == "pairQrRow" && r->isVisible()) row = r;
+              const auto darkShare = [&](const char* name) { QQuickItem* q = row ? row->findChild<QQuickItem*>(name) : nullptr; if (!q || !q->isVisible() || q->width() < 20) return 0.0;
+                const QImage g = win->grabWindow(); const qreal d = g.width() > 0 && win->width() > 0 ? qreal(g.width()) / win->width() : 1.0; const QRectF rc = q->mapRectToScene(QRectF(0, 0, q->width(), q->height()));
+                int dark = 0, all = 0; for (int y = int(rc.top() * d); y < int(rc.bottom() * d) && y < g.height(); y += 2) for (int x = int(rc.left() * d); x < int(rc.right() * d) && x < g.width(); x += 2) { ++all; if (qGray(g.pixel(x, y)) < 80) ++dark; }
+                return all ? double(dark) / all : 0.0; };
+              const auto vis = [&](const char* name) { QQuickItem* q = row ? row->findChild<QQuickItem*>(name) : nullptr; return q && q->isVisible(); };
+              const QString nf = qEnvironmentVariable("AMIX_NETFIX_DIR");
+              const auto check = [&](const char* what, bool wantCode, bool wantReason) {
+                waitMs(1100); const bool code = row && row->property("codeShown").toBool(), reason = row && row->property("reasonShown").toBool() && !row->property("reason").toString().isEmpty();
+                const double dk = code ? darkShare("pairQr") : 0.0; const bool ok = row && (code || reason) && (!wantCode || (code && dk > 0.2 && dk < 0.8)) && (!wantReason || reason);
+                std::printf("amixos --shots: NETWORK pairing area, %s: code %d (%.0f%% dark), reason %d \"%s\"\n", what, int(code), dk * 100, int(reason), row ? qPrintable(row->property("reason").toString().left(90)) : "");
+                if (!nf.isEmpty()) win->grabWindow().save(nf + "/network-" + QString::fromLatin1(what).replace(' ', '-') + ".png");
+                if (!ok) { std::fprintf(stderr, "amixos --shots: FAILED the NETWORK pairing area is blank or wrong (%s)\n", what); std::exit(219); } };
+              if (row) {
+                if (remote.addresses().isEmpty()) row->setProperty("demoAddress", QStringLiteral("http://192.168.1.20:%1").arg(remote.port()));
+                check("qr canvas", true, false);
+                if (QQuickItem* q = row->findChild<QQuickItem*>("pairQr")) { q->setProperty("forceImage", true); check("qr image", true, false); if (!vis("qrImage")) { std::fprintf(stderr, "amixos --shots: FAILED the QR image fallback is not shown\n"); std::exit(219); } q->setProperty("forceImage", false); }
+                row->setProperty("simPin", QString()); check("no token", true, true); row->setProperty("simPin", QVariant());
+                row->setProperty("simAddresses", QVariantList()); check("no address", false, true); row->setProperty("simAddresses", QVariant());
+                row->setProperty("simRunning", false); check("service down", false, true); if (!vis("pairStart")) { std::fprintf(stderr, "amixos --shots: FAILED no START in the pairing area while the service is off\n"); std::exit(219); } row->setProperty("simRunning", QVariant());
+                row->setProperty("demoAddress", QString()); }
+              else { std::fprintf(stderr, "amixos --shots: FAILED the NETWORK pairing area is missing\n"); std::exit(219); } }
             for (const auto& r : qrRows) if (r && r->objectName() == "pairQrRow") r->setProperty("demoAddress", QString());
             std::printf("amixos --shots: network-remote-qr (%d address(es))\n", int(remote.addresses().size()));
-            remote.stop(); waitMs(600); if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); waitMs(300); }   // the sound card back exactly as it was
+            remote.stop(); waitMs(600);
+            { // THE SOUND CARD BACK: the console reopens by itself exactly what it handed over (backend, input or none, channels)
+              const bool back = engine.running() == wasRunning && (!wasRunning || (engine.backend() == wb && engine.deviceInputs() == wi && engine.deviceOutputs() == wo));
+              std::printf("amixos --shots: PHONE REMOTE handed over %s and gave it back %d (%s, in %d, out %d)\n", qPrintable(Remote::openArgs(remote.handedOver()).join(' ')), int(back), qPrintable(engine.backend()), engine.deviceInputs(), engine.deviceOutputs());
+              if (!back) { std::fprintf(stderr, "amixos --shots: FAILED the console did not take its sound card back as it was\n"); std::exit(220); } }
+            if (wasRunning && !engine.running()) engine.open(wb, "", "", wr, wf, wi, wo); waitMs(300); }   // the sound card back exactly as it was
           if (QString::fromLatin1(id) == "fx") { if (QObject* fp = win->findChild<QObject*>("effectsPage")) { fp->setProperty("browse", true); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50); win->grabWindow().save(shots + "/fx-presets.png"); fp->setProperty("browse", false); std::printf("amixos --shots: fx-presets\n"); } }
           if (QString::fromLatin1(id) == "dsp") { if (QObject* tp = win->findChild<QObject*>("tonePage")) { tp->setProperty("rta", true); waitMs(500); win->grabWindow().save(shots + "/tone-rta.png"); tp->setProperty("rta", false);
             engine.applyEqPreset(1, 0); tp->setProperty("contentY", 400); waitMs(300); win->grabWindow().save(shots + "/tone-presets.png"); tp->setProperty("contentY", 0); for (int b = 0; b < 10; ++b) engine.setEq(0, b, 0, 1000, 1, 0); engine.setCrossover(0, 0, 0, 80, 0, 16000); std::printf("amixos --shots: tone-rta, tone-presets\n"); } }
