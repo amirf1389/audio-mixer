@@ -74,7 +74,7 @@ const Plan& basic() { return kPlans[0]; }
 Verdict verifyKey(const std::string& key, std::int64_t nowMs, const std::string& machine, const std::vector<Jwk>& trusted) {
   Verdict v; bool sigOk = false;
   if (!open(key, "AMIX1", trusted, v.payload, sigOk)) { v.reason = "malformed"; v.message = "This is not an A mix OS license key."; return v; }
-  if (!sigOk) { v.reason = "bad-signature"; v.message = "This key was not signed by the vendor key this copy trusts (key " + fingerprint(trusted.empty() ? kVendorJwk : trusted[0]) + "). Ask the vendor for a key from the current generator."; return v; }
+  if (!sigOk) { v.reason = "bad-signature"; v.message = "Key was signed by a different vendor key: this copy trusts key " + fingerprint(trusted.empty() ? kVendorJwk : trusted[0]) + " (it must match the fingerprint on the generator page). Ask the vendor for a key from the matching generator."; return v; }
   const json::Value& p = v.payload; const Plan* pl = plan(p["plan"].asString());
   if (p["v"].asInt() != 1 || !pl) { v.reason = "unknown-plan"; v.message = "The license key is for an unknown plan."; v.payload = json::Value(); return v; }
   v.planId = pl->id; const double now = static_cast<double>(nowMs);

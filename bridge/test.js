@@ -3847,3 +3847,27 @@ test('OTA server: the staff sign-in shared with the licence server opens the adm
     assert.strictEqual((await fetch(base2 + '/admin/files', { headers: { authorization: 'Bearer ' + li.token } })).status, 401);
   } finally { s.close(); s2.close(); staff.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });
+
+test('generator SEND TO AMF X1 ON THIS PC: one key file (0600) in the console data folder, never overwrites, refuses batches', () => {
+  const gen = require('../scripts/license-generator'), os = require('node:os'), pathx = require('node:path'), fsx = require('node:fs');
+  const tmp = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'am-send-')), data = pathx.join(tmp, 'data'), dl = pathx.join(tmp, 'Downloads');
+  try {
+    assert.deepStrictEqual(gen.consoleDataDirs({ APPDATA: 'C:\\U\\AppData\\Roaming' }, 'win32', 'C:\\U'), [pathx.join('C:\\U\\AppData\\Roaming', 'AMFB Audio', 'AmF X1')]);
+    assert.deepStrictEqual(gen.consoleDataDirs({}, 'linux', '/home/u'), [pathx.join('/home/u', '.local', 'share', 'amf-x1')]);
+    assert.deepStrictEqual(gen.consoleDataDirs({ AMIX_DATA_DIR: '/x' }, 'linux', '/home/u'), ['/x']);
+    const key = 'AMIX1.' + Buffer.from(JSON.stringify({ v: 1, plan: 'pro', id: 'ABCDEF123456' })).toString('base64url') + '.' + Buffer.alloc(64, 7).toString('base64url');
+    fsx.mkdirSync(data); fsx.writeFileSync(pathx.join(data, 'other.amixkey'), 'keep me');
+    const files = gen.sendToPc(key, { dataDirs: [data], downloads: dl });
+    assert.deepStrictEqual(files, [pathx.join(data, 'AmF-X1-ABCDEF123456.amixkey')]);
+    assert.strictEqual(fsx.readFileSync(files[0], 'utf8'), key + '\n');
+    if (process.platform !== 'win32') assert.strictEqual(fsx.statSync(files[0]).mode & 0o777, 0o600);
+    assert.strictEqual(fsx.readFileSync(pathx.join(data, 'other.amixkey'), 'utf8'), 'keep me');
+    assert.ok(!fsx.existsSync(dl));                                        // the data folder was enough
+    assert.deepStrictEqual(gen.sendToPc(key, { dataDirs: [data], downloads: dl }), files);   // the same key again: fine, unchanged
+    fsx.writeFileSync(files[0], 'a different file');                       // a different file of that name is never replaced: Downloads instead
+    assert.deepStrictEqual(gen.sendToPc(key, { dataDirs: [data], downloads: dl }), [pathx.join(dl, 'AmF-X1-ABCDEF123456.amixkey')]);
+    assert.strictEqual(fsx.readFileSync(files[0], 'utf8'), 'a different file');
+    assert.throws(() => gen.sendToPc(key + '\n' + key, { dataDirs: [data], downloads: dl }), /only one/);
+    assert.throws(() => gen.sendToPc('ABC  AMIX1.x.y', { dataDirs: [data], downloads: dl }), /only one/);
+  } finally { fsx.rmSync(tmp, { recursive: true, force: true }); }
+});

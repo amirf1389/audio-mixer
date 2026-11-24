@@ -1684,7 +1684,14 @@ int main(int argc, char* argv[]) {
       // AUTO LICENCE: a request file is written; a key file holding a bad key is seen and refused (never activated); the vendor's real key would be accepted the same way
       const QString req = engine.writeLicenseRequest("pro", "Smoke", "smoke@example.invalid"); if (req.isEmpty() || !QFileInfo::exists(req)) { std::fprintf(stderr, "amixos --smoke: key request file\n"); return 130; }
       { QFile kf(QString::fromStdString(am::paths::dataDir()) + "/smoke.amixkey"); kf.open(QIODevice::WriteOnly); kf.write("AMIX1.not-a-real-key.xx"); kf.close(); engine.setAutoLicense(true); const int tried = engine.scanForKeys(); kf.remove(); QFile::remove(req);
-        if (tried < 1 || engine.license()["source"].toString() == "key") { std::fprintf(stderr, "amixos --smoke: auto licence scan (%d tried, %s)\n", tried, qPrintable(engine.autoLicenseStatus())); return 131; } } }
+        if (tried < 1 || engine.license()["source"].toString() == "key") { std::fprintf(stderr, "amixos --smoke: auto licence scan (%d tried, %s)\n", tried, qPrintable(engine.autoLicenseStatus())); return 131; } }
+      // SEND TO AMF X1 ON THIS PC: a well-formed key signed by another key pair (here: a signature that is not the vendor's) written as the
+      // generator writes it is picked up by the scan and refused with the "different vendor key" message
+      { const QByteArray b64 = QByteArray("{\"v\":1,\"plan\":\"pro\",\"id\":\"SMOKE0000001\"}").toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals), sig = QByteArray(64, '\x5a').toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+        const QString key = "AMIX1." + QString::fromLatin1(b64) + "." + QString::fromLatin1(sig);
+        QFile kf(QString::fromStdString(am::paths::dataDir()) + "/AmF-X1-SMOKE0000001.amixkey"); kf.open(QIODevice::WriteOnly); kf.write(key.toUtf8() + "\n"); kf.close();
+        const QVariantMap r = engine.activateKey(key); const int tried = engine.scanForKeys(); const QString st = engine.autoLicenseStatus(); kf.remove();
+        if (r.value("ok").toBool() || !r.value("message").toString().startsWith("Key was signed by a different vendor key") || tried < 1 || !st.contains("different vendor key")) { std::fprintf(stderr, "amixos --smoke: wrong-vendor key file (%s | %s)\n", qPrintable(r.value("message").toString()), qPrintable(st)); return 132; } } }
     { update.setUrl("http://example.com/update.json"); if (update.state() != "error") { std::fprintf(stderr, "amixos --smoke: a non-project update URL was accepted\n"); return 123; }
       QFile mf(QCoreApplication::applicationDirPath() + "/../../releases/update.json"); if (!mf.exists()) mf.setFileName(QStringLiteral(AMIX_SOURCE_DIR) + "/../../releases/update.json");
       if (mf.open(QIODevice::ReadOnly)) { const QString env = QString::fromUtf8(mf.readAll());

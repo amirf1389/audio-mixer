@@ -2435,5 +2435,8 @@
 "VU meters",
 "DIGITAL: bars with peak hold. ANALOG: needle faces (VU ballistics). On every fader page.",
 "L",
-"R"
+"R",
+"OPEN KEY GENERATOR",
+"VENDOR KEY",
+"Must match the fingerprint on the generator page."
 ]

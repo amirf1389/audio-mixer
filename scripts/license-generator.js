@@ -11,7 +11,8 @@
 //     admin             scripts/license-admin.js's key    (default ~/.audio-mixer-admin,   or AUDIO_MIXER_ADMIN_DIR   / --dir)
 //   --port 8799 (default) is the address the app's GENERATOR button opens; when it is taken a free port is used instead. --port 0 always picks a free one.
 //   The page fills plan / name / e-mail / machine from its address (?plan=&name=&email=&machine=, what the app's button sends), and after a single key
-//   offers ACTIVATE IN AMF X1: http://localhost:8765/#license=<key> (the key stays in the # part, which is never sent to any server).
+//   offers SEND TO AMF X1 ON THIS PC (POST /send-to-pc writes AmF-X1-<serial>.amixkey into the console's data folder, else Downloads: the Qt
+//   console's AUTO LICENCE activates it) and, for the old browser app only, http://localhost:8765/#license=<key> (the # part never reaches a server).
 //   --open            also opens the page in the default browser (the double-click launchers use it)
 // VENDOR only: when no key pair exists yet, the page offers to create one (the same as `node scripts/license.js init`): the private key is written
 // to the key directory on THIS computer (0600) and the public half into bridge/license-public.json and index.html, which are then committed and
@@ -183,7 +184,8 @@ ${k.canInit ? `<section class="card" id="ed-card">
     <p><a id="mailkey" class="btn" href="#" hidden>E-MAIL KEY TO CUSTOMER</a></p>
     <div class="field" id="wa-row"><label for="wa">Buyer's WhatsApp number (with country code, e.g. 60123456789)</label><input id="wa" type="tel" maxlength="20" autocomplete="off"></div>
     <button class="btn" id="wasend" type="button">SEND VIA WHATSAPP</button>
-    <p><a id="activate" class="btn" href="#" target="_blank" rel="noopener noreferrer" hidden>ACTIVATE IN AMF X1 (THIS COMPUTER)</a></p>
+    <p><button class="btn" id="sendpc" type="button" hidden>SEND TO AMF X1 ON THIS PC</button> <span class="dim" id="sendpc-note"></span></p>
+    <p><a id="activate" class="btn" href="#" target="_blank" rel="noopener noreferrer" hidden>ACTIVATE IN AMF X1 (BROWSER APP)</a></p>
   </section>
 </main>
 <script>
@@ -276,6 +278,9 @@ ${k.canInit ? `<section class="card" id="ed-card">
     post('/ota/publish', { repo: $('ota-repo').checked }).then(function (j) { if (!j || !j.ok) { showErr((j && j.error) || 'Could not publish.'); if (j && j.locked) refresh(); } else { $('err').hidden = true; loadOta(); } }).catch(function () { showErr('Could not reach this server.'); }).then(function () { $('publish').disabled = false; });
   });
   $('copypub').addEventListener('click', function () { navigator.clipboard.writeText($('copypub').dataset.k || '').then(function () { $('copypub').textContent = 'COPIED: paste it to the developer'; }); });
+  $('sendpc').addEventListener('click', function () {
+    post('/send-to-pc', { key: $('sendpc').dataset.k || '' }).then(function (j) { $('sendpc-note').textContent = j && j.ok ? 'Written to ' + j.files.join(' and ') + ': AmF X1 activates it within a few seconds (AUTO LICENCE).' : ((j && j.error) || 'Could not write the key file.'); }).catch(function () { $('sendpc-note').textContent = 'Could not reach this server.'; });
+  });
   $('lockbtn').addEventListener('click', function () { post('/lock', {}).then(function () { $('result').hidden = true; refresh(); }); });
   $('f').addEventListener('submit', function (ev) {
     ev.preventDefault();
@@ -289,6 +294,7 @@ ${k.canInit ? `<section class="card" id="ed-card">
         $('summary').textContent = res.j.summary;
         csvText = res.j.csv || ''; $('csv').hidden = !csvText;
         $('activate').hidden = !!res.j.keys; if (!res.j.keys) $('activate').href = 'http://localhost:8765/#license=' + encodeURIComponent(res.j.key);
+        $('sendpc').hidden = !!res.j.keys; $('sendpc').dataset.k = res.j.keys ? '' : res.j.key; $('sendpc-note').textContent = '';
         // send the key to the customer: an e-mail draft to the address on the form, with the key and how to activate it
         var to = $('email').value.trim();
         $('mailkey').hidden = !!res.j.keys || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(to);
@@ -573,6 +579,35 @@ function dailyCap(perDay = 5, now = () => Date.now()) {
   };
 }
 
+// SEND TO AMF X1 ON THIS PC: the console (native/amixos) watches its data folder and Downloads for key files (AUTO LICENCE) and activates a
+// genuine one within a second or two. The data folder is am::paths::dataDir() (engine/cpp/app/paths/paths.cpp): AMIX_DATA_DIR, else
+// %APPDATA%/AMFB Audio/AmF X1 on Windows, ~/Library/Application Support/AmF X1 on macOS, ~/.local/share/amf-x1 on Linux (a portable copy with a
+// writable <program>/data folder is not found from here: the Downloads copy covers it). One key only; mode 0600; an existing file is never replaced.
+// The key is never logged. (Port 8765 is the console's remote daemon: it cannot see a #license=... link, the hash never reaches a server.)
+function consoleDataDirs(env = process.env, platform = process.platform, home = require('node:os').homedir()) {
+  if (env.AMIX_DATA_DIR) return [env.AMIX_DATA_DIR];
+  if (platform === 'win32') return [path.join(env.APPDATA || home, 'AMFB Audio', 'AmF X1')];
+  if (platform === 'darwin') return [path.join(home, 'Library', 'Application Support', 'AmF X1')];
+  return [path.join(home, '.local', 'share', 'amf-x1')];
+}
+function sendToPc(key, { dataDirs = consoleDataDirs(), downloads = path.join(require('node:os').homedir(), 'Downloads') } = {}) {
+  const k = String(key || '').trim();
+  const bad = m => Object.assign(new Error(m), { status: 400 });
+  if (!/^AMIX1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(k) || k.length > 4096) throw bad('only one AMIX1 licence key can be sent (not a batch)');
+  let serial = 'key'; try { const p = JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString('utf8')); serial = String(p.id || p.serial || 'key').replace(/[^A-Za-z0-9-]/g, '').slice(0, 40) || 'key'; } catch (_) { throw bad('the key payload is not readable'); }
+  const name = 'AmF-X1-' + serial + '.amixkey', out = [];
+  for (const d of [...dataDirs, downloads]) {
+    try {
+      fs.mkdirSync(d, { recursive: true });
+      const f = path.join(d, name);
+      try { fs.writeFileSync(f, k + '\n', { mode: 0o600, flag: 'wx' }); } catch (e) { if (e.code !== 'EEXIST') throw e; if (fs.readFileSync(f, 'utf8').trim() !== k) continue; }   // never replace another file
+      out.push(f); if (out.length && d !== downloads) break;   // the data folder is enough; Downloads only when it could not be written
+    } catch (_) { /* try the next folder */ }
+  }
+  if (!out.length) throw Object.assign(new Error('could not write the key file in the console data folder or Downloads'), { status: 500 });
+  return out;
+}
+
 function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSession(), releases, publicOnly = false, limit = rateLimiter(), requestCap = dailyCap(), trustProxy = false, acceptRequests = false } = {}) {
   const clientIp = req => { const a = req.socket.remoteAddress || '?'; if (trustProxy && /^(127\.|::1$|::ffff:127\.)/.test(a)) { const h = String(req.headers['x-real-ip'] || '').trim(); if (/^[0-9a-fA-F:.]{2,45}$/.test(h)) return h; } return a; };
   if (!KINDS[kind]) throw new Error('kind must be one of: ' + Object.keys(KINDS).join(', '));
@@ -669,6 +704,12 @@ function createServer({ kind = 'vendor', dirArgv = [], root, session = makeSessi
           vault.lock(dirNow(), b.pin); session.unlock(dirNow(), b.pin); return send(res, 200, { ok: true });   // /lock-file: encrypt a plain private.pem
         } catch (e) { return fail(res, e.status || 500, e.message); }
       }
+      if (req.method === 'POST' && url.pathname === '/send-to-pc') {
+        const chunks = []; let n = 0;
+        for await (const c of req) { n += c.length; if (n > 8192) return fail(res, 413, 'request too large'); chunks.push(c); }
+        let b; try { b = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (_) { return fail(res, 400, 'the body is not JSON'); }
+        try { return send(res, 200, { ok: true, files: sendToPc(b && b.key) }); } catch (e) { return fail(res, e.status || 500, e.message); }
+      }
       if (req.method === 'POST' && url.pathname === '/issue') {
         const chunks = []; let n = 0;
         for await (const c of req) { n += c.length; if (n > 8192) return fail(res, 413, 'request too large'); chunks.push(c); }
@@ -722,4 +763,4 @@ function browserCommand(url, platform = process.platform) {
   return platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
 }
 
-module.exports = { browserCommand, buildEditionToken, readSales, waDigits, readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
+module.exports = { consoleDataDirs, sendToPc, browserCommand, buildEditionToken, readSales, waDigits, readInbox, publicIp, vendorPublish, rateLimiter, dailyCap, senderKey, otaStatus, otaPublish, KINDS, page, pageFor, issueKey, keyStatus, initKind, makeSession, createServer, main };
