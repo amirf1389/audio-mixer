@@ -14,6 +14,8 @@
 #include <QApplication>   // the tray icon's menu is a widget menu
 #endif
 #include "Volume.h"
+#include "Background.h"
+#include "Journal.h"
 #ifdef _WIN32
 #include <objbase.h>
 #endif
@@ -214,6 +216,10 @@ int main(int argc, char* argv[]) {
   if (!lang.isEmpty()) i18n.setLang(lang);   // --lang fa: start in that language (also for --shots)
   AppWindows appWindows;   // PROGRAM PICTURES for the app picker and the live program view (before the interface: it outlives it)
   Apps apps(&engine);   // before the interface, so it outlives it: every strip reads it (a page must never see it gone at exit)
+  // AUTO-SAVE JOURNAL: the last run died (its marker is still there): the mixer, routing, scenes and settings back from the last good save
+  const bool anyTestRun = smoke || bench || !shots.isEmpty() || !film.isEmpty() || !bigShots.isEmpty();
+  if (anyTestRun) settings.journal()->setEnabled(qEnvironmentVariableIsSet("AMIX_JOURNAL_TEST")); else if (settings.journalCrashed()) settings.restoreJournal();
+  bool background = false; for (int i = 1; i < argc; ++i) if (QByteArray(argv[i]) == "--background") background = true;   // START WITH WINDOWS: straight to the tray
   Volume volume(&engine, &apps);   // VOLUME CONTROL: tray, volume keys, per-app volume (before the interface, which reads it)
   if (smoke || bench || !shots.isEmpty() || !film.isEmpty() || !bigShots.isEmpty()) volume.quiet();   // test runs take no keys and show no tray icon
   QQmlApplicationEngine qml;
@@ -316,6 +322,19 @@ int main(int argc, char* argv[]) {
   // the tray's OPEN CONSOLE / QUIT
   QObject::connect(&volume, &Volume::openConsole, &app, [&] { if (qml.rootObjects().isEmpty()) return; if (auto* w = qobject_cast<QWindow*>(qml.rootObjects().first())) { if (w->windowState() & Qt::WindowMinimized) w->showNormal(); else w->show(); w->raise(); w->requestActivate(); } });
   QObject::connect(&volume, &Volume::quitRequested, &app, &QCoreApplication::quit);
+  // BACKGROUND RUN: closing the window hides it while the tray icon is there (KEEP RUNNING IN THE TRAY); the sound, the capture, APP SOUND
+  // and the remote service carry on. The first time, a notice says so. Without the setting or the icon, a close quits as before.
+  if (!qml.rootObjects().isEmpty()) if (auto* w = qobject_cast<QWindow*>(qml.rootObjects().first())) {
+    auto* keeper = new CloseToTray(&app);
+    keeper->keepInTray = [&settings] { return settings.keepInTray(); };
+    keeper->trayShown = [&volume] { return volume.trayShown(); };
+    keeper->noticeShown = QSettings().value("background/closeNoticeShown", false).toBool();
+    keeper->onNoticeShown = [] { QSettings s; s.setValue("background/closeNoticeShown", true); s.sync(); };
+    keeper->showNotice = [&volume] { volume.showMessage(QStringLiteral("AmF X1 keeps running"), QStringLiteral("The console is still mixing in the background. Use the tray icon: SHOW brings the window back, QUIT closes it. You can change this in SETTINGS.")); };
+    keeper->quit = [&app] { QTimer::singleShot(0, &app, &QCoreApplication::quit); };
+    w->installEventFilter(keeper); app.setQuitOnLastWindowClosed(false);
+    if (background && !anyTestRun) QTimer::singleShot(800, w, [w, &volume] { if (volume.trayShown()) w->hide(); });
+  }
   if (!smoke && settings.autoStart()) QTimer::singleShot(300, &app, [&] { settings.startLastDevice(); });   // the remembered device, once the interface is up
   // AUTO AUDIO INTERFACE: when an interface is plugged in (hot-plug) and the engine is idle, start it (the remembered device if it is the one, else AUTO DETECT)
   QObject::connect(&engine, &Engine::hotplug, &app, [&](bool added, const QString& what) { if (!added || engine.running() || !settings.autoStart()) return; QTimer::singleShot(1500, &app, [&] { if (!engine.running()) settings.startLastDevice(); }); qInfo("hot-plug: %s", qPrintable(what)); });

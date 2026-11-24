@@ -21,6 +21,7 @@ struct Input {
   long inFrames = 0, outFrames = 0;   // as the driver reports them (0 = it does not)
   bool hasInput = true;         // an input is open (round trip and monitoring need one)
   bool bluetoothOut = false;    // the output is a Bluetooth device
+  bool apoActive = false;       // Windows system effects (APOs: the maker's enhancements) are on for an endpoint; only the shared paths go through them
   bool hybrid = false, fastCores = true;   // a hybrid processor, and whether FAST CORES FOR AUDIO is on
   unsigned long long xruns = 0; double maxBlockUs = 0;   // the engine's own counters: dropouts, worst block time
 };
@@ -33,6 +34,7 @@ struct Report {
   std::string levelName;        // "LOW LATENCY", "OK", "HIGH"
   std::string verdict;          // one sentence
   std::vector<std::string> advice;   // what would lower it or make it steadier, most useful first
+  bool apoAdvice = false;       // one of the advice lines is "switch the system effects off" (the panel links it to its SYSTEM EFFECTS card)
 };
 
 /** the plain-words report and the advice for one open device (pure: no device is touched) */

@@ -33,7 +33,7 @@ ApplicationWindow {
     function uiActivity() { if (Qt.platform.pluginName === "offscreen") return; engine.setUiActivity(visibility === Window.Minimized || visibility === Window.Hidden || !visible ? 0 : active ? 2 : 1) }
     onActiveChanged: uiActivity()
     onVisibilityChanged: uiActivity()
-    Component.onCompleted: { if (current === "") current = settings.startPage; touchPage(current); if (current === "mixer") mixerEver = true }
+    Component.onCompleted: { if (current === "") current = settings.startPage; touchPage(current); if (current === "mixer") mixerEver = true; if (settings.journalNote !== "") Qt.callLater(function () { say(i18n.t(settings.journalNote, i18n.lang)); settings.clearJournalNote() }) }
     // MEMORY: a closed page's items are freed, but its JavaScript objects wait for the QML garbage collector, which runs only under
     // allocation pressure, so every page visit used to add ~5 MB that stayed. Collected once the user has settled on a page.
     Timer { id: gcTimer; interval: 1200; onTriggered: gc() }

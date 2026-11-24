@@ -2470,5 +2470,14 @@
 "PEAK dBFS",
 "CLIPPED",
 "CONFIRM",
-"UNDO"
+"UNDO",
+"Keep running in the tray when closed",
+"Closing the window keeps the sound running (capture, mixing, APP SOUND, the remote service) behind the tray icon. SHOW in its menu brings the window back, QUIT closes everything.",
+"Start with Windows",
+"Starts the console in the tray when you sign in to Windows (your own startup list, no administrator).",
+"SHOW SYSTEM EFFECTS (APOs)",
+"AmF X1 keeps running",
+"The console is still mixing in the background. Use the tray icon: SHOW brings the window back, QUIT closes it. You can change this in SETTINGS.",
+"Show",
+"Windows system effects (APOs) are on for this device: they add processing time and change the sound. Switch them off (SYSTEM EFFECTS card), or use WASAPI EXCLUSIVE / ASIO, which bypass them."
 ]
