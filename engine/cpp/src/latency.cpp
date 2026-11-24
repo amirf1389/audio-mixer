@@ -40,6 +40,8 @@ Report assess(const Input& in) {
   if (r.level != Level::Low && in.blockFrames > 128 && in.xruns == 0) r.advice.push_back("A smaller buffer lowers it: try " + std::to_string(std::max(64, in.blockFrames / 2)) + " frames (" + ms(1000.0 * std::max(64, in.blockFrames / 2) / rate) + " per block).");
   if (in.xruns > 0) r.advice.push_back(std::to_string(in.xruns) + " dropout(s) so far: the buffer is too small for this computer now. Raise it one step, or close heavy programs and plug-ins.");
   if (in.maxBlockUs > 0 && in.maxBlockUs > 0.8 * blockMs * 1000.0) r.advice.push_back("The slowest block took " + ms(in.maxBlockUs / 1000.0) + " of its " + ms(blockMs) + ": very little headroom; a larger buffer or fewer plug-ins keeps it steady.");
+  if (in.apoActive && (in.backend == "dsound" || (in.backend == "wasapi" && !in.exclusive))) {   // ASIO and WASAPI exclusive bypass the APOs
+    r.apoAdvice = true; r.advice.push_back("Windows system effects (APOs) are on for this device: they add processing time and change the sound. Switch them off (SYSTEM EFFECTS card), or use WASAPI EXCLUSIVE / ASIO, which bypass them."); }
   if (in.hybrid && !in.fastCores) r.advice.push_back("Hybrid processor with FAST CORES FOR AUDIO off: switch it on (SETTINGS → SYSTEM OPTIMIZATION) so the sound stays on the performance cores.");
   if (r.advice.empty()) r.advice.push_back(r.level == Level::Low ? "Nothing to change: this is a low-latency setup." : "This is about as low as this device goes; an audio interface with its own ASIO driver goes lower.");
   return r;

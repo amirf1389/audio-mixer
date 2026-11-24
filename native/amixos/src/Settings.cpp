@@ -15,6 +15,9 @@
 #include <QDateTime>
 
 #include "Engine.h"
+#include "Journal.h"
+#include "Background.h"
+#include <QJsonArray>
 #include "vst3/vst3_host.hpp"
 #include "vst2/vst2_host.hpp"
 #include "zip/zipstore.hpp"
@@ -24,8 +27,53 @@ Settings::Settings(Engine* engine, QObject* parent) : QObject(parent), engine_(e
   if (engine_) { engine_->setClipThreshold(clipDb()); engine_->setPeakHold(peakHoldMs()); }
   crashed_ = s_.value("session/open", false).toBool(); s_.setValue("session/open", true); s_.sync();   // cleared by sessionClosed(); still set at the next start = the last run died
   autosave_.setInterval(60000); connect(&autosave_, &QTimer::timeout, this, [this] { if (!engine_) return; QDir().mkpath(dataFolder()); if (!exportConsole(dataFolder() + "/autosave.json").isEmpty()) emit autosaveChanged(); }); autosave_.start();
+  // AUTO-SAVE JOURNAL: every change to the console, the routing, the scenes or a setting is written 2 s later (atomic, one backup)
+  journal_ = new Journal(QString::fromStdString(am::paths::file("journal.json")), [this] { return journalState(); }, 2000, 10000, this);
+  journalCrashed_ = journal_->begin();
+  connect(this, &Settings::changed, journal_, &Journal::touch);
+  if (engine_) for (auto sig : {&Engine::stripsChanged, &Engine::busesChanged, &Engine::groupsChanged, &Engine::scenesChanged, &Engine::routingChanged, &Engine::masterChainChanged, &Engine::monitorChanged})
+    connect(engine_, sig, journal_, &Journal::touch);
 }
-void Settings::sessionClosed() { s_.setValue("session/open", false); s_.sync(); }
+void Settings::sessionClosed() { s_.setValue("session/open", false); s_.sync(); if (journal_) journal_->end(); }
+
+// settings that never go into the journal: secrets, and what describes this one run (the window, the session marker)
+static bool journalSkips(const QString& k) {
+  static const QRegularExpression secret(QStringLiteral("licen[cs]e|token|secret|password|passw|pin|serial|key$|machine|account"), QRegularExpression::CaseInsensitiveOption);
+  return k.startsWith(QLatin1String("session/")) || k.startsWith(QLatin1String("window/")) || k == QLatin1String("general/setupDone") || secret.match(k).hasMatch();
+}
+QByteArray Settings::journalState() const {
+  if (!engine_) return {};
+  QJsonObject root; root["app"] = "AmF X1"; root["kind"] = "console-export"; root["v"] = 1; root["journal"] = true; root["at"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+  root["console"] = engine_->consoleExport(); root["scenes"] = engine_->scenesExport(); root["presets"] = engine_->presetsExport();
+  QJsonObject st; for (const QString& k : s_.allKeys()) { if (journalSkips(k)) continue; const QJsonValue v = QJsonValue::fromVariant(s_.value(k)); if (!v.isNull() && !v.isUndefined()) st[k] = v; }
+  root["settings"] = st;
+  return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+bool Settings::applyJournal(const QByteArray& data) {
+  const QJsonObject root = QJsonDocument::fromJson(data).object();
+  if (root.value("kind").toString() != "console-export" || !root.contains("console") || !engine_) return false;
+  const QJsonObject st = root.value("settings").toObject();
+  for (auto it = st.begin(); it != st.end(); ++it) if (!journalSkips(it.key())) s_.setValue(it.key(), it.value().toVariant());
+  s_.sync();
+  engine_->consoleImport(root.value("console").toObject(), root.value("scenes").toArray(), root.value("presets").toArray());
+  emit changed(); return true;
+}
+bool Settings::restoreJournal() {
+  QString from; const QByteArray d = journal_ ? journal_->loadGood(&from) : QByteArray();
+  if (d.isEmpty() || !applyJournal(d)) return false;
+  const QString at = QJsonDocument::fromJson(d).object().value("at").toString();
+  journalNote_ = QStringLiteral("The console did not close properly last time. The mixer, routing, scenes and settings were restored from the last auto-save") + (at.isEmpty() ? QString() : QStringLiteral(" (") + QDateTime::fromString(at, Qt::ISODate).toLocalTime().toString("yyyy-MM-dd HH:mm:ss") + QStringLiteral(")")) + (from.endsWith(".bak") ? QStringLiteral(", from its backup copy.") : QStringLiteral("."));
+  emit changed(); return true;
+}
+bool Settings::startWithWindowsAvailable() const {
+#ifdef _WIN32
+  return true;
+#else
+  return false;
+#endif
+}
+bool Settings::startWithWindows() const { return bg::startWithWindows(); }
+void Settings::setStartWithWindows(bool v) { if (v == startWithWindows()) return; bg::setStartWithWindows(v, QCoreApplication::applicationFilePath()); emit changed(); }
 QVariantMap Settings::autosave() const { QVariantMap m; QFileInfo fi(dataFolder() + "/autosave.json"); m["exists"] = fi.exists(); m["path"] = fi.filePath(); m["at"] = fi.exists() ? fi.lastModified().toString("yyyy-MM-dd HH:mm:ss") : QString(); m["bytes"] = fi.exists() ? static_cast<qlonglong>(fi.size()) : 0; return m; }
 bool Settings::restoreAutosave() { const QString p = dataFolder() + "/autosave.json"; if (!QFileInfo::exists(p)) { note("No autosave yet"); return false; } exportConsole(dataFolder() + "/before-restore.json"); const bool ok = importConsole(p); if (ok) note("Console restored from the autosave; the console before it is in before-restore.json"); return ok; }
 QString Settings::saveText(const QString& name, const QString& text) {

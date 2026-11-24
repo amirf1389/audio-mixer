@@ -19,6 +19,11 @@ int main() {
   { Input i; i.backend = "asio"; i.rate = 48000; i.blockFrames = 64; i.inFrames = 96; i.outFrames = 112; Report r = assess(i);
     CHECK(r.reported); CHECK(r.level == Level::Low); CHECK(std::fabs(r.totalMs - 4.333) < 0.01); CHECK(r.levelName == "LOW LATENCY"); CHECK(has(r, "Nothing to change"));
     std::printf("latency_test: ASIO 64: %s\n", r.verdict.c_str()); }
+  // SYSTEM EFFECTS: on the shared path the APOs are named (and linked); ASIO and WASAPI exclusive bypass them, so nothing is said there
+  { Input i; i.backend = "wasapi"; i.blockFrames = 480; i.apoActive = true; Report r = assess(i); CHECK(r.apoAdvice); CHECK(has(r, "APOs"));
+    i.exclusive = true; r = assess(i); CHECK(!r.apoAdvice); CHECK(!has(r, "APOs"));
+    i.backend = "asio"; i.exclusive = false; r = assess(i); CHECK(!r.apoAdvice);
+    i.backend = "wasapi"; i.apoActive = false; r = assess(i); CHECK(!r.apoAdvice); }
   // WASAPI shared at 480 frames, Windows reports 10 ms + 480 buffer each way: HIGH, advice exclusive / ASIO and a smaller buffer
   { Input i; i.backend = "wasapi"; i.blockFrames = 480; i.inFrames = 960; i.outFrames = 960; Report r = assess(i);
     CHECK(r.level == Level::High); CHECK(std::fabs(r.totalMs - 40) < 0.01); CHECK(has(r, "EXCLUSIVE")); CHECK(has(r, "smaller buffer")); }

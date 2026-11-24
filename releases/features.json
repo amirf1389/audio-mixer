@@ -2,6 +2,17 @@
  "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
  "features": [
   {
+   "version": "1.26.0.0",
+   "date": "2026-11-24",
+   "title": "1.26.0.0: keeps running in the tray, continuous auto-save, system effects in the latency advice",
+   "items": [
+    "NEW · KEEP RUNNING IN THE TRAY: closing the console window keeps the sound running (capture, mixing, APP SOUND, the remote service); SHOW in the tray menu brings it back, QUIT closes everything (SETTINGS, on by default)",
+    "NEW · START WITH WINDOWS (SETTINGS, off by default): the console starts in the tray when you sign in",
+    "NEW · CONTINUOUS AUTO-SAVE: the mixer, routing, scenes and settings are saved 2 seconds after every change (atomic, with one backup); after a crash the last good state comes back with a notice",
+    "LOW LATENCY: Windows system effects (APOs) on the shared path are named in the advice, with a link to the SYSTEM EFFECTS card"
+   ]
+  },
+  {
    "version": "1.25.0.0",
    "date": "2026-11-20",
    "title": "1.25.0.0: multitrack recording, zoom, mini player above the faders, factory setup on every new install",

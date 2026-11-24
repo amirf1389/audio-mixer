@@ -27,7 +27,7 @@ qt_add_executable(amixos
     src/Engine.cpp src/Engine.h
     src/Graphics.cpp src/Graphics.h
     src/Arrange.cpp src/Arrange.h
-    src/Settings.cpp src/Settings.h
+    src/Settings.cpp src/Settings.h src/Journal.cpp src/Journal.h src/Background.cpp src/Background.h
     src/Access.cpp src/Access.h
     src/Osc.cpp src/Osc.h
     src/Media.cpp src/Media.h
@@ -217,6 +217,12 @@ add_executable(remote_args_test test/remote_args_test.cpp)
 target_include_directories(remote_args_test PRIVATE src)
 target_link_libraries(remote_args_test PRIVATE Qt6::Core Qt6::Network)
 add_test(NAME remote_args COMMAND remote_args_test)
+# AUTO-SAVE JOURNAL (debounce, atomic write, one backup, restore after a crash) and BACKGROUND RUN (close to the tray, the Run key command)
+add_executable(journal_test test/journal_test.cpp src/Journal.cpp src/Journal.h src/Background.cpp src/Background.h)
+target_include_directories(journal_test PRIVATE src)
+target_link_libraries(journal_test PRIVATE Qt6::Core Qt6::Gui)
+add_test(NAME journal COMMAND journal_test)
+set_tests_properties(journal PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
 set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1" TIMEOUT 60)   # AMIX_ALLOW_CAPTURE: the repository's own tooling may capture the window
 # PAGE BUDGET: every page and every popup opens within its time budget (built from nothing 600 ms, cached 150 ms) and its content stays

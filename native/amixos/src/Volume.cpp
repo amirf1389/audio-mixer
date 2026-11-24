@@ -57,6 +57,20 @@ Volume::~Volume() {
   layer_.reset();
 }
 
+bool Volume::trayShown() const {
+#ifdef AMIX_TRAY
+  return icon_ && icon_->isVisible();
+#else
+  return false;
+#endif
+}
+void Volume::showMessage(const QString& title, const QString& text) {
+#ifdef AMIX_TRAY
+  if (icon_ && icon_->isVisible()) icon_->showMessage(title, text, QSystemTrayIcon::Information, 8000);
+#else
+  Q_UNUSED(title); Q_UNUSED(text);
+#endif
+}
 void Volume::quiet() { quiet_ = true; unregisterKeys();
 #ifdef AMIX_TRAY
   if (icon_) icon_->hide();
@@ -217,7 +231,7 @@ void Volume::makeTray() {
     icon_ = new QSystemTrayIcon(QIcon(QStringLiteral(":/qt/qml/AmixOS/icons/amfx1.png")), this);
     menu_ = new QMenu();
     connect(this, &QObject::destroyed, menu_, [m = menu_] { delete m; });
-    QAction* open = menu_->addAction(tr("Open console")); connect(open, &QAction::triggered, this, &Volume::openConsole);
+    QAction* open = menu_->addAction(tr("Show")); connect(open, &QAction::triggered, this, &Volume::openConsole);
     QAction* mute = menu_->addAction(tr("Mute master")); mute->setCheckable(true); connect(mute, &QAction::triggered, this, [this](bool on) { if (engine_) engine_->setMasterMuted(on); });
     connect(menu_, &QMenu::aboutToShow, this, [this, mute] { mute->setChecked(engine_ && engine_->masterMuted()); });
     menu_->addSeparator();

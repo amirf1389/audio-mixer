@@ -14,6 +14,7 @@
 #include <QVariant>
 
 class Engine;
+class Journal;
 
 class Settings : public QObject {
   Q_OBJECT
@@ -55,6 +56,10 @@ class Settings : public QObject {
   Q_PROPERTY(QString message READ message NOTIFY messageChanged)
   Q_PROPERTY(bool setupDone READ setupDone NOTIFY changed)                       // the factory setup (first run) was completed
   Q_PROPERTY(bool lastSessionCrashed READ lastSessionCrashed CONSTANT)          // the previous run did not close cleanly
+  Q_PROPERTY(bool keepInTray READ keepInTray WRITE setKeepInTray NOTIFY changed)              // closing the window keeps the sound running in the tray (default on)
+  Q_PROPERTY(bool startWithWindows READ startWithWindows WRITE setStartWithWindows NOTIFY changed)   // the HKCU Run key (off by default; Windows only)
+  Q_PROPERTY(bool startWithWindowsAvailable READ startWithWindowsAvailable CONSTANT)
+  Q_PROPERTY(QString journalNote READ journalNote NOTIFY changed)                    // after a crash: what was restored from the journal ("" otherwise)
   Q_PROPERTY(QVariantMap autosave READ autosave NOTIFY autosaveChanged)          // {exists, path, at, bytes}: the console written every 60 s
 
  public:
@@ -137,6 +142,17 @@ class Settings : public QObject {
   Q_INVOKABLE bool restoreAutosave();                        // the console as it was at the last autosave (a backup of the current one is written first)
   Q_INVOKABLE QString saveText(const QString& name, const QString& text);   // writes a text file into the data folder; returns its path ("" on failure)
   Q_INVOKABLE void sessionClosed();                          // called on a clean quit
+  // BACKGROUND RUN (Background.h) and the AUTO-SAVE JOURNAL (Journal.h): <data>/journal.json, 2 s after a change, atomic, one backup
+  bool keepInTray() const { return s_.value("background/keepInTray", true).toBool(); } void setKeepInTray(bool v) { set("background/keepInTray", v); }
+  bool startWithWindows() const; void setStartWithWindows(bool v);
+  bool startWithWindowsAvailable() const;
+  Journal* journal() const { return journal_; }
+  bool journalCrashed() const { return journalCrashed_; }   // the journal's marker was left by a run that died
+  QByteArray journalState() const;                         // what the journal writes: console, scenes, presets, settings (no licence or tokens)
+  bool applyJournal(const QByteArray& data);               // the console and the settings back from a journal state
+  bool restoreJournal();                                   // after a crash: the last good state (journal, else its backup), with a notice
+  QString journalNote() const { return journalNote_; }
+  Q_INVOKABLE void clearJournalNote() { journalNote_.clear(); emit changed(); }
 
  signals:
   void changed();
@@ -146,5 +162,5 @@ class Settings : public QObject {
  private:
   void set(const QString& k, const QVariant& v) { if (s_.value(k) == v) return; s_.setValue(k, v); s_.sync(); emit changed(); }
   void note(const QString& m) { msg_ = m; emit messageChanged(); }
-  Engine* engine_; QSettings s_; QString msg_; bool crashed_ = false; QTimer autosave_;
+  Engine* engine_; QSettings s_; QString msg_; bool crashed_ = false; QTimer autosave_; Journal* journal_ = nullptr; bool journalCrashed_ = false; QString journalNote_;
 };

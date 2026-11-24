@@ -964,12 +964,16 @@ QVariantMap Engine::latencyReport() const {
   rt_->latencyFrames(in.inFrames, in.outFrames); in.hasInput = devIn_ > 0;
   for (const QVariant& v : devices_) { const QVariantMap d = v.toMap(); if (d["id"].toString() == QString::fromStdString(curOut_) && d["kind"].toString() == "bluetooth") in.bluetoothOut = true; }
   in.hybrid = cpuOnce().topo.classes > 1; in.fastCores = sysFast_;
+  if (in.backend == "dsound" || (in.backend == "wasapi" && !in.exclusive)) {   // the APO scan (registry reads) at most every 10 s, only where they apply
+    static QElapsedTimer apoAge; static bool apoOn = false;
+    if (!apoAge.isValid() || apoAge.elapsed() > 10000) { apoOn = false; for (const auto& e : am::apo::scan()) if (!e.capture && e.effectsActive()) apoOn = true; apoAge.start(); }
+    in.apoActive = apoOn; }
   const am::Snapshot sn = rt_->snapshot(); in.xruns = sn.xruns; in.maxBlockUs = sn.maxBlockUs;
   const am::latency::Report r = am::latency::assess(in);
   m["running"] = true; m["driver"] = QString::fromStdString(r.driver); m["rate"] = in.rate; m["frames"] = in.blockFrames; m["inMs"] = r.inMs; m["outMs"] = r.outMs; m["blockMs"] = r.blockMs; m["totalMs"] = r.totalMs; m["reported"] = r.reported;
   m["level"] = QString::fromStdString(r.levelName); m["verdict"] = QString::fromStdString(r.verdict);
   const int fb = am::latency::suggestFastBlock(in); m["fastBlock"] = fb; m["fastBlockMs"] = 1000.0 * fb / in.rate;   // TRUE BUFFER: shown, never applied by itself
-  QStringList adv; for (const auto& a : r.advice) adv << QString::fromStdString(a); m["advice"] = adv; m["roundTrip"] = lastRoundTrip_;
+  QStringList adv; for (const auto& a : r.advice) adv << QString::fromStdString(a); m["advice"] = adv; m["apoAdvice"] = r.apoAdvice; m["roundTrip"] = lastRoundTrip_;
   return m;
 }
 // the test: a click mixed into the master (after whatever source was there) and input 1 recorded raw for 0.8 s, block by block in step

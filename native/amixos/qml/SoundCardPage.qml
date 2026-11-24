@@ -33,7 +33,7 @@ Item {
         Text { id: bl; anchors.centerIn: parent; text: i18n.t(label, i18n.lang); color: parent.on ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: parent.clicked() } }
     component Card: Rectangle { default property alias content: body.data; Layout.fillWidth: true; Layout.alignment: Qt.AlignTop; radius: Theme.radius; color: Theme.card; border.color: Theme.line; implicitHeight: body.implicitHeight + 24; ColumnLayout { id: body; anchors.fill: parent; anchors.margins: 12; spacing: 8 } }
     component KV: RowLayout { property string k; property string v; property color c: Theme.cyan; spacing: 10; Text { Layout.preferredWidth: 120; text: k; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 } Text { text: v; color: c; font.family: Theme.mono; font.pixelSize: 10; font.bold: true } }
-    Flickable { anchors.fill: parent; anchors.margins: 10; contentHeight: grid.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+    Flickable { id: scFlick; anchors.fill: parent; anchors.margins: 10; contentHeight: grid.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
         GridLayout { id: grid; width: parent.width; columns: 2; columnSpacing: 8; rowSpacing: 8
             Card { Layout.columnSpan: 2
                 RowLayout { spacing: 14
@@ -88,6 +88,8 @@ Item {
                 Text { Layout.fillWidth: true; visible: latencyCard.rep.running === true; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8
                     text: latencyCard.rep.running ? i18n.t("IN", i18n.lang) + " " + Number(latencyCard.rep.inMs).toFixed(1) + " ms  ·  " + i18n.t("OUT", i18n.lang) + " " + Number(latencyCard.rep.outMs).toFixed(1) + " ms  ·  " + i18n.t("TOTAL", i18n.lang) + " " + Number(latencyCard.rep.totalMs).toFixed(1) + " ms  ·  " + (latencyCard.rep.reported ? i18n.t("REPORTED BY THE DRIVER", i18n.lang) : i18n.t("ESTIMATED (THE DRIVER REPORTS NOTHING)", i18n.lang)) : "" }
                 Repeater { model: latencyCard.rep.advice ? latencyCard.rep.advice : []; delegate: Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; text: "• " + modelData } }
+                // the APO advice links to the SYSTEM EFFECTS card above (scrolled into view, scanned again)
+                Btn { objectName: "latencyApoLink"; visible: latencyCard.rep.apoAdvice === true; label: i18n.t("SHOW SYSTEM EFFECTS (APOs)", i18n.lang); onClicked: { apoCard.scan(); scFlick.contentY = Math.max(0, Math.min(apoCard.y, scFlick.contentHeight - scFlick.height)) } }
                 Text { id: rtNote; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8
                     text: latencyCard.rep.roundTrip && latencyCard.rep.roundTrip.note ? (latencyCard.rep.roundTrip.state === "none" ? i18n.t(latencyCard.rep.roundTrip.note, i18n.lang) : latencyCard.rep.roundTrip.note) : i18n.t("ROUND TRIP: needs a loop cable from output 1 to input 1 (or the microphone near the speaker). Press the button: a short click plays and its return is timed; it stops after 2 s if no click is heard.", i18n.lang) }
             }

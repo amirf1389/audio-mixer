@@ -67,6 +67,8 @@ class Volume : public QObject, public QAbstractNativeEventFilter {
   Q_INVOKABLE bool arrowKey(int key, int modifiers, bool textFocus);
   static bool textHasFocus();
   bool eventFilter(QObject* o, QEvent* e) override;   // the master after one step (the header knob's wheel)
+  bool trayShown() const;                                       // the icon is in the notification area now (a hidden window can come back)
+  void showMessage(const QString& title, const QString& text);  // a balloon from the tray icon
   void quiet();   // test runs: no tray icon, no keys taken from the system
   void flush();   // pending slider writes now (tests)
   int writes() const { return writes_; }   // writes handed to the layer (tests: the coalescing)
