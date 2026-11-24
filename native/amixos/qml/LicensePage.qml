@@ -15,6 +15,8 @@ Flickable {
     property var check: null
     property string msg: ""
     property bool msgOk: false
+    readonly property string generatorUrl: "http://127.0.0.1:8799/?plan=&name=&email=&machine=" + encodeURIComponent(page.lic.machine || "")
+    readonly property bool autoFailed: { const t = engine.autoLicenseStatus; return t !== "" && t !== "active" && t !== "off" && t.indexOf("activated") !== 0 && t.indexOf("watching") !== 0 && t.indexOf("request") !== 0 && t.indexOf("cannot") !== 0 }
     function dateOf(ms) { return ms > 0 ? new Date(ms).toISOString().slice(0, 10) : "" }
     ColumnLayout {
         id: col; width: parent.width - 20; x: 10; y: 10; spacing: 10
@@ -90,7 +92,17 @@ Flickable {
                 Rectangle { id: gb53; implicitWidth: 110; implicitHeight: 26; radius: 7; color: engine.autoLicense ? Theme.emerald : Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb53.color) } GradientStop { position: 1; color: Theme.btnBottom(gb53.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: engine.autoLicense ? i18n.t("AUTO ON", i18n.lang) : i18n.t("AUTO OFF", i18n.lang); color: engine.autoLicense ? "#000" : Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.autoLicense = !engine.autoLicense } }
                 Rectangle { id: gb54; implicitWidth: Math.max(130, children[0].implicitWidth + 12); implicitHeight: 26; radius: 7; color: Qt.rgba(0.235, 0.784, 0.859, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb54.color) } GradientStop { position: 1; color: Theme.btnBottom(gb54.color) } } border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("AUTO REQUEST", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { const pth = engine.writeLicenseRequest(reqPlan.plan, reqName.text, reqMail.text); if (pth) { reqOut.text = engine.licenseRequest(reqPlan.plan, reqName.text, reqMail.text); engine.autoLicense = true } } } }
                 Rectangle { id: gb55; implicitWidth: Math.max(100, children[0].implicitWidth + 12); implicitHeight: 26; radius: 7; color: Theme.ov(0.08); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb55.color) } GradientStop { position: 1; color: Theme.btnBottom(gb55.color) } } border.color: Theme.lineSoft; Text { anchors.centerIn: parent; text: i18n.t("LOOK NOW", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } MouseArea { anchors.fill: parent; onClicked: engine.scanForKeys() } }
-                Text { Layout.fillWidth: true; text: engine.autoLicenseStatus; color: engine.autoLicenseStatus.indexOf("activated") === 0 || engine.autoLicenseStatus === "active" ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight } }
+                Text { Layout.fillWidth: true; text: engine.autoLicenseStatus; color: engine.autoLicenseStatus.indexOf("activated") === 0 || engine.autoLicenseStatus === "active" ? Theme.emerald : page.autoFailed ? Theme.danger : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap } }
+            // OPEN KEY GENERATOR: the vendor's local generator (scripts/license-generator.js on 127.0.0.1:8799), prefilled with this machine code. Its
+            // SEND TO AMF X1 ON THIS PC writes the key file into the data folder; the scan below picks it up within ~2 s while this page is open.
+            RowLayout { spacing: 8
+                Rectangle { id: gbGen; objectName: "openGeneratorBtn"; implicitWidth: Math.max(150, genT.implicitWidth + 22); implicitHeight: 26; radius: 7; color: "transparent"; border.color: Theme.amber
+                    Text { id: genT; anchors.centerIn: parent; text: i18n.t("OPEN KEY GENERATOR", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally(page.generatorUrl) } }
+                Text { text: i18n.t("VENDOR KEY", i18n.lang) + "  " + engine.vendorKeyFingerprint(); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                Text { Layout.fillWidth: true; text: i18n.t("Must match the fingerprint on the generator page.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; elide: Text.ElideRight } }
+            Timer { objectName: "keyRescan"; interval: 2000; repeat: true; running: page.visible && engine.autoLicense && !(page.lic.state === "active" && page.lic.source === "key"); onTriggered: engine.scanForKeys() }
+            Connections { target: Qt.application; function onStateChanged() { if (Qt.application.state === Qt.ApplicationActive && page.visible && engine.autoLicense) engine.scanForKeys() } }
         }
         Panel {
             Layout.fillWidth: true
