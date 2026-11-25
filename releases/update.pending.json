@@ -1,10 +1,21 @@
 {
   "product": "audio-mixer",
-  "version": "1.25.0.0",
+  "version": "1.26.0.0",
   "channel": "stable",
-  "released": "2026-11-23",
+  "released": "2026-11-25",
   "notes": [],
   "features": [
+    {
+      "version": "1.26.0.0",
+      "date": "2026-11-24",
+      "title": "1.26.0.0: keeps running in the tray, continuous auto-save, system effects in the latency advice",
+      "items": [
+        "NEW · KEEP RUNNING IN THE TRAY: closing the console window keeps the sound running (capture, mixing, APP SOUND, the remote service); SHOW in the tray menu brings it back, QUIT closes everything (SETTINGS, on by default)",
+        "NEW · START WITH WINDOWS (SETTINGS, off by default): the console starts in the tray when you sign in",
+        "NEW · CONTINUOUS AUTO-SAVE: the mixer, routing, scenes and settings are saved 2 seconds after every change (atomic, with one backup); after a crash the last good state comes back with a notice",
+        "LOW LATENCY: Windows system effects (APOs) on the shared path are named in the advice, with a link to the SYSTEM EFFECTS card"
+      ]
+    },
     {
       "version": "1.25.0.0",
       "date": "2026-11-20",
@@ -261,10 +272,10 @@
   ],
   "files": {
     "win-x64-exe": {
-      "name": "AmF-X1-1.25.0.0-setup.exe",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.25.0.0-setup.exe",
-      "size": 31470496,
-      "sha256": "dc50e8e039f93239cd8632248b1d8bebf00b7b08165cd33eb08b388c005a3a45"
+      "name": "AmF-X1-1.26.0.0-setup.exe",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.26.0.0-setup.exe",
+      "size": 32493570,
+      "sha256": "c646ce0d27c1a18be1dc5938461f045cd71b911725e1322522ec32b5085af9d4"
     }
   },
   "plugins": [],
