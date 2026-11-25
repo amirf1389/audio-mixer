@@ -202,7 +202,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
       if (eq && wcschr(eq, L' ')) _snwprintf(item, 600, L" %.*ls=\"%ls\"", (int)(eq - argv[i]), argv[i], eq + 1);
       else _snwprintf(item, 600, wcschr(argv[i], L' ') ? L" \"%ls\"" : L" %ls", argv[i]);
       item[599] = 0;
-      if (wcslen(extra) + wcslen(item) < 2000) wcscat(extra, item);
+      if (wcslen(extra) + wcslen(item) < 2000) wcsncat(extra, item, 2000 - wcslen(extra) - 1);
     }
   }
 
@@ -254,17 +254,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmd, int show) {
   /* feature switches -> ADDLOCAL (only when one was used; the default install keeps the MSI defaults) */
   if (noplug || nohelp || notools || noshort || !desktop || nopath || asio || noreg || nofiletypes || toolspath) {
     wchar_t add[400] = L" ADDLOCAL=Main";
-    if (!noshort) wcscat(add, L",Shortcuts");
-    if (!noshort && !notools) wcscat(add, L",Tools");
-    if (!nopath) wcscat(add, L",CommandLine");
-    if (!noplug) wcscat(add, L",PluginHost");
-    if (!nohelp) wcscat(add, L",WinHelpers");
-    if (desktop) wcscat(add, L",Desktop");
-    if (asio) wcscat(add, L",AsioDriver");
-    if (!noreg) wcscat(add, L",Registry");
-    if (!nofiletypes) wcscat(add, L",FileTypes");
-    if (toolspath) wcscat(add, L",ToolsPath");
-    if (!wcsstr(extra, L"ADDLOCAL=") && wcslen(extra) + wcslen(add) < 2000) wcscat(extra, add);
+    if (!noshort) wcsncat(add, L",Shortcuts", 400 - wcslen(add) - 1);
+    if (!noshort && !notools) wcsncat(add, L",Tools", 400 - wcslen(add) - 1);
+    if (!nopath) wcsncat(add, L",CommandLine", 400 - wcslen(add) - 1);
+    if (!noplug) wcsncat(add, L",PluginHost", 400 - wcslen(add) - 1);
+    if (!nohelp) wcsncat(add, L",WinHelpers", 400 - wcslen(add) - 1);
+    if (desktop) wcsncat(add, L",Desktop", 400 - wcslen(add) - 1);
+    if (asio) wcsncat(add, L",AsioDriver", 400 - wcslen(add) - 1);
+    if (!noreg) wcsncat(add, L",Registry", 400 - wcslen(add) - 1);
+    if (!nofiletypes) wcsncat(add, L",FileTypes", 400 - wcslen(add) - 1);
+    if (toolspath) wcsncat(add, L",ToolsPath", 400 - wcslen(add) - 1);
+    if (!wcsstr(extra, L"ADDLOCAL=") && wcslen(extra) + wcslen(add) < 2000) wcsncat(extra, add, 2000 - wcslen(extra) - 1);
   }
 
   int restart = 0;

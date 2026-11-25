@@ -11,7 +11,8 @@ Item {
     objectName: "streamingPage"
     readonly property var hue: ({ youtube: "#ff4d4d", spotify: "#1ed760", tidal: "#e6e6e6", deezer: "#a238ff", tiktok: "#25f4ee" })
     property var probe: ({ ok: false })
-    Component.onCompleted: streaming.active = true
+    Component.onCompleted: streaming.active = visible   // polls only while shown (a cached, hidden page costs nothing)
+    onVisibleChanged: streaming.active = visible
     Component.onDestruction: streaming.active = false
     function go(id) { Window.window.current = id }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(64, bl.implicitWidth + 18); implicitHeight: 26; radius: 9

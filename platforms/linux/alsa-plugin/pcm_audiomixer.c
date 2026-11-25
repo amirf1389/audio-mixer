@@ -179,7 +179,7 @@ SND_PCM_PLUGIN_DEFINE_FUNC(audiomixer)
   if (!am) return -ENOMEM;
   am->ring = calloc(RING_FRAMES, (size_t)channels * sizeof(int16_t));
   if (!am->ring) { free(am); return -ENOMEM; }
-  strcpy(am->name, dev); am->channels = (int)channels; am->rate = (int)rate; am->port = (int)port;
+  snprintf(am->name, sizeof am->name, "%s", dev); am->channels = (int)channels; am->rate = (int)rate; am->port = (int)port;
   pthread_mutex_init(&am->lock, NULL);
   if (pipe(am->pfd) < 0) { free(am->ring); free(am); return -errno; }
   fcntl(am->pfd[0], F_SETFL, O_NONBLOCK); fcntl(am->pfd[1], F_SETFL, O_NONBLOCK);

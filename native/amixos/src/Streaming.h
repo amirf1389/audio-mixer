@@ -34,6 +34,7 @@ class Streaming : public QObject {
  signals:
   void changed();
  private:
+  void updatePoll();
   void mediaSession(const QString& action); void spotify(const QString& cmd); void finishSignIn(const QString& code, const QString& state);
   void store(const std::string& id); void log(const QString& line) const;
   QVariantMap now_; QString msg_; bool active_ = false; QSettings s_; QNetworkAccessManager net_; QTimer poll_; Remote* remote_;

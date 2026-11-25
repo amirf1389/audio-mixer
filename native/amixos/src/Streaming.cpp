@@ -41,8 +41,12 @@ Streaming::Streaming(Remote* remote, QObject* parent) : QObject(parent), remote_
   for (const st::Provider& p : st::providers()) { const QByteArray b = s_.value(q("streaming/" + p.id + "/sealed")).toByteArray(); if (b.isEmpty()) continue;
     std::string plain; st::Tokens t; if (dpapi(b.toStdString(), plain, false) && st::deserialize(plain, t)) tokens_[p.id] = t; }
 #endif
-  poll_.setInterval(3000); connect(&poll_, &QTimer::timeout, this, &Streaming::refresh); poll_.start();   // also feeds the web remote while the service runs
+  // polls only while the STREAMING page is shown or the web remote's service runs: nothing ticks on the GUI thread otherwise (page budget)
+  poll_.setInterval(3000); connect(&poll_, &QTimer::timeout, this, &Streaming::refresh);
+  if (remote_) connect(remote_, &Remote::changed, this, &Streaming::updatePoll);
+  updatePoll();
 }
+void Streaming::updatePoll() { const bool want = !dryRun && (active_ || (remote_ && remote_->running())); if (want == poll_.isActive()) return; if (want) poll_.start(); else poll_.stop(); }
 void Streaming::log(const QString& line) const { std::fprintf(stderr, "streaming: %s\n", st::redact(line.toStdString()).c_str()); }   // every log line is redacted
 void Streaming::store(const std::string& id) {
 #ifdef Q_OS_WIN
@@ -61,7 +65,7 @@ QVariantList Streaming::providers() const {
                      {"clientId", s_.value(q("streaming/" + p.id + "/clientId")).toString()}, {"signedIn", it != tokens_.end() && it->second.valid()}}; }
   return l;
 }
-void Streaming::setActive(bool on) { if (active_ == on) return; active_ = on; if (on) refresh(); emit changed(); }
+void Streaming::setActive(bool on) { if (active_ == on) return; active_ = on; updatePoll(); if (on) refresh(); emit changed(); }
 void Streaming::setClientId(const QString& provider, const QString& id) {
   const QString v = id.trimmed(); if (!st::find(provider.toStdString())) return;
   if (!v.isEmpty() && !st::validClientId(v.toStdString())) { msg_ = QStringLiteral("That is not a client id (8 to 128 letters, digits, . _ -)."); emit changed(); return; }
