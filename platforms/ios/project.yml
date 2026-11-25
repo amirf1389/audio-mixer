@@ -1,0 +1,29 @@
+# XcodeGen spec of the iOS remote (brew install xcodegen; scripts/ios/build.sh runs `xcodegen generate`).
+name: AmFX1Remote
+options:
+  bundleIdPrefix: com.amfx1
+  deploymentTarget: { iOS: "16.0" }
+targets:
+  AmFX1Remote:
+    type: application
+    platform: iOS
+    sources: [AmFX1Remote]
+    info:
+      path: AmFX1Remote/Info.plist
+      properties:
+        CFBundleDisplayName: AmF X1 Remote
+        CFBundleShortVersionString: "1.26.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSCameraUsageDescription: The camera reads the pairing QR code shown by AmF X1 on your computer.
+        NSLocalNetworkUsageDescription: The remote talks to AmF X1 on your computer over your local network.
+        NSBonjourServices: [_http._tcp]
+        NSAppTransportSecurity: { NSAllowsLocalNetworking: true }   # the console's remote service is plain HTTP on the LAN (private addresses only)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.amfx1.remote
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO

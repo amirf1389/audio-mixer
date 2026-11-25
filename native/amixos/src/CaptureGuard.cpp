@@ -9,11 +9,14 @@
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
 #endif
+#if defined(AMIX_MACOS)
+bool amixMacSetSharingNone(void* nsview, bool on);   // CaptureGuardMac.mm
+#endif
 
 CaptureGuard::CaptureGuard(QObject* parent) : QObject(parent) { qApp->installEventFilter(this); }
 bool CaptureGuard::envAllowsCapture() { return qEnvironmentVariable("AMIX_ALLOW_CAPTURE") == QLatin1String("1"); }
 bool CaptureGuard::supported() {
-#ifdef _WIN32
+#if defined(_WIN32) || (defined(AMIX_MACOS))
   return true;
 #else
   return false;
@@ -26,6 +29,9 @@ bool CaptureGuard::apply(QWindow* w, bool on) {
   if (!on) return SetWindowDisplayAffinity(h, WDA_NONE) != 0;
   if (SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE)) return true;   // Windows 10 2004 and newer
   return SetWindowDisplayAffinity(h, WDA_MONITOR) != 0;                  // older: the window is shown black in captures
+#elif defined(AMIX_MACOS)
+  if (!w || !w->handle()) return false;
+  return amixMacSetSharingNone(reinterpret_cast<void*>(w->winId()), on);
 #else
   Q_UNUSED(w); Q_UNUSED(on); return false;
 #endif

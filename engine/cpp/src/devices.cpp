@@ -10,6 +10,9 @@
 //   Core Audio  the system default device only (the backend does not choose another device yet)
 //   null     one timed device that needs no hardware
 // Probing an ASIO driver loads it: a caller must not list while one of its ASIO streams is open (ASIO drivers serve one client).
+#ifdef __APPLE__
+#include "backends.hpp"
+#endif
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/app_sound.hpp"
 #include "audiomixer/device_watch.hpp"
@@ -322,6 +325,9 @@ std::string deviceFingerprint() {
 #ifdef AM_HAVE_ALSA
   { void** hints = nullptr; if (snd_device_name_hint(-1, "pcm", &hints) >= 0) { for (void** h = hints; *h; ++h) { char* name = snd_device_name_get_hint(*h, "NAME"); if (name) { f += name; f += '|'; std::free(name); } } snd_device_name_free_hint(hints); } }
 #endif
+#ifdef __APPLE__
+  f += coreAudioFingerprint();
+#endif
   return f;
 }
 
@@ -350,8 +356,7 @@ std::vector<DeviceInfo> listDevicesExcept(bool probeAsio, const std::string& ski
   addDsound(v);
 #endif
 #ifdef __APPLE__
-  DeviceInfo ca; ca.backend = "coreaudio"; ca.name = "System default"; ca.inChannels = 2; ca.outChannels = 2; ca.defaultIn = ca.defaultOut = true;
-  v.push_back(ca);
+  addCoreAudio(v);
 #endif
   DeviceInfo nul; nul.backend = "null"; nul.id = "null"; nul.name = "Null device (timed, no hardware)"; nul.inChannels = 2; nul.outChannels = 2;
   v.push_back(nul);
