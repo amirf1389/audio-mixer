@@ -334,6 +334,21 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     else if (tokens_.revoke(b["id"].asString(), terr)) { out.set("ok", true); out.set("closed", kickToken(b["id"].asString(), false)); }   // FORGET: its live links close too
     if (!terr.empty()) { res.status = 400; out.set("ok", false); out.set("error", terr); }
     res.body = out.dump(); return res; }
+  if (r.path == "/api/streaming" || r.path == "/api/streaming/cmd" || r.path == "/api/streaming/state") {   // STREAMING: now playing + transport (metadata and commands only: no audio)
+    const std::string role = roleOf(r, false);
+    if (role.empty() || role == "held") { res.status = role == "held" ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    json::Value out = json::Value::object(); const long long now = static_cast<long long>(std::time(nullptr));
+    if (r.method == "GET" && r.path == "/api/streaming") { std::lock_guard<std::mutex> g(streamM_); out.set("ok", true); out.set("now", streamNow_.isObject() && now - streamAt_ < 30 ? streamNow_ : json::Value::object()); out.set("console", now - streamAt_ < 30); res.body = out.dump(); return res; }
+    bool ok = false; const json::Value b = json::Value::parse(r.body, ok);
+    if (r.method != "POST" || !ok || !b.isObject()) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"the body is not a JSON object\"}"; return res; }
+    if (r.path == "/api/streaming/cmd") {
+      if (role != "admin" && role != "control") { res.status = 403; res.body = "{\"ok\":false,\"error\":\"a control token is needed\"}"; return res; }
+      const std::string c = b["cmd"].asString(); if (!(c == "play" || c == "pause" || c == "toggle" || c == "next" || c == "previous")) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"unknown command\"}"; return res; }
+      std::lock_guard<std::mutex> g(streamM_); if (streamCmds_.size() < 8) streamCmds_.push_back(c); out.set("ok", true); out.set("queued", static_cast<double>(streamCmds_.size())); res.body = out.dump(); return res; }
+    if (role != "admin") { res.status = 403; res.body = "{\"ok\":false,\"error\":\"the master token is needed\"}"; return res; }
+    json::Value n = json::Value::object(); for (const char* k : {"service", "title", "artist", "album", "source"}) n.set(k, b[k].asString().substr(0, 200)); n.set("playing", b["playing"].asBool()); n.set("any", b["any"].asBool());
+    json::Value cmds = json::Value::array(); { std::lock_guard<std::mutex> g(streamM_); streamNow_ = n; streamAt_ = now; for (const auto& c : streamCmds_) cmds.push(c); streamCmds_.clear(); }
+    out.set("ok", true); out.set("cmds", cmds); res.body = out.dump(); return res; }
   if (r.method == "POST" && r.path == "/api/control") {
     if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     bool ok = false; const json::Value cmd = json::Value::parse(r.body, ok);
@@ -364,7 +379,7 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
 #include "remote_page.inc"
       ;
     res.type = "text/html; charset=utf-8";
-    res.headers.push_back({"Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
+    res.headers.push_back({"Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-src https://www.youtube-nocookie.com; connect-src 'self' ws: wss:; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
     res.body = kPage; return res;
   }
   if (r.method == "GET" && (r.path == "/" || r.path == "/api")) {

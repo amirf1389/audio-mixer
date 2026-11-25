@@ -1,0 +1,12 @@
+# Audio Mixer virtual sound card. Put this in ~/.asoundrc (one user) or /etc/asound.conf (everyone) after "sudo make install".
+#   aplay    -D audiomixer music.wav     plays into the mixer (a source input named "Audio Mixer")
+#   arecord  -D audiomixer -d 10 x.wav   records what the mixer sends to the device
+# PulseAudio / PipeWire applications use it through the ALSA bridge:  pactl load-module module-alsa-sink device=audiomixer
+pcm.audiomixer {
+    type audiomixer
+    name "Audio Mixer"      # the device name the mixer shows
+    channels 2              # 1 to 32
+    rate 48000
+    # port 8765             # the mixer's port; without it 8765 to 8774 are tried
+    hint { show on description "Audio Mixer virtual device" }
+}

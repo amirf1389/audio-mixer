@@ -66,6 +66,7 @@
 #include "paths/paths.hpp"
 #include "samples/samples.hpp"
 #include "Links.h"
+#include "Streaming.h"
 #include "Apps.h"
 #include "SysNotify.h"
 #include "AppWindows.h"
@@ -238,6 +239,7 @@ int main(int argc, char* argv[]) {
   const bool watchdogWas = engine.watchdog(); if (smoke || bench || !shots.isEmpty()) { engine.keepSavedWatchdog(); engine.setWatchdog(false); }
   if (!shots.isEmpty()) settings.setSpatialEnabled(true);   // the screenshots show every page, the optional 360 AUDIO too
   Links links; links.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("links", &links);
+  Streaming streaming(&remote); streaming.dryRun = smoke || !shots.isEmpty(); qml.rootContext()->setContextProperty("streaming", &streaming);
   qml.rootContext()->setContextProperty("appWindows", &appWindows); qml.addImageProvider(QStringLiteral("appwin"), new AppWindowImages(&appWindows));   // the engine owns the provider
   qml.rootContext()->setContextProperty("volume", &volume);
   qml.rootContext()->setContextProperty("apps", &apps);   // APP CAPTURE: several programs, each on its own strips
