@@ -24,6 +24,11 @@ class FaderView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : Vi
     fun clearClip() { clipLatched = false; hold = 0; invalidate() }
     var onMove: ((Int) -> Unit)? = null
     var onTouchState: ((Boolean) -> Unit)? = null
+    /** CHROMEBOOK MODE (and any mouse): the wheel moves the fader, as a drag would */
+    override fun onGenericMotionEvent(e: android.view.MotionEvent): Boolean {
+        if (e.action == android.view.MotionEvent.ACTION_SCROLL && isEnabled) { val v = e.getAxisValue(android.view.MotionEvent.AXIS_VSCROLL); if (v != 0f) { val p = ChromeFrame.wheel(progress, v); if (p != progress) { progress = p; onMove?.invoke(p) }; return true } }
+        return super.onGenericMotionEvent(e)
+    }
     private var hold = 0; private var holdAt = 0L
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF05080C.toInt() }
     private val tick = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3A4656.toInt(); strokeWidth = 2f }

@@ -41,6 +41,18 @@ object ChromeFrame {
         return b.show()
     }
 
+    /** the master keys as on the console: UP / DOWN 1 dB, with SHIFT 0.1 dB; not while text is typed, not with ALT or META */
+    fun masterStep(e: android.view.KeyEvent, textFocus: Boolean): Double? {
+        if (textFocus || e.isAltPressed || e.isMetaPressed) return null
+        val dir = when (e.keyCode) { android.view.KeyEvent.KEYCODE_DPAD_UP -> 1; android.view.KeyEvent.KEYCODE_DPAD_DOWN -> -1; else -> return null }
+        return dir * if (e.isShiftPressed) 0.1 else 1.0
+    }
+    /** the master after one key: -60 dB and below is off (one key up from off starts at -60), +10 dB at most */
+    fun stepMaster(db: Double, step: Double): Double { val from = if (db <= -60) -60.0 else db; val v = Math.round((from + step) * 10) / 10.0; return if (v <= -60) -120.0 else v.coerceAtMost(10.0) }
+    /** a mouse wheel notch on a fader: 20 of its 1000 steps */
+    const val WHEEL_STEP = 20
+    fun wheel(progress: Int, vscroll: Float): Int = (progress + Math.round(vscroll * WHEEL_STEP)).coerceIn(0, 1000)
+
     fun wrap(a: Activity, content: View): View {
         val d = a.resources.displayMetrics.density
         val root = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(a.getColor(R.color.bg)); tag = "chromeFrame" }

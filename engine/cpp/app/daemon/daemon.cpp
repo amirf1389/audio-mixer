@@ -8,6 +8,7 @@
 #include "paths/paths.hpp"
 #include "fx/fx.hpp"
 #include "fx/presets.hpp"
+#include "license/license.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -470,6 +471,8 @@ json::Value Daemon::racks(int onlyStrip, bool params, bool states) const {
 namespace {
 std::string kindId(const std::string& k) { std::uint64_t h = 1469598103934665603ull; for (unsigned char c : k) { h ^= c; h *= 1099511628211ull; } char b[20]; std::snprintf(b, sizeof b, "%016llx", static_cast<unsigned long long>(h)); return b; }
 }
+int Daemon::dcaLimit() const { if (opt_.plan.empty()) return 8;   // no plan given (a service started by hand, the tests): the console holds the limit
+  std::string p = opt_.plan; for (char& c : p) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return lic::dcaLimit(p); }
 bool Daemon::Bucket::take(double perSecond, double burst) {
   const auto now = std::chrono::steady_clock::now(); if (tokens < 0) { tokens = burst; at = now; }
   tokens = std::min(burst, tokens + perSecond * std::chrono::duration<double>(now - at).count()); at = now;
@@ -581,9 +584,9 @@ json::Value Daemon::state() const {
   for (int k = 0; k < kMaxBuses; ++k) { json::Value v = json::Value::object(); v.set("id", k); v.set("db", buses_[k].db); v.set("returnDb", buses_[k].returnDb); v.set("mute", buses_[k].mute); buses.push(v); }
   o.set("buses", buses);
   { json::Value dcas = json::Value::array();
-    for (int g = 0; g < 8; ++g) { const Dca& d = dcas_[g]; json::Value v = json::Value::object(); v.set("id", g + 1); v.set("name", d.name.empty() ? "DCA " + std::to_string(g + 1) : d.name); v.set("db", d.db); v.set("mute", d.mute); v.set("color", d.color);
+    for (int g = 0; g < 8; ++g) { const Dca& d = dcas_[g]; json::Value v = json::Value::object(); v.set("id", g + 1); v.set("name", d.name.empty() ? "DCA " + std::to_string(g + 1) : d.name); v.set("db", d.db); v.set("mute", d.mute); v.set("color", d.color); v.set("winVol", d.winVol); v.set("locked", g + 1 > dcaLimit());
       json::Value m = json::Value::array(); for (int x : d.members) m.push(x); v.set("members", m); dcas.push(v); }
-    o.set("dcas", dcas); }
+    o.set("dcas", dcas); o.set("dcaLimit", dcaLimit()); }
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("mute", masterMute_); m.set("dim", masterDim_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
   o.set("settings", settingsJson());
   o.set("apps", appsJson()); o.set("appsAvailable", appLayer_ && appLayer_->available());
@@ -657,7 +660,7 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
     const json::Value& eq = v["eq"]; for (std::size_t b = 0; b < eq.size() && b < 8; ++b) { const json::Value& e = eq.at(b); Strip::Band& d = s.eq[b];
       d.type = std::max(0, std::min(8, e.at(0).asInt(0))); d.freq = std::max(10.0, std::min(24000.0, e.at(1).asNumber(1000))); d.q = std::max(0.05, std::min(36.0, e.at(2).asNumber(0.707))); d.gain = std::max(-24.0, std::min(24.0, e.at(3).asNumber(0))); } }
   if (o["dcas"].isArray()) { const json::Value& ds = o["dcas"];   // the console's DCA group strips, as the remotes show them
-    for (std::size_t g = 0; g < ds.size() && g < 8; ++g) { const json::Value& d = ds.at(g); Dca& x = dcas_[g]; x.db = std::max(-60.0, std::min(10.0, d["db"].asNumber(x.db))); x.mute = d["mute"].asBool(x.mute);
+    for (std::size_t g = 0; g < ds.size() && g < 8; ++g) { const json::Value& d = ds.at(g); Dca& x = dcas_[g]; x.db = std::max(-60.0, std::min(10.0, d["db"].asNumber(x.db))); x.mute = d["mute"].asBool(x.mute); x.winVol = d["winVol"].asBool(x.winVol);
       x.name = d["name"].asString(x.name).substr(0, 16); x.color = std::max(0, std::min(7, d["color"].asInt(x.color))); x.members.clear();
       const json::Value& m = d["members"]; for (std::size_t i = 0; i < m.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) { const int k = m.at(i).asInt(-1); if (k >= 0 && k < opt_.strips) x.members.push_back(k); } } }
   if (o["master"].isObject()) { masterDb_ = o["master"].has("db") && !o["master"]["db"].isNumber() ? -120.0 : std::max(-120.0, std::min(10.0, o["master"]["db"].asNumber(masterDb_))); masterMute_ = o["master"]["mute"].asBool(masterMute_); }
@@ -863,7 +866,11 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }
   if (op == "send") { if (!strip(s) || !bus(b)) return {}; if (!need()) return {}; rt_->setSend(s, b, clampDb(cmd["db"].asNumber(-120)), cmd["pre"].asBool(false)); return ok; }
   if (op == "dca") {   // a DCA group strip: {group 1..8, db, mute, name, color, members}; every field optional but the group
-    const int g = cmd["group"].asInt(0); if (g < 1 || g > 8) { err = "group: 1..8"; return {}; } Dca& d = dcas_[g - 1];
+    const int g = cmd["group"].asInt(0); if (g < 1 || g > 8) { err = "group: 1..8"; return {}; }
+    if (g > dcaLimit()) { err = "DCA " + std::to_string(g) + " is not in this edition (" + std::to_string(dcaLimit()) + " group" + (dcaLimit() == 1 ? "" : "s") + ")"; return {}; }
+    if (!dcaBucket_.take(60, 60)) { err = "too many DCA changes: slow down"; return {}; }
+    Dca& d = dcas_[g - 1];
+    if (cmd.has("winVol")) d.winVol = cmd["winVol"].asBool(false);
     if (cmd.has("db")) d.db = std::max(-60.0, std::min(10.0, cmd["db"].asNumber(0)));
     if (cmd.has("mute")) d.mute = cmd["mute"].asBool(false);
     if (cmd.has("name")) { std::string n = cmd["name"].asString(); if (n.size() > 16) n.resize(16); d.name = n; }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rt_tools">TOOLS</string>
+    <string name="rt_dca">GROUP FADERS (DCA)</string>
+    <string name="rt_360">360 AUDIO</string>
+    <string name="rt_effects">ADD EFFECTS</string>
+    <plurals name="rt_dca_limit">
+        <item quantity="one">This console\'s edition has %d group fader.</item>
+        <item quantity="other">This console\'s edition has %d group faders.</item>
+    </plurals>
+    <string name="rt_dca_head">DCA %1$d · %2$s</string>
+    <string name="rt_dca_locked">Not in this console\'s edition.</string>
+    <string name="rt_dca_no_members">No channels in this group yet (add them on the console).</string>
+    <string name="rt_dca_members">Channels: %s</string>
+    <string name="rt_dca_winvol">WINDOWS VOLUME is on: this fader and MUTE move the Windows volume of the console\'s computer.</string>
+    <string name="rt_360_readonly">The console does not share its 360 audio settings over the remote link. Change them on the console (360 AUDIO); this page is read-only.</string>
+    <string name="rt_360_console">The console shares its 360 audio settings; change them on the console.</string>
+</resources>
