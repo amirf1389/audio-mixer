@@ -70,3 +70,20 @@ These findings remain open. They are MEDIUM, and several are in `engine/` and `n
   security headers of its own. `deploy/nginx` uses host networking. `tools/release-manager.html` has no CSP.
 
 See the latest `security-report.md` for the full list, including the LOW review items.
+
+## Status of the 1.26.0.0 review (MEDIUM 7 -> 2)
+
+Fixed:
+
+- The five `bridge/license-server/licence-site/*.html` pages were reported without a CSP. The licence server does send one for every page
+  (`mountLicenceSite`, the default strict policy plus `font-src 'self'`), but in a lower-case header name; the checker looked for the
+  header case-sensitively. `checks/web.js` now matches it case-insensitively (HTTP header names are case-insensitive), so those pages show
+  as INFO "CSP sent by bridge/license-server/server.js".
+- Android: the licence host and the streaming-embed hosts the app talks to are now in the HTTPS-only `domain-config` too.
+
+Remaining, by design:
+
+- `android/app/.../network_security_config.xml`: the base config allows clear text. The LAN remote talks to `http://<console-ip>:<port>`
+  and Android cannot list a private address range in a `domain-config`; every internet host the app uses is in the HTTPS-only list.
+- `deploy/nginx/docker-compose.yml`: `network_mode: host`, so nginx reaches the bridge on 127.0.0.1:8765 without publishing the bridge on
+  a Docker network. The bridge listens on loopback only; nginx is the single public listener (TLS + basic auth on `/api` and `/ws`).

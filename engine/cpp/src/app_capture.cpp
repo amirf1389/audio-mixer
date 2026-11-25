@@ -15,6 +15,7 @@
 #include <windows.h>
 #include <audioclient.h>
 #include <objbase.h>
+#include <tlhelp32.h>
 namespace am { long wasapiAppCaptureClient(unsigned long pid, double rate, void** audioClient, void** captureClient, std::string& err);
 long wasapiDeviceCaptureClient(const std::string& endpointId, double rate, void** audioClient, void** captureClient, std::string& err);
 bool wasapiCaptureProperties(const std::string& endpointId, int& channels, double& rate, int& bits, float& level, bool& muted, int& enhancements, std::string& err); }
@@ -22,6 +23,24 @@ bool wasapiCaptureProperties(const std::string& endpointId, int& channels, doubl
 
 namespace am::app {
 namespace {
+// APP SOUND captures a program's whole process tree. If that tree holds this console (its own process, or a program that started it, such as
+// a launcher), the console's own output would come back into its inputs: a feedback loop. Those picks are refused.
+bool treeHoldsThisProcess(std::uint32_t pid) {
+#ifdef _WIN32
+  DWORD cur = GetCurrentProcessId(); if (pid == cur) return true;
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); if (snap == INVALID_HANDLE_VALUE) return false;
+  bool hit = false;
+  for (int depth = 0; depth < 64 && cur != 0 && !hit; ++depth) {   // walk this process's parents (bounded: parent ids can be reused)
+    PROCESSENTRY32W e; e.dwSize = sizeof e; DWORD parent = 0;
+    for (BOOL ok = Process32FirstW(snap, &e); ok; ok = Process32NextW(snap, &e)) if (e.th32ProcessID == cur) { parent = e.th32ParentProcessID; break; }
+    if (parent == 0 || parent == cur) break;
+    hit = parent == pid; cur = parent;
+  }
+  CloseHandle(snap); return hit;
+#else
+  (void)pid; return false;
+#endif
+}
 // one producer (the slot's capture thread), one consumer (the audio thread); neither waits for the other
 class Ring {
  public:
@@ -72,6 +91,7 @@ int Capture::used() const { int n = 0; for (const auto& s : s_) if (s->state.loa
 
 int Capture::open(std::uint32_t pid, const std::string& label, double sampleRate, std::string& err, int wantSlot) {
   if (pid == 0) { err = "no program picked"; return -1; }
+  if (treeHoldsThisProcess(pid)) { err = label + " runs this console: capturing it would feed the console's own sound back in"; return -1; }
   for (int k = 0; k < kSlots; ++k) { Slot& s = *s_[k]; if (s.state.load() == 0 || s.test.load()) continue; std::lock_guard<std::mutex> g(s.mu); if (s.pid == pid) { err = label + " is already captured"; return -1; } }
   if (!available()) { err = "capturing a program needs Windows 10 version 2004 or later"; return -1; }
   const int k = wantSlot >= 0 && wantSlot < kSlots && s_[wantSlot]->state.load() == 0 ? wantSlot : freeSlot(); if (k < 0) { err = "eight programs are captured already: release one first"; return -1; }
@@ -122,7 +142,8 @@ int Capture::openTest(const std::string& label, double hz, double sampleRate, st
   s.state = 2; return k;
 }
 void Capture::close(int slot) {
-  if (slot < 0 || slot >= kSlots) return; Slot& s = *s_[slot];
+  if (slot < 0 || slot >= kSlots) return;
+  Slot& s = *s_[slot];
   s.stop = true; if (s.thread.joinable()) s.thread.join();
   s.state = 0; s.test = false; s.peak = 0;
   { std::lock_guard<std::mutex> g(s.mu); s.pid = 0; s.label.clear(); s.error.clear(); s.device.clear(); s.isDevice = false; }
@@ -132,7 +153,6 @@ void Capture::setSampleRate(double sampleRate) {
   if (sampleRate <= 0) return;
   for (int k = 0; k < kSlots; ++k) { Slot& s = *s_[k]; if (s.state.load() == 0 || s.rate.load() == sampleRate) continue;
     if (s.test.load()) { s.rate = sampleRate; continue; }
-    std::uint32_t pid; std::string label; { std::lock_guard<std::mutex> g(s.mu); pid = s.pid; label = s.label; }
     s.stop = true; if (s.thread.joinable()) s.thread.join();   // the same slot (the strips keep their inputs), a new stream at the new rate
     s.rate = sampleRate; s.stop = false; s.flush = true; { std::lock_guard<std::mutex> g(s.mu); s.error.clear(); }
     s.state = 1; s.thread = std::thread([this, k] { run(k); }); }
@@ -145,7 +165,9 @@ Capture::Info Capture::info(int slot) const {
   return i;
 }
 std::size_t Capture::feed(int slot, const float* interleaved, std::size_t frames) {
-  if (slot < 0 || slot >= kSlots) return 0; Slot& s = *s_[slot]; if (s.state.load() == 0) return 0;
+  if (slot < 0 || slot >= kSlots) return 0;
+  Slot& s = *s_[slot];
+  if (s.state.load() == 0) return 0;
   return s.ring.push(interleaved, frames * 2) / 2;
 }
 

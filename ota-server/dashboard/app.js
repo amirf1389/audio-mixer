@@ -52,10 +52,10 @@
     return { version, map: version ? found[version] : {} };
   }
   // same shape as scripts/make-update.js: files { key: { name, url, size, sha256 } }
-  function buildManifest({ version, channel, notes, map, files, base, released, features = [] }) {   // features: releases/features.json's list (WHAT'S NEW in the console), the same field scripts/make-update.js writes
+  function buildManifest({ version, channel, notes, map, files, base, released, features = [], plugins = [] }) {   // plugins: the plug-in downloads (releases/plugins.json), carried over from the live manifest of the channel; features: releases/features.json's list (WHAT'S NEW in the console), the same field scripts/make-update.js writes
     const byName = Object.fromEntries(files.map(f => [f.name, f])), out = {};
     for (const [key, name] of Object.entries(map)) { const f = byName[name]; if (name && f) out[key] = { name, url: base.replace(/\/+$/, '') + '/releases/' + encodeURIComponent(name), size: f.size, sha256: f.sha256 }; }
-    return { product: 'audio-mixer', version, channel, released, notes: notes.map(s => s.trim()).filter(Boolean), features: Array.isArray(features) ? features : [], files: out };
+    return { product: 'audio-mixer', version, channel, released, notes: notes.map(s => s.trim()).filter(Boolean), features: Array.isArray(features) ? features : [], files: out, plugins: Array.isArray(plugins) ? plugins : [] };
   }
   // audit log: readable names and a one-line summary of the details of an entry
   const ACTIONS = { 'file.upload': 'Upload file', 'file.delete': 'Delete file', 'manifest.publish': 'Publish', 'manifest.rollback': 'Roll back', 'manifest.unpublish': 'Unpublish', 'files.verify': 'Verify files', 'auth.denied': 'Sign-in refused', 'admin.rate_limited': 'Rate limited', 'session.open': 'Dashboard opened', 'audit.export': 'Audit exported' };
@@ -174,7 +174,7 @@
     });
     const force = h('input', { type: 'checkbox' }), preview = h('pre', null, 'Choose the files to see the manifest.'), result = h('div');
     const maps = PLATFORMS.map(p => { const s = h('select', { 'aria-label': p.label }, h('option', { value: '' }, '— not offered —'), S.files.filter(f => p.re.test(f.name)).map(f => h('option', { value: f.name }, f.name))); s.value = g.map[p.key] || ''; return [p, s]; });
-    const manifest = () => buildManifest({ version: version.value.trim(), channel: channel.value.trim(), notes: notes.value.split('\n'), map: Object.fromEntries(maps.map(([p, s]) => [p.key, s.value]).filter(x => x[1])), files: S.files, base: base(), released: new Date().toISOString().slice(0, 10), features });
+    const manifest = () => buildManifest({ version: version.value.trim(), channel: channel.value.trim(), notes: notes.value.split('\n'), map: Object.fromEntries(maps.map(([p, s]) => [p.key, s.value]).filter(x => x[1])), files: S.files, base: base(), released: new Date().toISOString().slice(0, 10), features, plugins: ((S.manifests[channel.value.trim()] || {}).manifest || {}).plugins || [] });
     const upd = () => { preview.textContent = JSON.stringify(manifest(), null, 2); };
     [channel, version, notes, ...maps.map(x => x[1])].forEach(e => { e.addEventListener('input', upd); e.addEventListener('change', upd); }); upd();
     const go = h('button', { class: 'btn primary', onclick: async () => {

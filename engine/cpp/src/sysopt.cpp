@@ -390,7 +390,8 @@ std::uint64_t trimMemory(bool) {
 
 std::string cleanField(const std::string& raw) {
   std::string o; for (unsigned char c : raw) { if (c == '\t' || c == '\r' || c == '\n') c = ' '; if (c >= 0x20 && c != 0x7f) o += static_cast<char>(c); }
-  while (!o.empty() && o.back() == ' ') o.pop_back(); std::size_t b = 0; while (b < o.size() && o[b] == ' ') ++b; o = o.substr(b);
+  while (!o.empty() && o.back() == ' ') o.pop_back();
+  std::size_t b = 0; while (b < o.size() && o[b] == ' ') ++b; o = o.substr(b);
   if (o.size() > 96) o.resize(96);
   return o;
 }

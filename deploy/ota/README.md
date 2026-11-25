@@ -35,7 +35,7 @@ With `OTA_ADMIN_TOKEN` set, open `https://ota.example.com/admin/` and sign in wi
 - **History:** every manifest ever published per channel, with **Roll back to this** (publishes the older, already signed manifest again).
 - **Audit:** every upload, delete, publish, roll back, unpublish and file check, refused sign-ins, rate-limit hits and dashboard openings: when, from where (address, browser), with which token (the first 8 hex characters of its SHA-256, never the token) and what the server answered (ok / rejected with the reason / denied / error). Filter by action and result, search, load older entries, **Verify the log**, **Download (JSON lines)**.
 - **Stats:** update checks and downloads per day, downloads per file. **Health:** re-hash every file on the disk and report damage or missing files.
-The dashboard files are served from the same origin under a strict Content-Security-Policy (no external scripts or styles, no inline code, not framable); it writes server data as text only. Keep `/admin/` behind your IP allow-list in nginx (see `nginx.conf`) as well.
+The dashboard files are served from the same origin under a strict Content-Security-Policy (no external scripts or styles, no inline code, not framable); it writes server data as text only. `/admin/` is not public behind the sample proxies: `nginx.conf` allows only the addresses it lists and `Caddyfile` only `ADMIN_IPS` (both: this host by default). Add your address, or use an SSH tunnel (`ssh -L 8780:127.0.0.1:8780 <server>`, then `http://127.0.0.1:8780/admin/`); `scripts/ota.js publish` needs the same.
 
 ## Point the apps at it
     BRIDGE_UPDATE_URL=https://ota.example.com/update.json

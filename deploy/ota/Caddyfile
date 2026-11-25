@@ -2,6 +2,13 @@
 # Run the server with OTA_TRUST_PROXY=1 OTA_PUBLIC_URL=https://ota.example.com
 ota.example.com {
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"   # HTTPS only from now on (Caddy serves the certificate)
+  # the dashboard and the publish API (/admin) are not public: only ADMIN_IPS (default: none but this host; e.g. ADMIN_IPS="203.0.113.10/32"),
+  # or an SSH tunnel to 127.0.0.1:8780. The token is required as well.
+  @adminblocked {
+    path /admin /admin/*
+    not remote_ip 127.0.0.1/32 {$ADMIN_IPS:127.0.0.1/32}
+  }
+  respond @adminblocked "not found" 404
   reverse_proxy 127.0.0.1:8780
   request_body {
     max_size 450MB

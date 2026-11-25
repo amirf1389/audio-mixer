@@ -1087,7 +1087,7 @@ test('Linux ALSA plugin (linux/alsa-plugin): aplay plays into the mixer and arec
 test('ASIO host backend (engine/cpp/src/backend_asio.cpp): any installed ASIO driver through the Steinberg IASIO interface, built into the Windows runtime, compiled for x64 and x86 with -Werror', (tc) => {
   const cp = require('node:child_process'), root = pathx.join(__dirname, '..');
   const src = fsx.readFileSync(pathx.join(root, 'engine', 'cpp', 'src', 'backend_asio.cpp'), 'utf8');
-  assert.match(src, /SOFTWARE\\\\ASIO/); assert.match(src, /CoCreateInstance\(clsid, nullptr, CLSCTX_INPROC_SERVER, clsid,/); assert.match(src, /#include "asio_sdk\.h"/);
+  assert.match(src, /SOFTWARE\\\\ASIO/); assert.match(src, /GetProcAddress\(mod, "DllGetClassObject"\)/); assert.match(src, /cf->CreateInstance\(nullptr, clsid,/); assert.doesNotMatch(src, /CoCreateInstance\(/);   // the signature-verified DLL is loaded from its own path, never through the COM lookup assert.match(src, /#include "asio_sdk\.h"/);
   assert.match(fsx.readFileSync(pathx.join(root, 'engine', 'cpp', 'src', 'runtime.cpp'), 'utf8'), /name == "asio"\) return makeAsioBackend\(\)/);
   assert.match(fsx.readFileSync(pathx.join(root, 'engine', 'cpp', 'CMakeLists.txt'), 'utf8'), /src\/backend_asio\.cpp/);
   for (const t of ['x86_64-w64-mingw32', 'i686-w64-mingw32']) {

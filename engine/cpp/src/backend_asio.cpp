@@ -201,7 +201,6 @@ AsioProbeInfo probeAsioDriver(const AsioDriverInfo& want) {
 }
 
 namespace {
-std::string lower(std::string s) { for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }
 std::string msg(const char* what, long e) { char b[96]; std::snprintf(b, sizeof b, "%s failed (ASIO error %ld)", what, e); return b; }
 
 class AsioBackend;
@@ -343,7 +342,8 @@ class AsioBackend : public Backend {
   // then started the stream again, into a mixer that was being destroyed. Now the wish to run is cleared first, the reset (if any) is
   // waited for, and the driver is stopped whatever state the reset left it in.
   void stop() override {
-    if (!drv_) return; wantRun_ = false;
+    if (!drv_) return;
+    wantRun_ = false;
     std::lock_guard<std::mutex> g(dm_);
     const bool was = running_.exchange(false); while (inCallback_.load()) std::this_thread::yield();
     if (drv_ && (was || buffers_)) safe([&] { drv_->stop(); }, "stop");

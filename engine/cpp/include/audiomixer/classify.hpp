@@ -95,7 +95,8 @@ inline bool nameHas(const std::string& name, const char* const* words) {
   std::string u; for (char c : name) u += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
   for (const char* const* w = words; *w; ++w) { const std::string k = *w; std::size_t p = u.find(k);
     while (p != std::string::npos) { const bool l = p == 0 || !std::isalpha(static_cast<unsigned char>(u[p - 1])), r = p + k.size() >= u.size() || !std::isalpha(static_cast<unsigned char>(u[p + k.size()]));
-      if (l && (r || k.size() >= 4)) return true; p = u.find(k, p + 1); } }
+      if (l && (r || k.size() >= 4)) return true;
+      p = u.find(k, p + 1); } }
   return false;
 }
 

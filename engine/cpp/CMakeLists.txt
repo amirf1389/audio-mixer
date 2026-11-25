@@ -1,6 +1,9 @@
 # Audio Mixer / A mix OS engine (C++20): the engine library, the runtime (device backends of the system it is built on) and the tests.
 #   cmake -S engine/cpp -B build && cmake --build build && ctest --test-dir build --output-on-failure
 cmake_minimum_required(VERSION 3.12)
+if(POLICY CMP0083)
+  cmake_policy(SET CMP0083 NEW)   # PIE link flags from CMAKE_POSITION_INDEPENDENT_CODE (scripts/security/hardening.cmake checks them)
+endif()
 project(audiomixer_engine C CXX)
 include(${CMAKE_CURRENT_LIST_DIR}/../../scripts/security/hardening.cmake)   # compiler / linker hardening (stack protector, FORTIFY, PIE, RELRO; MinGW --dynamicbase --nxcompat)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/winres.cmake)   # amfb_win_version: publisher / product / version on every Windows binary
