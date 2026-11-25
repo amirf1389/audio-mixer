@@ -29,6 +29,8 @@ class Settings : public QObject {
   Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY changed)   // the system is auto on: the remembered device, else AUTO DETECT, at every start (default on)
   Q_PROPERTY(QVariantMap lastDevice READ lastDevice NOTIFY changed)              // backend, in, out, rate, frames, inChannels, outChannels
   Q_PROPERTY(int defaultRate READ defaultRate WRITE setDefaultRate NOTIFY changed)
+  Q_PROPERTY(int remotePort READ remotePort WRITE setRemotePort NOTIFY changed)       // REMOTE / NETWORK port of the phone service (1024-65535, default 8765; used at the next service start)
+  Q_PROPERTY(bool remoteEnabled READ remoteEnabled WRITE setRemoteEnabled NOTIFY changed)
   Q_PROPERTY(int defaultFrames READ defaultFrames WRITE setDefaultFrames NOTIFY changed)
   Q_PROPERTY(bool smartStart READ smartStart WRITE setSmartStart NOTIFY changed)
   Q_PROPERTY(bool autoAsio READ autoAsio WRITE setAutoAsio NOTIFY changed)        // AUTO DETECT the best device (ASIO first) when none is remembered
@@ -76,6 +78,11 @@ class Settings : public QObject {
   bool autoStart() const { return s_.value("audio/autoStart", true).toBool(); } void setAutoStart(bool v) { set("audio/autoStart", v); }
   QVariantMap lastDevice() const { return s_.value("audio/lastDevice").toMap(); }
   int defaultRate() const { return s_.value("audio/rate", 48000).toInt(); } void setDefaultRate(int v) { set("audio/rate", v); }
+  static bool validPort(int p) { return p >= 1024 && p <= 65535; }
+  static int storedRemotePort() { const int p = QSettings().value("remote/port", 8765).toInt(); return validPort(p) ? p : 8765; }
+  int remotePort() const { return storedRemotePort(); }
+  Q_INVOKABLE bool setRemotePort(int v) { if (!validPort(v)) { msg_ = QStringLiteral("port must be 1024-65535"); emit changed(); return false; } set("remote/port", v); return true; }
+  bool remoteEnabled() const { return s_.value("remote/enabled", true).toBool(); } void setRemoteEnabled(bool v) { set("remote/enabled", v); }
   int defaultFrames() const { return s_.value("audio/frames", 256).toInt(); } void setDefaultFrames(int v) { set("audio/frames", v); }
   bool autoAsio() const { return false; }   /* automatic selection was removed: the device is always chosen by hand */ void setAutoAsio(bool v) { set("audio/autoDetect", v); }
   bool smartStart() const { return false; }   /* the driver ladder was removed: the chosen device is opened, and no other in its place */ void setSmartStart(bool v) { set("audio/smartStart", v); }

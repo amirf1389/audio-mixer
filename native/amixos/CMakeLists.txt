@@ -35,7 +35,7 @@ qt_add_executable(amixos
     src/Links.cpp src/Links.h src/Apps.cpp src/Apps.h src/SysNotify.cpp src/SysNotify.h src/AppWindows.cpp src/AppWindows.h
     src/Update.cpp src/Update.h
     src/Volume.cpp src/Volume.h src/CaptureGuard.cpp src/CaptureGuard.h
-    src/Scope.cpp src/Scope.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
+    src/Scope.cpp src/Scope.h src/ProTools.cpp src/ProTools.h src/Measure.cpp src/Measure.h src/Remote.cpp src/Remote.h src/Extension.cpp src/Extension.h src/Net.cpp src/Net.h src/Frame.cpp src/Frame.h
     src/Generator.cpp src/Generator.h
     src/Waterfall.cpp src/Waterfall.h
     src/I18n.cpp src/I18n.h
@@ -90,6 +90,7 @@ qt_add_qml_module(amixos
         qml/MicEqPage.qml
         qml/LiveSourcesPage.qml
         qml/ToolsPage.qml
+        qml/ProToolsPage.qml
         qml/CalibratePage.qml
         qml/DiagnosticsPage.qml
         qml/HelpPage.qml
@@ -249,6 +250,11 @@ target_include_directories(journal_test PRIVATE src)
 target_link_libraries(journal_test PRIVATE Qt6::Core Qt6::Gui)
 add_test(NAME journal COMMAND journal_test)
 set_tests_properties(journal PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# PRO TOOLS (session folder, correlation, goniometer, loudness history, markers) and the remote port range
+add_executable(protools_test test/protools_test.cpp src/ProTools.cpp src/ProTools.h)
+target_include_directories(protools_test PRIVATE src)
+target_link_libraries(protools_test PRIVATE Qt6::Core Qt6::Gui)
+add_test(NAME protools COMMAND protools_test)
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
 set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1" TIMEOUT 60)   # AMIX_ALLOW_CAPTURE: the repository's own tooling may capture the window
 # PAGE BUDGET: every page and every popup opens within its time budget (built from nothing 600 ms, cached 150 ms) and its content stays
