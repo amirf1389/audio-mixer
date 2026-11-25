@@ -11,6 +11,8 @@ function run(ctx, cfg) {
   const pages = ctx.files.filter(f => /\.html?$/i.test(f) && !vendored.some(v => f.startsWith(v + '/')) && !/(^|\/)(node_modules|docs\/manual)\//.test(f));
   // files that set a CSP header for pages they serve (Node servers, nginx / Caddy configs, C++ daemon)
   const cspProviders = ctx.files.filter(f => !/\.html?$/.test(f) && /\.(js|cpp|py|conf|inc)$|Caddyfile$/.test(f) && /Content-Security-Policy/.test(ctx.read(f) || ''));
+  // servers that send the header under its lower-case name (Node): they count only for the pages in their own folder tree that they name
+  const lowerProviders = ctx.files.filter(f => /\.(js|cpp|py)$/.test(f) && !/(^|\/)tests?\/|\.test\.js$/.test(f) && !cspProviders.includes(f) && /['"]content-security-policy['"]/.test(ctx.read(f) || '')).map(f => [f, ctx.read(f) || '']);
   const providerText = cspProviders.map(f => [f, ctx.read(f) || '']);
   const publicRoots = cfg.publicWebRoots || [];
 
@@ -20,7 +22,8 @@ function run(ctx, cfg) {
     const sensitive = SENSITIVE_PAGE.test(rel);
     // CSP
     const meta = /<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*content=["']([^"']+)["']/i.exec(t);
-    const served = providerText.find(([f, x]) => x.includes(base) || x.includes(dir + '/') || (path.posix.dirname(f) === dir) || x.includes(path.posix.basename(dir) + '/') || (publicRoots.some(r => rel.startsWith(r + '/')) && /site|website/.test(f)));
+    const served = providerText.find(([f, x]) => x.includes(base) || x.includes(dir + '/') || (path.posix.dirname(f) === dir) || x.includes(path.posix.basename(dir) + '/') || (publicRoots.some(r => rel.startsWith(r + '/')) && /site|website/.test(f)))
+      || lowerProviders.find(([f, x]) => { const d = path.posix.dirname(f); return (rel.startsWith(d + '/')) && x.includes("'" + base + "'"); });
     const csp = meta ? meta[1] : null;
     if (!meta && !served) ctx.add({ severity: sensitive ? 'MEDIUM' : 'LOW', check: CHECK, id: 'no-csp', title: 'page has no Content-Security-Policy (no meta tag, and no server config found that sends one for it)', file: rel });
     else ctx.add({ severity: 'INFO', check: CHECK, id: 'csp', title: 'CSP ' + (meta ? 'meta tag' : 'sent by ' + served[0]), file: rel });

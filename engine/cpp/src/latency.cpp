@@ -12,8 +12,12 @@ Level levelOf(double totalMs) { return totalMs < 10.0 ? Level::Low : totalMs <= 
 const char* levelName(Level l) { return l == Level::Low ? "LOW LATENCY" : l == Level::Ok ? "OK" : "HIGH"; }
 
 std::string driverLabel(const std::string& b, bool exclusive) {
-  if (b == "asio") return "ASIO"; if (b == "wasapi") return exclusive ? "WASAPI exclusive" : "WASAPI shared"; if (b == "dsound") return "DirectSound";
-  if (b == "alsa") return "ALSA"; if (b == "coreaudio") return "Core Audio"; return b.empty() ? "none" : b; }
+  if (b == "asio") return "ASIO";
+  if (b == "wasapi") return exclusive ? "WASAPI exclusive" : "WASAPI shared";
+  if (b == "dsound") return "DirectSound";
+  if (b == "alsa") return "ALSA";
+  if (b == "coreaudio") return "Core Audio";
+  return b.empty() ? "none" : b; }
 
 static std::string ms(double v) { char b[32]; std::snprintf(b, sizeof b, "%.1f ms", v); return b; }
 

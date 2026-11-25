@@ -193,9 +193,11 @@ void Runtime::setMonitor(int source, double db, bool dim, bool mono, bool mute) 
 
 void Runtime::setMonitorDual(bool on, int sourceB, double blend, int listen) { Cmd c{kMonDual, std::clamp(sourceB, 0, kMaxBuses), std::clamp(blend, 0.0, 1.0), 0, 0, on ? 1 : 0}; c.w = std::clamp(listen, 0, 2); post(c); }
 void Runtime::dualGains(double blend, int listen, double& ga, double& gb) noexcept {
-  if (listen == 1) { ga = 1; gb = 0; return; } if (listen == 2) { ga = 0; gb = 1; return; }
+  if (listen == 1) { ga = 1; gb = 0; return; }
+  if (listen == 2) { ga = 0; gb = 1; return; }
   const double b = std::clamp(blend, 0.0, 1.0) * 1.5707963267948966; ga = std::cos(b); gb = std::sin(b);   // equal power: the sum keeps its loudness
-  if (ga < 1e-9) ga = 0; if (gb < 1e-9) gb = 0;
+  if (ga < 1e-9) ga = 0;
+  if (gb < 1e-9) gb = 0;
 }
 void Runtime::setMonitorEqOn(bool on) { post({kMonEqOn, 0, 0, 0, 0, on ? 1 : 0}); }
 void Runtime::setMonitorEqFilter(int i, double freq, double q, double gainDb) { if (i < 0 || i >= kMonEqMax) return; post({kMonEqF, i, std::clamp(freq, 20.0, 20000.0), std::clamp(q, 0.3, 12.0), std::clamp(gainDb, -15.0, 6.0)}); }

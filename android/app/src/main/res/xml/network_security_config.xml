@@ -10,5 +10,10 @@
         <domain includeSubdomains="true">amfb.audio</domain>
         <domain includeSubdomains="true">github.com</domain>
         <domain includeSubdomains="true">githubusercontent.com</domain>
+        <domain includeSubdomains="true">amirfakhribadri.my</domain>
+        <domain includeSubdomains="true">youtube-nocookie.com</domain>
+        <domain includeSubdomains="true">deezer.com</domain>
+        <domain includeSubdomains="true">spotify.com</domain>
+        <domain includeSubdomains="true">tidal.com</domain>
     </domain-config>
 </network-security-config>

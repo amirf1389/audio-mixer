@@ -16,7 +16,7 @@ Flickable {
     readonly property int ch: engine.selectedStrip
     property string note: ""
     property var heat: []            // the last two minutes of load, one value a second
-    Timer { interval: 1000; running: true; repeat: true; onTriggered: { const h = page.heat.slice(-119); h.push(page.load); page.heat = h } }
+    Timer { interval: 1000; running: page.visible; repeat: true; onTriggered: { const h = page.heat.slice(-119); h.push(page.load); page.heat = h } }   // only while the page is shown (a cached page stays loaded)
     function insert(kind, name) { const slots = engine.plugins(ch); for (let k = 0; k < slots.length; ++k) if (slots[k].kind === kind) { note = name + i18n.t(" is already on CH ", i18n.lang) + (ch + 1); return }
         for (let k = 0; k < slots.length; ++k) if (slots[k].kind === "") { engine.setPlugin(ch, k, kind); note = name + i18n.t(" is now on CH ", i18n.lang) + (ch + 1) + i18n.t(": open the PLUGIN RACK on the MIXER to set it", i18n.lang); return }
         note = i18n.t("The rack of this channel is full.", i18n.lang) }
