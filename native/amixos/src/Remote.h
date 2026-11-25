@@ -4,6 +4,7 @@
 // The service runs its own engine, so the console hands the sound card over while it runs and takes it back when it stops.
 #pragma once
 #include <cmath>
+#include <functional>
 #include <QObject>
 #include <QHash>
 #include <QNetworkAccessManager>
@@ -88,6 +89,8 @@ class Remote : public QObject {
   Q_INVOKABLE bool touched(int strip, int tick = 0) const;
   QVariantList links() const { return running() ? links_ : QVariantList(); } QString linkNote() const { return linkNote_; }
   Q_INVOKABLE void refreshLinks();
+  // STREAMING: report what plays to the service and take the phones' queued transport commands (master token; metadata only)
+  void streamingSync(const QVariantMap& now, std::function<void(const QStringList&)> onCmds);
   Q_INVOKABLE void disconnectLink(int id);            // DISCONNECT: drops that phone now; its pairing is refused for 2 minutes
   Q_INVOKABLE void forgetLink(const QString& tokenId); // FORGET: revokes the phone's pairing (it needs the PIN again); its link closes at once
   static QString linkAge(int seconds);                // "12 s", "4 min", "2 h 05 min"

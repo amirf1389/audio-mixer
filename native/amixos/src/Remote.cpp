@@ -26,6 +26,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QFileInfo>
 #include <QNetworkInterface>
 #include <QNetworkReply>
@@ -464,4 +465,11 @@ void Remote::writeConsoleInfo() const {
     if (used.isEmpty()) continue; QVariantMap r; r["strip"] = i; r["name"] = ss[i].toMap().value("name"); r["plugins"] = used; racks << r; }
   o["racks"] = racks;
   QFile f(QString::fromStdString(am::paths::file("remote-console.json"))); if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(o).toJson(QJsonDocument::Compact));
+}
+
+void Remote::streamingSync(const QVariantMap& now, std::function<void(const QStringList&)> onCmds) {
+  if (!running()) return; ensureToken(); if (token_.isEmpty()) return;
+  QNetworkReply* r = net_.post(api(QStringLiteral("/api/streaming/state")), QJsonDocument(QJsonObject::fromVariantMap(now)).toJson(QJsonDocument::Compact));
+  connect(r, &QNetworkReply::finished, this, [r, onCmds] { r->deleteLater(); if (r->error() != QNetworkReply::NoError) return;
+    QStringList l; for (const QJsonValue& v : QJsonDocument::fromJson(r->readAll()).object().value("cmds").toArray()) l << v.toString(); if (!l.isEmpty() && onCmds) onCmds(l); });
 }

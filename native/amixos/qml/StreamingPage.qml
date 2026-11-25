@@ -11,6 +11,9 @@ Item {
     objectName: "streamingPage"
     readonly property var hue: ({ youtube: "#ff4d4d", spotify: "#1ed760", tidal: "#e6e6e6", deezer: "#a238ff", tiktok: "#25f4ee" })
     property var probe: ({ ok: false })
+    Component.onCompleted: streaming.active = visible   // polls only while shown (a cached, hidden page costs nothing)
+    onVisibleChanged: streaming.active = visible
+    Component.onDestruction: streaming.active = false
     function go(id) { Window.window.current = id }
     component Btn: Rectangle { property string label; property bool on: false; property color onColor: Theme.amber; signal clicked(); implicitWidth: Math.max(64, bl.implicitWidth + 18); implicitHeight: 26; radius: 9
         color: on ? onColor : (bh.hovered ? Theme.ov(0.16) : Theme.ov(0.09)); border.width: 1; border.color: on || bh.hovered ? onColor : Theme.line
@@ -20,6 +23,27 @@ Item {
         anchors.fill: parent; anchors.margins: 12; contentWidth: width; contentHeight: col.implicitHeight; clip: true; flickableDirection: Flickable.VerticalFlick
         ColumnLayout {
             id: col; width: parent.width; spacing: 10
+            Panel { Layout.fillWidth: true; title: "NOW PLAYING"
+                subtitle: "Official APIs only: a service's own sign-in (OAuth with PKCE, your client id) or the computer's MEDIA SESSION. Nothing is downloaded, recorded or captured."
+                RowLayout { Layout.fillWidth: true; spacing: 10
+                    ColumnLayout { Layout.fillWidth: true; spacing: 2
+                        Text { objectName: "npTitle"; Layout.fillWidth: true; elide: Text.ElideRight; text: streaming.now.any ? streaming.now.title : i18n.t("Nothing playing", i18n.lang); color: Theme.ink; font.family: Theme.sans; font.pixelSize: 15; font.bold: true }
+                        Text { Layout.fillWidth: true; elide: Text.ElideRight; text: streaming.now.any ? [streaming.now.artist, streaming.now.album, streaming.now.service].filter(function(x) { return !!x }).join("  ·  ") : i18n.t("Play something in a music app or a browser.", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+                        Text { text: i18n.t("SOURCE", i18n.lang) + ": " + (streaming.now.source || i18n.t("media session", i18n.lang)); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8 } }
+                    Btn { objectName: "npPrev"; label: "PREVIOUS"; onColor: Theme.cyan; onClicked: streaming.command("previous") }
+                    Btn { objectName: "npToggle"; label: "PLAY / PAUSE"; on: !!streaming.now.playing; onColor: Theme.emerald; onClicked: streaming.command("toggle") }
+                    Btn { objectName: "npNext"; label: "NEXT"; onColor: Theme.cyan; onClicked: streaming.command("next") } }
+                Text { visible: streaming.message.length > 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: i18n.t(streaming.message, i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 9 } }
+            Panel { Layout.fillWidth: true; title: "SERVICES"
+                subtitle: streaming.sealed ? i18n.t("Sign-in tokens are sealed by Windows (DPAPI).", i18n.lang) : i18n.t("This system's key store is not used yet: a sign-in lasts until the console closes.", i18n.lang)
+                Repeater { model: streaming.providers
+                    delegate: ColumnLayout { Layout.fillWidth: true; spacing: 4
+                        RowLayout { Layout.fillWidth: true; spacing: 8
+                            Text { Layout.preferredWidth: 100; text: modelData.name; color: page.hue[modelData.id] || Theme.ink; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                            Text { Layout.fillWidth: true; elide: Text.ElideRight; text: i18n.t(modelData.note, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8 }
+                            Field { visible: modelData.login; Layout.preferredWidth: 200; text: modelData.clientId; placeholderText: i18n.t("client id", i18n.lang); onEditingFinished: streaming.setClientId(modelData.id, text) }
+                            Btn { visible: modelData.login; label: modelData.signedIn ? "SIGN OUT" : "SIGN IN"; on: modelData.signedIn; onColor: Theme.emerald; onClicked: modelData.signedIn ? streaming.signOut(modelData.id) : streaming.signIn(modelData.id) } }
+                        Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: modelData.setup.map(function(x, i) { return (i + 1) + ". " + i18n.t(x, i18n.lang) }).join("\n"); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 8; lineHeight: 1.2 } } } }
             Panel { Layout.fillWidth: true; title: "STREAMING LINKS"
                 subtitle: "Paste a link to YouTube, Spotify, TIDAL, Deezer or TikTok. OPEN plays it in the service's own app or the browser."
                 RowLayout { Layout.fillWidth: true; spacing: 8

@@ -83,7 +83,7 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 @media (prefers-reduced-motion:reduce){:root{--motion:0ms}}</style></head><body>
 <div id="toast" role="status" aria-live="polite" hidden></div><div id="nPanel" hidden><h3>NOTIFICATIONS</h3><ul id="nList"></ul><button id="nClear">Clear</button></div>
 <header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span><button id="nBell" aria-label="Notifications" title="NOTIFICATIONS: what's new, clipping, device lost / connected, CPU overload, update ready, audio loop stopped">NOTICES<b id="nCnt"></b></button></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">SEND TO</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUP FADERS</button><button data-p="rec">RECORD</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">SEND TO</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUP FADERS</button><button data-p="rec">RECORD</button><button data-p="str">STREAMING</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
 <div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
@@ -174,6 +174,13 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 <div class="bar" style="margin:10px 0 0"><button id="rGo" class="pri" style="flex:1">● RECORD</button><button id="rStop" style="flex:1">■ STOP</button></div></div>
 <div class="card"><h2>LOUDNESS</h2><div class="lm"><div><small>MOMENTARY</small><b id="lM">—</b></div><div><small>SHORT-TERM</small><b id="lS">—</b></div><div><small>INTEGRATED</small><b id="lI">—</b></div><div><small>RANGE</small><b id="lR">—</b></div><div><small>TRUE PEAK</small><b id="lT">—</b></div><div><small>CORRELATION</small><b id="lC">—</b></div></div>
 <p class="note">LUFS (EBU R128) of the master, as the console measures it.</p></div></div></section>
+<section id="str" class="page"><div class="grid">
+<div class="card"><h2>NOW PLAYING</h2><div id="npT" class="big" style="font-size:18px">—</div><p id="npA" class="note">nothing reported yet</p>
+<div class="bar" style="margin:10px 0 0"><button id="npPrev" style="flex:1" aria-label="Previous">⏮</button><button id="npTog" class="pri" style="flex:1" aria-label="Play or pause">⏯</button><button id="npNext" style="flex:1" aria-label="Next">⏭</button></div>
+<p class="note">From the computer: the service's sign-in on the console (Spotify) or the computer's media session (any player). Only what plays and the buttons pass here: no sound is downloaded or recorded.</p></div>
+<div class="card"><h2>YOUTUBE (OFFICIAL EMBEDDED PLAYER)</h2><div class="bar"><input id="ytU" class="t" placeholder="paste a YouTube link" aria-label="YouTube link" style="flex:1"><button id="ytGo">PLAY HERE</button></div>
+<div id="ytBox" style="position:relative;padding-top:56.25%;margin-top:8px;display:none"><iframe id="ytF" title="YouTube player" style="position:absolute;inset:0;width:100%;height:100%;border:0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+<p class="note">YouTube's own embedded player plays on this device. It is not downloaded or recorded.</p></div></div></section>
 <section id="sys" class="page"><div class="grid">
 <div class="card"><h2>CONSOLE</h2><div class="kv" id="sKv"></div></div>
 <div class="card"><h2>THIS CONNECTION</h2><div class="kv" id="cKv"></div></div></div></section>
@@ -633,8 +640,15 @@ function drawInserts(slots){const L=$("#insL");L.innerHTML="";const used=new Set
   f.value=Math.round(q.value*1000);t.textContent=q.text;f.setAttribute("aria-label",q.title);if(q.steps>0)f.step=Math.max(1,Math.round(1000/q.steps));
   f.onpointerdown=()=>{drag=f};f.oninput=()=>{held.p=Date.now();sendFrameP(s.slot,q.id,f.value/1000,t)};P.appendChild(d)}}
 const pq={};let pRaf=0;function sendFrameP(slot,id,v,t){pq[slot+"_"+id]={slot,id,v,t};if(!pRaf)pRaf=requestAnimationFrame(()=>{pRaf=0;for(const k of Object.keys(pq)){const x=pq[k];delete pq[k];api("/api/control",{op:"plugin",strip:cur,slot:x.slot,param:x.id,value:x.v}).then(o=>{if(o&&o.text!=null)x.t.textContent=o.text}).catch(e=>{$("#insN").textContent=e.message})}})}
+// ---- STREAMING: now playing + transport (the console does the work; commands are queued for it)
+let npT=null;async function readNp(){try{const j=await api("/api/streaming"),n=j.now||{};$("#npT").textContent=n.any?(n.title||"—"):"—";
+ $("#npA").textContent=!j.console?"the console is not reporting (open STREAMING on the console)":n.any?[n.artist,n.album,n.service,n.playing?"playing":"paused"].filter(Boolean).join(" · "):"nothing playing"}catch(e){$("#npA").textContent=e.message}}
+for(const [id,c] of [["#npPrev","previous"],["#npTog","toggle"],["#npNext","next"]])$(id).onclick=()=>{buzz();api("/api/streaming/cmd",{cmd:c}).then(()=>setTimeout(readNp,800)).catch(e=>setSt(e.message,true))};
+function ytId(u){const m=/^https:\/\/(?:www\.|m\.|music\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?:[?&#].*)?$/.exec(u.trim());return m?m[1]:null}
+$("#ytGo").onclick=()=>{const id=ytId($("#ytU").value);if(!id){setSt("not a YouTube video link",true);return}$("#ytF").src="https://www.youtube-nocookie.com/embed/"+id+"?playsinline=1&rel=0";$("#ytBox").style.display="block"};
 function go(p){tab=p;for(const s of document.querySelectorAll(".page"))s.style.display=s.id===p?"block":"none";for(const b of document.querySelectorAll("#nav button"))b.classList.toggle("cur",b.dataset.p===p);ls.set("tab",p);
  clearInterval(statusT);if(p==="rec"||p==="sys"){readStatus();statusT=setInterval(()=>{if(!document.hidden)readStatus()},2000)}panels();if(p==="rec"&&lastMeters)meters(lastMeters)
+ clearInterval(npT);if(p==="str"){readNp();npT=setInterval(()=>{if(!document.hidden)readNp()},2000)}
  if(p==="scn")drawScenes();if(p==="pre")loadPresets();if(p==="dev"&&!devs.length)loadDevices();if(p==="ch")drawEq()}
 for(const b of document.querySelectorAll("#nav button"))b.onclick=()=>go(b.dataset.p);
 $("#bAux").onclick=()=>{busSet=0;$("#bAux").classList.add("on");$("#bFx").classList.remove("on");buses()};$("#bFx").onclick=()=>{busSet=1;$("#bFx").classList.add("on","acc");$("#bAux").classList.remove("on");buses()};

@@ -1,3 +1,4 @@
+#include "streaming/streaming.hpp"
 #include "fx/fx_plugin.hpp"
 #include <QHash>
 #include <QCryptographicHash>
@@ -1297,6 +1298,7 @@ QString Engine::recordFolder() const { const QString d = settings_.value("record
 bool Engine::startRecording() {
   if (!rt_) { recMsg_ = QStringLiteral("Start the engine on CONNECTIONS first."); emit recordChanged(); return false; }
   if (recorder_.recording()) return true;
+  if (am::streaming::isStreamingApp(appSourceName().toStdString())) { recMsg_ = QStringLiteral("APP SOUND is a streaming app (%1): its sound is not recorded. Live listening and metering stay on.").arg(appSourceName()); emit recordChanged(); return false; }
   am::rec::Options o; o.folder = recordFolder().toStdString(); o.master = recordMaster(); o.float32 = recordFloat(); o.format = recordFormat(); for (int i = 0; i < kStrips; ++i) if (armed_.test(static_cast<std::size_t>(i))) o.strips.push_back(i);
   std::string err; if (!recorder_.start(o, rt_->sampleRate(), err)) { recMsg_ = QString::fromStdString(err); emit recordChanged(); return false; }
   taps_.a.store(&recorder_); recMsg_ = QStringLiteral("Recording %1 file(s) into %2 · %3 thread(s) writing at low priority").arg(recorder_.files().size()).arg(recordFolder()).arg(recorder_.workers()); emit recordChanged(); return true;

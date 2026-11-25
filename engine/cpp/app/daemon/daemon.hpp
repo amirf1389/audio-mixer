@@ -13,6 +13,9 @@
 //   POST /api/pair                {"pin":"123456","name":..} the minute's PIN for a control token of its own (no token needed)
 //   GET  /api/links               the phones and browsers connected now: [{id, tokenId, name, role, ip, since, seconds}] (master token)
 //   POST /api/links/kick          {"id":N} disconnect one (a named pairing is then refused for 2 minutes) (master token)
+//   GET  /api/streaming           STREAMING: what plays now, as the console last reported it (any valid token)
+//   POST /api/streaming/cmd       {"cmd":"play"|"pause"|"toggle"|"next"|"previous"} queued for the console (control token)
+//   POST /api/streaming/state     the console reports what plays and takes the queued commands (master token). No audio passes here.
 //   WS   /ws/meters?token=...     a JSON frame 20 times a second: strips [{pk,rms,hold,clip,gr,gate,in}], master {l,r,rms,clip}, loudness, correlation, blocks, xruns
 // Token: <data>/daemon.token (am::paths: %APPDATA%\AMFB Audio\AmF X1 on Windows, the program's data folder on Linux, ...) (created on first start, 0600, 32 random bytes as hex); --token-file / --token override it.
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
@@ -157,6 +160,7 @@ class Daemon {
   json::Value apply(const json::Value& cmd, std::string& err);
   std::atomic<unsigned long long> version_{1}; std::atomic<int> watchers_{0};
   struct Link { int id = 0; std::string tokenId, name, role, ip; long long since = 0; std::atomic<bool> kick{false}; };
+  std::mutex streamM_; json::Value streamNow_; std::vector<std::string> streamCmds_; long long streamAt_ = 0;   // STREAMING: now playing from the console, commands from the remotes
   mutable std::mutex linksM_; std::map<int, std::shared_ptr<Link>> links_; int nextLink_ = 1; std::map<std::string, long long> held_;   // tokenId -> until (unix s)
   bool held(const std::string& tokenId) const;
   mutable OneVoice ov_; mutable bool ovActed_ = false; mutable std::string ovNote_;   // ONE VOICE (onevoice.hpp): the same microphone on inputs 1 and 2, CH 1 to no input
