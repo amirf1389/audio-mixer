@@ -14,7 +14,12 @@ Item {
     onBigChanged: bank = 0
     property bool sidePanel: settings.channelPanelDefault
     // the meter clock while the page is on screen: kept alive but hidden, nothing here reads the meters
-    property int tick: visible ? engine.meterTick : -1
+    property int tick: -1   // HELD while hidden (not dropped to -1): hiding and re-showing the page no longer resets and re-reads every meter twice
+    Binding on tick { when: page.visible && page.live; value: engine.meterTick; restoreMode: Binding.RestoreNone }
+    // RE-OPEN: the first frame of the cached page draws the meters as they were; they follow the engine again from the next frame, so the
+    // 30-a-second meter work (every strip's VU, fader levels, the master) does not land inside the re-open frame
+    property bool live: true
+    Timer { id: liveT; interval: 60; onTriggered: page.live = page.visible }   // the meters follow again just after the re-open frame
     readonly property bool vuMode: settings.vuStyle === "analog"       // bar meters or analogue VU faces on every strip and the master
     property bool monitorPanel: settings.monitorPanelDefault   // the control-room section next to the master
     property int rackBank: 0                           // which ten slots of the rack are shown (PRO and up have more than ten)
@@ -85,7 +90,77 @@ Item {
     Connections { target: engine; function onBusesChanged() { page.sendsTick++ } function onRoutingChanged() { page.sendsTick++ } function onStateChanged() { page.sendsTick++ } }
     property var selPlugins: engine.plugins(sel)
     Connections { target: engine; enabled: page.visible; function onStripsChanged() { page.selPlugins = engine.plugins(page.sel) } function onSelectedStripChanged() { page.selPlugins = engine.plugins(page.sel) } }
-    onVisibleChanged: if (visible) { page.selPlugins = engine.plugins(page.sel); page.sendsTick++ }   // shown again: what changed while hidden
+    property bool staleWhileHidden: false   // a strip changed while the page was hidden: re-read the sends and plugins once on re-open, not on every re-open
+    Connections { target: engine; enabled: !page.visible; function onStripsChanged() { page.staleWhileHidden = true } function onSelectedStripChanged() { page.staleWhileHidden = true } }
+    onVisibleChanged: {
+        if (!visible) { live = false; return }
+        liveT.restart()
+        if (staleWhileHidden) { staleWhileHidden = false; page.selPlugins = engine.plugins(page.sel); page.sendsTick++ }   // shown again: what changed while hidden
+    }
+    // THE STRIP MENU (⋯ or right-click on a strip): ONE menu for every strip, built once in the background after the page opens (it was
+    // built per strip on its first open: 150-300 ms in the click); opening it for a strip only sets which strip it acts on
+    function openStripMenu(i, x, y, onto) { engine.selectedStrip = i; stripMenuL.asynchronous = false; stripMenuL.active = true; const m = stripMenuL.item; m.s = i; m.st = engine.stripLite(i); if (onto) m.popup(onto, x, y); else m.popup() }
+    Timer { interval: 1500; running: page.visible && !stripMenuL.active; onTriggered: stripMenuL.active = true }
+    Loader { id: stripMenuL; active: false; asynchronous: true; sourceComponent: Component {
+    Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: more; width: 300; property int s: 0; property var st: null; function openFx() { fxMenu.open() } function closeFx() { fxMenu.close() } objectName: "stripMenu"
+        MenuItem { text: i18n.t("Channel panel ›", i18n.lang); onTriggered: { page.sidePanel = true } }
+        MenuItem { text: i18n.t("Plugin rack ›", i18n.lang); onTriggered: { engine.selectedStrip = more.s; page.rack = true } }
+        MenuItem { text: i18n.t("Open EQ / tone", i18n.lang); onTriggered: page.go("dsp") }
+        MenuItem { objectName: "stripProQ" + more.s; text: i18n.t("Add Pro-Q (your installed FabFilter plug-in)", i18n.lang); onTriggered: page.addProQ(more.s, -1) }
+        MenuItem { enabled: false; text: i18n.t("FabFilter and Pro-Q are trademarks of FabFilter; not affiliated", i18n.lang) }
+        MenuItem { text: i18n.t("Match the stereo partner (processing + rack)", i18n.lang); onTriggered: engine.matchStereoPair(more.s) }
+        MenuItem { text: i18n.t("Open compressor", i18n.lang); onTriggered: page.go("dyn") }
+        MenuItem { text: i18n.t("Open gate", i18n.lang); onTriggered: page.go("gate") }
+        MenuItem { text: i18n.t("Sends to buses", i18n.lang); onTriggered: page.go("bus") }
+        MenuSeparator {}
+        MenuItem { text: i18n.t("Fader to 0 dB", i18n.lang); onTriggered: engine.setGain(more.s, 0) }
+        MenuItem { text: i18n.t("Pan to centre", i18n.lang); onTriggered: engine.setPan(more.s, 0) }
+        MenuItem { text: (more.st && more.st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(more.s, !(more.st && more.st.autoPol)) }
+        MenuItem { text: (more.st && more.st.automix ? "✓ " : "") + i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onTriggered: engine.setAutomix(more.s, !(more.st && more.st.automix), more.st ? more.st.amWeight : 1) }
+        Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
+            palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim; id: fxMenu; objectName: "stripFxMenu" + more.s; property int strip: more.s; title: i18n.t("Add an effect", i18n.lang)
+            // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
+            readonly property var groups: ({ "EQ / TONE": ["dyneq", "dualeq", "automiceq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "peakremover", "barrier", "rider", "clean", "antifeedback"],
+                "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
+                "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay", "pingpong"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
+            function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
+            Instantiator { model: { const all = engine.pluginCatalog().filter(x => x.fx), names = ["EQ / TONE", "DYNAMICS", "SATURATION / AMPS", "MODULATION", "SPACE / DELAY", "SPATIAL / UTILITY", "OTHER"]; return names.filter(n => all.some(x => fxMenu.groupOf(x.kind) === n)) }
+                delegate: Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: fxGroup; required property string modelData; title: i18n.t(modelData, i18n.lang)
+                    property bool wanted: false; onAboutToShow: wanted = true   // BUILT WHEN FIRST OPENED: the effect and sample lists are made when their sub-menu opens, not with the strip menu (300 ms a strip)
+                    Instantiator { active: fxGroup.wanted; model: engine.pluginCatalog().filter(x => x.fx && fxMenu.groupOf(x.kind) === fxGroup.modelData)
+                        delegate: MenuItem { required property var modelData; text: i18n.t(modelData.name ?? "", i18n.lang)
+                            onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                        onObjectAdded: function (i, o) { fxGroup.insertItem(i, o) } onObjectRemoved: function (i, o) { fxGroup.removeItem(o) } } }
+                onObjectAdded: function (i, o) { fxMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeMenu(o) } } }
+        Menu {   // PLAY A SAMPLE: the 100 built-in samples by category; the pick plays in this channel through its SAMPLE PLAYER
+            palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim; id: smpMenu; property int strip: more.s; title: i18n.t("Play a sample", i18n.lang)
+            Instantiator { model: samples.categories
+                delegate: Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: catMenu; required property string modelData; title: modelData
+                    property bool wanted: false; onAboutToShow: wanted = true
+                    Instantiator { active: catMenu.wanted; model: samples.list.filter(x => x.category === catMenu.modelData)
+                        delegate: MenuItem { required property var modelData; text: modelData.id + "  " + i18n.t(modelData.name ?? "", i18n.lang)
+                            onTriggered: { if (engine.playSampleOnStrip(smpMenu.strip, modelData.id) < 0) page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+                        onObjectAdded: function (i, o) { catMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { catMenu.removeItem(o) } } }
+                onObjectAdded: function (i, o) { smpMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { smpMenu.removeMenu(o) } } }
+        MenuItem { text: i18n.t("Sample player (play a sample in this channel)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:sampler"); if (k >= 0) plugEd.openFor(more.s, k, "fx:sampler", "SAMPLE PLAYER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("De-squash (give back what a heavy compressor took)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:desquash"); if (k >= 0) plugEd.openFor(more.s, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Pre amp (the first gain stage)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:preamp"); if (k >= 0) plugEd.openFor(more.s, k, "fx:preamp", "PRE AMP"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Post amp (level, tilt and soft clip at the end)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:postamp"); if (k >= 0) plugEd.openFor(more.s, k, "fx:postamp", "POST AMP"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Power regulator (holds the level steady)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:regulator"); if (k >= 0) plugEd.openFor(more.s, k, "fx:regulator", "POWER REGULATOR"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Short protect (cuts the output on a fault)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:protect"); if (k >= 0) plugEd.openFor(more.s, k, "fx:protect", "SHORT PROTECT"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Voice rider (keeps a voice at one level)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:rider"); if (k >= 0) plugEd.openFor(more.s, k, "fx:rider", "VOICE RIDER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Voice clean (less noise and room, no delay)", i18n.lang); onTriggered: { const k = engine.addToRack(more.s, "fx:clean"); if (k >= 0) plugEd.openFor(more.s, k, "fx:clean", "VOICE CLEAN"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
+        MenuItem { text: i18n.t("Flatten DSP (EQ, dyn, delay, Ø)", i18n.lang); onTriggered: engine.resetStripDsp(more.s) }
+        MenuItem { text: i18n.t("Reset channel (keep name, colour)", i18n.lang); onTriggered: engine.resetStrip(more.s) }
+        MenuSeparator {}
+        MenuItem { text: i18n.t("Copy channel", i18n.lang); onTriggered: engine.copyChannel(more.s) }
+        MenuItem { text: i18n.t("Paste channel (DSP, sends, pan)", i18n.lang); enabled: engine.channelClipboard; onTriggered: engine.pasteChannel(more.s) }
+        MenuSeparator {}
+        MenuItem { text: (engine.recallSafe(more.s) ? "✓ " : "") + i18n.t("Recall safe (scenes skip it)", i18n.lang); onTriggered: engine.setRecallSafe(more.s, !engine.recallSafe(more.s)) }
+        MenuItem { text: i18n.t("DCA group…", i18n.lang) + (more.st && more.st.dca > 0 ? "  (" + more.st.dca + ")" : ""); onTriggered: dcaPanels.openAssign(more.st && more.st.dca > 0 ? more.st.dca : 1, more.s) }
+        MenuItem { text: i18n.t("Listen here: monitor = master", i18n.lang); onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
+        MenuItem { text: (more.st && more.st.armed ? "✓ " : "") + i18n.t("Arm for recording (pre-fader WAV)", i18n.lang); onTriggered: engine.setArmed(more.s, !(more.st && more.st.armed)) }
+    } } }
     // keyboard: ← → select strip, M mute, S solo, 0 fader to 0 dB, Ctrl+Z / Ctrl+Y undo / redo, A A/B, R plugin rack, Esc clear solo
     focus: true
     Keys.onPressed: function (e) {
@@ -478,12 +553,13 @@ Item {
                                 id: stripItem
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
-                                visible: (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank
-                                width: visible ? (page.sendView ? 124 : page.lay.stripW) : 0
+                                readonly property bool inBank: (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank   // not the effective visibility: hiding the page must not collapse every strip to 0 wide and re-lay the row on re-open
+                                visible: inBank
+                                width: inBank ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
                                 readonly property int ver: engine.stripVer(index, page.sTick)
                                 property var st: { ver; return engine.stripLite(index) }
-                                property var mt: visible ? (page.tick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
+                                property var mt: inBank && page.tick >= 0 ? (page.tick, engine.meterAt(index)) : undefined   // the other bank's strips are hidden: their meters are not read
                                 property color sc: Theme.stripColors[st ? st.color : 0]
                                 property bool selected: page.sel === index
                                 // BUILT ON DEMAND: a console of up to 32 strips builds them all at once, as ever; of a larger one (EXTEND, ULTIMATE: up to
@@ -493,7 +569,7 @@ Item {
                                 Component.onCompleted: if (visible) built = true
                                 Loader { anchors.fill: parent; active: stripItem.built; sourceComponent: Component { Item {
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Theme.ov(0.06) : (index % 2 ? Theme.ov(0.025) : (Theme.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.05))); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
-                                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onPressed: function (m) { engine.selectedStrip = index; if (m.button === Qt.RightButton) { moreL.active = true; moreL.item.popup(); m.accepted = true } else m.accepted = false } } }
+                                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onPressed: function (m) { engine.selectedStrip = index; if (m.button === Qt.RightButton) { page.openStripMenu(index); m.accepted = true } else m.accepted = false } } }
                                 // THE STRIP'S OWN COLOUR: a soft wash from the top (stronger on the selected strip) and a lit cap
                                 Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 6
                                     gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, stripItem.selected ? 0.42 : 0.26) } GradientStop { position: 0.30; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, stripItem.selected ? 0.14 : 0.07) } GradientStop { position: 0.75; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, 0.04) } GradientStop { position: 1; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, stripItem.selected ? 0.14 : 0.08) } } }
@@ -598,68 +674,10 @@ Item {
                                             Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 1; height: 2; radius: 1; color: Theme.harm(stripItem.sc); visible: st && st.automix; width: Math.max(0, Math.min(1, 1 + (mt && mt.amGainDb !== undefined ? mt.amGainDb : 0) / 30)) * (parent.width - 2) }
                                             MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onClicked: function (m) { if (m.button === Qt.RightButton) { engine.selectedStrip = index; page.go("ai") } else engine.setAutomix(index, !(st && st.automix), st ? st.amWeight : 1) } }
                                             ToolTip.visible: aiH.hovered && settings.tooltips; ToolTip.text: i18n.t("AI automix: when on, this channel shares gain with the other AI channels by who is speaking (the bar and number show the gain applied now). Right-click opens AI MIX.", i18n.lang); HoverHandler { id: aiH } }
-                                        MKey { objectName: "stripMore" + index; Layout.fillWidth: page.simple; implicitWidth: 22; implicitHeight: page.simple ? 22 : 16; radius: 7; hue: stripItem.sc; on: !!(moreL.item && moreL.item.visible)
-                                            label: page.simple ? "MORE" : ""; glyph: page.simple ? "" : "⋯"; onHit: { engine.selectedStrip = index; moreL.active = true; moreL.item.popup() }
-                                        Connections { target: page; function onStripMenuDemoChanged() { if (index !== 0) return; if (page.stripMenuDemo) { moreL.active = true; moreL.item.popup(120, 40); moreL.item.openFx() } else if (moreL.item) { moreL.item.closeFx(); moreL.item.close() } } }
-                                        Loader { id: moreL; active: false   // the channel menu (effects, 100 samples ...) is built the first time it opens: 32 of them at once made the MIXER take seconds to open
-                                            sourceComponent: Component {
-                                        Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: more; width: 300; function openFx() { fxMenu.open() } function closeFx() { fxMenu.close() } objectName: "stripMenu" + index
-                                            MenuItem { text: i18n.t("Channel panel ›", i18n.lang); onTriggered: { page.sidePanel = true } }
-                                            MenuItem { text: i18n.t("Plugin rack ›", i18n.lang); onTriggered: { engine.selectedStrip = index; page.rack = true } }
-                                            MenuItem { text: i18n.t("Open EQ / tone", i18n.lang); onTriggered: page.go("dsp") }
-                                            MenuItem { objectName: "stripProQ" + index; text: i18n.t("Add Pro-Q (your installed FabFilter plug-in)", i18n.lang); onTriggered: page.addProQ(index, -1) }
-                                            MenuItem { enabled: false; text: i18n.t("FabFilter and Pro-Q are trademarks of FabFilter; not affiliated", i18n.lang) }
-                                            MenuItem { text: i18n.t("Match the stereo partner (processing + rack)", i18n.lang); onTriggered: engine.matchStereoPair(index) }
-                                            MenuItem { text: i18n.t("Open compressor", i18n.lang); onTriggered: page.go("dyn") }
-                                            MenuItem { text: i18n.t("Open gate", i18n.lang); onTriggered: page.go("gate") }
-                                            MenuItem { text: i18n.t("Sends to buses", i18n.lang); onTriggered: page.go("bus") }
-                                            MenuSeparator {}
-                                            MenuItem { text: i18n.t("Fader to 0 dB", i18n.lang); onTriggered: engine.setGain(index, 0) }
-                                            MenuItem { text: i18n.t("Pan to centre", i18n.lang); onTriggered: engine.setPan(index, 0) }
-                                            MenuItem { text: (st && st.autoPol ? "✓ " : "") + i18n.t("Phase: AUTO (turn round when out of phase with the mix)", i18n.lang); onTriggered: engine.setAutoPolarity(index, !(st && st.autoPol)) }
-                                            MenuItem { text: (st && st.automix ? "✓ " : "") + i18n.t("AUTO MIX: this channel shares the gain with the others (AI MIX)", i18n.lang); onTriggered: engine.setAutomix(index, !(st && st.automix), st ? st.amWeight : 1) }
-                                            Menu {   // ADD AN EFFECT: every built-in effect the LOCAL STORE has on, into this channel's rack, with its panel opened
-                                                palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim; id: fxMenu; objectName: "stripFxMenu" + index; property int strip: index; title: i18n.t("Add an effect", i18n.lang)
-                                                // by kind, six short lists (forty effects in one list run off the bottom of the screen); anything new lands in OTHER
-                                                readonly property var groups: ({ "EQ / TONE": ["dyneq", "dualeq", "automiceq", "mseq", "isoeq", "wshape", "exciter", "subsynth"], "DYNAMICS": ["opto", "glue", "multiband", "maximizer", "transient", "deesser", "desquash", "peakremover", "barrier", "rider", "clean", "antifeedback"],
-                                                    "SATURATION / AMPS": ["analog", "drive", "tubeamp", "preamp", "postamp", "regulator", "protect", "tape", "convclip", "crusher"], "MODULATION": ["chorus", "flanger", "phaser", "tremolo", "wah", "mod", "autopan", "pitch", "doubler"],
-                                                    "SPACE / DELAY": ["reverb", "hall", "room", "delay", "syncdelay", "pingpong"], "SPATIAL / UTILITY": ["iamfelement", "iamfrender", "imager", "sampler"] })
-                                                function groupOf(kind) { const k = kind.replace("fx:", ""); for (const g in groups) if (groups[g].indexOf(k) >= 0) return g; return "OTHER" }
-                                                Instantiator { model: { const all = engine.pluginCatalog().filter(x => x.fx), names = ["EQ / TONE", "DYNAMICS", "SATURATION / AMPS", "MODULATION", "SPACE / DELAY", "SPATIAL / UTILITY", "OTHER"]; return names.filter(n => all.some(x => fxMenu.groupOf(x.kind) === n)) }
-                                                    delegate: Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: fxGroup; required property string modelData; title: i18n.t(modelData, i18n.lang)
-                                                        Instantiator { model: engine.pluginCatalog().filter(x => x.fx && fxMenu.groupOf(x.kind) === fxGroup.modelData)
-                                                            delegate: MenuItem { required property var modelData; text: i18n.t(modelData.name ?? "", i18n.lang)
-                                                                onTriggered: { const k = engine.addToRack(fxMenu.strip, modelData.kind); if (k >= 0) plugEd.openFor(fxMenu.strip, k, modelData.kind, modelData.name); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                                            onObjectAdded: function (i, o) { fxGroup.insertItem(i, o) } onObjectRemoved: function (i, o) { fxGroup.removeItem(o) } } }
-                                                    onObjectAdded: function (i, o) { fxMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { fxMenu.removeMenu(o) } } }
-                                            Menu {   // PLAY A SAMPLE: the 100 built-in samples by category; the pick plays in this channel through its SAMPLE PLAYER
-                                                palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim; id: smpMenu; property int strip: index; title: i18n.t("Play a sample", i18n.lang)
-                                                Instantiator { model: samples.categories
-                                                    delegate: Menu { palette.window: Theme.cardSolid; palette.windowText: Theme.ink; palette.base: Theme.cardSolid; palette.text: Theme.ink; palette.button: Theme.cardRaised; palette.buttonText: Theme.ink; palette.highlight: Theme.accent; palette.highlightedText: "#000"; palette.light: Theme.cardRaised; palette.midlight: Theme.cardRaised; palette.mid: Theme.line; palette.dark: Theme.line; palette.disabled.windowText: Theme.dim; palette.disabled.text: Theme.dim;  id: catMenu; required property string modelData; title: modelData
-                                                        Instantiator { model: samples.list.filter(x => x.category === catMenu.modelData)
-                                                            delegate: MenuItem { required property var modelData; text: modelData.id + "  " + i18n.t(modelData.name ?? "", i18n.lang)
-                                                                onTriggered: { if (engine.playSampleOnStrip(smpMenu.strip, modelData.id) < 0) page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                                            onObjectAdded: function (i, o) { catMenu.insertItem(i, o) } onObjectRemoved: function (i, o) { catMenu.removeItem(o) } } }
-                                                    onObjectAdded: function (i, o) { smpMenu.insertMenu(i, o) } onObjectRemoved: function (i, o) { smpMenu.removeMenu(o) } } }
-                                            MenuItem { text: i18n.t("Sample player (play a sample in this channel)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:sampler"); if (k >= 0) plugEd.openFor(index, k, "fx:sampler", "SAMPLE PLAYER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("De-squash (give back what a heavy compressor took)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:desquash"); if (k >= 0) plugEd.openFor(index, k, "fx:desquash", "DE-SQUASH"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Pre amp (the first gain stage)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:preamp"); if (k >= 0) plugEd.openFor(index, k, "fx:preamp", "PRE AMP"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Post amp (level, tilt and soft clip at the end)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:postamp"); if (k >= 0) plugEd.openFor(index, k, "fx:postamp", "POST AMP"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Power regulator (holds the level steady)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:regulator"); if (k >= 0) plugEd.openFor(index, k, "fx:regulator", "POWER REGULATOR"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Short protect (cuts the output on a fault)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:protect"); if (k >= 0) plugEd.openFor(index, k, "fx:protect", "SHORT PROTECT"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Voice rider (keeps a voice at one level)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:rider"); if (k >= 0) plugEd.openFor(index, k, "fx:rider", "VOICE RIDER"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Voice clean (less noise and room, no delay)", i18n.lang); onTriggered: { const k = engine.addToRack(index, "fx:clean"); if (k >= 0) plugEd.openFor(index, k, "fx:clean", "VOICE CLEAN"); else page.note = i18n.t("The rack of this channel is full.", i18n.lang) } }
-                                            MenuItem { text: i18n.t("Flatten DSP (EQ, dyn, delay, Ø)", i18n.lang); onTriggered: engine.resetStripDsp(index) }
-                                            MenuItem { text: i18n.t("Reset channel (keep name, colour)", i18n.lang); onTriggered: engine.resetStrip(index) }
-                                            MenuSeparator {}
-                                            MenuItem { text: i18n.t("Copy channel", i18n.lang); onTriggered: engine.copyChannel(index) }
-                                            MenuItem { text: i18n.t("Paste channel (DSP, sends, pan)", i18n.lang); enabled: engine.channelClipboard; onTriggered: engine.pasteChannel(index) }
-                                            MenuSeparator {}
-                                            MenuItem { text: (engine.recallSafe(index) ? "✓ " : "") + i18n.t("Recall safe (scenes skip it)", i18n.lang); onTriggered: engine.setRecallSafe(index, !engine.recallSafe(index)) }
-                                            MenuItem { text: i18n.t("DCA group…", i18n.lang) + (stripItem.st && stripItem.st.dca > 0 ? "  (" + stripItem.st.dca + ")" : ""); onTriggered: dcaPanels.openAssign(stripItem.st && stripItem.st.dca > 0 ? stripItem.st.dca : 1, index) }
-                                            MenuItem { text: i18n.t("Listen here: monitor = master", i18n.lang); onTriggered: engine.setMonitor(0, page.mon.db, page.mon.dim, page.mon.mono, page.mon.mute) }
-                                            MenuItem { text: (st && st.armed ? "✓ " : "") + i18n.t("Arm for recording (pre-fader WAV)", i18n.lang); onTriggered: engine.setArmed(index, !(st && st.armed)) }
-                                        } } } } }   // the menu, its loader, the ⋯ button and the AI row end here: the VU meter, the sends and the fader belong to the strip
+                                        MKey { objectName: "stripMore" + index; Layout.fillWidth: page.simple; implicitWidth: 22; implicitHeight: page.simple ? 22 : 16; radius: 7; hue: stripItem.sc; on: !!(stripMenuL.item && stripMenuL.item.visible && stripMenuL.item.s === index)
+                                            label: page.simple ? "MORE" : ""; glyph: page.simple ? "" : "⋯"; onHit: page.openStripMenu(index)
+                                        Connections { target: page; function onStripMenuDemoChanged() { if (index !== 0) return; if (page.stripMenuDemo) { page.openStripMenu(0, 120, 40, stripItem); stripMenuL.item.openFx() } else if (stripMenuL.item) { stripMenuL.item.closeFx(); stripMenuL.item.close() } } }
+                                        } }   // the ⋯ button and the AI row end here: the VU meter, the sends and the fader belong to the strip
                                     BigVu { objectName: "stripBigVu" + index; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.max(30, Math.min(stripItem.width - 10, 110)); Layout.preferredHeight: sizeFor(stripItem.height); merged: stripItem.width < 90; lDb: mt ? mt.peakDb : -120; vuDb: mt ? mt.vuDb : -120; rmsDb: mt ? mt.rmsDb : -120; clip: mt ? mt.clip : false }   // the big VU above the fader (the thin IN / OUT / GR meters stay left of it)
                                     // SENDS ON STRIPS: 8 mini faders (AUX 1-8 or FX 1-8), each with its PRE/POST switch
                                     RowLayout { visible: page.sendView > 0; Layout.fillHeight: true; Layout.fillWidth: true; spacing: 2
@@ -724,7 +742,7 @@ Item {
                         }
                         Repeater {   // DCA GROUP CHANNELS: each group in use is a strip of its own, after the inputs and before the master
                             model: engine.dcaState
-                            delegate: DcaStrip { d: modelData; tick: page.tick; visible: modelData.count > 0 && !modelData.locked; width: visible ? 96 : 0; height: strips.height; onAssign: function (g) { dcaPanels.openAssign(g, -1) } }
+                            delegate: DcaStrip { d: modelData; tick: page.tick; readonly property bool used: modelData.count > 0 && !modelData.locked; visible: used; width: used ? 96 : 0; height: strips.height; onAssign: function (g) { dcaPanels.openAssign(g, -1) } }
                         }
                     }
                 }
@@ -779,7 +797,8 @@ Item {
                         SectHead { title: "EQ"; link: "dsp" }
                         Rectangle { objectName: "eqCurve"; Layout.fillWidth: true; implicitHeight: 86; radius: 3; color: Theme.dark ? Theme.deep : "#ffffff"; border.color: Theme.line
                             readonly property var eq: (page.selSt, engine.channelEq(page.sel))
-                            onEqChanged: curve.requestPaint()
+                            property string drawn: ""   // the curve is redrawn only when the EQ itself changed (any strip change used to repaint it: a fader move repainted the curve)
+                            onEqChanged: { const k = JSON.stringify(eq); if (k !== drawn) { drawn = k; curve.requestPaint() } }
                             Canvas { id: curve; anchors.fill: parent; anchors.margins: 1
                                 // the three bands as the strip's EQ has them: a low shelf at 100 Hz, a bell at FREQ, a high shelf at 10 kHz (a drawing of the curve, ±15 dB)
                                 onPaint: { const c = getContext("2d"), w = width, h = height, e = parent.eq || {}, on = !!e.on; c.reset()

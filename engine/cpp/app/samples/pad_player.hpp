@@ -41,11 +41,20 @@ class Player final : public Runtime::ExtraSource {
   }
 
   /** the device's rate (control thread): a change lets every kept sound go and renders the 100 built-in samples again */
-  void prepare(double rate) {
-    if (rate <= 0 || rate == rate_) return;
-    stopAll(); for (int s = 0; s < kSlots; ++s) retire(s); rate_ = rate;
-    for (int n = 1; n <= kSamples; ++n) { std::string e; load("sample:" + std::to_string(n), 0, e); }
-  }
+  void prepare(double rate) { if (!setRate(rate)) return; install(rate, renderBuiltIns(rate)); }
+  /** the rate alone (control thread): every kept sound let go; a sound played before the built-ins are installed is rendered on demand */
+  bool setRate(double rate) { if (rate <= 0 || rate == rate_) return false; stopAll(); for (int s = 0; s < kSlots; ++s) retire(s); rate_ = rate; return true; }
+  /** the 100 built-in samples rendered at [rate] (ANY thread: touches no player state), for install() on the control thread; seconds of
+   *  work at high rates, so the console runs it off the interface thread */
+  static std::vector<std::unique_ptr<Clip>> renderBuiltIns(double rate) {
+    std::vector<std::unique_ptr<Clip>> v; v.reserve(kSamples);
+    for (int n = 1; n <= kSamples; ++n) { auto c = std::make_unique<Clip>(); std::string e; c->source = "sample:" + std::to_string(n); if (loadClip(c->source, rate, c->L, c->R, e)) v.push_back(std::move(c)); }
+    return v; }
+  /** keep the rendered built-ins (control thread); ignored when the rate changed meanwhile, a slot already loaded keeps its sound */
+  void install(double rate, std::vector<std::unique_ptr<Clip>>&& clips) {
+    if (rate != rate_) return; collect();
+    for (auto& c : clips) { const int s = slotOf(c->source, 0); if (s < 0) continue; Owned& o = owned_[static_cast<std::size_t>(s)]; if (o.clip && o.clip->source == c->source) continue;
+      retire(s); bytes_ += c->bytes(); o.clip = std::move(c); o.used = ++tick_; slots_[static_cast<std::size_t>(s)].store(o.clip.get(), std::memory_order_release); } }
   double rate() const { return rate_; }
   bool ready() const { return rate_ > 0; }
 

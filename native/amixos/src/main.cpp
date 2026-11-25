@@ -434,6 +434,63 @@ int main(int argc, char* argv[]) {
         ++emptyFrames; if (!busy || !busy->isVisible()) { ++silentEmpty; ++silentOn[win->property("current").toString()]; } }); }
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_CPU")) {   // CPU and RAM: the process and the GUI thread (the rest is the engine and the renderer), idle (silence) and playing,
+      // on the MIXER and on HOME after every page has been visited once (hidden pages kept), 5 s each; RSS at the end
+      auto thr = [] { timespec t{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t); return t.tv_sec * 1000.0 + t.tv_nsec / 1e6; };
+      auto rss = [] { QFile f("/proc/self/status"); if (!f.open(QIODevice::ReadOnly)) return 0.0; for (const QByteArray& l : f.readAll().split('\n')) if (l.startsWith("VmRSS:")) return l.mid(6).trimmed().split(' ').first().toDouble() / 1024.0; return 0.0; };
+      const int secs = qEnvironmentVariableIntValue("AMIX_CPU_SECS") > 0 ? qEnvironmentVariableIntValue("AMIX_CPU_SECS") : 5;
+      auto run = [&](const char* what, const char* page, bool playing) { engine.setNullTestInput(playing); win->setProperty("current", QString::fromLatin1(page)); waitMs(1500);
+        int fr = 0; auto fc = QObject::connect(win, &QQuickWindow::frameSwapped, win, [&] { ++fr; }, Qt::DirectConnection);
+        const double p0 = cpuMs(), g0 = thr(); waitMs(secs * 1000); const double p = (cpuMs() - p0) / secs, g = (thr() - g0) / secs; QObject::disconnect(fc);
+        std::printf("amixos --bench: CPU %-8s %-6s process %5.1f %%  GUI thread %5.1f %%  engine+render %5.1f %%  %4.1f frames/s  RSS %.0f MB\n", what, page, p / 10.0, g / 10.0, (p - g) / 10.0, double(fr) / secs, rss()); };
+      run("idle", "mixer", false); run("playing", "mixer", true);
+      for (const QVariant& v : engine.pages()) { win->setProperty("current", v.toMap().value("id").toString()); waitMs(250); }
+      if (qEnvironmentVariableIsSet("AMIX_CPU_TIMERS")) { win->setProperty("current", "home"); waitMs(500);   // what still ticks on a hidden page
+        for (QObject* o : win->findChildren<QObject*>()) { if (!o->inherits("QQmlTimer") || !o->property("running").toBool()) continue; QString where; bool hidden = false;
+          for (QObject* q = o->parent(); q; q = q->parent()) { if (auto* it = qobject_cast<QQuickItem*>(q)) { if (!it->isVisible()) hidden = true; if (where.isEmpty() && q->metaObject()->className()[0] && QString::fromLatin1(q->metaObject()->className()).contains("Page")) where = QString::fromLatin1(q->metaObject()->className()); } }
+          const QQmlContext* cx = qmlContext(o); std::printf("amixos --bench: TIMER %s %d ms repeat=%d %s %s\n", hidden ? "HIDDEN" : "shown ", o->property("interval").toInt(), o->property("repeat").toBool(), qPrintable(where), cx ? qPrintable(cx->baseUrl().fileName()) : ""); } }
+      run("idle", "home", false); run("playing", "home", true); run("idle", "mixer", false); run("playing", "mixer", true);
+      engine.stop(); return 0; }
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_CLICKS")) {   // EVERY BUTTON: each visible clickable of every page (and of the popups they open) clicked, to the frame that shows it;
+      // the click's own dispatch (GUI thread blocked) and click-to-frame are reported, the 10 worst listed; exit 1 when one is over AMIX_CLICK_BUDGET (33 ms)
+      const double cb = qEnvironmentVariableIntValue("AMIX_CLICK_BUDGET") > 0 ? qEnvironmentVariableIntValue("AMIX_CLICK_BUDGET") : 33;
+      QElapsedTimer clk; clk.start(); qint64 lastSwap = 0; auto c = QObject::connect(win, &QQuickWindow::frameSwapped, win, [&] { lastSwap = clk.nsecsElapsed(); }, Qt::DirectConnection);
+      static const QStringList risky = {"QUIT", "EXIT", "SHUT", "RESTART", "LOG OUT", "SIGN OUT", "UNINSTALL", "DELETE", "ERASE", "FACTORY", "REMOVE", "CLOSE APP", "UPDATE NOW", "INSTALL"};
+      std::function<void(QQuickItem*, QString&)> texts = [&](QQuickItem* it, QString& out) { const QVariant t = it->property("text"); if (t.isValid()) out += t.toString().toUpper() + ' '; for (QQuickItem* ch : it->childItems()) texts(ch, out); };
+      std::function<void(QQuickItem*, QList<QQuickItem*>&)> collect = [&](QQuickItem* it, QList<QQuickItem*>& out) { if (!it->isVisible() || it->opacity() <= 0.01) return;
+        if ((it->inherits("QQuickMouseArea") || it->inherits("QQuickAbstractButton")) && it->isEnabled() && it->width() > 2 && it->height() > 2) out << it;
+        for (QQuickItem* ch : it->childItems()) collect(ch, out); };
+      auto closePopups = [&] { QList<QPointer<QObject>> ps; for (QObject* o : win->findChildren<QObject*>()) if (o->inherits("QQuickPopup")) ps << o; for (const QPointer<QObject>& o : ps) if (o && o->property("visible").toBool()) QMetaObject::invokeMethod(o, "close"); };
+      QVariantList pages = engine.pages(); pages.prepend(QVariantMap{{"id", "mixer"}});
+      if (qEnvironmentVariableIsSet("AMIX_CLICK_PAGES")) { const QStringList only = qEnvironmentVariable("AMIX_CLICK_PAGES").split(','); QVariantList keep; for (const QVariant& v : pages) if (only.contains(v.toMap().value("id").toString())) keep << v; pages = keep; }
+      QList<std::tuple<double, double, QString>> all; int n = 0, over = 0;
+      if (qEnvironmentVariableIsSet("AMIX_CLICK_SEL")) { win->setProperty("current", "mixer"); waitMs(800); QElapsedTimer e; e.start(); for (int k = 0; k < 10; ++k) engine.setSelectedStrip(k % 2 ? 3 : 4); std::printf("amixos --bench: CLICK select a strip: %.1f ms\n", e.nsecsElapsed() / 1e7);
+        e.restart(); for (int k = 0; k < 10; ++k) engine.setChannelLimiter(3, k % 2, -1, 50); std::printf("amixos --bench: CLICK limiter on a strip: %.1f ms\n", e.nsecsElapsed() / 1e7); }
+      for (const QVariant& v : pages) { const QString id = v.toMap().value("id").toString(); win->setProperty("current", id); waitMs(500);
+        QQuickItem* area = win->findChild<QQuickItem*>("pageArea"); if (!area) break; QList<QQuickItem*> targets; collect(area, targets);
+        QList<QPointer<QQuickItem>> list; for (QQuickItem* t : targets) list << t; int k = 0;
+        for (const QPointer<QQuickItem>& t : list) { if (++k > 160) break; if (!t || !t->isVisible() || !t->isEnabled()) continue;
+          QString label; texts(t->parentItem() ? t->parentItem() : t.data(), label); bool skip = false; for (const QString& r : risky) if (label.contains(r)) skip = true; if (skip) continue;
+          if (qEnvironmentVariableIsSet("AMIX_CLICK_ONLY") && !(t->objectName() + label).contains(qEnvironmentVariable("AMIX_CLICK_ONLY"))) continue;
+          for (int rep = qEnvironmentVariableIntValue("AMIX_CLICK_REPEAT"); rep > 1; --rep) { const QPointF q = t->mapToScene(QPointF(t->width() / 2, t->height() / 2)); QMouseEvent a1(QEvent::MouseButtonPress, q, q, win->mapToGlobal(q), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier); QCoreApplication::sendEvent(win, &a1);
+            QMouseEvent a2(QEvent::MouseButtonRelease, q, q, win->mapToGlobal(q), Qt::LeftButton, Qt::NoButton, Qt::NoModifier); QCoreApplication::sendEvent(win, &a2); waitMs(5); }
+          const QPointF p = t->mapToScene(QPointF(t->width() / 2, t->height() / 2)); if (p.x() < 0 || p.y() < 0 || p.x() >= win->width() || p.y() >= win->height()) continue;
+          QString name = t->objectName(); for (QQuickItem* q = t; q && name.isEmpty(); q = q->parentItem()) name = q->objectName(); name += QStringLiteral(" '%1' @%2,%3").arg(label.left(24).trimmed()).arg(qRound(p.x())).arg(qRound(p.y()));
+          if (qEnvironmentVariableIsSet("AMIX_CLICK_TRACE")) { std::fprintf(stderr, "CLICK %s %s\n", qPrintable(id), qPrintable(name)); std::fflush(stderr); }
+          waitMs(150); const qint64 at = clk.nsecsElapsed();   // the last click settled first (its page, popup or device work is not charged to this one)
+          qint64 beat = clk.nsecsElapsed(), stall = 0; QTimer hb; hb.setInterval(2); QObject::connect(&hb, &QTimer::timeout, [&] { const qint64 n = clk.nsecsElapsed(); stall = std::max(stall, n - beat); beat = n; }); hb.start();   // the GUI thread's longest gap (a nested loop keeps it beating)
+          QMouseEvent pr(QEvent::MouseButtonPress, p, p, win->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier); QCoreApplication::sendEvent(win, &pr);
+          QMouseEvent re(QEvent::MouseButtonRelease, p, p, win->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier); QCoreApplication::sendEvent(win, &re);
+          stall = std::max(stall, clk.nsecsElapsed() - beat); const double block = stall / 1e6; const qint64 done = clk.nsecsElapsed(); win->update(); QElapsedTimer w; w.start();
+          while (lastSwap <= done && w.elapsed() < 2000) QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+          const double ms = (lastSwap - at) / 1e6; ++n; if (ms > cb || block > cb) ++over;
+          all << std::make_tuple(ms, block, QStringLiteral("[%1] %2").arg(id, name));
+          closePopups(); if (win->property("current").toString() != id) { win->setProperty("current", id); waitMs(300); } }
+        closePopups(); waitMs(100); }
+      std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) { return std::get<0>(a) > std::get<0>(b); });
+      for (int i = 0; i < std::min<qsizetype>(qEnvironmentVariableIntValue("AMIX_CLICK_TOP") > 0 ? qEnvironmentVariableIntValue("AMIX_CLICK_TOP") : 10, all.size()); ++i) std::printf("amixos --bench: CLICK %6.1f ms to the frame (GUI thread blocked %5.1f ms at most) %s\n", std::get<0>(all[i]), std::get<1>(all[i]), qPrintable(std::get<2>(all[i])));
+      std::printf("amixos --bench: CLICKS %d clicked on %lld pages, %d over %.0f ms\n", n, static_cast<long long>(pages.size()), over, cb);
+      QObject::disconnect(c); engine.stop(); return over ? 1 : 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_LAG")) {   // INPUT LAG: a fader dragged with a 1000 Hz mouse, a button clicked, cached pages switched; each to the frame that shows it
       std::function<QQuickItem*(QQuickItem*, const QString&)> walk = [&](QQuickItem* r, const QString& n) -> QQuickItem* { if (!r->isVisible()) return nullptr; if (r->objectName() == n && r->width() > 0) return r; for (QQuickItem* ch : r->childItems()) if (QQuickItem* f = walk(ch, n)) return f; return nullptr; };
       auto find = [&](const char* name) { return walk(win->contentItem(), QString::fromLatin1(name)); };
@@ -569,8 +626,8 @@ int main(int argc, char* argv[]) {
       const bool verbose = qEnvironmentVariableIsSet("AMIX_BUDGET_EACH"); const QString shotDir = qEnvironmentVariable("AMIX_BUDGET_SHOTS");
       qint64 swaps = 0; QElapsedTimer clk; clk.start(); qint64 lastSwap = 0; auto sc = QObject::connect(win, &QQuickWindow::frameSwapped, win, [&] { ++swaps; lastSwap = clk.nsecsElapsed(); }, Qt::DirectConnection);
       auto toFrame = [&](const std::function<void()>& act, const std::function<bool()>& ready) {   // the action, then the first frame shown after it is ready (ms)
-        const qint64 at = clk.nsecsElapsed(); act(); QElapsedTimer t; t.start(); qint64 readyAt = -1;
-        while (t.elapsed() < 4000) { if (readyAt < 0 && ready()) { readyAt = clk.nsecsElapsed(); win->update(); } if (readyAt >= 0 && lastSwap > readyAt) break; QCoreApplication::processEvents(QEventLoop::AllEvents, 1); }
+        const qint64 at = clk.nsecsElapsed(); act(); if (qEnvironmentVariableIsSet("AMIX_TRACE_CACHED")) std::fprintf(stderr, "ACT %.1f ms\n", (clk.nsecsElapsed() - at) / 1e6); QElapsedTimer t; t.start(); qint64 readyAt = -1;
+        while (t.elapsed() < 4000) { if (readyAt < 0 && ready()) { readyAt = clk.nsecsElapsed(); win->update(); if (qEnvironmentVariableIsSet("AMIX_TRACE_CACHED")) std::fprintf(stderr, "READY %.1f ms\n", (readyAt - at) / 1e6); } if (readyAt >= 0 && lastSwap > readyAt) break; QCoreApplication::processEvents(QEventLoop::AllEvents, 1); }
         return (lastSwap - at) / 1e6; };
       auto pageReady = [&] { return win->property("pageReady").toBool(); };
       QQuickItem* area = win->findChild<QQuickItem*>("pageArea");
@@ -593,7 +650,9 @@ int main(int argc, char* argv[]) {
           QString what; const int bad = page ? outside(page, what) : 0; ++checked;
           if (!shotDir.isEmpty() && (sz == sizes.first())) win->grabWindow().save(QStringLiteral("%1/%2-%3x%4.png").arg(shotDir, id).arg(sz.width()).arg(sz.height()));
           win->setProperty("current", id == "mixer" ? "home" : "mixer"); waitMs(150);
+          if (qEnvironmentVariableIsSet("AMIX_TRACE_CACHED")) std::fprintf(stderr, "CACHED-BEGIN\n");
           const double cached = toFrame([&] { win->setProperty("current", id); }, pageReady); waitMs(120);
+          if (qEnvironmentVariableIsSet("AMIX_TRACE_CACHED")) std::fprintf(stderr, "CACHED-END %.1f\n", cached);
           QString popNote; int pops = 0; double popWorst = 0;   // every popup this page holds: opened, to its first frame, inside the window, closed
           if (page) for (QObject* o : page->findChildren<QObject*>()) { if (!o->inherits("QQuickPopup") || o->inherits("QQuickMenu") || o->inherits("QQuickToolTip") || o->property("visible").toBool()) continue;
             if (o->parent() && o->parent()->inherits("QQuickComboBox")) continue; ++pops;
