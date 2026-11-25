@@ -18,7 +18,7 @@ Item {
     // Drawn on a Canvas; when the Canvas does not draw it (not available, or no paint within 800 ms: seen with some Windows Direct3D 11
     // drivers) the same modules are shown as an Image (img: Remote.qrImage, a PNG), so the code is never a white square.
     component QrView: Rectangle { id: qv; property var mods: []; property string img: ""; property bool forceImage: false; property bool painted: false; property bool late: false
-        readonly property bool useImage: img !== "" && (forceImage || (late && !painted))
+        readonly property bool useImage: img !== "" && (forceImage || Qt.platform.os === "windows" || (late && !painted))   // Windows: always the PNG (a Canvas can report painted yet show white on some GPU drivers)
         readonly property bool drawn: mods && mods.length > 1 && (useImage ? qi.status === Image.Ready : painted)   // the code is on screen
         radius: 8; color: "#ffffff"; onModsChanged: { painted = false; late = false; lateTimer.restart(); qc.requestPaint() }
         Timer { id: lateTimer; interval: 800; onTriggered: qv.late = true }
