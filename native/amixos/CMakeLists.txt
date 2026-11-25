@@ -205,6 +205,10 @@ endif()
 add_dependencies(amixos amfb_plugin_shell amfb_plugin_builder)   # the separate PLUG-IN BUILDER and the shell it exports: built next to the console
 
 if(WIN32)
+    if(MINGW)
+      target_link_options(amixos PRIVATE -static-libgcc -static-libstdc++)
+      target_link_libraries(amixos PRIVATE -Wl,-Bstatic,-lstdc++,-lwinpthread)
+    endif()
     set_target_properties(amixos PROPERTIES WIN32_EXECUTABLE TRUE)
     target_sources(amixos PRIVATE win/amixos.rc)   # version information + manifest (company, product, asInvoker, DPI aware)
 endif()
