@@ -231,6 +231,11 @@ int main() {
     { const Value g = d.state()["dcas"].at(1); CHECK(g["id"].asInt() == 2 && g["db"].asNumber() == 10 && g["mute"].asBool() && g["name"].asString() == "VOICES" && g["color"].asInt() == 3 && g["members"].size() == 2); }
     CHECK(d.state()["dcas"].size() == 8 && d.state()["dcas"].at(0)["name"].asString() == "DCA 1");
     CHECK(ctl("{\"op\":\"dca\",\"group\":9,\"db\":0}") == 400);
+    CHECK(ctl("{\"op\":\"dca\",\"group\":3,\"winVol\":true}") == 200 && d.state()["dcas"].at(2)["winVol"].asBool() && d.state()["dcaLimit"].asInt() == 8);
+    { am::Daemon::Options po; po.port = 0; po.token = o.token; po.strips = 8; po.plan = "PRO"; po.tokenStore = "daemon_test.pro.tokens.json"; std::remove(po.tokenStore.c_str()); am::Daemon pd(po);
+      std::string e1, e2; bool k1 = false, k2 = false; const Value a = Value::parse("{\"op\":\"dca\",\"group\":4,\"db\":-3}", k1), b = Value::parse("{\"op\":\"dca\",\"group\":5,\"db\":-3}", k2);   // DCA GROUPS BY EDITION: PRO has four
+      CHECK(k1 && k2 && !pd.control(a, e1).isNull() && pd.control(b, e2).isNull() && e2.find("not in this edition") != std::string::npos);
+      CHECK(pd.state()["dcaLimit"].asInt() == 4 && pd.state()["dcas"].at(4)["locked"].asBool() && !pd.state()["dcas"].at(3)["locked"].asBool()); std::remove(po.tokenStore.c_str()); }
     // MASTERING from a remote: clamped, kept in the state, the master version moves (the console takes it); the SAMPLE PADS list
     { const double mv = d.state()["masterV"].asNumber();
       CHECK(ctl("{\"op\":\"mastering\",\"on\":true,\"thr\":-60,\"low\":3,\"makeup\":40}") == 200);

@@ -64,7 +64,7 @@ QVector<Remote::SyncStrip> Remote::consoleMix() const {
 // the part of a DCA group the remotes share: level, mute, name, colour, members (numbers compared as the service sends them back)
 QVariantList Remote::dcaSync(const QVariantList& st) {
   QVariantList out; for (const QVariant& v : st) { const QVariantMap m = v.toMap(); QVariantList mem; for (const QVariant& x : m.value("members").toList()) mem << x.toInt();
-    out << QVariantMap{{"db", std::round(m.value("db").toDouble() * 100) / 100}, {"mute", m.value("mute").toBool()}, {"name", m.value("name").toString()}, {"color", m.value("color").toInt()}, {"members", mem}}; }
+    out << QVariantMap{{"db", std::round(m.value("db").toDouble() * 100) / 100}, {"mute", m.value("mute").toBool()}, {"name", m.value("name").toString()}, {"color", m.value("color").toInt()}, {"members", mem}, {"winVol", m.value("winVol").toBool()}}; }   // winVol: the WINDOWS VOLUME switch, shown on the phones
   return out;
 }
 QVariantList Remote::eqList(const SyncStrip& s) { QVariantList l; for (const auto& e : s.eq) l << QVariant(QVariantList{e.type, e.freq, e.q, e.gain}); return l; }

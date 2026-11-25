@@ -25,8 +25,8 @@ data class WindowsSound(val volume: Int = -1, val gainMode: Boolean = false, val
 data class Rta(val src: Int, val f: List<Double>, val db: List<Double>)
 data class ProgramEq(val on: Boolean = false, val gains: List<Double> = List(10) { 0.0 })
 /** a DCA group channel of the console (id 1..8): its fader is an offset on its members' level, MUTE mutes them; members = strip numbers */
-data class DcaState(val id: Int, val name: String, val db: Double, val mute: Boolean, val color: Int, val members: List<Int>)
-data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound(), val dcas: List<DcaState> = emptyList(), val masterMute: Boolean = false, val masterDim: Boolean = false, val apps: List<AppVolume> = emptyList(), val appsAvailable: Boolean = false)   // v: the console's change counter (LIVE SYNC)
+data class DcaState(val id: Int, val name: String, val db: Double, val mute: Boolean, val color: Int, val members: List<Int>, val winVol: Boolean = false, val locked: Boolean = false)   // winVol: the console's WINDOWS VOLUME switch; locked: past the edition's DCA limit
+data class ConsoleState(val strips: List<StripState>, val buses: List<BusState>, val masterDb: Double, val limiter: Boolean, val ceilingDb: Double, val v: Long = 0, val windows: WindowsSound = WindowsSound(), val dcas: List<DcaState> = emptyList(), val masterMute: Boolean = false, val masterDim: Boolean = false, val apps: List<AppVolume> = emptyList(), val appsAvailable: Boolean = false, val dcaLimit: Int = 8)   // v: the console's change counter (LIVE SYNC)
 data class StripMeter(val pk: Double, val rms: Double, val hold: Double, val clip: Boolean, val gr: Double, val gate: Double, val input: Double)
 /** loudness of the master (LUFS momentary / short-term / integrated, range LU, true peak dBTP) */
 data class Loudness(val m: Double = -120.0, val s: Double = -120.0, val i: Double = -120.0, val lra: Double = 0.0, val tp: Double = -120.0)
@@ -100,7 +100,7 @@ class DaemonClient(val ep: Endpoint) {
         }
         fun parseState(o: Map<String, Any?>): ConsoleState { val m = o.obj("master")
             return ConsoleState(o.list("strips").map { StripState(it.int("id"), it.str("name"), it.num("db"), it.num("pan"), it.bool("mute"), it.bool("solo"), it.num("trim"), it.obj("tone").let { t -> Tone(t.num("low"), t.num("mid"), t.num("midHz", 1000.0), t.num("high"), t["on"] != false) }, (it["eq"] as? List<*>).orEmpty().map { b -> nums(b) }) }, o.list("buses").map { BusState(it.int("id"), it.num("db"), it.num("returnDb", -60.0), it.bool("mute")) }, m.num("db"), m.bool("limiter", true), m.num("ceilingDb", -0.5), o.num("v").toLong(), o.obj("settings").let { w -> WindowsSound((w["winVolume"] as? Number)?.toInt() ?: -1, w["winGain"] == true, (w["winTrimDb"] as? Number)?.toDouble() ?: 0.0, w["winSetsLevel"] == true) },
-                o.list("dcas").map { DcaState(it.int("id"), it.str("name"), it.num("db"), it.bool("mute"), it.int("color"), (it["members"] as? List<*>).orEmpty().mapNotNull { x -> (x as? Number)?.toInt() }) }, m.bool("mute"), m.bool("dim"), AppVolumes.parse(o), AppVolumes.available(o))
+                o.list("dcas").map { DcaState(it.int("id"), it.str("name"), it.num("db"), it.bool("mute"), it.int("color"), (it["members"] as? List<*>).orEmpty().mapNotNull { x -> (x as? Number)?.toInt() }, it.bool("winVol"), it.bool("locked")) }, m.bool("mute"), m.bool("dim"), AppVolumes.parse(o), AppVolumes.available(o), (o["dcaLimit"] as? Number)?.toInt()?.coerceIn(1, 8) ?: 8)
         }
         fun nums(v: Any?): List<Double> = (v as? List<*>).orEmpty().map { (it as? Number)?.toDouble() ?: 0.0 }
         fun parseProgramEq(o: Map<String, Any?>): ProgramEq { val p = o.obj("programEq"); val g = nums(p["gains"])

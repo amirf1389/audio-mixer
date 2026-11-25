@@ -94,7 +94,7 @@ class RemoteActivity : FitActivity() {
         val clipBtn = Button(this).apply { text = getString(R.string.clear_clips); isEnabled = false }
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row2.addView(find); row2.addView(consolesBtn); row2.addView(busesBtn); row2.addView(monBtn); row2.addView(clipBtn); root.addView(android.widget.HorizontalScrollView(this).apply { addView(row2) })
-        row2.apply { addView(Button(this@RemoteActivity).apply { text = getString(R.string.scenes); setOnClickListener { showScenes() } });  addView(Button(this@RemoteActivity).apply { text = getString(R.string.plugins); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, PluginsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.ins_button); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, InsertsActivity::class.java)) } }); addView(Button(this@RemoteActivity).apply { text = getString(R.string.calculator); setOnClickListener { startActivity(android.content.Intent(this@RemoteActivity, CalculatorActivity::class.java)) } }) }
+        row2.addView(Button(this).apply { text = getString(R.string.rt_tools); contentDescription = "remoteTools"; setOnClickListener { showTools() } })   // TOOLS: group faders, 360 audio, effects, plug-ins, scenes, calculator
         connectBtn = connect
         // RECORD on the console, MUTE GROUPS (kept on this phone) and the console's INPUT source
         val recBtn = Button(this).apply { text = getString(R.string.remote_rec); isEnabled = false; setOnClickListener { toggleRecord(this) } }
@@ -198,7 +198,7 @@ class RemoteActivity : FitActivity() {
      *  pan, MUTE / SOLO, the fader with its meter, and the level. */
     // LANDSCAPE: the height is short, so the hint under the status line goes and the faders take that room; six channels stand across
     private var hintView: TextView? = null
-    private fun fitOrientation() { hintView?.visibility = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) View.GONE else View.VISIBLE }
+    private fun fitOrientation() { hintView?.visibility = if (ChromeFrame.active(this) || resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) View.GONE else View.VISIBLE }
     /** the phone was turned: the strips are laid out again for the new shape; the link to the console stays up */
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) { super.onConfigurationChanged(newConfig); Nav.fit(this); fitOrientation(); state?.let { buildStrips(it) } }
     companion object {
@@ -254,7 +254,7 @@ class RemoteActivity : FitActivity() {
             strips.addView(col); faders.add(fader); dbLabels.add(db); nameLabels.add(name); mutes.add(mute); solos.add(solo); clipFlags.add(false)
         }
         // DCA GROUP CHANNELS of the console: a group in use is a strip after the channels (its fader moves its members' level, not their faders)
-        for (g in s.dcas.filter { it.members.isNotEmpty() }) {
+        for (g in s.dcas.filter { it.members.isNotEmpty() && !it.locked }) {
             val tint = ConsoleUi.AMBER; val col = ConsoleUi.strip(this, tint, stripW).apply { tag = "dcaStrip${g.id}" }
             col.addView(TextView(this).apply { text = getString(R.string.rc_dca_title, g.id, g.name, g.members.size); setTextColor(tint); textSize = 10f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD })
             val mute = ConsoleUi.compact(ToggleButton(this).apply { textOn = "M"; textOff = "M"; isChecked = g.mute; contentDescription = "dcaMute${g.id}"; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#EF4444") else Color.WHITE); buzz(b); io.execute { runCatching { client?.dca(g.id, mute = on) } } } }, ConsoleUi.KEY_DP, 12)
@@ -497,6 +497,28 @@ class RemoteActivity : FitActivity() {
             val now = runCatching { c.status().inChannels > 0 }.getOrDefault(!on)
             ui.post { status.text = if (r.isFailure) getString(R.string.failed, r.exceptionOrNull()?.message ?: "") else getString(if (now) R.string.remote_auto_input_on else R.string.remote_auto_input_off) }
         }
+    }
+    /** TOOLS: one list of the remote's pages */
+    internal fun showTools(): AlertDialog { val dlg = AlertDialog.Builder(this).setTitle(R.string.rt_tools).setNegativeButton(android.R.string.cancel, null).create()
+        dlg.setView(ScrollView(this).apply { addView(RemoteTools.toolsPanel(this@RemoteActivity) { t -> dlg.dismiss(); openTool(t) }) }); dlg.show(); return dlg }
+    internal fun openTool(t: RemoteTools.Tool) { when (t) {
+        RemoteTools.Tool.DCA -> showDcaPage()
+        RemoteTools.Tool.SPATIAL -> AlertDialog.Builder(this).setTitle(R.string.rt_360).setView(RemoteTools.spatialPanel(this, false)).setPositiveButton(android.R.string.ok, null).show()
+        RemoteTools.Tool.EFFECTS -> startActivity(android.content.Intent(this, InsertsActivity::class.java))   // the inserts flow: pick a channel, add an effect
+        RemoteTools.Tool.PLUGINS -> startActivity(android.content.Intent(this, PluginsActivity::class.java))
+        RemoteTools.Tool.SCENES -> showScenes()
+        RemoteTools.Tool.CALCULATOR -> startActivity(android.content.Intent(this, CalculatorActivity::class.java)) } }
+    /** GROUP FADERS (DCA): the console's groups, as many as its edition has */
+    internal fun showDcaPage() { val s = state; if (s == null) { status.text = getString(R.string.not_connected); return }
+        AlertDialog.Builder(this).setTitle(R.string.rt_dca).setView(ScrollView(this).apply { addView(dcaPage(s)) }).setPositiveButton(android.R.string.ok, null).show() }
+    internal fun dcaPage(s: ConsoleState): View = RemoteTools.dcaPanel(this, s, Prefs.remote(this).getString("lastPlan", "").orEmpty()) { g, db, mute ->
+        if (db != null) live.submit("dca$g") { client?.dca(g, db = db) }; if (mute != null) io.execute { runCatching { client?.dca(g, mute = mute) } } }
+    /** CHROMEBOOK MODE: the arrow keys move the master as on the console (1 dB, with SHIFT 0.1 dB) */
+    override fun dispatchKeyEvent(e: android.view.KeyEvent): Boolean {
+        val step = ChromeFrame.masterStep(e, currentFocus is android.widget.EditText); val s = state
+        if (step != null && s != null && ChromeFrame.active(this)) { if (e.action == android.view.KeyEvent.ACTION_DOWN) { val v = ChromeFrame.stepMaster(s.masterDb, step); state = s.copy(masterDb = v)
+            masterFader.progress = (DaemonClient.dbToPos(v) * 1000).toInt(); masterDb.text = DaemonClient.fmtDb(v); live.submit("master") { client?.master(v) } }; return true }
+        return super.dispatchKeyEvent(e)
     }
     /** MUTE GROUPS: eight groups of strips, muted and un-muted together. Kept on this phone (SharedPreferences "muteGroups"). */
     private fun showMuteGroups() {

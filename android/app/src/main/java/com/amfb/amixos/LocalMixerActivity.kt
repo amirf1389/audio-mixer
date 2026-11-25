@@ -594,6 +594,12 @@ class LocalMixerActivity : FitActivity() {
     private val quickHook: () -> Unit = { ui.post { val p = prefs(); engine?.setMaster(masterOut(p, masterRider.gainDb)); masterMuteKey?.on = p.getBoolean("masterMute", false); faders[-1]?.progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(p.getFloat("masterDb", 0f).toDouble().let { if (it <= -60) -120.0 else it }) * 1000).toInt() } }
     private val soloKeys = HashMap<Int, PadButton>(); private var masterMuteKey: PadButton? = null
     private fun soloKeyView(ch: Int) = PadButton(this, getString(R.string.lm_solo), ConsoleUi.AMBER, 12f).apply { contentDescription = "solo_$ch"; on = prefs().getBoolean(soloKey(ch), false); setOnClickListener { toggleSolo(ch) } }.also { soloKeys[ch] = it }
+    /** CHROMEBOOK MODE: the arrow keys move the master as on the console (1 dB, with SHIFT 0.1 dB) */
+    override fun dispatchKeyEvent(e: android.view.KeyEvent): Boolean {
+        val step = ChromeFrame.masterStep(e, currentFocus is android.widget.EditText)
+        if (step != null && ChromeFrame.active(this)) { if (e.action == android.view.KeyEvent.ACTION_DOWN) { val p = prefs(); p.edit().putFloat("masterDb", ChromeFrame.stepMaster(p.getFloat("masterDb", 0f).toDouble(), step).toFloat()).commit(); quickHook(); QuickMaster.changed(this) }; return true }
+        return super.dispatchKeyEvent(e)
+    }
     /** SOLO: one channel (or several) alone on the master; every channel's level is sent again */
     internal fun toggleSolo(ch: Int) { val p = prefs(); val v = !p.getBoolean(soloKey(ch), false); p.edit().putBoolean(soloKey(ch), v).commit()
         for (c in allChannels()) { applyLevel(engine, c); soloKeys[c]?.on = p.getBoolean(soloKey(c), false) } }

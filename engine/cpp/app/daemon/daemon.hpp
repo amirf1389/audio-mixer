@@ -150,7 +150,8 @@ class Daemon {
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
   // DCA GROUP CHANNELS as the console has them (the console applies them to its own mix; the service keeps them so every remote shows the
   // same group strips, and a remote's move of one reaches the console): id 1..8, members = strip numbers
-  struct Dca { std::string name; double db = 0; bool mute = false; int color = 0; std::vector<int> members; };
+  struct Dca { std::string name; double db = 0; bool mute = false; int color = 0; std::vector<int> members; bool winVol = false; };   // winVol: the console's WINDOWS VOLUME switch (the group drives the Windows slider)
+  int dcaLimit() const;   // DCA GROUPS BY EDITION: the plan the console passed (BASIC 1, PRO 4, STUDIO and up 8)
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_;   // dual*: DUAL LISTEN (A + B in the control room)
   httpd::Response handle(const httpd::Request& r);
   json::Value apply(const json::Value& cmd, std::string& err);
@@ -173,7 +174,7 @@ class Daemon {
   json::Value programEqJson() const;
   struct PlugSlot { int slot = 0; std::string kind, name, state, error; bool bypass = false; std::shared_ptr<host::Plugin> pl; };
   struct Bucket { double tokens = -1; std::chrono::steady_clock::time_point at; bool take(double perSecond, double burst); };
-  Bucket insertBucket_, paramBucket_; bool masterMute_ = false, masterDim_ = false;   // MASTER MUTE / DIM (-20 dB) from the remotes
+  Bucket insertBucket_, paramBucket_, dcaBucket_; bool masterMute_ = false, masterDim_ = false;   // MASTER MUTE / DIM (-20 dB) from the remotes
   std::vector<std::pair<std::string, json::Value>> catalogKinds() const;   // {kind, entry} of what a remote may add (m_ held)
   std::map<int, std::vector<PlugSlot>> racks_; std::map<int, std::string> rackNames_; std::atomic<unsigned long long> racksV_{1};
   void loadRacks(Runtime& rt);   // every slot made at the runtime's rate, the chains handed to it (m_ held)
