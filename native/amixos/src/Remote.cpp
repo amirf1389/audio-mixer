@@ -440,7 +440,8 @@ bool Remote::start(bool wifi) {
   engine_->stop();   // the service opens the sound card itself
   restore_ = took_.running;   // when the service stops (or does not start), the console takes its devices back
   wifi_ = wifi;
-  QStringList args{"--port", QString::number(port()), "--version", QCoreApplication::applicationVersion(),
+  runPort_ = 0; runPort_ = port();
+  QStringList args{"--port", QString::number(runPort_), "--version", QCoreApplication::applicationVersion(),
     "--strips", QString::number(qBound(1, engine_->licensedChannels(), 32)), "--plan", engine_->license().value("planName").toString()};   // the phone gets the channels of the licence plan, no more
   args << openArgs(took_);   // the console's backend, output, input ("-" when it had none: never the default microphone), rate, buffer
   args << "--seed" << QString::fromStdString(am::paths::file("remote-seed.json"));
