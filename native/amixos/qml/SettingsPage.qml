@@ -78,8 +78,9 @@ Flickable {
             subtitle: i18n.t("How the sound card starts. The device itself is chosen by hand on SOUND CARD.", i18n.lang)
             Opt { label: i18n.t("Start the last device on launch", i18n.lang); hint: settings.lastDevice.backend ? (i18n.t("Last: ", i18n.lang) + settings.lastDevice.backend.toUpperCase() + " • " + settings.lastDevice.rate + i18n.t(" Hz • ", i18n.lang) + settings.lastDevice.frames + i18n.t(" frames", i18n.lang)) : i18n.t("No device remembered yet: start one on CONNECTIONS once", i18n.lang); Toggle { on: settings.autoStart; onToggled: function (v) { settings.autoStart = v } }
                 Rectangle { id: gb140; implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 20; radius: 7; color: Qt.rgba(0.235, 0.784, 0.859, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb140.color) } GradientStop { position: 1; color: Theme.btnBottom(gb140.color) } } border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("START NOW", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.startLastDevice() } } }
-            Opt { label: i18n.t("Default sample rate", i18n.lang); Choice { options: [{t: "44.1k", v: 44100}, {t: "48k", v: 48000}, {t: "88.2k", v: 88200}, {t: "96k", v: 96000}, {t: "192k", v: 192000}]; value: settings.defaultRate; onPicked: function (v) { settings.defaultRate = v } } }
-            Opt { label: i18n.t("Default buffer", i18n.lang); hint: (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms per block at the default rate", i18n.lang); Choice { options: [{t: "64", v: 64}, {t: "128", v: 128}, {t: "256", v: 256}, {t: "512", v: 512}, {t: "1024", v: 1024}]; value: settings.defaultFrames; onPicked: function (v) { settings.defaultFrames = v } } }
+            Opt { label: i18n.t("Default sample rate", i18n.lang); Choice { options: [{t: "44.1k", v: 44100}, {t: "48k", v: 48000}, {t: "88.2k", v: 88200}, {t: "96k", v: 96000}, {t: "176.4k", v: 176400}, {t: "192k", v: 192000}].filter(o => { const r = engine.running ? engine.ratesFor(engine.backend || "", "") : []; return !r.length || r.indexOf(o.v) >= 0 || o.v === settings.defaultRate }); value: settings.defaultRate; onPicked: function (v) { settings.defaultRate = v } } }
+            Opt { label: i18n.t("Default buffer", i18n.lang); hint: (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms per block at the default rate", i18n.lang); Choice { options: [{t: "64", v: 64}, {t: "128", v: 128}, {t: "256", v: 256}, {t: "512", v: 512}, {t: "1024", v: 1024}, {t: "2048", v: 2048}, {t: "4096", v: 4096}, {t: "8192", v: 8192}]; value: settings.defaultFrames; onPicked: function (v) { settings.defaultFrames = v } } }
+            Opt { objectName: "remotePortOpt"; label: i18n.t("Remote / network port", i18n.lang); hint: i18n.t("The phone service listens here (1024-65535, default 8765); used when the service next starts. The QR code and pair link follow it.", i18n.lang); RowLayout { spacing: 6; Field { id: portIn; objectName: "remotePortField"; Layout.preferredWidth: 90; text: String(settings.remotePort); inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 1024; top: 65535 } } Button { objectName: "remotePortApply"; text: i18n.t("APPLY", i18n.lang); enabled: portIn.acceptableInput && Number(portIn.text) !== settings.remotePort; onClicked: settings.setRemotePort(Number(portIn.text)) } Button { text: i18n.t("RERUN SETUP", i18n.lang); onClicked: settings.rerunSetup() } } }
             Opt { label: i18n.t("One voice", i18n.lang); hint: i18n.t("When inputs 1 and 2 carry the same microphone, CH 1 is set to no input so the voice is heard once (less feedback)", i18n.lang); Toggle { objectName: "oneVoiceToggle"; on: engine.oneVoice; onToggled: function (v) { engine.oneVoice = v } } }
             Opt { label: i18n.t("Clip point", i18n.lang); hint: i18n.t("The meters' clip lamp lights at this level (dBFS)", i18n.lang); MSlider { from: -12; to: 0; stepSize: 0.1; value: settings.clipDb; onMoved: settings.clipDb = value; implicitWidth: 200 } Text { text: settings.clipDb.toFixed(1) + i18n.t(" dBFS", i18n.lang); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 8 } }
             Opt { label: i18n.t("Peak hold", i18n.lang); hint: i18n.t("How long the peak line stays before falling", i18n.lang); Choice { options: [{t: "OFF", v: 0}, {t: "0.5 s", v: 500}, {t: "1.4 s", v: 1400}, {t: "3 s", v: 3000}, {t: "∞", v: 999999}]; value: settings.peakHoldMs; onPicked: function (v) { settings.peakHoldMs = v } } }
@@ -96,7 +97,7 @@ Flickable {
             Text { objectName: "exportNote"; visible: exportPanel.res.ok !== undefined; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.family: Theme.mono; font.pixelSize: 9; font.bold: true; color: exportPanel.res.ok ? Theme.emerald : Theme.danger
                 text: exportPanel.res.ok ? i18n.t("Saved:", i18n.lang) + " " + exportPanel.res.path + "  (" + (exportPanel.res.files ? exportPanel.res.files.length : 0) + " " + i18n.t("files", i18n.lang) + ", " + Math.max(1, Math.round((exportPanel.res.bytes || 0) / 1024)) + " KB)" : i18n.t(exportPanel.res.error || "", i18n.lang) }
         }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 1; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 1; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("FACTORY RESET", i18n.lang)
             subtitle: i18n.t("Back to the state the console left the factory in. The licence stays.", i18n.lang)
@@ -106,7 +107,7 @@ Flickable {
                     Timer { interval: 6000; running: frBtn.sure; onTriggered: frBtn.sure = false }
                     MouseArea { anchors.fill: parent; onClicked: { if (!frBtn.sure) frBtn.sure = true; else { frBtn.sure = false; settings.factoryReset() } } } } }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 2; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 2; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("RECORDING", i18n.lang)
             subtitle: i18n.t("● REC on the MIXER writes the master and every armed strip (pre-fader, after trim / DSP / inserts) to WAV or FLAC files, one per source, named by time.", i18n.lang)
@@ -117,7 +118,7 @@ Flickable {
             Text { visible: engine.recordMessage.length > 0; text: engine.recordMessage; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Repeater { model: engine.recordFiles; delegate: Text { text: modelData; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; elide: Text.ElideMiddle; Layout.fillWidth: true } }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 3; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 3; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("MIXER DEFAULTS", i18n.lang)
             subtitle: i18n.t("How the MIXER page opens. Each can still be toggled on the page itself.", i18n.lang)
@@ -137,7 +138,7 @@ Flickable {
             Opt { label: i18n.t("Plugin rack", i18n.lang); Toggle { on: settings.rackDefault; onToggled: function (v) { settings.rackDefault = v } } }
             Opt { label: i18n.t("Channel panel", i18n.lang); Toggle { on: settings.channelPanelDefault; onToggled: function (v) { settings.channelPanelDefault = v } } }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 4; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 4; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("LANGUAGE", i18n.lang) + " • " + i18n.count + i18n.t(" LANGUAGES", i18n.lang)
             subtitle: i18n.t("22 languages are checked by people; the rest are machine translations and say so in the menu. Right-to-left languages mirror the layout.", i18n.lang)
@@ -147,7 +148,7 @@ Flickable {
                     MouseArea { anchors.fill: parent; onClicked: i18n.lang = modelData.code } } }
             }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 5; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 5; sourceComponent: Component { Panel {
             id: sysPanel
             objectName: "sysPanel"
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
@@ -195,7 +196,7 @@ Flickable {
                 Item { Layout.fillWidth: true } }
             Repeater { model: sysPanel.sys.tips; delegate: Text { Layout.fillWidth: true; text: "• " + i18n.t(modelData, i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.Wrap } }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 6; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 6; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("VST3 / VST2 PLUG-INS", i18n.lang)
             subtitle: i18n.t("Where A mix OS looks for plug-ins: .vst3 bundles, and VST2 .dll (Windows) / .so (Linux) files. The platform folders are always scanned; add your own below. Plug-ins load into the PLUGIN RACK on the MIXER (generic controls, no plug-in window yet).", i18n.lang)
@@ -206,11 +207,11 @@ Flickable {
                 Rectangle { id: gb143; implicitWidth: Math.max(90, children[0].implicitWidth + 12); implicitHeight: 26; radius: 7; color: Theme.amber; gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb143.color) } GradientStop { position: 1; color: Theme.btnBottom(gb143.color) } } Text { anchors.centerIn: parent; text: i18n.t("ADD FOLDER", i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: { settings.addVstDir(vstDirIn.text); vstDirIn.text = "" } } }
                 Rectangle { id: gb144; implicitWidth: Math.max(80, children[0].implicitWidth + 12); implicitHeight: 26; radius: 7; color: Qt.rgba(0.235, 0.784, 0.859, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb144.color) } GradientStop { position: 1; color: Theme.btnBottom(gb144.color) } } border.color: Theme.cyan; Text { anchors.centerIn: parent; text: i18n.t("RESCAN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } MouseArea { anchors.fill: parent; onClicked: settings.rescanVst() } } }
             Flow { Layout.fillWidth: true; spacing: 4
-                Repeater { model: engine.vstCatalog(); delegate: Rectangle { id: gb145; implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 7; color: Qt.rgba(0.6, 0.4, 1, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb145.color) } GradientStop { position: 1; color: Theme.btnBottom(gb145.color) } } border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.format + " · " + i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
-                Text { visible: engine.vstCatalog().length === 0; text: i18n.t("No VST3 plug-ins found yet.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                Repeater { id: vstRep; property var cat: []; Timer { interval: 120; running: true; onTriggered: vstRep.cat = engine.vstCatalog() } model: cat; delegate: Rectangle { id: gb145; implicitWidth: vt.implicitWidth + 12; implicitHeight: 18; radius: 7; color: Qt.rgba(0.6, 0.4, 1, 0.18); gradient: Gradient { GradientStop { position: 0; color: Theme.btnTop(gb145.color) } GradientStop { position: 1; color: Theme.btnBottom(gb145.color) } } border.color: "#a78bfa"; Text { id: vt; anchors.centerIn: parent; text: modelData.format + " · " + i18n.t(modelData.name ?? "", i18n.lang) + (modelData.vendor ? " · " + modelData.vendor : ""); color: "#a78bfa"; font.family: Theme.mono; font.pixelSize: 7 } } }
+                Text { visible: vstRep.cat.length === 0; text: i18n.t("No VST3 plug-ins found yet.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
             MoreText { text: i18n.t("VST is a trademark of Steinberg Media Technologies GmbH. A mix OS hosts VST3 plug-ins through the VST 3 interface headers under their licence (drivers/vst3/sdk/LICENSE.txt) and VST2 plug-ins through the public VST 2.4 binary interface written clean-room (no Steinberg VST2 SDK file is used or shipped). It is not badged as VST and ships no plug-ins.", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 7; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 7; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("FILES & DATA", i18n.lang)
             subtitle: "Everything A mix OS keeps lives in " + settings.dataFolder + " and the settings file. Nothing is sent anywhere."
@@ -234,7 +235,7 @@ Flickable {
             Dialog { id: confirmReset; title: i18n.t("Factory reset?", i18n.lang); modal: true; standardButtons: Dialog.Ok | Dialog.Cancel; anchors.centerIn: Overlay.overlay; onAccepted: settings.factoryReset()
                 Text { text: settings.factoryResetPreview().join("\n"); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; wrapMode: Text.WordWrap; width: 380 } }
         } } }
-        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; active: page.stage >= 8; sourceComponent: Component { Panel {
+        Loader { Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop; asynchronous: asyncPages; active: page.stage >= 8; sourceComponent: Component { Panel {
             Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             title: i18n.t("ABOUT", i18n.lang)
             subtitle: "AmF X1 " + appVersion + " • native console by AMFB Audio • C++20 engine + Qt Quick interface, no web runtime"

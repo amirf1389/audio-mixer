@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QNetworkAccessManager>
 #include <QProcess>
+#include <QSettings>
 #include <QTimer>
 #include <QVector>
 #include <QStringList>
@@ -38,7 +39,7 @@ class Remote : public QObject {
   ~Remote() override;
   bool running() const { return ext_.running() || proc_.state() != QProcess::NotRunning; }
   bool inProcess() const { return ext_.running(); }   // the service runs as an extension inside the console
-  bool available() const; QString status() const { return status_; } int port() const { return 8765; }
+  bool available() const; QString status() const { return status_; } int port() const { const int p = QSettings().value("remote/port", 8765).toInt(); return p >= 1024 && p <= 65535 ? p : 8765; }   // REMOTE PORT from SETTINGS (validated); read when the service starts
   QStringList addresses() const; QStringList otherAddresses() const; QString tokenFile() const;
   Q_INVOKABLE QString adapterName(const QString& address) const;   // the network card an address belongs to ("Wi-Fi", "Ethernet"), for the address picker
   QString feedbackNote() const { return running() ? feedbackNote_ : QString(); }

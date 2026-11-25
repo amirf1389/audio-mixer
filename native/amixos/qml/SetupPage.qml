@@ -19,6 +19,10 @@ Rectangle {
     property bool signature: !settings.setupDone || engine.mastering().preset === "AMFB SIGNATURE"   // the house sound: on for a new console
     property bool termsAlert: false   // NEXT was pressed on TERMS without the tick: the box turns red and says why
     property string audioNote: ""
+    property string licChoice: engine.license.state !== "basic" ? "key" : ""   // LICENCE: a key activated, or CONTINUE BASIC; NEXT waits for one
+    property string netChoice: ""                                               // NETWORK / REMOTE: ON or OFF chosen; NEXT waits for one
+    readonly property bool consoleValid: licChoice !== "" && netChoice !== "" && settings.defaultRate > 0 && settings.defaultFrames > 0
+    readonly property bool stepValid: step === 1 ? accepted : step === 3 ? consoleValid : true
     readonly property var steps: ["WELCOME", "TERMS", "AUDIO", "CONSOLE", "OPERATOR", "UPDATES", "DONE"]
     signal finished()
     color: Theme.obsidian
@@ -89,8 +93,8 @@ Rectangle {
                         Btn { objectName: "setupBootAnim"; label: settings.bootAnimation ? i18n.t("ANIMATION: ON", i18n.lang) : i18n.t("ANIMATION: OFF", i18n.lang); on: settings.bootAnimation; onColor: Theme.emerald; onClicked: settings.bootAnimation = !settings.bootAnimation }
                         Btn { objectName: "setupBootSound"; label: settings.bootSound ? i18n.t("SOUND: ON", i18n.lang) : i18n.t("SOUND: OFF", i18n.lang); on: settings.bootSound; onColor: Theme.emerald; onClicked: settings.bootSound = !settings.bootSound }
                         Body { text: i18n.t("The opening animation plays for 3 seconds at every start and cannot be skipped; switch it off here if you want the console at once.", i18n.lang) } }
-                    RowLayout { spacing: 6; Text { text: i18n.t("SAMPLE RATE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [44100, 48000, 96000]; delegate: Btn { label: modelData / 1000 + i18n.t(" kHz", i18n.lang); on: settings.defaultRate === modelData; onClicked: settings.defaultRate = modelData } } }
-                    RowLayout { spacing: 6; Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [64, 128, 256, 512]; delegate: Btn { label: modelData + ""; on: settings.defaultFrames === modelData; onClicked: settings.defaultFrames = modelData } } Text { text: "(" + (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms; smaller = less latency, more load)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    RowLayout { spacing: 6; Text { text: i18n.t("SAMPLE RATE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [44100, 48000, 88200, 96000, 176400, 192000].filter(x => { const r = engine.running ? engine.ratesFor(engine.backend || "", "") : []; return !r.length || r.indexOf(x) >= 0 }); delegate: Btn { label: modelData / 1000 + i18n.t(" kHz", i18n.lang); on: settings.defaultRate === modelData; onClicked: settings.defaultRate = modelData } } }
+                    RowLayout { spacing: 6; Text { text: i18n.t("BLOCK", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [64, 128, 256, 512, 1024, 2048, 4096, 8192]; delegate: Btn { label: modelData + ""; on: settings.defaultFrames === modelData; onClicked: settings.defaultFrames = modelData } } Text { text: "(" + (settings.defaultFrames / settings.defaultRate * 1000).toFixed(1) + i18n.t(" ms; smaller = less latency, more load)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
                     RowLayout { spacing: 6; Text { text: i18n.t("START PAGE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 } Repeater { model: [["home", "HOME"], ["mixer", "MIXER"], ["io", "CONNECTIONS"]]; delegate: Btn { label: modelData[1]; on: settings.startPage === modelData[0]; onClicked: settings.startPage = modelData[0] } } }
                     RowLayout { spacing: 6; Text { text: i18n.t("SOUND", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 }
                         Btn { label: wiz.signature ? i18n.t("AMFB SIGNATURE: ON", i18n.lang) : i18n.t("AMFB SIGNATURE: OFF (FLAT)", i18n.lang); on: wiz.signature; onColor: Theme.orange; onClicked: wiz.signature = !wiz.signature }
@@ -100,7 +104,13 @@ Rectangle {
                     Text { text: i18n.t("LICENCE: ", i18n.lang) + engine.license.planName + " · " + engine.licensedChannels + i18n.t(" channels", i18n.lang) + (engine.license.state === "basic" ? i18n.t(" (free). Have a key? Paste it:", i18n.lang) : ""); color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
                     RowLayout { spacing: 6; Layout.fillWidth: true
                         Field { id: keyIn; Layout.fillWidth: true; placeholderText: i18n.t("AMIX1-... licence key (optional)", i18n.lang); font.family: Theme.mono; font.pixelSize: 9 }
-                        Btn { label: i18n.t("ACTIVATE", i18n.lang); on: keyIn.text.length > 8; onClicked: { const r = engine.activateKey(keyIn.text); wiz.audioNote = r.message; if (r.ok) keyIn.text = "" } } }
+                        Btn { label: i18n.t("ACTIVATE", i18n.lang); on: keyIn.text.length > 8; onClicked: { const r = engine.activateKey(keyIn.text); wiz.audioNote = r.message; if (r.ok) { keyIn.text = ""; wiz.licChoice = "key" } } }
+                        Btn { objectName: "setupContinueBasic"; label: i18n.t("CONTINUE BASIC", i18n.lang); on: wiz.licChoice === "basic"; onColor: Theme.emerald; onClicked: wiz.licChoice = "basic" } }
+                    RowLayout { spacing: 6; Text { text: i18n.t("NETWORK / REMOTE", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 8; Layout.preferredWidth: 110 }
+                        Btn { objectName: "setupRemoteOn"; label: i18n.t("REMOTE: ON", i18n.lang); on: wiz.netChoice === "on"; onColor: Theme.emerald; onClicked: { wiz.netChoice = "on"; settings.remoteEnabled = true } }
+                        Btn { objectName: "setupRemoteOff"; label: i18n.t("REMOTE: OFF", i18n.lang); on: wiz.netChoice === "off"; onClicked: { wiz.netChoice = "off"; settings.remoteEnabled = false } }
+                        Text { text: i18n.t("port ", i18n.lang) + settings.remotePort + i18n.t(" (change on SETTINGS)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 7 } }
+                    Small { objectName: "setupConsoleNeed"; visible: !wiz.consoleValid; color: Theme.amber; text: i18n.t("Choose a licence (ACTIVATE or CONTINUE BASIC) and REMOTE ON or OFF to continue.", i18n.lang) }
                     Small { text: i18n.t("The machine code for a key bound to this computer is on LICENSE. Keys are checked offline; nothing is sent.", i18n.lang) } }
                 // 4 OPERATOR
                 ColumnLayout { spacing: 12
@@ -135,6 +145,6 @@ Rectangle {
         RowLayout { spacing: 8
             Btn { label: i18n.t("BACK", i18n.lang); visible: wiz.step > 0; onClicked: wiz.step-- }
             Item { Layout.fillWidth: true }
-            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); on: wiz.step !== 1 || wiz.accepted; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) { const has = engine.mastering().preset === "AMFB SIGNATURE"; if (wiz.signature && !has) engine.applyMasteringPreset("AMFB SIGNATURE"); else if (!wiz.signature && has) engine.setMastering({ on: false, preset: "" }); if (!engine.running) settings.startLastDevice(); wiz.finished() } else wiz.step++ } } }
+            Btn { label: wiz.step === 6 ? i18n.t("FINISH", i18n.lang) : i18n.t("NEXT", i18n.lang); objectName: "setupNext"; on: wiz.stepValid; onColor: wiz.step === 6 ? Theme.emerald : Theme.amber; onClicked: { if (wiz.step === 1 && !wiz.accepted) { wiz.termsAlert = true; shake.restart(); return } if (!wiz.stepValid) { shake.restart(); return } wiz.termsAlert = false; if (wiz.step === 6) { const has = engine.mastering().preset === "AMFB SIGNATURE"; if (wiz.signature && !has) engine.applyMasteringPreset("AMFB SIGNATURE"); else if (!wiz.signature && has) engine.setMastering({ on: false, preset: "" }); if (!engine.running) settings.startLastDevice(); wiz.finished() } else wiz.step++ } } }
     }
 }

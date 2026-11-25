@@ -77,6 +77,7 @@
 #include "Update.h"
 #include "Measure.h"
 #include "Remote.h"
+#include "ProTools.h"
 #include "fx/fx.hpp"
 #include "Net.h"
 #include "Frame.h"
@@ -253,6 +254,7 @@ int main(int argc, char* argv[]) {
   QObject::connect(&update, &Update::restarting, &app, [&] { settings.sessionClosed(); engine.stop(); QTimer::singleShot(1800, &app, &QCoreApplication::quit); });   // INSTALL AND RESTART: save, release the sound card, show the notice, quit; the setup starts the console again
   qml.rootContext()->setContextProperty("measure", &measure);
   qml.rootContext()->setContextProperty("remote", &remote);
+  ProTools& proTools = *new ProTools(QString::fromStdString(am::paths::file("pro-tools.json")), &app); qml.rootContext()->setContextProperty("proTools", &proTools);   // owned by the application: outlives the pages that read it   // PRO TOOLS: recorder sessions, analyzer, markers
   qml.rootContext()->setContextProperty("net", &net);
   QObject::connect(&remote, &Remote::stopped, &app, [&] { if (!engine.running()) settings.startLastDevice(); });   // the remote service has let the sound card go: the console takes it back
   QObject::connect(&app, &QGuiApplication::aboutToQuit, &settings, &Settings::sessionClosed);
@@ -504,6 +506,27 @@ int main(int argc, char* argv[]) {
       for (auto it = silentOn.cbegin(); it != silentOn.cend(); ++it) std::printf("amixos --bench: BLANK  %s: %d frames with no page and no sign of building\n", qPrintable(it.key()), it.value());
       std::printf("amixos --bench: BLANK %d cycles, %d checks: %d blank, %d not built, %d stale; %d of %d frames drawn with no page yet, %d of them with no sign of it building\n", cycles, checks, blank, notReady, stale, emptyFrames, framesSeen, silentEmpty);
       engine.stop(); return blank || notReady || stale || silentEmpty ? 9 : 0; }
+    if (qEnvironmentVariableIsSet("AMIX_BENCH_STUTTER")) {   // STUTTER: every page opened from nothing (built over frames, as on a desktop), then scrolled, then (MIXER) a fader dragged;
+      // the longest stall of the event loop in each phase is the worst frame a user sees. Exit 1 when one is over AMIX_BENCH_STUTTER ms (default 33).
+      const double limit = qEnvironmentVariableIntValue("AMIX_BENCH_STUTTER") > 1 ? qEnvironmentVariableIntValue("AMIX_BENCH_STUTTER") : 33;
+      auto stallOver = [&](int ms, const std::function<void(double)>& step) { QElapsedTimer t; t.start(); qint64 last = 0; double worst = 0;
+        while (t.elapsed() < ms) { if (step) step(t.elapsed() / double(ms)); QCoreApplication::processEvents(QEventLoop::AllEvents, 2); const qint64 now = t.nsecsElapsed(); worst = std::max(worst, (now - last) / 1e6); last = now; QThread::usleep(500); }
+        return worst; };
+      QQuickItem* area = win->findChild<QQuickItem*>("pageArea"); int bad = 0; double worstAll = 0; QString worstId;
+      auto shownPage = [&]() -> QQuickItem* { if (!area) return nullptr; for (QQuickItem* l : area->childItems()) if (l->isVisible() && l->inherits("QQuickLoader")) if (auto* it = qobject_cast<QQuickItem*>(l->property("item").value<QObject*>())) return it; return nullptr; };
+      QVariantList pages = engine.pages(); pages.prepend(QVariantMap{{"id", "mixer"}});
+      if (qEnvironmentVariableIsSet("AMIX_STUTTER_PAGES")) { const QStringList only = qEnvironmentVariable("AMIX_STUTTER_PAGES").split(','); QVariantList keep; for (const QVariant& v : pages) if (only.contains(v.toMap().value("id").toString())) keep << v; pages = keep; }
+      for (const QVariant& v : pages) { const QString id = v.toMap().value("id").toString();
+        win->setProperty("current", id == "mixer" ? "home" : "mixer"); waitMs(150); if (id != "mixer") { QMetaObject::invokeMethod(win, "clearPages"); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); } waitMs(150);
+        win->setProperty("current", id); const double open = stallOver(900, nullptr);
+        QQuickItem* fl = nullptr; if (QQuickItem* pg = shownPage()) for (QQuickItem* it : pg->findChildren<QQuickItem*>()) if (it->inherits("QQuickFlickable") && it->isVisible() && it->property("contentHeight").toDouble() > it->height() + 40) { fl = it; break; }
+        const double range = fl ? fl->property("contentHeight").toDouble() - fl->height() : 0;
+        const double scroll = fl ? stallOver(1200, [&](double k) { fl->setProperty("contentY", range * (k < 0.5 ? k * 2 : 2 - k * 2)); }) : 0;
+        double drag = 0; if (id == "mixer") if (QQuickItem* f = win->findChild<QQuickItem*>("stripFader")) { int k = 0; drag = stallOver(1200, [&](double) { engine.setGain(0, -40.0 + (k++ % 400) * 0.1); }); Q_UNUSED(f) }
+        const double w = std::max({open, scroll, drag}); if (w > worstAll) { worstAll = w; worstId = id; } if (w > limit) ++bad;
+        std::printf("amixos --bench: STUTTER %-12s open %6.1f ms, scroll %6.1f ms%s, drag %6.1f ms%s\n", qPrintable(id), open, scroll, fl ? "" : " (nothing to scroll)", drag, w > limit ? "  OVER" : ""); }
+      std::printf("amixos --bench: STUTTER %lld pages: %d with a frame over %.0f ms, worst %.1f ms (%s)\n", static_cast<long long>(pages.size()), bad, limit, worstAll, qPrintable(worstId));
+      engine.stop(); return bad ? 1 : 0; }
     if (qEnvironmentVariableIsSet("AMIX_BENCH_FRAMES")) {   // FRAME TIME: every page with the meters running, AMIX_BENCH_FRAMES ms each (default 3000)
       const int ms = std::max(500, qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") > 1 ? qEnvironmentVariableIntValue("AMIX_BENCH_FRAMES") : 3000);
       double sumMean = 0, worstP95 = 0, worstMax = 0; long frames = 0; int n = 0; QString worstId;
@@ -1318,9 +1341,22 @@ int main(int argc, char* argv[]) {
         for (const QPointF p : {QPointF(40, 200), QPointF(40, 330), QPointF(300, 20)}) { QMouseEvent d(QEvent::MouseButtonPress, p, win->mapToGlobal(p.toPoint()), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier), u(QEvent::MouseButtonRelease, p, win->mapToGlobal(p.toPoint()), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
           QCoreApplication::sendEvent(win, &d); QCoreApplication::sendEvent(win, &u); QCoreApplication::processEvents(); }
         const bool locked = win->property("current").toString() == before;
+        bool gate = false; if (wiz) { const QVariant st = wiz->property("step"), lc = wiz->property("licChoice"), nc = wiz->property("netChoice");   // CONSOLE step: NEXT waits for a licence choice and REMOTE on / off
+          wiz->setProperty("step", 3); wiz->setProperty("licChoice", ""); wiz->setProperty("netChoice", ""); const bool blocked = !wiz->property("stepValid").toBool();
+          wiz->setProperty("licChoice", "basic"); const bool half = !wiz->property("stepValid").toBool(); wiz->setProperty("netChoice", "off"); gate = blocked && half && wiz->property("stepValid").toBool();
+          wiz->setProperty("step", st); wiz->setProperty("licChoice", lc); wiz->setProperty("netChoice", nc); }
+        if (!gate) { std::fprintf(stderr, "amixos --smoke: SETUP lets NEXT through without a licence / remote choice\n"); return 109; }
         win->setProperty("forceSetup", false); QCoreApplication::processEvents(); const bool open = !win->property("setupLocked").toBool();
         std::printf("amixos --smoke: FACTORY SETUP new install asks %d (again %d, closed mid-way %d), a console in use does not %d, a reset is kept %d, tests skip %d; locked: covers %d, clicks do nothing %d, open after %d\n", fresh, again, closed, used, kept, test, covers, locked, open);
         if (!fresh || !again || !closed || !used || !kept || !test || !covers || !locked || !open) { std::fprintf(stderr, "amixos --smoke: FACTORY SETUP failed\n"); return 109; } }
+      { // PRO TOOLS: BASIC sees each card locked with UPGRADE; the remote port setting refuses a port outside 1024-65535
+        auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); const QString was = win->property("current").toString(); win->setProperty("current", "protools");
+        for (int k = 0; k < 10; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QQuickItem* lk = win->findChild<QQuickItem*>("proRecorderLocked"); if (!lk) std::printf("amixos --smoke: PRO TOOLS page %p, current %s\n", (void*)win->findChild<QObject*>("proToolsPage"), qPrintable(win->property("current").toString()));
+        const bool basic = !ProTools::tierAllows(engine.edition()); const bool lockedOk = lk && lk->isVisible() == basic;
+        const int port0 = settings.remotePort(); const bool portOk = !settings.setRemotePort(80) && !settings.setRemotePort(70000) && settings.remotePort() == port0;
+        std::printf("amixos --smoke: PRO TOOLS %s, cards %s; remote port %d, out-of-range refused %d\n", qPrintable(engine.edition()), lk ? (lk->isVisible() ? "locked" : "open") : "missing", port0, portOk);
+        win->setProperty("current", was); if (!lockedOk || !portOk) { std::fprintf(stderr, "amixos --smoke: PRO TOOLS gating or the port check failed\n"); return 297; } }
       { // ZOOM: in, out and actual size, clamped to 50 .. 200 %, and the console is drawn at that scale; MULTITRACK: at most 100 armed channels
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); QQuickItem* zr = win->findChild<QQuickItem*>("zoomRoot");
         const double z0 = settings.liveZoom(); settings.zoomReset(); settings.zoomIn(); settings.zoomIn(); QCoreApplication::processEvents();
@@ -2012,9 +2048,10 @@ int main(int argc, char* argv[]) {
             else { std::fprintf(stderr, "amixos --shots: the plug-in editor was not found\n"); } }
           win->setProperty("bootOn", true); { QElapsedTimer bt; bt.start(); while (bt.elapsed() < 1700) QCoreApplication::processEvents(QEventLoop::AllEvents, 20); } win->grabWindow().save(shots + QStringLiteral("/boot-splash.png")); win->setProperty("bootOn", false); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         }
+        proTools.setProperty("preview", true);
         frame.setCardType(0, "aec-in"); frame.setCardType(1, "digital-in"); frame.setCardType(2, "analog-out"); frame.setCardType(3, "hybrid");
         frame.setPhantom(0, 0, true); frame.setPhantom(0, 1, true); frame.setChannelStrip(0, 0, 0); frame.setChannelStrip(0, 1, 1); frame.setLogicIn(2, true); frame.setLogicIn(7, true);   // a populated frame for the I/O FRAME picture
-        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "store", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
+        for (const char* id : {"home", "frame", "engctl", "delay", "cloud", "cascade", "mixer", "dsp", "dyn", "gate", "bus", "dca", "scenes", "presets", "routing", "renew", "arrange", "io", "meter", "score", "amp", "assistant", "store", "lufs", "sys", "fx", "osc", "phase", "acoustics", "surround", "master", "rtaeq", "miceq", "live", "tools", "protools", "calib", "boot", "help", "acct", "access", "admin", "ai", "plugins", "network", "media", "asio", "samples", "rtaeq", "bluetooth"}) {
           if (const QStringList only = qEnvironmentVariable("AMIX_SHOTS_PAGES").split(',', Qt::SkipEmptyParts); !only.isEmpty() && !only.contains(QString::fromLatin1(id))) continue;   // AMIX_SHOTS_PAGES=mixer,asio: only those pages (a quick look at one page)
           if (QString::fromLatin1(id) == "rtaeq") { QVariantList golden; for (double g : {1.0, 5.0, 3.0, 3.0, 4.0, 2.0, 2.0, 3.0, 3.0, 1.0}) golden << g; engine.setGraphicEq(0, golden, true); }   // the beta's Golden EQ on the shot
           win->setProperty("current", QString::fromLatin1(id)); for (int k = 0; k < 6; ++k) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
