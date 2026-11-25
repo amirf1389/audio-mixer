@@ -1757,7 +1757,10 @@ void Engine::setEq(int i, int band, int type, double f, double q, double g) {
   if (rt_) rt_->setEqBand(i, band, b.type, b.freq, b.q, b.gainDb);
   stripsTouched();
 }
-void Engine::limitAllChannels(bool on) { for (int i = 0; i < kStrips; ++i) { const am::dsp::ChannelParams& p = strips_[static_cast<std::size_t>(i)].dsp.params(); setChannelLimiter(i, on, p.limiterCeilDb, p.limiterReleaseMs); } }
+void Engine::limitAllChannels(bool on) {   // every strip at once, ONE change signal: per-strip signals re-ran every strip binding of the console 300 times (4 s on a laptop)
+  for (int i = 0; i < kStrips; ++i) { auto& d = strips_[static_cast<std::size_t>(i)].dsp; const double c = d.params().limiterCeilDb, r = d.params().limiterReleaseMs;
+    d.setLimiter(on, std::clamp(c, -30.0, 0.0), std::clamp(r, 1.0, 2000.0)); if (rt_) rt_->setChannelLimiter(i, on, c, r); }
+  stripsTouched(); }
 bool Engine::allChannelsLimited() const { for (int i = 0; i < kStrips; ++i) if (!strips_[static_cast<std::size_t>(i)].dsp.params().limiterOn) return false; return true; }
 int Engine::infUnused() {
   std::vector<int> pull;   // decided first: a linked partner moves with its strip, and still counts as one pulled down

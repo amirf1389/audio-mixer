@@ -8,6 +8,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QUrl>
+#include <QCoreApplication>
+#include <QPointer>
+#include <thread>
 #include <cmath>
 
 Samples::Samples(Engine* engine, QObject* parent) : QObject(parent), engine_(engine), bank_(std::make_unique<am::pads::Bank>(am::paths::file("pads.json"))) {
@@ -30,8 +33,13 @@ void Samples::setGainDb(double db) { db = std::clamp(db, -40.0, 12.0); player_.g
 double Samples::peakDb() const { const float p = player_.peak.load(); return p > 1e-6f ? 20 * std::log10(p) : -120; }
 QString Samples::folder() const { return QString::fromStdString(am::paths::cacheDir()) + "/samples"; }
 
-void Samples::prepare(double rate) {
-  player_.prepare(rate); msg_ = QStringLiteral("100 samples ready at %1 Hz; effects and pads load when first played").arg(rate); emit changed();
+void Samples::prepare(double rate) {   // OFF THE INTERFACE THREAD: rendering the 100 samples took 5 s at 48 kHz (21 s at 192 kHz) inside every device open and at start
+  if (!player_.setRate(rate)) return;
+  msg_ = QStringLiteral("rendering the 100 samples at %1 Hz…").arg(rate); emit changed();
+  QPointer<Samples> self(this);
+  std::thread([self, rate] { auto clips = std::make_shared<std::vector<std::unique_ptr<am::pads::Player::Clip>>>(am::pads::Player::renderBuiltIns(rate));
+    QMetaObject::invokeMethod(QCoreApplication::instance(), [self, rate, clips] { if (!self) return; self->player_.install(rate, std::move(*clips));
+      if (self->player_.rate() == rate) { self->msg_ = QStringLiteral("100 samples ready at %1 Hz; effects and pads load when first played").arg(rate); emit self->changed(); } }, Qt::QueuedConnection); }).detach();
 }
 
 bool Samples::playSource(const std::string& source, int padN, double padGainDb) {
