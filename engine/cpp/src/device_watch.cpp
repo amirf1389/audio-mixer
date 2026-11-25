@@ -1,5 +1,8 @@
 // DEVICE WATCH (see audiomixer/device_watch.hpp)
 #include "audiomixer/device_watch.hpp"
+#ifdef __APPLE__
+#include "backends.hpp"
+#endif
 
 #include <algorithm>
 #include <condition_variable>
@@ -91,6 +94,11 @@ DeviceChangeWatch::~DeviceChangeWatch() {
   if (impl_->t.joinable()) impl_->t.join();
 }
 bool DeviceChangeWatch::active() const { return impl_->ok.load(); }
+#elif defined(__APPLE__)
+struct DeviceChangeWatch::Impl { void* watch = nullptr; bool ok = false; };
+DeviceChangeWatch::DeviceChangeWatch(std::function<void()> onChange) : impl_(std::make_unique<Impl>()) { impl_->watch = coreAudioWatchStart(std::move(onChange), impl_->ok); }
+DeviceChangeWatch::~DeviceChangeWatch() { coreAudioWatchStop(impl_->watch); }
+bool DeviceChangeWatch::active() const { return impl_->ok; }
 #else
 struct DeviceChangeWatch::Impl {};
 DeviceChangeWatch::DeviceChangeWatch(std::function<void()>) : impl_(std::make_unique<Impl>()) {}

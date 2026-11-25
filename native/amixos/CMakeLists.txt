@@ -205,7 +205,33 @@ if(WIN32)
     target_sources(amixos PRIVATE win/amixos.rc)   # version information + manifest (company, product, asInvoker, DPI aware)
 endif()
 if(APPLE AND NOT IOS)
-    set_target_properties(amixos PROPERTIES MACOSX_BUNDLE TRUE)
+    # macOS BUNDLE: AmF X1.app (universal: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"), hardened-runtime entitlements for scripts/macos/build.sh
+    enable_language(OBJCXX)
+    target_sources(amixos PRIVATE src/CaptureGuardMac.mm)
+    target_compile_definitions(amixos PRIVATE AMIX_MACOS)
+    target_link_libraries(amixos PRIVATE "-framework AppKit")
+    set(AMIX_ICNS "${CMAKE_CURRENT_BINARY_DIR}/amfx1.icns")
+    find_program(AMIX_ICONUTIL iconutil)
+    find_program(AMIX_SIPS sips)
+    if(AMIX_ICONUTIL AND AMIX_SIPS)   # the .icns is made at build time from icons/amfx1.png (sips + iconutil, both part of macOS)
+      set(_set "${CMAKE_CURRENT_BINARY_DIR}/amfx1.iconset")
+      set(_cmds COMMAND ${CMAKE_COMMAND} -E make_directory "${_set}")
+      foreach(sz 16 32 128 256)
+        math(EXPR sz2 "${sz} * 2")
+        list(APPEND _cmds COMMAND ${AMIX_SIPS} -z ${sz} ${sz} "${CMAKE_CURRENT_SOURCE_DIR}/icons/amfx1.png" --out "${_set}/icon_${sz}x${sz}.png"
+                          COMMAND ${AMIX_SIPS} -z ${sz2} ${sz2} "${CMAKE_CURRENT_SOURCE_DIR}/icons/amfx1.png" --out "${_set}/icon_${sz}x${sz}@2x.png")
+      endforeach()
+      add_custom_command(OUTPUT "${AMIX_ICNS}" ${_cmds} COMMAND ${AMIX_ICONUTIL} -c icns "${_set}" -o "${AMIX_ICNS}"
+                         DEPENDS icons/amfx1.png COMMENT "amfx1.icns from icons/amfx1.png" VERBATIM)
+      target_sources(amixos PRIVATE "${AMIX_ICNS}")
+      set_source_files_properties("${AMIX_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    endif()
+    set_target_properties(amixos PROPERTIES MACOSX_BUNDLE TRUE OUTPUT_NAME "AmF X1"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/mac/Info.plist.in"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.amfx1.console"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${AMIX_VERSION}" MACOSX_BUNDLE_BUNDLE_VERSION "${AMIX_VERSION}"
+        XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_CURRENT_SOURCE_DIR}/mac/amixos.entitlements"
+        XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES)
 endif()
 if(ANDROID)
     set_target_properties(amixos PROPERTIES QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android" QT_ANDROID_VERSION_NAME "${AMIX_VERSION}")

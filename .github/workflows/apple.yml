@@ -1,0 +1,50 @@
+name: apple
+on:
+  workflow_dispatch:
+  push:
+    paths: ['engine/cpp/**', 'native/amixos/**', 'platforms/ios/**', 'scripts/macos/**', 'scripts/ios/**', '.github/workflows/apple.yml']
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: false }
+      - uses: jurplel/install-qt-action@v4
+        with: { version: '6.8.3', host: mac, target: desktop, arch: clang_64, cache: true }
+      - run: brew install ninja
+      - name: engine tests (Core Audio backend compiled, pure logic tested)
+        run: |
+          cmake -S engine/cpp -B build/engine -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/engine --target coreaudio_logic_test runtime_test
+          ctest --test-dir build/engine -R "coreaudio_logic|runtime" --output-on-failure
+      - name: import signing certificate (only when the secrets exist)
+        env: { P12: '${{ secrets.MACOS_CERT_P12_BASE64 }}', P12_PASS: '${{ secrets.MACOS_CERT_PASSWORD }}' }
+        if: env.P12 != ''
+        run: |
+          KC=$RUNNER_TEMP/sign.keychain-db; KP=$(uuidgen)
+          security create-keychain -p "$KP" "$KC"; security set-keychain-settings -lut 3600 "$KC"; security unlock-keychain -p "$KP" "$KC"
+          echo "$P12" | base64 --decode > $RUNNER_TEMP/c.p12
+          security import $RUNNER_TEMP/c.p12 -k "$KC" -P "$P12_PASS" -T /usr/bin/codesign; rm $RUNNER_TEMP/c.p12
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC"; security list-keychains -d user -s "$KC" login.keychain-db
+      - name: notary profile (only when the secrets exist)
+        env: { AID: '${{ secrets.APPLE_ID }}', APW: '${{ secrets.APPLE_APP_PASSWORD }}', TID: '${{ secrets.APPLE_TEAM_ID }}' }
+        if: env.AID != ''
+        run: xcrun notarytool store-credentials amfx1-ci --apple-id "$AID" --password "$APW" --team-id "$TID"
+      - name: build .app + .dmg
+        env:
+          QT_DIR: ${{ env.QT_ROOT_DIR }}
+          AMIX_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          AMIX_NOTARY_PROFILE: ${{ secrets.APPLE_ID != '' && 'amfx1-ci' || '' }}
+        run: scripts/macos/build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: amfx1-macos, path: dist/macos/*.dmg }
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - name: simulator build (unsigned); signed archive only with a team id secret and a signing setup
+        env: { AMIX_TEAM_ID: '${{ secrets.APPLE_TEAM_ID_IOS }}' }
+        run: scripts/ios/build.sh

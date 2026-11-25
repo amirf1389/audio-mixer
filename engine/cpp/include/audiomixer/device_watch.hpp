@@ -1,5 +1,5 @@
 // DEVICE WATCH: sound cards plugged in / pulled out / taken by another program while the console is capturing.
-// - DeviceChangeWatch: the system's own notifications (Windows: IMMNotificationClient on its own MTA thread); inert elsewhere.
+// - DeviceChangeWatch: the system's own notifications (Windows: IMMNotificationClient on its own MTA thread; macOS: HAL property listeners); inert elsewhere.
 // - DeviceMonitor: when a full rescan is due (a notification, or the cheap fingerprint changed); usable from the interface thread.
 // - classifyStreamError: what a WASAPI error means for a running stream (the device is gone / held by another program).
 // - diffDeviceNames / asioDriverToSkip: what changed, and which ASIO driver a rescan must not load (the one this console holds open).
