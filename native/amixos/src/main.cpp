@@ -196,6 +196,10 @@ int main(int argc, char* argv[]) {
     else if (a == "--big" && i + 1 < argc) { smoke = true; bigShots = QString::fromLocal8Bit(argv[++i]); }   // test builds: the 300-channel console, checked and photographed
 #endif
   }
+  // TEST RUNS keep their settings in a fresh folder of their own: the user's console (and the last test run's strips, inserts and test
+  // plug-ins, which would play into the strips) must never leak into a check, and a check must never change the user's console.
+  // AMIX_SETTINGS_DIR=<folder> picks the folder (a test that runs twice on purpose).
+  QTemporaryDir testSettingsDir; if (smoke) { const QString d = qEnvironmentVariableIsSet("AMIX_SETTINGS_DIR") ? qEnvironmentVariable("AMIX_SETTINGS_DIR") : testSettingsDir.path(); QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, d); QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, d); }
   { QSettings first; Settings::decideSetup(first, smoke || bench || !shots.isEmpty() || !film.isEmpty() || !bigShots.isEmpty()); }   // before anything else writes a setting
 
   am::paths::setProgramDir(QCoreApplication::applicationDirPath().toStdString());

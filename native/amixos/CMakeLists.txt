@@ -263,7 +263,7 @@ target_include_directories(protools_test PRIVATE src)
 target_link_libraries(protools_test PRIVATE Qt6::Core Qt6::Gui)
 add_test(NAME protools COMMAND protools_test)
 add_test(NAME amixos_smoke COMMAND amixos --smoke)
-set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1" TIMEOUT 60)   # AMIX_ALLOW_CAPTURE: the repository's own tooling may capture the window
+set_tests_properties(amixos_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;AMIX_ALLOW_CAPTURE=1" TIMEOUT 300)   # the whole interface is driven on software rendering (about 70 s alone, more under ctest -j); AMIX_ALLOW_CAPTURE: the repository's own tooling may capture the window
 # PAGE BUDGET: every page and every popup opens within its time budget (built from nothing 600 ms, cached 150 ms) and its content stays
 # inside the page area / the window (amixos --bench, AMIX_BENCH_BUDGET; see main.cpp)
 add_test(NAME amixos_page_budget COMMAND amixos --bench)
