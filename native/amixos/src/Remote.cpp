@@ -28,6 +28,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFileInfo>
+#include <QDir>
+#include <QProcessEnvironment>
 #include <QNetworkInterface>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -43,9 +45,10 @@ Remote::Remote(Engine* engine, QObject* parent) : QObject(parent), engine_(engin
   connect(&sync_, &QTimer::timeout, this, &Remote::syncTick);
   proc_.setProcessChannelMode(QProcess::MergedChannels);
   connect(&proc_, &QProcess::readyRead, this, [this] { const QString out = QString::fromLocal8Bit(proc_.readAll()).trimmed(); if (!out.isEmpty()) { status_ = out.section('\n', -1).left(200); emit changed(); } });
-  connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); giveBack(); emit changed(); emit stopped(); });
+  connect(&proc_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus) { status_ = code == 0 ? QStringLiteral("off") : QStringLiteral("stopped (%1): %2").arg(code).arg(status_); stopWebStack(); giveBack(); emit changed(); emit stopped(); });
   connect(&ext_, &Extension::changed, this, [this] { const QString out = ext_.takeOutput().trimmed(); if (!out.isEmpty()) status_ = out.section('\n', -1).left(200); emit changed(); });
-  connect(&ext_, &Extension::stopped, this, [this] { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("off"); giveBack(); emit changed(); emit stopped(); });
+  connect(&ext_, &Extension::stopped, this, [this] { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("off"); stopWebStack(); giveBack(); emit changed(); emit stopped(); });
+  connect(&nginx_, &QProcess::stateChanged, this, &Remote::webStackChanged);
   connect(&proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) { if (e == QProcess::FailedToStart) { status_ = QStringLiteral("the remote service could not be started: ") + program(); emit changed(); } });
 }
 // ---- LIVE SYNC (see Remote.h)
@@ -223,7 +226,7 @@ void Remote::syncTick() {
     if (n) { syncedChanges_ += n; dApplied_ += n; emit synced(); } });   // the console's own follow-ups (a stereo link moving the partner) go out on the next tick
 }
 
-Remote::~Remote() { restore_ = false; if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }
+Remote::~Remote() { restore_ = false; stopWebStack(); if (running()) { proc_.terminate(); if (!proc_.waitForFinished(1500)) proc_.kill(); } }
 // The service program: "AmF X1 Network" next to the console (its name in the release); the build's own name is the fallback.
 QString Remote::program() const {
   const QString d = QCoreApplication::applicationDirPath();
@@ -448,13 +451,13 @@ bool Remote::start(bool wifi) {
   if (wifi) args << "--allow-lan";   // phones on this network may connect (local policy stays on: private addresses only). This sat inside the comment above and was never passed: every phone was refused
   if (ext_.available() && !QSettings().value("store/off").toStringList().contains(QStringLiteral("ext:AmF X1 Network"))) {   // the extension runs inside the console (unless switched off in the LOCAL STORE): same process, same rights on the sound card
     const int rc = ext_.start(args);
-    if (rc == 0 && ext_.running()) { sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
+    if (rc == 0 && ext_.running()) { startWebStack(); sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network (extension)") : QStringLiteral("starting for this computer only (extension)"); emit changed(); return true; }
     status_ = QStringLiteral("the network extension did not start (%1): %2").arg(rc).arg(ext_.takeOutput().trimmed().section('\n', -1).left(160)); emit changed();   // then the program next to it, if there is one
   }
   proc_.start(program(), args); if (!proc_.waitForStarted(3000)) { if (status_.isEmpty() || status_ == "off") status_ = QStringLiteral("the remote service did not start"); giveBack(); emit changed(); return false; }
-  sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
+  startWebStack(); sync_.start(); linkTimer_.start(); status_ = wifi ? QStringLiteral("starting for the phones on this network") : QStringLiteral("starting for this computer only"); emit changed(); return true;
 }
-void Remote::stop() { sync_.stop(); linkTimer_.stop(); if (!links_.isEmpty()) { links_.clear(); emit linksChanged(); } if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
+void Remote::stop() { stopWebStack(); sync_.stop(); linkTimer_.stop(); if (!links_.isEmpty()) { links_.clear(); emit linksChanged(); } if (!running()) return; if (ext_.running()) { ext_.stop(); return; } proc_.terminate(); if (!proc_.waitForFinished(2000)) proc_.kill(); }
 
 // remote-console.json: read-only for the phone (served by the service at /api/console-info). Names and states only: no plug-in state data.
 void Remote::writeConsoleInfo() const {
@@ -473,4 +476,39 @@ void Remote::streamingSync(const QVariantMap& now, std::function<void(const QStr
   QNetworkReply* r = net_.post(api(QStringLiteral("/api/streaming/state")), QJsonDocument(QJsonObject::fromVariantMap(now)).toJson(QJsonDocument::Compact));
   connect(r, &QNetworkReply::finished, this, [r, onCmds] { r->deleteLater(); if (r->error() != QNetworkReply::NoError) return;
     QStringList l; for (const QJsonValue& v : QJsonDocument::fromJson(r->readAll()).object().value("cmds").toArray()) l << v.toString(); if (!l.isEmpty() && onCmds) onCmds(l); });
+}
+
+// ---- WEB STACK (see Remote.h): only what the package carries under web/ next to the console; nothing is downloaded or installed here
+QString Remote::webDir() const { return QCoreApplication::applicationDirPath() + QStringLiteral("/web"); }
+QString Remote::webStackPrefix() const {   // nginx's own folder (logs, temp, the written nginx.conf): Program Files is read-only
+  const QString la = qEnvironmentVariable("LOCALAPPDATA");
+  return la.isEmpty() ? QString::fromStdString(am::paths::cacheDir()) + QStringLiteral("/webstack") : la + QStringLiteral("/AMFB Audio/AmF X1/webstack");
+}
+bool Remote::webStackAvailable() const {
+#ifdef _WIN32
+  const QString w = webDir(); return QFileInfo::exists(w + "/nginx/nginx.exe") && QFileInfo::exists(w + "/nginx/conf/nginx.conf.in") && QFileInfo::exists(w + "/remote/index.html");
+#else
+  return false;
+#endif
+}
+void Remote::startWebStack() {
+  if (!webStack() || !webStackAvailable() || webStackRunning()) return;
+  const QString w = webDir(), pre = webStackPrefix(); QDir().mkpath(pre + "/logs"); QDir().mkpath(pre + "/temp");
+  QFile in(w + "/nginx/conf/nginx.conf.in"); if (!in.open(QIODevice::ReadOnly)) return;
+  QString conf = QString::fromUtf8(in.readAll()); const int bport = webStackPort() + 1 == port() ? webStackPort() + 2 : webStackPort() + 1;
+  conf.replace("@WEB_DIR@", w).replace("@NGINX_DIR@", w + "/nginx").replace("@LISTEN_ADDR@", QStringLiteral("127.0.0.1"))
+      .replace("@LISTEN_PORT@", QString::number(webStackPort())).replace("@DAEMON_PORT@", QString::number(port())).replace("@BRIDGE_PORT@", QString::number(bport));
+  QFile out(pre + "/nginx.conf"); if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return; out.write(conf.toUtf8()); out.close();
+  if (QFileInfo::exists(w + "/node/node.exe") && QFileInfo::exists(w + "/bridge/bridge/server.js")) {
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment(); env.insert("BRIDGE_PORT", QString::number(bport)); bridge_.setProcessEnvironment(env);
+    bridge_.setWorkingDirectory(w + "/bridge"); bridge_.start(w + "/node/node.exe", {w + "/bridge/bridge/server.js"});
+  }
+  nginx_.setWorkingDirectory(pre); nginx_.start(w + "/nginx/nginx.exe", {"-p", pre + "/", "-c", pre + "/nginx.conf"});
+  emit webStackChanged();
+}
+void Remote::stopWebStack() {
+  const QString w = webDir(), pre = webStackPrefix();
+  if (nginx_.state() != QProcess::NotRunning) { QProcess::execute(w + "/nginx/nginx.exe", {"-p", pre + "/", "-c", pre + "/nginx.conf", "-s", "stop"}); if (!nginx_.waitForFinished(2000)) nginx_.kill(); }
+  if (bridge_.state() != QProcess::NotRunning) { bridge_.kill(); bridge_.waitForFinished(1000); }
+  emit webStackChanged();
 }

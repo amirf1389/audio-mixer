@@ -100,6 +100,11 @@ Item {
                         Btn { visible: !remote.running; label: i18n.t("THIS COMPUTER ONLY", i18n.lang); on: remote.available; onClicked: remote.start(false) }
                         Btn { visible: remote.running; label: i18n.t("STOP", i18n.lang); on: true; onColor: Theme.danger; onClicked: remote.stop() }
                         Btn { label: remCard.shown ? i18n.t("HIDE TOKEN", i18n.lang) : i18n.t("SHOW TOKEN (10 min)", i18n.lang); onClicked: { if (remCard.shown) remCard.shown = ""; else { remCard.shown = remote.token() || i18n.t("no token yet: start the service once", i18n.lang); hideTok.restart() } } } }
+                    ScrollRow { Layout.fillWidth: true; spacing: 8; visible: remote.webStackAvailable   // WEB STACK: nginx + the Node bridge with the service (off by default)
+                        Text { text: i18n.t("WEB STACK (nginx + Node.js)", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                        Btn { objectName: "webStackToggle"; label: remote.webStack ? i18n.t("ON", i18n.lang) : i18n.t("OFF", i18n.lang); on: remote.webStack; onColor: Theme.emerald; onClicked: remote.webStack = !remote.webStack }
+                        Text { visible: remote.webStackRunning; text: "http://127.0.0.1:" + remote.webStackPort + "/remote/"; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true }
+                        Item { Layout.fillWidth: true } }
                     Text { Layout.fillWidth: true; text: remote.available ? remote.status : i18n.t("The remote service program (amixos-daemon) is not installed next to the console.", i18n.lang); color: remote.running ? Theme.emerald : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; wrapMode: Text.WordWrap }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "   " + i18n.t("← type this into the phone app", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; font.bold: true } }
                     Repeater { model: remote.running ? remote.addresses : []; delegate: Text { text: modelData + "/remote   " + i18n.t("← or open this in any browser (phone, tablet, laptop) and type the PIN", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
