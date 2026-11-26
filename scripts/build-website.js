@@ -49,13 +49,13 @@ const DL = downloads();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const NAV = [['/', 'Home'], ['/features', 'Features'], ['/extensions', 'Extensions'], ['/plugins', 'Plug-ins'], ['/updates', 'Updates'], ['/developers', 'Developers'], ['/security', 'Security'], ['/faq', 'FAQ'], ['/keys', 'Buy']];
 
-function page({ slug, title, description, h1, intro, crumbs = true, body, jsonld = [], hero = null, changefreq = 'monthly', priority = '0.7' }) {
+function page({ slug, title, description, h1, intro, crumbs = true, body, jsonld = [], hero = null, changefreq = 'monthly', priority = '0.7', comment = '' }) {
   const url = SITE + (slug === '/' ? '/' : slug);
   const ld = [{ '@context': 'https://schema.org', '@type': 'WebPage', name: title, description, url, isPartOf: { '@type': 'WebSite', name: 'AmF X1 by AMFB Audio', url: SITE + '/' }, inLanguage: 'en' }];
   if (crumbs && slug !== '/') ld.push({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: SITE + '/' }, { '@type': 'ListItem', position: 2, name: h1, item: url }] });
   const nav = NAV.map(([href, name]) => `<a href="${href}"${href === slug ? ' aria-current="page"' : ''}>${name}</a>`).join('') + '<a class="cta" href="/download">Download</a>';
   const head = hero || `<div class="page-head"><div class="wrap">${crumbs ? `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">${esc(h1)}</span></nav>` : ''}<h1>${esc(h1)}</h1>${intro ? `<p>${intro}</p>` : ''}</div></div>`;
-  const html = `<!doctype html>
+  const html = `<!doctype html>${comment ? `\n<!-- ${comment.replace(/--/g, '- -')} -->` : ''}
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -324,15 +324,25 @@ pages.push(page({
   body: `<section class="block"><div class="wrap">${FAQ.map(([q, a], i) => `<details${i === 0 ? ' open' : ''}><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('\n')}</div></section>`,
 }));
 
-// PRIVACY
+// PRIVACY: the Personal Data Protection notice (PDPA 2010 as amended by the PDP (Amendment) Act 2024), English and Bahasa Malaysia, from
+// docs/legal/privacy-notice.json (the Malay text is produced with DeepL from the English; the same file feeds docs/legal/pdpa-privacy-policy.md).
+// Written against: PDP (Amendment) Act 2024 [Act A1727]; Commissioner's Guideline on Appointment of DPO (2025) with Circular 2/2025;
+// Guideline on Data Breach Notification (2025) with Circular 1/2025; Guideline on Cross Border Personal Data Transfer (29 April 2025).
+const NOTICE = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs', 'legal', 'privacy-notice.json'), 'utf8'));
+const linkify = t => esc(t).replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, m => `<a href="mailto:${m}">${m}</a>`);
+const noticeHtml = (lang, secs) => secs.map((s, i) => `<h2${i ? ' class="mt"' : ''} id="${lang}-${i + 1}">${esc(s.h)}</h2>${s.p.map(t => `<p>${linkify(t)}</p>`).join('')}`).join('\n');
 pages.push(page({
   slug: '/privacy', title: 'Privacy — AmF X1 by AMFB Audio', h1: 'Privacy', priority: '0.4', changefreq: 'yearly',
-  description: 'What data AmF X1 and this website use: no tracking, no analytics, no cookies; sales records are encrypted and used only to send your edition.',
-  intro: 'Short version: no tracking, no analytics, no cookies.',
-  body: `<section class="block"><div class="wrap">
-<h2>This website</h2><p>No cookies, no analytics, no third-party scripts or fonts. The web server keeps standard access logs (IP address, time, page) for security and removes them regularly.</p>
-<h2 class="mt">Buying an edition</h2><p>When you buy on WhatsApp you send the edition and, if you include it, your computer's machine code. The sale (serial number, edition, order and the contact you gave) is stored encrypted and used only to make and send your edition installer. Ask us at <a href="mailto:${CONTACT.email}">${CONTACT.email}</a> to see or delete them.</p>
-<h2 class="mt">The app</h2><p>Your audio never leaves your computer. The app checks for signed updates and, if you choose, opens WhatsApp or e-mail with a prepared message; nothing is sent without you pressing send.</p>
+  comment: 'OWNER: Review with a Malaysian lawyer before publishing. Fill every [TO FILL] / [UNTUK DIISI] field (DPO name, dpo@ e-mail, address, log retention).',
+  description: 'Personal data protection notice for AmF X1 (PDPA 2010, as amended 2024), in English and Bahasa Malaysia: what we collect, why, your rights and our DPO.',
+  intro: 'Personal Data Protection Notice / Notis Perlindungan Data Peribadi. <a href="#ms-1">Bahasa Malaysia</a>',
+  body: `<section class="block"><div class="wrap" lang="en">
+${noticeHtml('en', NOTICE.en)}
+<p class="mt">Last updated: ${esc(NOTICE.updated)}</p>
+</div></section>
+<section class="block"><div class="wrap" lang="ms">
+${noticeHtml('ms', NOTICE.ms)}
+<p class="mt">Kemas kini terakhir: ${esc(NOTICE.updated)}</p>
 </div></section>`,
 }));
 
