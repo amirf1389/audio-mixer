@@ -193,6 +193,18 @@ class DaemonClient(val ep: Endpoint) {
     // ---- MASTERING: the master chain (on, low, air, thr, ratio, attack, release, makeup, drive, gain)
     fun mastering(values: Map<String, Any>) = control(mapOf("op" to "mastering") + values)
     fun masteringNow(): Map<String, Any?> = getObj("/api/state").obj("mastering")
+    /** PHONE MIC: the strip the phone's microphone plays on (on) or none (off) */
+    fun phoneMic(strip: Int, on: Boolean) = control(if (on) mapOf("op" to "phoneMic", "strip" to strip, "on" to true) else mapOf("op" to "phoneMic", "on" to false))
+    /** PHONE MIC audio: one chunk of 16-bit little-endian mono PCM at [rate]; returns the HTTP status (200 taken, 409 the mic is off on the console) */
+    fun micChunk(pcm: ByteArray, len: Int, rate: Int): Int {
+        val c = URL(ep.http + "/api/mic?rate=$rate").openConnection() as HttpURLConnection
+        try {
+            c.requestMethod = "POST"; c.connectTimeout = 2000; c.readTimeout = 2000; c.doOutput = true; c.useCaches = false
+            c.setRequestProperty("X-Amix-Token", ep.token); c.setRequestProperty("Content-Type", "application/octet-stream"); c.setFixedLengthStreamingMode(len)
+            c.outputStream.use { it.write(pcm, 0, len) }
+            val code = c.responseCode; runCatching { (if (code >= 400) c.errorStream else c.inputStream)?.use { it.readBytes() } }; return code
+        } finally { c.disconnect() }
+    }
     fun send(strip: Int, bus: Int, db: Double, pre: Boolean) = control(mapOf("op" to "send", "strip" to strip, "bus" to bus, "db" to db, "pre" to pre))
     fun eq(strip: Int, band: Int, type: String, freq: Double, q: Double, gainDb: Double) = push(mapOf("op" to "eq", "strip" to strip, "band" to band, "type" to type, "freq" to freq, "q" to q, "gainDb" to gainDb))
     fun compressor(strip: Int, on: Boolean, thresholdDb: Double, ratio: Double, kneeDb: Double, attackMs: Double, releaseMs: Double, makeupDb: Double) = control(mapOf("op" to "compressor", "strip" to strip, "on" to on, "thresholdDb" to thresholdDb, "ratio" to ratio, "kneeDb" to kneeDb, "attackMs" to attackMs, "releaseMs" to releaseMs, "makeupDb" to makeupDb))

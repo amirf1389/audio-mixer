@@ -34,6 +34,7 @@ class HomeActivity : FitActivity() {
             Tile("ConsoleStatusActivity", "ⓘ", R.string.home_cstat, R.string.home_cstat_sub, g) { Nav.go(this, ConsoleStatusActivity::class.java) },
             Tile("MetersActivity", "▮", R.string.home_meters, R.string.home_meters_sub, c) { Nav.go(this, MetersActivity::class.java) },
             Tile("SoundScoreActivity", "★", R.string.home_score, R.string.home_score_sub, y) { Nav.go(this, SoundScoreActivity::class.java) },
+            Tile("PhoneMicActivity", "🎤", R.string.home_mic, R.string.home_mic_sub, Color.parseColor("#F87171")) { Nav.go(this, PhoneMicActivity::class.java) },
             Tile("RoutingActivity", "⇆", R.string.home_routing, R.string.home_routing_sub, v) { Nav.go(this, RoutingActivity::class.java) },
             Tile("Scenes", "▤", R.string.home_scenes, R.string.home_scenes_sub, g) { Nav.go(this, RemoteActivity::class.java) { it.putExtra("open", "scenes") } },
             Tile("ToolsActivity", "♪", R.string.home_tools, R.string.home_tools_sub, y) { Nav.go(this, ToolsActivity::class.java) },
@@ -85,7 +86,7 @@ class HomeActivity : FitActivity() {
     // ---- THE TILES: pinned first (long press pins / unpins, ★ on the tile)
     internal fun drawTiles() {
         grid.removeAllViews(); val pins = Home.pinned(this)
-        for (t in Home.pinnedFirst(tiles(), { it.id }, pins)) grid.addView(LinearLayout(this).apply {
+        for (t in Home.pinnedFirst(tiles().filter { Features.tileOn(this, it.id) }, { it.id }, pins)) grid.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.tile_bg); setPadding(28, 26, 28, 26); isClickable = true; setOnClickListener { t.go() }
             setOnLongClickListener { val on = Home.togglePin(this@HomeActivity, t.id); android.widget.Toast.makeText(this@HomeActivity, getString(if (on) R.string.home_pinned else R.string.home_unpinned, getString(t.title)), android.widget.Toast.LENGTH_SHORT).show(); drawTiles(); true }
             layoutParams = GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f)).apply { width = 0; setMargins(8, 8, 8, 8) }

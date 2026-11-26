@@ -55,7 +55,7 @@ class KnobView(ctx: Context, private val accent: Int = 0xFFFFB590.toInt()) : Vie
 }
 
 /** A console pad button (MUTE, SOLO, FX, LIMIT ...): a dark key that lights in its colour when ON. */
-class PadButton(ctx: Context, label: String, private val onColor: Int, private val textSizeSp: Float = 13f) : TextView(ctx) {
+class PadButton(ctx: Context, label: String, private val onColor: Int, private val textSizeSp: Float = 13f) : androidx.appcompat.widget.AppCompatTextView(ctx) {
     var on = false; set(v) { field = v; paint() }
     init { text = label; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD; textSize = textSizeSp; isClickable = true; isFocusable = true; minHeight = 84; setPadding(10, 0, 10, 0); paint() }
     private fun paint() {

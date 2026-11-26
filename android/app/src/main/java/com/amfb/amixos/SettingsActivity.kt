@@ -71,6 +71,15 @@ class SettingsActivity : FitActivity() {
         choice(r, "meterFloor", 60, listOf(40, 60, 90), getString(R.string.set_meter_range)) { "0 … -$it dBFS" }
         choice(r, "syncSeconds", 3, listOf(0, 1, 3, 5, 10), getString(R.string.set_sync)) { if (it == 0) getString(R.string.set_off) else "$it s" }
 
+        // FEATURES: the parts of the app to show (HOME tiles, the remote's TOOLS, the bottom bar). Hiding a part never unlocks another.
+        section(getString(R.string.set_features))
+        box.addView(note(getString(R.string.set_features_note)))
+        for (f in Features.forApp(Nav.standalone(this))) {
+            toggle(r, "feat_" + f.id, f.default, getString(f.label), getString(f.sub))
+            if (f.locked) box.findViewWithTag<Switch>("feat_" + f.id)?.apply { isChecked = true; isEnabled = false }
+        }
+        button(getString(R.string.set_features_reset)) { Features.resetAll(this); recreate() }
+
         section(getString(R.string.set_behaviour))
         toggle(r, "keepScreenOn", true, getString(R.string.set_screen_on), null)
         choice(r, "textSize", TextFit.AUTO, listOf(TextFit.AUTO, TextFit.SMALL, TextFit.NORMAL, TextFit.LARGE), getString(R.string.set_text_size), { recreate() }) { getString(listOf(R.string.set_text_auto, R.string.set_text_small, R.string.set_text_normal, R.string.set_text_large)[it]) }
