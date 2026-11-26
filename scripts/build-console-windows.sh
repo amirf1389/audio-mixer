@@ -62,6 +62,39 @@ mkdir -p "$D/drivers/asio" "$D/licenses"
 for f in "LICENSE.txt" "Steinberg ASIO Licensing Agreement.pdf" "Steinberg ASIO Usage Guidelines.pdf" "changes.txt"; do [ -f "$ROOT/$f" ] && cp "$ROOT/$f" "$D/drivers/asio/"; done
 cp "$ROOT/drivers/asio/sdk/README.txt" "$D/drivers/asio/SDK-HEADERS.txt" 2>/dev/null || true; cp "$ROOT/drivers/vst3/sdk/LICENSE.txt" "$D/licenses/VST3-SDK-LICENSE.txt" 2>/dev/null || true
 cp "$ROOT"/licenses/* "$D/licenses/" 2>/dev/null || true; cp "$ROOT/Additional Terms & Conditions" "$D/licenses/Additional Terms and Conditions.txt" 2>/dev/null || true
+# WEB STACK (optional; OFF by default in the console, NETWORK page): the official Node.js win-x64 and nginx for Windows, verified, under web\node and
+# web\nginx; the browser remote page under web\remote; the Node bridge under web\bridge; the nginx template and start / stop helpers under web\.
+# Downloads are cached in AMIX_WEBDEPS (default .webdeps-win) and checked against pinned SHA-256 sums (Node: as listed in SHASUMS256.txt of the
+# release; nginx: the sum of the release zip, and its .asc signature with gpg when AMIX_WEBDEPS/gnupg holds the nginx signing keys). Nothing in them is run here.
+NODE_V=22.11.0; NODE_SHA=905373a059aecaf7f48c1ce10ffbd5334457ca00f678747f19db5ea7d256c236; NGINX_V=1.26.2; NGINX_SHA=942638cc31c836fe429fde22e4c46e497f89d3c2bbce46cd2c8800854fd71409
+WD="${AMIX_WEBDEPS:-$ROOT/.webdeps-win}"; mkdir -p "$WD"
+[ -f "$WD/node-v$NODE_V-win-x64.zip" ] || curl -sSfL -o "$WD/node-v$NODE_V-win-x64.zip" "https://nodejs.org/dist/v$NODE_V/node-v$NODE_V-win-x64.zip"
+[ -f "$WD/SHASUMS256.txt" ] || curl -sSfL -o "$WD/SHASUMS256.txt" "https://nodejs.org/dist/v$NODE_V/SHASUMS256.txt"
+[ -f "$WD/nginx-$NGINX_V.zip" ] || curl -sSfL -o "$WD/nginx-$NGINX_V.zip" "https://nginx.org/download/nginx-$NGINX_V.zip"
+grep -q "^$NODE_SHA  node-v$NODE_V-win-x64.zip\$" "$WD/SHASUMS256.txt" || { echo "Node.js: SHASUMS256.txt does not list the pinned sum"; exit 1; }
+echo "$NODE_SHA  $WD/node-v$NODE_V-win-x64.zip" | sha256sum -c --quiet || { echo "Node.js zip: wrong SHA-256"; exit 1; }
+echo "$NGINX_SHA  $WD/nginx-$NGINX_V.zip" | sha256sum -c --quiet || { echo "nginx zip: wrong SHA-256"; exit 1; }
+if [ -f "$WD/nginx-$NGINX_V.zip.asc" ] && [ -d "$WD/gnupg" ] && command -v gpg >/dev/null; then gpg --homedir "$WD/gnupg" -q --verify "$WD/nginx-$NGINX_V.zip.asc" "$WD/nginx-$NGINX_V.zip" 2>/dev/null || { echo "nginx zip: bad signature"; exit 1; }; echo "nginx: signature good"; fi
+X="$(mktemp -d)"; unzip -q "$WD/node-v$NODE_V-win-x64.zip" "node-v$NODE_V-win-x64/node.exe" "node-v$NODE_V-win-x64/LICENSE" -d "$X"; unzip -q "$WD/nginx-$NGINX_V.zip" -d "$X"
+mkdir -p "$D/web/node" "$D/web/nginx/conf" "$D/web/remote" "$D/web/bridge/bridge/sim" "$D/web/bridge/engine/node" "$D/licenses"
+cp "$X/node-v$NODE_V-win-x64/node.exe" "$D/web/node/"; cp "$X/node-v$NODE_V-win-x64/LICENSE" "$D/licenses/NODEJS-LICENSE.txt"
+N="$X/nginx-$NGINX_V"; cp "$N/nginx.exe" "$D/web/nginx/"; cp "$N/conf/mime.types" "$D/web/nginx/conf/"
+cp "$N/docs/LICENSE" "$D/licenses/NGINX-LICENSE.txt"; cp "$N/docs/zlib.LICENSE" "$D/licenses/NGINX-zlib-LICENSE.txt"; cp "$N/docs/PCRE.LICENCE" "$D/licenses/NGINX-PCRE-LICENCE.txt"; cp "$N/docs/OpenSSL.LICENSE" "$D/licenses/NGINX-OpenSSL-LICENSE.txt"
+rm -rf "$X"
+printf 'Node.js v%s win-x64 (node.exe only)  sha256 %s  https://nodejs.org/dist/v%s/\nnginx %s for Windows  sha256 %s  https://nginx.org/download/\n' "$NODE_V" "$NODE_SHA" "$NODE_V" "$NGINX_V" "$NGINX_SHA" "$NGINX_SHA" > "$D/licenses/WEB-STACK-SOURCES.txt"
+cp "$ROOT/install/windows/web/nginx.conf.in" "$D/web/nginx/conf/"; cp "$ROOT/install/windows/web/start-web-stack.cmd" "$ROOT/install/windows/web/stop-web-stack.cmd" "$D/web/"
+cp "$ROOT/engine/cpp/app/daemon/remote_page.html" "$D/web/remote/index.html"
+for f in "$ROOT"/bridge/*.js "$ROOT/bridge/license-public.json"; do case "$(basename "$f")" in test.js|audit.js|mail.js|flexasio.js) ;; *) cp "$f" "$D/web/bridge/bridge/";; esac; done
+cp "$ROOT"/bridge/sim/*.js "$D/web/bridge/bridge/sim/"; cp "$ROOT/engine/node/index.js" "$D/web/bridge/engine/node/"; cp "$ROOT/package.json" "$D/web/bridge/"
+# PACKAGE CHECK: the build fails when the network service, its extension or the web remote is not in the package
+for f in "AmF X1 Network.exe" "AmF X1 Network.dll" amixos.exe Qt6Core.dll Qt6Network.dll platforms/qwindows.dll web/remote/index.html web/node/node.exe web/nginx/nginx.exe web/nginx/conf/mime.types web/nginx/conf/nginx.conf.in web/start-web-stack.cmd web/stop-web-stack.cmd web/bridge/bridge/server.js web/bridge/engine/node/index.js web/bridge/package.json licenses/NODEJS-LICENSE.txt licenses/NGINX-LICENSE.txt; do
+  [ -s "$D/$f" ] || { echo "PACKAGE CHECK: $f is missing from $D"; exit 1; }; done
+grep -q '/api/' "$D/web/remote/index.html" || { echo "PACKAGE CHECK: web/remote/index.html is not the browser remote"; exit 1; }
+x86_64-w64-mingw32-objdump -p "$D/AmF X1 Network.exe" | grep -qiE "DLL Name: (Qt6Network|ws2_32)\.dll" || { echo "PACKAGE CHECK: AmF X1 Network.exe has no network imports"; exit 1; }
+x86_64-w64-mingw32-objdump -p "$D/AmF X1 Network.exe" | sed -n 's/.*DLL Name: //p' | while read -r l; do case "$l" in [Qq]t6*|amix_*|av*|sw*) [ -f "$D/$l" ] || { echo "PACKAGE CHECK: AmF X1 Network.exe needs $l, not in the package"; exit 1; };; esac; done
+NODE_LIST="$(node "$ROOT/scripts/require-closure.js" "$ROOT/bridge/server.js")" || exit 1
+for f in $NODE_LIST; do [ -f "$D/web/bridge/$f" ] || { echo "PACKAGE CHECK: the bridge needs $f, not in web/bridge"; exit 1; }; done
+echo "package check: network service, extension, web remote and web stack present"
 cat > "$D/README.txt" <<TXT
 AmF X1 by AMFB Audio $VER - Windows x64
   amixos.exe            the console (Qt 6 Quick): start this
@@ -71,6 +104,7 @@ AmF X1 by AMFB Audio $VER - Windows x64
   AudioMixerASIO64.dll  the ASIO driver: register from an administrator prompt with  "AmF X1.exe" --install-driver
   drivers\\asio\\         the 32-bit ASIO driver DLL and the Steinberg ASIO licence, usage guidelines and change list
   licenses\\              third-party licences and the additional terms
+  web\\                   the WEB STACK (off unless switched on): web\\nginx (nginx for Windows), web\\node (Node.js), web\\bridge, web\\remote, start-web-stack.cmd / stop-web-stack.cmd
   Qt6*.dll, platforms\\, imageformats\\, qml\\   the Qt $HOSTQT runtime (MinGW build) the console needs; keep them next to amixos.exe
 Data goes to %APPDATA%\\AMFB Audio\\AmF X1, cache to %LOCALAPPDATA%\\AMFB Audio\\AmF X1 (docs/install-layout.md). Unsigned: sign with scripts/sign-windows.js.
 TXT

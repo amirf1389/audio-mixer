@@ -35,12 +35,22 @@ class Remote : public QObject {
   Q_PROPERTY(int pulse READ pulse NOTIFY pulseChanged)             // moves on while a remote's fader glow is lit: bind touched(strip, remote.pulse)
   Q_PROPERTY(QVariantList links READ links NOTIFY linksChanged)    // CONNECTED PHONES: [{id, tokenId, name, role, ip, seconds}] (every 2 s while running)
   Q_PROPERTY(QString linkNote READ linkNote NOTIFY linksChanged)
+  // WEB STACK (OFF by default): nginx (web/nginx) in front of the service on webStackPort, plus the Node bridge (web/node, web/bridge),
+  // started together with the service and stopped with it. The service's own browser remote (port, /remote) works with or without it.
+  Q_PROPERTY(bool webStack READ webStack WRITE setWebStack NOTIFY webStackChanged)
+  Q_PROPERTY(bool webStackAvailable READ webStackAvailable CONSTANT)
+  Q_PROPERTY(bool webStackRunning READ webStackRunning NOTIFY webStackChanged)
+  Q_PROPERTY(int webStackPort READ webStackPort NOTIFY webStackChanged)
  public:
   explicit Remote(Engine* engine, QObject* parent = nullptr);
   ~Remote() override;
   bool running() const { return ext_.running() || proc_.state() != QProcess::NotRunning; }
   bool inProcess() const { return ext_.running(); }   // the service runs as an extension inside the console
   bool available() const; QString status() const { return status_; } int port() const { if (runPort_ > 0 && running()) return runPort_; const int p = QSettings().value("remote/port", 8765).toInt(); return p >= 1024 && p <= 65535 ? p : 8765; }   // while the service runs: the port it was STARTED on (a port changed in SETTINGS since applies at the next start; the QR code and the links must not point at a port nothing listens on)
+  bool webStack() const { return QSettings().value("remote/webStack", false).toBool(); }
+  void setWebStack(bool on) { if (on == webStack()) return; QSettings().setValue("remote/webStack", on); if (!on) stopWebStack(); else if (running()) startWebStack(); emit webStackChanged(); }
+  bool webStackAvailable() const; bool webStackRunning() const { return nginx_.state() != QProcess::NotRunning; }
+  int webStackPort() const { const int p = QSettings().value("remote/webStackPort", 8080).toInt(); return p >= 1024 && p <= 65535 && p != port() ? p : 8080; }
   mutable int runPort_ = 0;   // REMOTE PORT from SETTINGS (validated); read when the service starts
   QStringList addresses() const; QStringList otherAddresses() const; QString tokenFile() const;
   Q_INVOKABLE QString adapterName(const QString& address) const;   // the network card an address belongs to ("Wi-Fi", "Ethernet"), for the address picker
@@ -80,6 +90,7 @@ class Remote : public QObject {
  signals:
   void changed();
   void stopped();
+  void webStackChanged();
  public:
   int syncedChanges() const { return syncedChanges_; }
   int remotes() const { return running() ? remotes_ : 0; }
@@ -122,6 +133,7 @@ class Remote : public QObject {
   bool send(const QVariantMap& cmd) { if (!running()) return false; ensureToken(); if (token_.isEmpty()) return false; post(cmd); return true; }
  private:
   QTimer sync_; QNetworkAccessManager net_; QVector<SyncStrip> base_; double baseMaster_ = 0; bool baseMute_ = false; quint64 v_ = 0; int posting_ = 0; bool stale_ = false, getting_ = false; QByteArray token_; int syncedChanges_ = 0, remotes_ = 0, pulse_ = 0; qint64 lastTouch_ = 0; int dTicks_ = 0, dGets_ = 0, dApplied_ = 0; QHash<int, qint64> touched_;
+  QProcess nginx_, bridge_; QString webDir() const; QString webStackPrefix() const; void startWebStack(); void stopWebStack();
   Engine* engine_; QProcess proc_; Extension ext_{QStringLiteral("AmF X1 Network")}; QString status_ = "off";
   QString runTool(const QStringList& args, bool* ok) const; void restartIfRunning();
   QVariantList tokens_; QString tokenNote_; bool wifi_ = false;

@@ -140,6 +140,7 @@ bindings/perl/Audio-AmixOS/*.o
 bindings/perl/Audio-AmixOS/*.c
 bindings/perl/Audio-AmixOS/*.bs
 .qt-win/
+.webdeps-win/
 build-win/
 screenshots-*/
 third_party/

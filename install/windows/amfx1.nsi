@@ -81,6 +81,9 @@ Function ${UN}CloseConsole
   Call ${UN}CloseOne
   StrCpy $R9 "AmF X1 Plugin Builder.exe"
   Call ${UN}CloseOne
+  ; the WEB STACK (web\nginx, started by the console or web\start-web-stack.cmd): asked to stop through its own pid file, never by image name
+  IfFileExists "$INSTDIR\web\nginx\nginx.exe" 0 +2
+    nsExec::Exec '"$INSTDIR\web\nginx\nginx.exe" -p "$LOCALAPPDATA\AMFB Audio\AmF X1\webstack" -c "$LOCALAPPDATA\AMFB Audio\AmF X1\webstack\nginx.conf" -s stop'
 FunctionEnd
 ; A FILE STILL IN USE after that (the ASIO driver DLL loaded by a DAW, a program another user runs): Windows lets a file in use be renamed,
 ; so it is moved aside to <name>.old<n> and removed at the next restart, and the new file goes in its place. The install never stops on it.
