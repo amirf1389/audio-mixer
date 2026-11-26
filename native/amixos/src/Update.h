@@ -28,6 +28,7 @@ class Update : public QObject {
   Q_PROPERTY(bool checkAtStart READ checkAtStart WRITE setCheckAtStart NOTIFY changed)
   Q_PROPERTY(QString lastCheck READ lastCheck NOTIFY changed)
   Q_PROPERTY(QString current READ current CONSTANT)
+  Q_PROPERTY(bool packaged READ packaged CONSTANT)                 // Microsoft Store (MSIX) install: the Store updates it, the self-updater stays off
   Q_PROPERTY(int progress READ progress NOTIFY changed)
   // THE UPDATE NOTICE (am::upd::noticeFor): a banner in the console, a badge on SOFTWARE UPDATE in the menu, one Windows notification
   Q_PROPERTY(bool found READ found NOTIFY changed)                       // the signed manifest names a newer version than this one
@@ -49,7 +50,7 @@ class Update : public QObject {
  public:
   explicit Update(const QString& currentVersion, QObject* parent = nullptr);
   QString state() const { return state_; } QString message() const { return msg_; } QString latest() const { return latest_; } QString channel() const { return channel_; } QString released() const { return released_; }
-  QStringList notes() const { return notes_; } QVariantMap file() const { return file_; } QString downloaded() const { return downloaded_; } QString current() const { return current_; } int progress() const { return progress_; }
+  QStringList notes() const { return notes_; } QVariantMap file() const { return file_; } QString downloaded() const { return downloaded_; } QString current() const { return current_; } bool packaged() const; int progress() const { return progress_; }
   QString url() const { return s_.value("update/url", kDefaultUrl).toString(); } void setUrl(const QString& u);
   bool checkAtStart() const { return s_.value("update/checkAtStart", true).toBool(); } void setCheckAtStart(bool v) { s_.setValue("update/checkAtStart", v); emit changed(); }
   QString lastCheck() const { return s_.value("update/lastCheck").toString(); }

@@ -22,6 +22,9 @@ QString runCommand(const QString& exe);
 /** START WITH WINDOWS: read / write the Run key value; false (and nothing written) off Windows */
 bool startWithWindows();
 bool setStartWithWindows(bool on, const QString& exe);
+/** true when running from an MSIX package (Microsoft Store): GetCurrentPackageFullName succeeds. Then the Run key and the
+ *  self-updater are off: the package's StartupTask and the Store do those jobs. Always false off Windows. */
+bool packaged();
 }  // namespace bg
 
 class CloseToTray : public QObject {
