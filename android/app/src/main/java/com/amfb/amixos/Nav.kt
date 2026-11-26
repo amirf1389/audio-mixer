@@ -60,7 +60,7 @@ object Nav {
         // a Material navigation bar: a tonal surface (no divider line), the open tab's icon on a pill, labels under the icons
         val d = a.resources.displayMetrics.density
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; tag = "navBar"; setBackgroundColor(a.getColor(R.color.md_surface_container)); setPadding(0, (12 * d).toInt(), 0, (12 * d).toInt()) }
-        for (t in tabs(standalone(a))) {
+        for (t in tabs(standalone(a)).filter { Features.tabOn(Prefs.remote(a), it) }) {   // FEATURES: TOOLS / PLAYERS can be switched off
             val on = t == current
             bar.addView(LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; contentDescription = a.getString(t.label)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setOnClickListener { go(a, if (t == Tab.MIXER) mixerTarget(a) else t.target) }

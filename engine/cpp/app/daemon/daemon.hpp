@@ -16,6 +16,8 @@
 //   GET  /api/streaming           STREAMING: what plays now, as the console last reported it (any valid token)
 //   POST /api/streaming/cmd       {"cmd":"play"|"pause"|"toggle"|"next"|"previous"} queued for the console (control token)
 //   POST /api/streaming/state     the console reports what plays and takes the queued commands (master token). No audio passes here.
+//   POST /api/mic?rate=48000     PHONE MIC: raw s16le mono PCM chunks (<= 64 KB) from a phone, played on the strip picked with
+//                                 {"op":"phoneMic","strip":N,"on":true|false} (control token); 409 while the mic is off
 //   WS   /ws/meters?token=...     a JSON frame 20 times a second: strips [{pk,rms,hold,clip,gr,gate,in}], master {l,r,rms,clip}, loudness, correlation, blocks, xruns
 // Token: <data>/daemon.token (am::paths: %APPDATA%\AMFB Audio\AmF X1 on Windows, the program's data folder on Linux, ...) (created on first start, 0600, 32 random bytes as hex); --token-file / --token override it.
 // Binds 127.0.0.1 by default. --allow-lan binds 0.0.0.0 for a phone on the same network: the token still protects control, but nothing is
@@ -46,6 +48,7 @@
 #include "json.hpp"
 #include "tokens.hpp"
 #include "record/recorder.hpp"
+#include "phone_mic.hpp"
 
 namespace am {
 
@@ -199,6 +202,8 @@ class Daemon {
   bool noteRefused();   // a wrong token: counted and slowed down; true when there were too many in the last minute
   std::atomic<int> refused_{0}, refusedNow_{0}; std::atomic<long long> refusedSince_{0};
   std::atomic<int> pairFails_{0}; std::atomic<long long> pairMinute_{0};
+  PhoneMic mic_; int micStrip_ = -1; std::atomic<long long> micAt_{0}; std::mutex micPush_;   // PHONE MIC (phone_mic.hpp): the strip it plays on (-1 off), the last chunk (unix ms)
+  json::Value micJson() const;
   rec::Recorder rec_; double rate_ = 48000;   // RECORD from the remote: the master to <data>/recordings (the folder is fixed: a remote never names a path)
   mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; Dca dcas_[8]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
   std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now(); std::atomic<bool> running_{false};

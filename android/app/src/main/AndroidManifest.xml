@@ -25,6 +25,7 @@
         <activity android:name=".MetersActivity" android:exported="false" />
         <activity android:name=".SoundScoreActivity" android:exported="false" />
         <activity android:name=".RoutingActivity" android:exported="false" />
+        <activity android:name=".PhoneMicActivity" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" android:exported="false" />
         <activity android:name=".CalculatorActivity" android:exported="false" />
         <activity android:name=".StreamPlayerActivity" android:exported="false" android:hardwareAccelerated="true" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="@string/settings" />

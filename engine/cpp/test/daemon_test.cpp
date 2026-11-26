@@ -433,6 +433,28 @@ int main() {
     CHECK(am::httpd::Client::request("127.0.0.1", mp, "GET", "/api/rta", "", ma, status, body) && status == 200 && Value::parse(body, ok)["f"].size() > 50);
     CHECK(am::httpd::Client::request("127.0.0.1", mp, "POST", "/api/control", "{\"op\":\"rta\",\"src\":\"off\"}", ma, status, body) && status == 200 && md.rtaJson(false)["src"].asInt() == am::Rta::kOff);
     md.stop(); std::remove(sf.c_str()); }
+  { // PHONE MIC: a phone's 1 kHz tone at -6 dBFS posted as s16le PCM plays on the strip it picked; off again gives the strip its input back
+    am::Daemon::Options po = o; po.port = 0; po.tokenStore.clear(); am::Daemon pm(po); std::string e; CHECK(pm.start(e)); const unsigned short pp = pm.port(); const std::vector<std::pair<std::string, std::string>> pa = {{"X-Amix-Token", po.token}};
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"open\",\"backend\":\"null\",\"rate\":48000,\"frames\":128,\"inChannels\":2,\"outChannels\":2}", pa, status, body) && status == 200);
+    std::string chunk(2 * 960, '\0'); double ph = 0;   // 20 ms at 48 kHz
+    auto fill = [&] { for (int i = 0; i < 960; ++i) { const auto x = static_cast<std::int16_t>(16384 * std::sin(ph)); ph += 2 * 3.14159265358979 * 1000.0 / 48000.0; chunk[2 * i] = static_cast<char>(x & 0xff); chunk[2 * i + 1] = static_cast<char>((x >> 8) & 0xff); } };
+    fill(); CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/mic?rate=48000", chunk, pa, status, body) && status == 409);   // off: refused
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/mic", chunk, {}, status, body) && status == 401);                       // no token
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"phoneMic\",\"strip\":3,\"on\":true}", pa, status, body) && status == 200);
+    CHECK(pm.state()["phoneMic"]["on"].asBool() && pm.state()["phoneMic"]["strip"].asInt() == 3);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/mic?rate=1000", chunk, pa, status, body) && status == 400);
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/mic", chunk.substr(1), pa, status, body) && status == 400);   // odd length
+    double best = 0;
+    for (int k = 0; k < 40; ++k) { fill(); CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/mic?rate=48000", chunk, pa, status, body) && status == 200);
+      std::this_thread::sleep_for(std::chrono::milliseconds(18)); best = std::max(best, pm.meters()["strips"].at(3)["in"].asNumber(-200)); }
+    const Value pmj = pm.state()["phoneMic"];
+    std::printf("daemon_test: PHONE MIC strip 3 input peak %.3f (level %.2f, underruns %d)\n", best, pmj["level"].asNumber(), pmj["underruns"].asInt());
+    CHECK(pmj["live"].asBool() && pmj["level"].asNumber() > 0.4);
+    CHECK(best > 0.05);   // the tone reached the strip (linear peak or dB, either is above silence)
+    CHECK(pm.meters()["strips"].at(2)["in"].asNumber(0) < 0.01 || pm.meters()["strips"].at(2)["in"].asNumber(0) < -60);   // a neighbour stays silent
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/control", "{\"op\":\"phoneMic\",\"on\":false}", pa, status, body) && status == 200 && !pm.state()["phoneMic"]["on"].asBool());
+    CHECK(am::httpd::Client::request("127.0.0.1", pp, "POST", "/api/mic", chunk, pa, status, body) && status == 409);
+    pm.stop(); }
   std::printf("daemon_test: live state push, seed, json, local policy, token gate, control/state, HTTP meters, WebSocket meters, connected phones (list, disconnect, hold, forget), console settings, Windows volume / GAIN MODE, console plug-ins, RTA and RTA EQ OK on port %u\n", port);
   return 0;
 }

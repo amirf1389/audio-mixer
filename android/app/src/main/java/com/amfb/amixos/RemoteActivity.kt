@@ -463,8 +463,8 @@ class RemoteActivity : FitActivity() {
         toggle("GATE ON", "GATE OFF") { gateOn = it; c.gate(strip, it, gthr, -80.0, 1.0, 50.0, 100.0) }
         row("GATE THRESHOLD", 800, 400, { String.format("%.1f dB", it / 10.0 - 80) }) { p -> gthr = p / 10.0 - 80; if (gateOn) c.gate(strip, true, gthr, -80.0, 1.0, 50.0, 100.0) }
 
-        head("SENDS")
-        for (b in 0 until 8) { var pre = false; var lvl = -120.0
+        if (Features.isOn(this, "sends")) head("SENDS")
+        for (b in 0 until (if (Features.isOn(this, "sends")) 8 else 0)) { var pre = false; var lvl = -120.0
             val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             val t = TextView(this).apply { text = "AUX ${b + 1}  -∞"; setTextColor(cyan); typeface = android.graphics.Typeface.MONOSPACE; layoutParams = LinearLayout.LayoutParams(300, LinearLayout.LayoutParams.WRAP_CONTENT) }
             val sb = SeekBar(this).apply { max = 1000; progress = 0; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -507,7 +507,8 @@ class RemoteActivity : FitActivity() {
         RemoteTools.Tool.EFFECTS -> startActivity(android.content.Intent(this, InsertsActivity::class.java))   // the inserts flow: pick a channel, add an effect
         RemoteTools.Tool.PLUGINS -> startActivity(android.content.Intent(this, PluginsActivity::class.java))
         RemoteTools.Tool.SCENES -> showScenes()
-        RemoteTools.Tool.CALCULATOR -> startActivity(android.content.Intent(this, CalculatorActivity::class.java)) } }
+        RemoteTools.Tool.CALCULATOR -> startActivity(android.content.Intent(this, CalculatorActivity::class.java))
+        RemoteTools.Tool.MIC -> startActivity(android.content.Intent(this, PhoneMicActivity::class.java)) } }
     /** GROUP FADERS (DCA): the console's groups, as many as its edition has */
     internal fun showDcaPage() { val s = state; if (s == null) { status.text = getString(R.string.not_connected); return }
         AlertDialog.Builder(this).setTitle(R.string.rt_dca).setView(ScrollView(this).apply { addView(dcaPage(s)) }).setPositiveButton(android.R.string.ok, null).show() }

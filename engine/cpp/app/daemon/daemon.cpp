@@ -349,6 +349,20 @@ httpd::Response Daemon::handle(const httpd::Request& r) {
     json::Value n = json::Value::object(); for (const char* k : {"service", "title", "artist", "album", "source"}) n.set(k, b[k].asString().substr(0, 200)); n.set("playing", b["playing"].asBool()); n.set("any", b["any"].asBool());
     json::Value cmds = json::Value::array(); { std::lock_guard<std::mutex> g(streamM_); streamNow_ = n; streamAt_ = now; for (const auto& c : streamCmds_) cmds.push(c); streamCmds_.clear(); }
     out.set("ok", true); out.set("cmds", cmds); res.body = out.dump(); return res; }
+  if (r.path == "/api/mic") {   // PHONE MIC: a phone's microphone into the strip it picked (raw s16le mono PCM, control token)
+    if (r.method != "POST") { res.status = 405; res.body = "{\"ok\":false,\"error\":\"POST raw PCM\"}"; return res; }
+    if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
+    const std::string rq = r.param("rate"); const int rate = rq.empty() ? 48000 : std::atoi(rq.c_str());
+    if (rate < 8000 || rate > 96000) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"rate: 8000 to 96000\"}"; return res; }
+    if (r.body.size() % 2) { res.status = 400; res.body = "{\"ok\":false,\"error\":\"16-bit samples: the body has an odd length\"}"; return res; }
+    int strip = -1; bool running = false; { std::lock_guard<std::mutex> g(m_); strip = micStrip_; running = rt_ && rt_->running(); }
+    if (strip < 0) { res.status = 409; res.body = "{\"ok\":false,\"error\":\"the phone mic is off: turn it on first\"}"; return res; }
+    std::vector<std::int16_t> pcm(r.body.size() / 2);
+    for (std::size_t i = 0; i < pcm.size(); ++i) pcm[i] = static_cast<std::int16_t>(static_cast<std::uint16_t>(static_cast<unsigned char>(r.body[2 * i])) | (static_cast<std::uint16_t>(static_cast<unsigned char>(r.body[2 * i + 1])) << 8));
+    std::size_t took = 0; { std::lock_guard<std::mutex> g(micPush_); took = mic_.push(pcm.data(), pcm.size(), rate); }
+    micAt_ = static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    json::Value out = json::Value::object(); out.set("ok", true); out.set("strip", strip); out.set("took", static_cast<double>(took)); out.set("running", running);
+    out.set("bufferedMs", 1000.0 * static_cast<double>(mic_.buffered()) / rate); res.body = out.dump(); return res; }
   if (r.method == "POST" && r.path == "/api/control") {
     if (!authorised(r)) { const std::string rr = roleOf(r, false); res.status = (rr == "view" || rr == "held") ? 403 : (noteRefused() ? 429 : 401); res.body = rr == "held" ? "{\"ok\":false,\"error\":\"disconnected by the console: try again in two minutes\",\"held\":true}" : "{\"ok\":false,\"error\":\"X-Amix-Token missing or wrong\"}"; return res; }
     bool ok = false; const json::Value cmd = json::Value::parse(r.body, ok);
@@ -607,11 +621,17 @@ json::Value Daemon::state() const {
   o.set("apps", appsJson()); o.set("appsAvailable", appLayer_ && appLayer_->available());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
-  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson()); o.set("feedback", fbJsonLocked());
+  o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson()); o.set("feedback", fbJsonLocked()); o.set("phoneMic", micJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
     m.set("on", mp_.on); m.set("low", mp_.lowDb); m.set("air", mp_.airDb); m.set("thr", mp_.thrDb); m.set("ratio", mp_.ratio); m.set("attack", mp_.attackMs); m.set("release", mp_.releaseMs);
     m.set("makeup", mp_.makeupDb); m.set("drive", mp_.drive); m.set("gain", mp_.gainDb); m.set("reductionDb", master_.reductionDb()); m.set("preset", masterPreset_); o.set("mastering", m); }
   return o;
+}
+
+json::Value Daemon::micJson() const {   // m_ held
+  const long long now = static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+  json::Value o = json::Value::object(); o.set("on", micStrip_ >= 0); o.set("strip", micStrip_); o.set("live", micStrip_ >= 0 && now - micAt_.load() < 2000);
+  o.set("level", o["live"].asBool() ? static_cast<double>(mic_.peak()) : 0.0); o.set("underruns", static_cast<double>(mic_.underruns())); return o;
 }
 
 json::Value Daemon::meters() const {
@@ -746,6 +766,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen);
     pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
     initRoutes(); for (int i = 0; i < opt_.strips; ++i) rt->setInputRoute(i, inRoute_[i]); for (int o = 0; o < Runtime::kMaxOutputs; ++o) rt->setOutputRoute(o, outRoute_[o]);   // the routing as kept
+    rt->setNetInput(&mic_); if (micStrip_ >= 0 && micStrip_ < opt_.strips) rt->setInputRoute(micStrip_, Runtime::kNetInBase);   // the PHONE MIC keeps its strip on a new device
     ovActed_ = false; ov_.reset(); ovNote_.clear();   // ONE VOICE looks again on every device
     lastCfg_ = cfg; rt_ = std::move(rt); applyMaster(*rt_); backend_ = rt_->backendName(); lastError_.clear(); rate_ = cfg.sampleRate;   // the trim knows the new output
     ok.set("backend", backend_); ok.set("rate", cfg.sampleRate); ok.set("frames", static_cast<int>(cfg.frames)); return ok;
@@ -931,7 +952,13 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (rt_) { rt_->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt_->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen); }
     return ok;
   }
-  if (op == "inRoute") { if (!strip(s)) return {}; initRoutes(); inRoute_[s] = std::max(-1, std::min(Runtime::kNetInBase - 1, cmd["input"].asInt(-1))); if (rt_) rt_->setInputRoute(s, inRoute_[s]); ++version_; return ok; }
+  if (op == "phoneMic") {   // PHONE MIC on / off: the strip reads the phone (network input 0) while on, its own input again when off
+    if (cmd["on"].type() != json::Value::Bool) { err = "on: true or false"; return {}; }
+    initRoutes(); const bool on = cmd["on"].asBool();
+    if (micStrip_ >= 0 && rt_) rt_->setInputRoute(micStrip_, inRoute_[micStrip_]);   // the strip it played on gets its own input back
+    if (on) { if (!strip(s)) return {}; micStrip_ = s; if (rt_) rt_->setInputRoute(s, Runtime::kNetInBase); } else micStrip_ = -1;
+    ++version_; ok.set("phoneMic", micJson()); return ok; }
+  if (op == "inRoute") { if (!strip(s)) return {}; if (s == micStrip_) micStrip_ = -1; initRoutes(); inRoute_[s] = std::max(-1, std::min(Runtime::kNetInBase - 1, cmd["input"].asInt(-1))); if (rt_) rt_->setInputRoute(s, inRoute_[s]); ++version_; return ok; }
   if (op == "outRoute") { const int o = cmd["out"].asInt(-1); if (o < 0 || o >= Runtime::kMaxOutputs) { err = "out of range"; return {}; }
     const int src = cmd["source"].asInt(0); if (src < Runtime::kSrcOff || src > Runtime::kSrcMasterMono) { err = "source out of range"; return {}; }
     initRoutes(); outRoute_[o] = src; if (rt_) rt_->setOutputRoute(o, src); ++version_; return ok; }

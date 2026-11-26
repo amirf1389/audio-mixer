@@ -576,4 +576,45 @@
     <string name="lm_solo">SOLO</string>
     <string name="qm_level">MASTER %1$+.1f dB</string>
     <string name="qm_muted">MASTER · MUTED</string>
+    <!-- FEATURES (SETTINGS) and PHONE MIC -->
+    <string name="set_features">FEATURES</string>
+    <string name="set_features_note">Choose the parts of the app you use. HOME, the remote\'s TOOLS and the bottom bar show only those. Hiding a part never unlocks another: what your console\'s edition does not include stays locked.</string>
+    <string name="set_features_reset">Show every feature again</string>
+    <string name="feat_mixer">Mixer</string><string name="feat_mixer_sub">Faders, mute, solo, pan and scenes. Always on.</string>
+    <string name="feat_phone">This phone\'s mixer</string><string name="feat_phone_sub">The phone\'s own mixer, without the console.</string>
+    <string name="feat_dca">DCA groups</string><string name="feat_dca_sub">The console\'s group faders in the remote\'s TOOLS.</string>
+    <string name="feat_sends">Sends</string><string name="feat_sends_sub">AUX sends on a channel\'s detail page.</string>
+    <string name="feat_eq">EQ</string><string name="feat_eq_sub">Channel EQ and the RTA EQ.</string>
+    <string name="feat_meters">Meters and status</string><string name="feat_meters_sub">Meters, sound score and console status.</string>
+    <string name="feat_pads">Sample pads</string><string name="feat_pads_sub">Pads, sound effects and built-in samples.</string>
+    <string name="feat_mastering">Mastering</string><string name="feat_mastering_sub">The console\'s master chain.</string>
+    <string name="feat_routing">Routing</string><string name="feat_routing_sub">Inputs and outputs of the console.</string>
+    <string name="feat_spatial">360 audio</string><string name="feat_spatial_sub">The spatial page in the remote\'s TOOLS.</string>
+    <string name="feat_mic">Phone mic</string><string name="feat_mic_sub">Use this phone as a microphone or talkback into a console channel.</string>
+    <string name="feat_plugins">Plug-ins and effects</string><string name="feat_plugins_sub">Plug-ins and channel inserts.</string>
+    <string name="feat_tools">Tools</string><string name="feat_tools_sub">Tuner, tools and calculator (the TOOLS tab).</string>
+    <string name="feat_recorder">Recorder and mixdown</string><string name="feat_recorder_sub">Record on the phone and mix down.</string>
+    <string name="feat_streaming">Streaming players</string><string name="feat_streaming_sub">The PLAYERS tab.</string>
+    <string name="feat_devices">Devices and network</string><string name="feat_devices_sub">Audio interfaces and the network page.</string>
+    <string name="home_mic">PHONE MIC</string>
+    <string name="home_mic_sub">This phone as a mic or talkback</string>
+    <string name="rt_mic">Phone mic</string>
+    <string name="mic_title">PHONE MIC</string>
+    <string name="mic_note">Talk into this phone: the console plays it on the channel you pick, instead of that channel\'s own input, until you press STOP. Use headphones or keep the phone away from the speakers.</string>
+    <string name="mic_channel_pick">Play on channel</string>
+    <string name="mic_channel">CH %1$d</string>
+    <string name="mic_channel_is">Channel: CH %1$d</string>
+    <string name="mic_start">START</string>
+    <string name="mic_stop">STOP</string>
+    <string name="mic_mute">MUTE</string>
+    <string name="mic_unmute">UNMUTE</string>
+    <string name="mic_idle">Off. Press START to talk into the console.</string>
+    <string name="mic_starting">Starting…</string>
+    <string name="mic_live">Live on CH %1$d.</string>
+    <string name="mic_muted">Muted: CH %1$d hears silence.</string>
+    <string name="mic_reconnecting">Connection lost, reconnecting… %1$s</string>
+    <string name="mic_refused">The console no longer accepts this phone\'s pairing. Pair again on the MIXER page.</string>
+    <string name="mic_denied">The microphone permission was not given, so the phone mic cannot start.</string>
+    <string name="mic_denied_settings">The microphone permission is turned off for this app. Turn it on in the app\'s settings to use the phone mic.</string>
+    <string name="mic_open_settings">Open settings</string>
 </resources>

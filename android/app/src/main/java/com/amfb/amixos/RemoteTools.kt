@@ -28,7 +28,7 @@ object RemoteTools {
     fun spatialExposed(raw: Map<String, Any?>?): Boolean = raw?.containsKey("spatial") == true
 
     enum class Tool(val label: Int, val tag: String) { DCA(R.string.rt_dca, "tool_dca"), SPATIAL(R.string.rt_360, "tool_360"), EFFECTS(R.string.rt_effects, "tool_effects"),
-        PLUGINS(R.string.plugins, "tool_plugins"), SCENES(R.string.scenes, "tool_scenes"), CALCULATOR(R.string.calculator, "tool_calculator") }
+        PLUGINS(R.string.plugins, "tool_plugins"), SCENES(R.string.scenes, "tool_scenes"), CALCULATOR(R.string.calculator, "tool_calculator"), MIC(R.string.rt_mic, "tool_mic") }
 
     private fun dp(a: Activity, v: Float) = ConsoleUi.dp(a, v)
     private fun head(a: Activity, t: String) = TextView(a).apply { text = t; setTextColor(Color.parseColor("#FFB590")); typeface = Typeface.DEFAULT_BOLD; textSize = 13f; setPadding(0, dp(a, 8f), 0, dp(a, 4f)) }
@@ -36,7 +36,7 @@ object RemoteTools {
 
     fun toolsPanel(a: Activity, open: (Tool) -> Unit): View {
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; tag = "toolsPanel"; setPadding(dp(a, 16f), dp(a, 8f), dp(a, 16f), dp(a, 8f)) }
-        for (t in Tool.values()) box.addView(Button(a).apply { text = a.getString(t.label); contentDescription = t.tag; isAllCaps = true
+        val p = Prefs.remote(a); for (t in Tool.values().filter { Features.toolOn(p, it) }) box.addView(Button(a).apply { text = a.getString(t.label); contentDescription = t.tag; isAllCaps = true
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT); setOnClickListener { open(t) } })
         return box
     }
