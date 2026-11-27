@@ -264,7 +264,7 @@ Section "Uninstall"
   IfFileExists "$0\amfx1-license.keep" askLicence 0
   IfFileExists "$0\amfx1-edition.keep" askLicence licenceDone
   askLicence:
-  MessageBox MB_YESNO "AmF X1 is back to its factory state on this computer.$\n$\nKeep the licence key here for a later install?" IDYES keepLicence
+  MessageBox MB_YESNO "AmF X1 is back to its factory state on this computer.$\n$\nKeep the licence key here for a later install?" /SD IDYES IDYES keepLicence
     Delete "$0\amfx1-license.keep"
     Delete "$0\amfx1-edition.keep"
     Goto licenceDone
