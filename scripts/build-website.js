@@ -92,7 +92,7 @@ ${body}
 <footer class="site-foot"><div class="wrap">
 <div><h2>AmF X1</h2><ul><li><a href="/features">Features</a></li><li><a href="/download">Download ${esc(SHOWN)}</a></li><li><a href="/keys">Buy Pro / Studio Master</a></li><li><a href="/faq">FAQ</a></li></ul></div>
 <div><h2>Developers</h2><ul><li><a href="/developers#frameworks">Frameworks</a></li><li><a href="/developers#api">Local API</a></li><li><a href="/developers#cdn">CDN &amp; hosting</a></li><li><a href="${REPO}" rel="noopener">Source on GitHub</a></li></ul></div>
-<div><h2>Trust</h2><ul><li><a href="/security">Security</a></li><li><a href="/privacy">Privacy</a></li><li><a href="mailto:${CONTACT.email}">Report a problem</a></li></ul></div>
+<div><h2>Trust</h2><ul><li><a href="/security">Security</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/install-help">Install help</a></li><li><a href="mailto:${CONTACT.email}">Report a problem</a></li></ul></div>
 <div><h2>Contact</h2><ul><li><a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a></li><li><a href="mailto:${CONTACT.email}">${CONTACT.email}</a></li></ul></div>
 <p class="legal">&copy; ${YEAR} AMFB Audio. AmF X1 ${esc(SHOWN)}. Dolby, DTS, THX, ASIO and other names are trademarks of their owners; AmF X1 is not affiliated with them.</p>
 </div></footer>
@@ -343,6 +343,34 @@ ${noticeHtml('en', NOTICE.en)}
 <section class="block"><div class="wrap" lang="ms">
 ${noticeHtml('ms', NOTICE.ms)}
 <p class="mt">Kemas kini terakhir: ${esc(NOTICE.updated)}</p>
+</div></section>`,
+}));
+
+// INSTALL HELP: installer return codes (setup.exe /S and msiexec /qn), from docs/install-help.json; the documentation URL given to
+// Microsoft Partner Center ("Installer handling"). English only.
+const IH = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs', 'install-help.json'), 'utf8'));
+const codeTable = rows => `<div class="table-wrap"><table><thead><tr><th scope="col">Code</th><th scope="col">Meaning</th><th scope="col">What to do</th></tr></thead><tbody>${rows.map(r => `<tr id="code-${esc(r[0])}"><td><code>${esc(r[0])}</code></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</tbody></table></div>`;
+pages.push(page({
+  slug: '/install-help', title: 'Install help — AmF X1 by AMFB Audio', h1: 'Install help', priority: '0.4', changefreq: 'yearly',
+  description: 'AmF X1 installer return codes for setup.exe and the MSI: what each code means, what to do, install logs, silent uninstall and support.',
+  intro: 'Return codes of the AmF X1 Windows installers, and what to do about each one.',
+  body: `<section class="block"><div class="wrap">
+<h2 id="exe">Windows setup (setup.exe)</h2>
+<p>Silent install: <code>setup.exe /S</code>. The setup returns one of these codes:</p>
+${codeTable(IH.exe)}
+<h2 class="mt" id="msi">Windows Installer (MSI)</h2>
+<p>Silent install: <code>msiexec /i AmF-X1-&lt;version&gt;-x64.msi /qn</code>. Standard Windows Installer codes:</p>
+${codeTable(IH.msi)}
+<h2 class="mt" id="logs">Install logs</h2>
+<p>MSI: run <code>msiexec /i AmF-X1-&lt;version&gt;-x64.msi /l*v install.log</code> and send us <code>install.log</code>.</p>
+<p>setup.exe does not write a log file. After installing, open the AmF X1 Diagnostics app to see what was installed and what failed.</p>
+<h2 class="mt" id="general">If it still fails</h2>
+<ul><li>Close any other setup that is running.</li><li>Free disk space on C:.</li><li>Restart Windows and try again.</li><li>Run the installer as administrator.</li><li>Uninstall an older AmF X1 from Settings, Apps, Installed apps.</li><li>Re-download the installer from <a href="/download">Download</a>.</li><li>Check your antivirus quarantine for AmF X1 files.</li></ul>
+<h2 class="mt" id="uninstall">Silent uninstall</h2>
+<p><code>"C:\\Program Files\\AmF X1\\Uninstall.exe" /S</code></p>
+<h2 class="mt" id="support">Support</h2>
+<p>E-mail <a href="mailto:${CONTACT.email}">${CONTACT.email}</a> or message us on <a href="${CONTACT.whatsapp}" rel="noopener">WhatsApp</a>. Include the return code and, for the MSI, the log file.</p>
+<p class="mt">Last updated: ${esc(IH.updated)}</p>
 </div></section>`,
 }));
 

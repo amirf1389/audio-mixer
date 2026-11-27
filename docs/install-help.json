@@ -1,0 +1,21 @@
+{
+ "_comment": "Installer return codes for AmF X1, as set by install/windows/amfx1.nsi (setup.exe) and documented in docs/msi.md (MSI). Feeds deploy/website/install-help.html via scripts/build-website.js. English only.",
+ "updated": "2026-11-27",
+ "exe": [
+  ["0", "Success", "AmF X1 is installed. Nothing to do."],
+  ["1", "Cancelled by the user", "Setup was closed before it finished. Run setup.exe again and let it complete."],
+  ["2", "Install failed (miscellaneous)", "Run setup.exe again as administrator (right-click, Run as administrator). If it fails again, re-download the installer from this site and check whether your antivirus quarantined any AmF X1 file."],
+  ["112", "Not enough disk space", "Free space on the system drive (C:) and run setup again."],
+  ["1618", "Another AmF X1 setup is already running", "Close the other AmF X1 setup window (or wait for it to finish), then run setup again."],
+  ["3010", "Installed, restart needed to finish", "Restart Windows to finish the installation (the audio driver is loaded after the restart)."]
+ ],
+ "msi": [
+  ["0", "Success", "AmF X1 is installed. Nothing to do."],
+  ["1602", "Cancelled by the user", "The installation was cancelled. Run it again and let it complete."],
+  ["1603", "Fatal error during installation", "Run the MSI again from an administrator command prompt with a log (see below). Re-download the MSI if the file may be damaged and check your antivirus quarantine."],
+  ["1618", "Another installation is in progress", "Windows allows one installer at a time. Wait for the other installation (often Windows Update) to finish, or restart Windows, then try again."],
+  ["1638", "Another version is already installed", "Uninstall the existing AmF X1 from Settings, Apps, Installed apps, then install again."],
+  ["3010", "Restart required", "AmF X1 is installed; restart Windows to finish."],
+  ["112", "Disk full", "Free space on the system drive (C:) and try again."]
+ ]
+}
