@@ -14,8 +14,12 @@ QtObject {
         chocolate: { obsidian: "#1e1003", deep: "#170c02", chrome: "#2a1604", card: "#2e1905", cardRaised: "#3f2207", head: "#66370A", ink: "#fdf3e7", muted: "#e3c9a8", dim: "#d0ad85", accent: "#e8a050" },
         ocean:     { obsidian: "#06141f", deep: "#040e16", chrome: "#081a28", card: "#0b2233", cardRaised: "#123247", head: "#0b3d5c", ink: "#eef7fc", muted: "#a9cde0", dim: "#86afc6", accent: "#3cc8db" },
         forest:    { obsidian: "#0a140d", deep: "#070f09", chrome: "#0f1d14", card: "#13241a", cardRaised: "#1b3324", head: "#1f4d2b", ink: "#f0f8f1", muted: "#b4d4bb", dim: "#9cc2a3", accent: "#34d399" },
-        plum:      { obsidian: "#160b17", deep: "#100711", chrome: "#1c0f1e", card: "#241326", cardRaised: "#321b35", head: "#4a1f4d", ink: "#fbf0fc", muted: "#dcbfe0", dim: "#b896bc", accent: "#c084fc" } })
+        plum:      { obsidian: "#160b17", deep: "#100711", chrome: "#1c0f1e", card: "#241326", cardRaised: "#321b35", head: "#4a1f4d", ink: "#fbf0fc", muted: "#dcbfe0", dim: "#b896bc", accent: "#c084fc" },
+        // COCKPIT: a glass-cockpit flight deck look: matte grey-blue panels, square backlit push-keys (white legend when off; a lit bar in
+        // green ON, amber WARN / MUTE / CLIP, cyan SELECTED), throttle-grey fader caps, green / amber / red meters. An original look.
+        cockpit:   { obsidian: "#151a1f", deep: "#0e1216", chrome: "#1a2027", card: "#1c2329", cardRaised: "#252e36", head: "#2c3640", ink: "#f4f7fa", muted: "#c3ccd5", dim: "#9eaab6", accent: "#22d3ee" } })
     readonly property var pal: dark && schemes[scheme] !== undefined ? schemes[scheme] : null
+    readonly property bool cockpit: pal !== null && scheme === "cockpit"   // the push-key style: square keys, matte bezels, lit legends
     readonly property color obsidian: pal ? pal.obsidian : dark ? "#0d0f12" : "#e8ebf0"      // the window
     readonly property color deep: pal ? pal.deep : dark ? "#0a0b0d" : "#dfe3ea"          // meters, canvases, fader tracks, text fields
     // GLASS: the header, the rail and the panels let the AURORA colour behind them through; cardSolid is for menus and popups over a page
@@ -37,10 +41,10 @@ QtObject {
     readonly property color nila: dark ? "#3b5bdb" : "#1e3a8a"           // indigo, the ground of the cloth
     readonly property color orange: pal ? pal.accent : dark ? "#e8a93a" : "#8f6508"          // the console's accent: songket gold
     readonly property color orangeGlow: Qt.rgba(0.91, 0.72, 0.29, 0.45)
-    readonly property color amber: dark ? "#fbbf24" : "#9a5504"
-    readonly property color cyan: dark ? "#3cc8db" : "#0e7490"   // calmer than pure neon: the most used accent
-    readonly property color emerald: dark ? "#10b981" : "#047857"
-    readonly property color danger: dark ? "#f0304f" : "#d11a3c"
+    readonly property color amber: cockpit ? "#ffb21e" : dark ? "#fbbf24" : "#9a5504"
+    readonly property color cyan: cockpit ? "#2fd8f0" : dark ? "#3cc8db" : "#0e7490"   // calmer than pure neon: the most used accent
+    readonly property color emerald: cockpit ? "#3ee07a" : dark ? "#10b981" : "#047857"
+    readonly property color danger: cockpit ? "#ff3b3b" : dark ? "#f0304f" : "#d11a3c"
     readonly property color violet: dark ? "#8b5cf6" : "#6d28d9"
     readonly property color pink: dark ? "#f472b6" : "#b02a5f"
     readonly property string product: "AmF X1"
@@ -54,19 +58,26 @@ QtObject {
     property bool fluid: true
     property bool motion: true
     readonly property int motionMs: motion ? 140 : 0
-    readonly property int radiusS: 6       // buttons, chips, fields
-    readonly property int radius: 12       // tiles and panels
-    readonly property int radiusL: 16      // page-level sections
+    readonly property int radiusS: cockpit ? 2 : 6       // buttons, chips, fields
+    readonly property int radius: cockpit ? 4 : 12       // tiles and panels
+    readonly property int radiusL: cockpit ? 6 : 16      // page-level sections
     readonly property color glassTop: pal ? Qt.lighter(pal.card, 1.22) : dark ? Qt.rgba(0.16, 0.18, 0.22, fluid ? 0.92 : 1) : Qt.rgba(1, 1, 1, fluid ? 0.97 : 1)
     readonly property color glassEdge: dark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.16)
     readonly property var stripColors: ["#f59e0b", "#22d3ee", "#a78bfa", "#34d399", "#f472b6", "#fb923c", "#60a5fa", "#facc15"]
     // an overlay a pages puts on a panel: white on the dark theme, black on the light one, the same strength
     // BUTTON COLOUR HARMONY: every button colour passes through here, so that all of them share one saturation and lightness band
     // (no neon next to pastel) and the gradient only shifts gently. Glass (translucent) colours stay glass.
+    // COCKPIT keys: an unlit key is a matte bezel (a dark face, a hint lighter at the top); a lit key keeps the dark face and takes a soft
+    // inner glow of its light (green / amber / cyan), brighter at the top like a backlit legend; the fader cap is throttle grey.
+    readonly property color keyFace: "#232b33"
+    readonly property color capTop: cockpit ? "#7d858c" : "#3a4150"
+    readonly property color capMid: cockpit ? "#4f565d" : "#1c222d"
+    readonly property color capBottom: cockpit ? "#62696f" : "#2a3140"
+    function keyMix(c, k) { c = Qt.lighter(c, 1.0); const f = Qt.lighter(keyFace, 1.0), a = Math.min(1, c.a < 0.6 ? c.a * 2.2 : k); return Qt.rgba(f.r + (c.r - f.r) * a, f.g + (c.g - f.g) * a, f.b + (c.b - f.b) * a, 1) }
     function harm(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return c; const h = c.hslHue < 0 ? 0 : c.hslHue, sat = c.hslHue < 0 ? 0 : Math.min(c.hslSaturation, dark ? 0.58 : 0.55);
         return Qt.hsla(h, sat, Math.max(dark ? 0.46 : 0.40, Math.min(dark ? 0.58 : 0.52, c.hslLightness)), c.a) }
-    function btnTop(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.1)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.64, h.hslLightness + 0.02), h.a) }
-    function btnBottom(c) { c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.9); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.02), h.a) }
+    function btnTop(c) { if (cockpit) { const q = Qt.lighter(c, 1.0); return q.a < 0.3 ? Qt.lighter(keyFace, 1.18) : keyMix(q, 0.42) } c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, Math.min(1, c.a * 1.1)); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.min(0.64, h.hslLightness + 0.02), h.a) }
+    function btnBottom(c) { if (cockpit) { const q = Qt.lighter(c, 1.0); return q.a < 0.3 ? Qt.darker(keyFace, 1.12) : keyMix(q, 0.16) } c = Qt.lighter(c, 1.0); if (c.a < 0.6) return Qt.rgba(c.r, c.g, c.b, c.a * 0.9); const h = harm(c); return Qt.hsla(Math.max(0, h.hslHue), Math.max(0, h.hslSaturation), Math.max(0.30, h.hslLightness - 0.02), h.a) }
     function ov(a) { return dark ? Qt.rgba(1, 1, 1, a) : Qt.rgba(0, 0, 0, a); }
     function groupColor(g) {
         switch (g) {

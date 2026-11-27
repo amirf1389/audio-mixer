@@ -2005,6 +2005,7 @@ int main(int argc, char* argv[]) {
     QTimer::singleShot(1200, &app, [&] {
       if (!shots.isEmpty()) {   // one picture per ported page
         QDir().mkpath(shots);
+        const QString shotTheme = qEnvironmentVariable("AMIX_THEME"); if (!shotTheme.isEmpty()) settings.setColorTheme(shotTheme);   // AMIX_THEME=cockpit: every shot in that colour theme
         auto* win = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
         engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); waitMs(300);   // the null device with the -12 dBFS test input: meters, fader IN / OUT columns and VU faces show a signal on the shots
         { const QVariantList mm = engine.meters(); const double in0 = mm[0].toMap()["inDb"].toDouble(), out0 = mm[0].toMap()["peakDb"].toDouble(), in2 = mm[2].toMap()["inDb"].toDouble();
@@ -2370,7 +2371,7 @@ int main(int argc, char* argv[]) {
           engine.setDeviceEnabled("alsa", "hw:1,0", true); engine.simulateDevices(keep); }
         auto* lw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); settings.setDarkTheme(false); for (const char* id : {"home", "mixer", "dsp"}) { lw->setProperty("current", QString::fromLatin1(id)); waitMs(350); lw->grabWindow().save(shots + "/" + id + "-light.png"); } settings.setDarkTheme(true); waitMs(200); std::printf("amixos --shots: home-light, mixer-light, dsp-light\n"); }
         { auto* tw = qobject_cast<QQuickWindow*>(qml.rootObjects().first()); for (const char* th : {"chocolate", "ocean", "forest", "plum"}) { settings.setColorTheme(QString::fromLatin1(th)); tw->setProperty("current", QStringLiteral("mixer")); waitMs(350); tw->grabWindow().save(shots + "/mixer-" + th + ".png"); }   // the colour themes
-          settings.setColorTheme(QString()); waitMs(200); std::printf("amixos --shots: mixer-chocolate, mixer-ocean, mixer-forest, mixer-plum\n"); }
+          settings.setColorTheme(qEnvironmentVariable("AMIX_THEME")); waitMs(200); std::printf("amixos --shots: mixer-chocolate, mixer-ocean, mixer-forest, mixer-plum\n"); }
         if (QObject* nc = qml.rootObjects().first()->findChild<QObject*>(QStringLiteral("noticeCenter"))) {   // NOTIFICATIONS: three toasts and the history
           auto* tw = qobject_cast<QQuickWindow*>(qml.rootObjects().first());
           for (const auto& kv : std::initializer_list<std::pair<const char*, const char*>>{{"new", "What's new: 3 new features"}, {"connected", "Device connected: Speakers"}, {"clip", "Clipping: a channel or the master went over 0 dBFS"}})

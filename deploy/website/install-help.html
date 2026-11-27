@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install help — AmF X1 by AMFB Audio</title>
+<meta name="description" content="AmF X1 installer return codes for setup.exe and the MSI: what each code means, what to do, install logs, silent uninstall and support.">
+<link rel="canonical" href="https://amirfakhri.interactivelink.site/install-help">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#0f121a">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AmF X1 by AMFB Audio">
+<meta property="og:title" content="Install help — AmF X1 by AMFB Audio">
+<meta property="og:description" content="AmF X1 installer return codes for setup.exe and the MSI: what each code means, what to do, install logs, silent uninstall and support.">
+<meta property="og:url" content="https://amirfakhri.interactivelink.site/install-help">
+<meta property="og:image" content="https://amirfakhri.interactivelink.site/assets/icon-512.png">
+<meta property="og:image:width" content="512"><meta property="og:image:height" content="512">
+<meta property="og:image:alt" content="AmF X1 logo: three amber mixer faders">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Install help — AmF X1 by AMFB Audio">
+<meta name="twitter:description" content="AmF X1 installer return codes for setup.exe and the MSI: what each code means, what to do, install logs, silent uninstall and support.">
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/icon-512.png" type="image/png" sizes="512x512">
+<link rel="apple-touch-icon" href="/assets/icon-512.png">
+<link rel="stylesheet" href="/assets/site.css?v=1.26.0.0">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Install help — AmF X1 by AMFB Audio","description":"AmF X1 installer return codes for setup.exe and the MSI: what each code means, what to do, install logs, silent uninstall and support.","url":"https://amirfakhri.interactivelink.site/install-help","isPartOf":{"@type":"WebSite","name":"AmF X1 by AMFB Audio","url":"https://amirfakhri.interactivelink.site/"},"inLanguage":"en"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://amirfakhri.interactivelink.site/"},{"@type":"ListItem","position":2,"name":"Install help","item":"https://amirfakhri.interactivelink.site/install-help"}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head"><div class="wrap"><a class="brand" href="/" aria-label="AmF X1 home"><img src="/assets/icon.svg" alt="" width="32" height="32">AMF X1 <b>BY AMFB</b></a><nav class="nav" aria-label="Main"><a href="/">Home</a><a href="/features">Features</a><a href="/extensions">Extensions</a><a href="/plugins">Plug-ins</a><a href="/updates">Updates</a><a href="/developers">Developers</a><a href="/security">Security</a><a href="/faq">FAQ</a><a href="/keys">Buy</a><a class="cta" href="/download">Download</a></nav></div></header>
+<div class="page-head"><div class="wrap"><nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">Install help</span></nav><h1>Install help</h1><p>Return codes of the AmF X1 Windows installers, and what to do about each one.</p></div></div>
+<main id="main">
+<section class="block"><div class="wrap">
+<h2 id="exe">Windows setup (setup.exe)</h2>
+<p>Silent install: <code>setup.exe /S</code>. The setup returns one of these codes:</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Code</th><th scope="col">Meaning</th><th scope="col">What to do</th></tr></thead><tbody><tr id="code-0"><td><code>0</code></td><td>Success</td><td>AmF X1 is installed. Nothing to do.</td></tr><tr id="code-1"><td><code>1</code></td><td>Cancelled by the user</td><td>Setup was closed before it finished. Run setup.exe again and let it complete.</td></tr><tr id="code-2"><td><code>2</code></td><td>Install failed (miscellaneous)</td><td>Run setup.exe again as administrator (right-click, Run as administrator). If it fails again, re-download the installer from this site and check whether your antivirus quarantined any AmF X1 file.</td></tr><tr id="code-112"><td><code>112</code></td><td>Not enough disk space</td><td>Free space on the system drive (C:) and run setup again.</td></tr><tr id="code-1618"><td><code>1618</code></td><td>Another AmF X1 setup is already running</td><td>Close the other AmF X1 setup window (or wait for it to finish), then run setup again.</td></tr><tr id="code-3010"><td><code>3010</code></td><td>Installed, restart needed to finish</td><td>Restart Windows to finish the installation (the audio driver is loaded after the restart).</td></tr></tbody></table></div>
+<h2 class="mt" id="msi">Windows Installer (MSI)</h2>
+<p>Silent install: <code>msiexec /i AmF-X1-&lt;version&gt;-x64.msi /qn</code>. Standard Windows Installer codes:</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Code</th><th scope="col">Meaning</th><th scope="col">What to do</th></tr></thead><tbody><tr id="code-0"><td><code>0</code></td><td>Success</td><td>AmF X1 is installed. Nothing to do.</td></tr><tr id="code-1602"><td><code>1602</code></td><td>Cancelled by the user</td><td>The installation was cancelled. Run it again and let it complete.</td></tr><tr id="code-1603"><td><code>1603</code></td><td>Fatal error during installation</td><td>Run the MSI again from an administrator command prompt with a log (see below). Re-download the MSI if the file may be damaged and check your antivirus quarantine.</td></tr><tr id="code-1618"><td><code>1618</code></td><td>Another installation is in progress</td><td>Windows allows one installer at a time. Wait for the other installation (often Windows Update) to finish, or restart Windows, then try again.</td></tr><tr id="code-1638"><td><code>1638</code></td><td>Another version is already installed</td><td>Uninstall the existing AmF X1 from Settings, Apps, Installed apps, then install again.</td></tr><tr id="code-3010"><td><code>3010</code></td><td>Restart required</td><td>AmF X1 is installed; restart Windows to finish.</td></tr><tr id="code-112"><td><code>112</code></td><td>Disk full</td><td>Free space on the system drive (C:) and try again.</td></tr></tbody></table></div>
+<h2 class="mt" id="logs">Install logs</h2>
+<p>MSI: run <code>msiexec /i AmF-X1-&lt;version&gt;-x64.msi /l*v install.log</code> and send us <code>install.log</code>.</p>
+<p>setup.exe does not write a log file. After installing, open the AmF X1 Diagnostics app to see what was installed and what failed.</p>
+<h2 class="mt" id="general">If it still fails</h2>
+<ul><li>Close any other setup that is running.</li><li>Free disk space on C:.</li><li>Restart Windows and try again.</li><li>Run the installer as administrator.</li><li>Uninstall an older AmF X1 from Settings, Apps, Installed apps.</li><li>Re-download the installer from <a href="/download">Download</a>.</li><li>Check your antivirus quarantine for AmF X1 files.</li></ul>
+<h2 class="mt" id="uninstall">Silent uninstall</h2>
+<p><code>"C:\Program Files\AmF X1\Uninstall.exe" /S</code></p>
+<h2 class="mt" id="support">Support</h2>
+<p>E-mail <a href="mailto:badriamirfakhri@gmail.com">badriamirfakhri@gmail.com</a> or message us on <a href="https://wa.me/601120871185" rel="noopener">WhatsApp</a>. Include the return code and, for the MSI, the log file.</p>
+<p class="mt">Last updated: 2026-11-27</p>
+</div></section>
+</main>
+<footer class="site-foot"><div class="wrap">
+<div><h2>AmF X1</h2><ul><li><a href="/features">Features</a></li><li><a href="/download">Download 1.26.0.0</a></li><li><a href="/keys">Buy Pro / Studio Master</a></li><li><a href="/faq">FAQ</a></li></ul></div>
+<div><h2>Developers</h2><ul><li><a href="/developers#frameworks">Frameworks</a></li><li><a href="/developers#api">Local API</a></li><li><a href="/developers#cdn">CDN &amp; hosting</a></li><li><a href="https://github.com/amirf1389/audio-mixer" rel="noopener">Source on GitHub</a></li></ul></div>
+<div><h2>Trust</h2><ul><li><a href="/security">Security</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/install-help">Install help</a></li><li><a href="mailto:badriamirfakhri@gmail.com">Report a problem</a></li></ul></div>
+<div><h2>Contact</h2><ul><li><a href="https://wa.me/601120871185" rel="noopener">WhatsApp</a></li><li><a href="mailto:badriamirfakhri@gmail.com">badriamirfakhri@gmail.com</a></li></ul></div>
+<p class="legal">&copy; 2026 AMFB Audio. AmF X1 1.26.0.0. Dolby, DTS, THX, ASIO and other names are trademarks of their owners; AmF X1 is not affiliated with them.</p>
+</div></footer>
+</body>
+</html>
