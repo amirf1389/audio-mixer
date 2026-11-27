@@ -47,7 +47,8 @@ class InsertsActivity : FitActivity() {
         val p = Prefs.remote(this); val host = p.getString("host", "").orEmpty()
         if (host.isEmpty()) { head.text = getString(R.string.eq_offline); return }
         client = DaemonClient(Endpoint(host, p.getString("port", null)?.toIntOrNull() ?: Prefs.defaultPort(this), p.getString("token", "").orEmpty()))
-        io.execute { val cat = runCatching { client!!.insertCatalog() }.getOrDefault(emptyList()); ui.post { catalog = cat
+        val cl = client ?: return
+        io.execute { val cat = runCatching { cl.insertCatalog() }.getOrDefault(emptyList()); ui.post { catalog = cat
             addSpin.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, cat.map { it.label }) } }
         refresh()
     }
@@ -84,4 +85,5 @@ class InsertsActivity : FitActivity() {
                     override fun onStartTrackingTouch(b: SeekBar) {}; override fun onStopTrackingTouch(b: SeekBar) {} }) })
         }
     }
+    override fun onDestroy() { ui.removeCallbacksAndMessages(null); io.shutdownNow(); super.onDestroy() }   // the worker thread went on after the page closed
 }

@@ -233,7 +233,7 @@ class LocalMixerActivity : FitActivity() {
         val chans = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "localChannels" }; val w = stripWidth(resources.displayMetrics.widthPixels - (if (compact && land) 88 else 0), across(land))   // on its side the master is 88 px wider (its two keys stand side by side)
         fun fixed(v: View) = v.apply { layoutParams = LinearLayout.LayoutParams(w, LinearLayout.LayoutParams.MATCH_PARENT).apply { setMargins(4, 0, 4, 0) } }
         for (s in 0 until INPUTS) chans.addView(fixed(stripView(s)))   // CH 1 .. CH 6, then the decks: ten channels
-        if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) chans.addView(fixed(playersStripView()))   // beside the inputs: on screen without a swipe
+        if (Nav.standalone(this) && Nav.Tab.PLAY in Nav.tabs(true)) chans.addView(fixed(playersStripView()))   // beside the inputs: on screen without a swipe
         for (d in 0 until DECKS) chans.addView(fixed(deckStripView(d)))
         for (g in 0 until Dca.COUNT) { val n = Dca.members(prefs(), g, dcaChannels()).size; if (n > 0) chans.addView(fixed(dcaStripView(g, n))) }   // GROUP FADERS: one per group in use
         desk.addView(android.widget.HorizontalScrollView(this).apply { isFillViewport = true; addView(chans, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
@@ -243,7 +243,7 @@ class LocalMixerActivity : FitActivity() {
         desk.addOnLayoutChangeListener { v, _, t, _, b, _, ot, _, ob -> if (b - t != ob - ot && b > t) v.post { MixerFit.fit(v, resources.displayMetrics.density, land) } }
         // THE MINI PLAYER: the PLAYERS link plays in a small video pane right above the faders (beside them when the phone lies on its
         // side), so the video and the faders are on one screen. It shows only in FADERS, and only when it is switched on and a link exists.
-        if (Nav.Tab.PLAYERS in Nav.tabs(Nav.standalone(this))) {
+        if (Nav.standalone(this) && Nav.Tab.PLAY in Nav.tabs(true)) {
             val idx = body.indexOfChild(desk); body.removeView(desk)
             val fadersView = LinearLayout(this).apply { orientation = if (land) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL; tag = "secFaders"; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
             desk.tag = "desk"; miniPane = android.widget.FrameLayout(this).apply { tag = "miniPlayer"; setBackgroundColor(Color.BLACK); visibility = View.GONE

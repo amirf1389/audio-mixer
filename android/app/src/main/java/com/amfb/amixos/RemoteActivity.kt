@@ -582,10 +582,10 @@ class RemoteActivity : FitActivity() {
                         store.edit().putString(name, com.amfb.amixos.remote.MiniJson.stringify(o)).apply() }
                         .onSuccess { ui.post { refresh() } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }
                     .setNegativeButton(android.R.string.cancel, null).show() } })
-            val names = store.all.keys.sortedBy { n -> (com.amfb.amixos.remote.MiniJson.parse(store.getString(n, "{}")!!) as? Map<*, *>)?.get("t").toString() }
+            val all = store.all; val names = all.keys.filter { OfflineScenes.read(all[it]) != null }.sortedBy { n -> ((OfflineScenes.read(all[n])?.get("t") as? Number)?.toLong() ?: 0L) }
             if (names.isEmpty()) box.addView(TextView(this).apply { text = getString(R.string.scene_none); setTextColor(Color.parseColor("#C2C7CF")); setPadding(0, 16, 0, 0) })
             for (n in names) {
-                @Suppress("UNCHECKED_CAST") val o = com.amfb.amixos.remote.MiniJson.parse(store.getString(n, "{}")!!) as Map<String, Any?>
+                val o = OfflineScenes.read(all[n]) ?: continue
                 val when_ = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date((o["t"] as? Number)?.toLong() ?: 0L))
                 val strips = (o["strips"] as? List<*>).orEmpty(); val muted = strips.count { (it as? Map<*, *>)?.get("mute") == true }
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 12, 0, 0) }

@@ -56,6 +56,9 @@ class DaemonClient(val ep: Endpoint) {
     fun stateSince(v: Long): ConsoleState? { val o = getObj("/api/state?since=$v"); return if (o["same"] == true) null else parseState(o) }
     /** The console's plug-in catalogue, racks and extensions as saved when the remote started ({available:false} when it never was). */
     fun consoleInfo(): Map<String, Any?> = getObj("/api/console-info")
+    /** STREAMING on the computer: now playing and transport (metadata and commands only, never audio) */
+    fun streaming(): Map<String, Any?> = getObj("/api/streaming")
+    @Suppress("UNCHECKED_CAST") fun streamingCmd(cmd: String): Map<String, Any?> { require(cmd in com.amfb.amixos.MediaHub.consoleCmds) { "unknown command" }; return MiniJson.parse(request("POST", "/api/streaming/cmd", MiniJson.stringify(mapOf("cmd" to cmd)))) as Map<String, Any?> }
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
     companion object {
         /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).

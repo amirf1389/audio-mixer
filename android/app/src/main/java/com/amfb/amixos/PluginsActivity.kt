@@ -83,7 +83,7 @@ class PluginsActivity : FitActivity() {
         val live = (liveRacks?.get("racks") as? List<*>)?.isNotEmpty() == true
         if (info["available"] != true && !(tab == 0 && live)) { empty(getString(R.string.plugins_none)); return }   // the live racks need no saved list
         when (tab) {
-            0 -> if (liveRacks?.get("racks") is List<*> && (liveRacks!!["racks"] as List<*>).isNotEmpty()) renderLive() else { val racks = list("racks"); if (racks.isEmpty()) empty(getString(R.string.plugins_no_racks))
+            0 -> if ((liveRacks?.get("racks") as? List<*>)?.isNotEmpty() == true) renderLive() else { val racks = list("racks"); if (racks.isEmpty()) empty(getString(R.string.plugins_no_racks))
                 for (r in racks) { @Suppress("UNCHECKED_CAST") val ps = (r["plugins"] as? List<Any?>).orEmpty().mapNotNull { it as? Map<String, Any?> }.filter { match(s(it, "name"), s(it, "kind")) }
                     if (ps.isEmpty()) continue
                     section(String.format("CH %02d  %s", ((r["strip"] as? Number)?.toInt() ?: 0) + 1, s(r, "name")))
@@ -105,7 +105,7 @@ class PluginsActivity : FitActivity() {
     @Suppress("UNCHECKED_CAST")
     private fun renderLive() {
         body.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.plugins_live_note); setTextColor(Color.parseColor("#34D399")); textSize = 12f; setPadding(0, 12, 0, 4) }))
-        for (r in (liveRacks!!["racks"] as List<Map<String, Any?>>)) { val strip = (r["strip"] as? Number)?.toInt() ?: 0
+        for (r in ((liveRacks?.get("racks") as? List<Map<String, Any?>>).orEmpty())) { val strip = (r["strip"] as? Number)?.toInt() ?: 0
             val slots = (r["slots"] as? List<Map<String, Any?>>).orEmpty().filter { match(s(it, "name"), s(it, "kind"), s(it, "vendor")) }; if (slots.isEmpty()) continue
             section(String.format("CH %02d  %s", strip + 1, s(r, "name")))
             for (p in slots) { val slot = (p["slot"] as? Number)?.toInt() ?: 0; val err = s(p, "error"); val loaded = p["loaded"] == true

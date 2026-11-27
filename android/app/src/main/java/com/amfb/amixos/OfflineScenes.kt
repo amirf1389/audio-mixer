@@ -8,6 +8,9 @@ import com.amfb.amixos.remote.MiniJson
  *  plus "offline": true when it was made or changed away from a console. One scene may be marked to recall on connect: the phone then
  *  asks first (a live console is never changed without a tap). Pure functions here; the screens are in RemoteActivity. */
 object OfflineScenes {
+    /** a stored scene, or null when it is not a scene (a damaged or foreign entry no longer crashes the SCENES list) */
+    @Suppress("UNCHECKED_CAST")
+    fun read(stored: Any?): Map<String, Any?>? = (stored as? String)?.let { runCatching { MiniJson.parse(it) as? Map<String, Any?> }.getOrNull() }
     /** the console's last state as the phone saw it (kept so an offline scene starts from the real channel names and levels) */
     fun stateJson(s: ConsoleState): String = MiniJson.stringify(mapOf("master" to s.masterDb,
         "strips" to s.strips.map { mapOf("id" to it.id, "name" to it.name, "db" to it.db, "pan" to it.pan, "mute" to it.mute, "solo" to it.solo) },

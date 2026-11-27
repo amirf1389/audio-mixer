@@ -279,7 +279,7 @@
     <string name="tools_need_mic">Allow the microphone to use this tool.</string>
     <string name="tools_no_mic">The microphone could not be opened.</string>
     <string name="nav_home">HOME</string>
-    <string name="nav_mixer">MIXER</string>
+    <string name="nav_mixer">MIX</string>
     <string name="nav_tools">TOOLS</string>
     <string name="nav_settings">SETTINGS</string>
     <string name="nav_players">PLAYERS</string>

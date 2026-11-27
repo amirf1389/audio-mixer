@@ -44,8 +44,8 @@ class StreamPlayersTest {
     }
     @Test fun theSeparateMixerAppHasItsOwnBar() {
         assertTrue(Nav.isStandalonePackage("com.amfb.amixos.mixer")); assertFalse(Nav.isStandalonePackage("com.amfb.amixos"))
-        assertEquals(listOf(Nav.Tab.MIXER, Nav.Tab.PLAYERS, Nav.Tab.TOOLS, Nav.Tab.SETTINGS), Nav.tabs(true))
-        assertEquals(listOf(Nav.Tab.HOME, Nav.Tab.MIXER, Nav.Tab.TOOLS, Nav.Tab.SETTINGS), Nav.tabs(false))   // AmF X1 itself is unchanged
+        assertEquals(listOf(Nav.Tab.MIXER, Nav.Tab.PLAY, Nav.Tab.TOOLS, Nav.Tab.DEVICES, Nav.Tab.SETTINGS), Nav.tabs(true))
+        assertEquals(listOf(Nav.Tab.HOME, Nav.Tab.MIXER, Nav.Tab.PLAY, Nav.Tab.TOOLS, Nav.Tab.SETTINGS), Nav.tabs(false))
     }
     @Test fun thePlayersScreenOpensALinkAndSwitchesService() {
         val a = Robolectric.buildActivity(StreamPlayerActivity::class.java).setup().get()

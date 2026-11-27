@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_play">PLAY</string>
+    <string name="nav_devices">DEVICES</string>
+    <string name="play_title">PLAY</string>
+    <string name="play_intro">Control the music playing on this phone: TIDAL, Spotify, Deezer or any player app.</string>
+    <string name="play_access_title">Allow media control</string>
+    <string name="play_access_why">Android only shows which song is playing in another app to apps you allow under Notification access. AmF X1 uses this access only to read the song title, artist and artwork and to send play, pause, next, previous and seek. It does not read, store or send your notifications, and it never records or downloads music. You can turn it off again at any time in the same place.</string>
+    <string name="play_access_allow">Open Notification access</string>
+    <string name="play_listener_label">AmF X1 media control</string>
+    <string name="play_artwork">Artwork</string>
+    <string name="play_prev">Previous</string>
+    <string name="play_next">Next</string>
+    <string name="play_toggle">Play or pause</string>
+    <string name="play_nothing">Nothing is playing. Start a song in a music app, or open one below.</string>
+    <string name="play_unknown">Unknown title</string>
+    <string name="play_open_app">Open a music app</string>
+    <string name="play_not_installed">%1$s is not installed on this phone.</string>
+    <string name="play_computer">On the computer</string>
+    <string name="play_paused">paused</string>
+    <string name="play_web_players">Web players</string>
+    <string name="play_note">Remote control only: the music stays in the player app. Nothing is recorded, captured or downloaded.</string>
+</resources>

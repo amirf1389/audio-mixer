@@ -60,7 +60,7 @@ class FeaturesPhoneMicTest {
         assertNotNull(find(s.window.decorView, "feat_streaming")); assertNull(find(s.window.decorView, "feat_mic"))
         Features.set(ctx, "streaming", false)
         val a = Robolectric.buildActivity(SettingsActivity::class.java).setup().get(); val bar = find(a.window.decorView, "navBar") as ViewGroup
-        assertFalse((0 until bar.childCount).any { bar.getChildAt(it).contentDescription == a.getString(R.string.nav_players) })
+        assertFalse((0 until bar.childCount).any { bar.getChildAt(it).contentDescription == a.getString(R.string.nav_players) || bar.getChildAt(it).contentDescription == a.getString(R.string.nav_play) })
     }
 
     private class FakeLink : MicSession.Link {
