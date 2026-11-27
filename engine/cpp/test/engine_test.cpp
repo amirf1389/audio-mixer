@@ -108,6 +108,14 @@ int main(int argc, char** argv) {
       check(id, "momentary", m.loudness().momentary(), ex[k++], 0.02, false); check(id, "integrated", m.loudness().integrated(), ex[k++], 0.02, false); check(id, "true peak", m.loudness().truePeak(), ex[k++], 0.01, false);
     }
   }
+  {  // (outside the shared vector count, which bridge/test.js pins) the PAN LAW: constant power, sin/cos. Hard left: R silent, L at unity. Centre: -3.01 dB each side
+    const double fs = 48000; std::vector<float> x(512, 0.5f), ol(512), orr(512); const float* p[1] = {x.data()};
+    auto run = [&](double pan) { am::Mixer m(1, fs); m.setLimiter(false, 0, 0); m.setPan(0, pan); for (int b = 0; b < 8; ++b) m.process(p, 512, ol.data(), orr.data()); };
+    auto db = [](double v) { return 20 * std::log10(std::max(1e-12, std::fabs(v))); };
+    run(-1); if (std::fabs(orr[511]) > 1e-6 || std::fabs(db(ol[511] / 0.5)) > 0.05) { ++failures; std::printf("pan hard left: L %g R %g\n", ol[511], orr[511]); }
+    run(1); if (std::fabs(ol[511]) > 1e-6 || std::fabs(db(orr[511] / 0.5)) > 0.05) { ++failures; std::printf("pan hard right: L %g R %g\n", ol[511], orr[511]); }
+    run(0); if (std::fabs(db(ol[511] / 0.5) + 3.0103) > 0.05 || std::fabs(db(orr[511] / 0.5) + 3.0103) > 0.05) { ++failures; std::printf("pan centre: L %g R %g\n", ol[511], orr[511]); }
+  }
   std::printf("C++ engine: %d cases, %d numbers checked, %d failed\n", cases, checked, failures);
   return failures ? 1 : 0;
 }

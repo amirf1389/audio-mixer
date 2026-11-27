@@ -688,7 +688,7 @@ bool Daemon::loadSeed(const std::string& file, std::string& err) {
   std::lock_guard<std::mutex> g(m_);
   const json::Value& l = o["strips"];
   for (std::size_t i = 0; i < strips_.size() && i < l.size(); ++i) { const json::Value& v = l.at(i); Strip& s = strips_[i];
-    s.name = v["name"].asString(s.name).substr(0, 24); s.db = v.has("db") && !v["db"].isNumber() ? -120.0 : std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db)));   // -inf arrives as null: the fader stays down, never at 0 dB s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));
+    s.name = v["name"].asString(s.name).substr(0, 24); s.db = v.has("db") && !v["db"].isNumber() ? -120.0 : std::max(-120.0, std::min(10.0, v["db"].asNumber(s.db))); s.pan = std::max(-1.0, std::min(1.0, v["pan"].asNumber(s.pan)));   // -inf arrives as null: the fader stays down, never at 0 dB
     s.mute = v["mute"].asBool(s.mute); s.solo = v["solo"].asBool(s.solo); s.groupMute = v["groupMute"].asBool(s.groupMute); s.groupDb = std::max(-60.0, std::min(10.0, v["groupDb"].asNumber(s.groupDb))); s.trim = std::max(-24.0, std::min(24.0, v["trim"].asNumber(s.trim)));
     if (v["tone"].isObject()) { const json::Value& t = v["tone"]; auto g = [](double x) { return std::max(-15.0, std::min(15.0, x)); };
       s.low = g(t["low"].asNumber(s.low)); s.mid = g(t["mid"].asNumber(s.mid)); s.high = g(t["high"].asNumber(s.high)); s.midHz = std::max(100.0, std::min(8000.0, t["midHz"].asNumber(s.midHz))); s.toneOn = t["on"].asBool(s.toneOn); }

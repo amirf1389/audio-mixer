@@ -217,7 +217,7 @@ class RemoteActivity : FitActivity() {
         const val KNOB_STRIP_DP = 58f; const val KNOB_DP = 34f; const val PAN_DP = 38f
     }
     private fun buildStrips(s: ConsoleState) {
-        strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear(); toneUi.clear()
+        strips.removeAllViews(); faders.clear(); dbLabels.clear(); nameLabels.clear(); mutes.clear(); solos.clear(); clipFlags.clear(); toneUi.clear(); panKnobs.clear()
         val colors = intArrayOf(0xFFFFB590.toInt(), 0xFF22D3EE.toInt(), 0xFFA78BFA.toInt(), 0xFF34D399.toInt())
         // FADERS view: exactly five channels beside the master, so the ten channels of a console are two pages and each fader is as wide
         // as a finger and as tall as the screen allows. KNOBS view: narrower strips with pan, gain and the 3-band EQ above a shorter fader.
@@ -233,9 +233,12 @@ class RemoteActivity : FitActivity() {
             // KNOBS view: pan, gain and EQ sit in their own scrolling box that takes at most 45 % of the strip, so the fader under it always
             // keeps more than half the height (before, the knobs took it all and the fader shrank to a sliver)
             val knobBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-            if (!big && Prefs.showPan(this)) knobBox.addView(KnobView(this, tint).apply { value = st.pan.toFloat(); layoutParams = LinearLayout.LayoutParams(ConsoleUi.dp(this@RemoteActivity, PAN_DP), LinearLayout.LayoutParams.WRAP_CONTENT)
+            // PAN on every strip (the big-fader view too): L100 .. C .. R100, a double tap centres it
+            val panKnob = KnobView(this, tint).apply { value = st.pan.toFloat(); contentDescription = "stripPan"; layoutParams = LinearLayout.LayoutParams(ConsoleUi.dp(this@RemoteActivity, PAN_DP), LinearLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER_HORIZONTAL }
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
-                onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } })
+                onChange = { v -> live.submit("pan${st.id}") { client?.pan(st.id, v.toDouble()) } } }
+            if (big) col.addView(panKnob) else if (Prefs.showPan(this)) knobBox.addView(panKnob)
+            if (big || Prefs.showPan(this)) panKnobs[st.id] = panKnob
             if (!big && Prefs.showTone(this)) knobBox.addView(toneBlock(st, tint))
             if (knobBox.childCount > 0) col.addView(android.widget.ScrollView(this).apply { tag = "knobScroll"; isVerticalScrollBarEnabled = false; addView(knobBox)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.8f) })
@@ -742,6 +745,7 @@ class RemoteActivity : FitActivity() {
             if (mutes[i].isChecked != st.mute) { mutes[i].tag = "sync"; mutes[i].isChecked = st.mute; mutes[i].tag = null }
             if (solos[i].isChecked != st.solo) { solos[i].tag = "sync"; solos[i].isChecked = st.solo; solos[i].tag = null }
             val label = ConsoleUi.title(i, st.name); if (nameLabels[i].text.toString() != label) nameLabels[i].text = label
+            panKnobs[i]?.let { k -> if (Math.abs(k.value - st.pan.toFloat()) > 0.005f) k.value = st.pan.toFloat() }
             toneUi[i]?.show(st) }
         run { val p = (DaemonClient.dbToPos(s.masterDb) * 1000).toInt(); if (Math.abs(masterFader.progress - p) > 2) { masterFader.progress = p; masterDb.text = DaemonClient.fmtDb(s.masterDb) } }
         state = s
@@ -754,6 +758,8 @@ class RemoteActivity : FitActivity() {
             if (eq.isChecked != st.tone.on) { eq.tag = "sync"; eq.isChecked = st.tone.on; eq.tag = null }; listOf(hi, mid, freq, lo).forEach { it.dim = !st.tone.on } }
     }
     internal val toneUi = HashMap<Int, ToneUi>()
+    /** each strip's PAN knob, so a pan moved on the console (or mirrored by a linked stereo pair there) shows here */
+    internal val panKnobs = HashMap<Int, KnobView>()
     private fun hzToKnob(hz: Double) = (2 * Math.log(hz / 100) / Math.log(80.0) - 1).toFloat()
     private fun knobToHz(v: Float) = Math.round(100 * Math.pow(80.0, (v + 1) / 2.0)).toDouble()
     private fun toneBlock(st: com.amfb.amixos.remote.StripState, tint: Int): View {
