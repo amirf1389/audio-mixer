@@ -13,6 +13,12 @@ Unicode true
 !ifndef OUT
   !define OUT "..\..\dist\windows\AmF-X1-${VERSION}-setup.exe"
 !endif
+; STORE RETURN CODES (Partner Center "Installer handling"): 0 success, 1 cancelled, 2 failure, 1618 another AmF X1 setup is running,
+; 112 not enough disk space, 3010 installed but a restart is needed (a file in use is replaced at the next start; never restarts by itself)
+!tempfile REQKB_FILE
+!system 'du -sk "${SRC}" | cut -f1 > "${REQKB_FILE}"' = 0
+!define /file REQKB "${REQKB_FILE}"
+!delfile "${REQKB_FILE}"
 Name "AmF X1"
 OutFile "${OUT}"
 InstallDir "$PROGRAMFILES64\AmF X1"
@@ -138,11 +144,30 @@ FunctionEnd
 !insertmacro CloseApps ""
 !insertmacro CloseApps "un."
 Function .onInit
+  System::Call 'kernel32::CreateMutex(p 0, i 0, t "AmFX1SetupMutex") p .r1 ?e'
+  Pop $R0
+  StrCmp $R0 183 0 notRunning   ; ERROR_ALREADY_EXISTS: another copy of this setup is running
+    SetErrorLevel 1618
+    Abort
+  notRunning:
+  StrCpy $R1 $INSTDIR 3
+  ClearErrors
+  ${DriveSpace} $R1 "/D=F /S=K" $R2
+  IfErrors spaceOk
+  IntCmp $R2 ${REQKB} spaceOk 0 spaceOk
+    SetErrorLevel 112
+    MessageBox MB_OK|MB_ICONSTOP "Not enough free disk space on $R1 for AmF X1 (needs about ${REQKB} KB)." /SD IDOK
+    Abort
+  spaceOk:
   ; AUTO UPDATE: the console starts this setup with  /S /RESTART  and quits; wait for it to let go of its files, install silently, start it again
   ${GetParameters} $R0
   ${GetOptions} $R0 "/RESTART" $R1
   IfErrors +2 0
   StrCpy $Restart "1"
+FunctionEnd
+Function .onInstSuccess
+  IfRebootFlag 0 +2
+  SetErrorLevel 3010
 FunctionEnd
 Section "AmF X1" SecMain
   SectionIn RO
@@ -199,6 +224,8 @@ Section "AmF X1" SecMain
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "Publisher" "AMFB Audio"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "DisplayIcon" "$INSTDIR\amixos.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "EstimatedSize" ${REQKB}
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AmFX1" "NoRepair" 1
   WriteUninstaller "$INSTDIR\Uninstall.exe"
