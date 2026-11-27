@@ -145,7 +145,7 @@ ApplicationWindow {
                         MItem { objectName: "menuAutoLive"; text: (apps.autoLive ? "✓ " : "") + i18n.t("AUTO LIVE: start it when a streaming program opens", i18n.lang); onTriggered: apps.autoLive = !apps.autoLive }
                         MenuSeparator {}
                         MItem { text: i18n.t("Plug-ins", i18n.lang); onTriggered: root.current = "plugins" }
-                        MItem { text: i18n.t("Plug-in Builder (separate app)…", i18n.lang); onTriggered: settings.openPluginBuilder() }
+                        MItem { text: settings.extrasInstalled ? i18n.t("Plug-in Builder (separate app)…", i18n.lang) : i18n.t("Install AmF X1 Extras (Plug-in Builder)…", i18n.lang); onTriggered: { if (!settings.openPluginBuilder()) root.say(i18n.t("Install AmF X1 Extras (AmF-X1-Extras setup) for the Plug-in Builder, the plug-in shell, Hybrid and the web stack.", i18n.lang)) } }
                         MItem { text: i18n.t("Sound card", i18n.lang); onTriggered: root.current = "asio" }
                         MItem { text: i18n.t("Effects", i18n.lang); onTriggered: root.current = "fx" }
                         MItem { text: i18n.t("Mastering", i18n.lang); onTriggered: root.current = "master" }
@@ -416,7 +416,7 @@ ApplicationWindow {
             else if (t === "Save the console to a file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("Saved: ") !== 0) bad.push(t + ": " + sayText.text) }
             else if (t === "Load the console from that file") { sayText.text = ""; it.triggered(); if (sayText.text.indexOf("was loaded") < 0) bad.push(t + ": " + sayText.text) }
             else if (t === "Sound card in use") { sayText.text = ""; it.triggered(); if (sayText.text === "") bad.push(t) }
-            else if (t.indexOf("Plug-in Builder") === 0) { if (typeof settings.openPluginBuilder !== "function") bad.push(t) }   // starts another program: only checked to be wired
+            else if (t.indexOf("Plug-in Builder") === 0 || t.indexOf("Install AmF X1 Extras") === 0) { if (typeof settings.openPluginBuilder !== "function") bad.push(t) }   // starts another program: only checked to be wired
             else bad.push("not covered: " + t)
         }
         shut(); root.current = keepPage

@@ -190,13 +190,17 @@ bool Settings::openDiagnostics() {
   if (!QFileInfo::exists(exe)) { note(QStringLiteral("The Diagnostics app is not installed next to the console (run the setup again and tick it).")); return false; }
   const bool ok = QProcess::startDetached(exe, {}); note(ok ? QStringLiteral("Diagnostics opened.") : QStringLiteral("The Diagnostics app did not start.")); return ok;
 }
-bool Settings::openPluginBuilder() {
+static QString pluginBuilderExe() {
 #ifdef _WIN32
-  const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder.exe";
+  return QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder.exe";
 #else
-  const QString exe = QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder";
+  return QCoreApplication::applicationDirPath() + "/AmF X1 Plugin Builder";
 #endif
-  if (!QFileInfo::exists(exe)) { note(QStringLiteral("The Plug-in Builder is not installed next to the console.")); return false; }
+}
+bool Settings::extrasInstalled() const { return QFileInfo::exists(pluginBuilderExe()); }   // the Plug-in Builder comes only with the AmF X1 Extras setup
+bool Settings::openPluginBuilder() {
+  const QString exe = pluginBuilderExe();
+  if (!QFileInfo::exists(exe)) { note(QStringLiteral("Install AmF X1 Extras (AmF-X1-Extras setup) for the Plug-in Builder, the plug-in shell, Hybrid and the web stack.")); return false; }
   const bool ok = QProcess::startDetached(exe, {}); note(ok ? QStringLiteral("Plug-in Builder opened: export a plug-in there, then RESCAN on PLUGINS.") : QStringLiteral("The Plug-in Builder did not start."));
   return ok;
 }

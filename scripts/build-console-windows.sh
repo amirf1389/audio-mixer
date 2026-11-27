@@ -91,15 +91,35 @@ cp "$ROOT/install/windows/web/nginx.conf.in" "$D/web/nginx/conf/"; cp "$ROOT/ins
 cp "$ROOT/engine/cpp/app/daemon/remote_page.html" "$D/web/remote/index.html"
 for f in "$ROOT"/bridge/*.js "$ROOT/bridge/license-public.json"; do case "$(basename "$f")" in test.js|audit.js|mail.js|flexasio.js) ;; *) cp "$f" "$D/web/bridge/bridge/";; esac; done
 cp "$ROOT"/bridge/sim/*.js "$D/web/bridge/bridge/sim/"; cp "$ROOT/engine/node/index.js" "$D/web/bridge/engine/node/"; cp "$ROOT/package.json" "$D/web/bridge/"
-# PACKAGE CHECK: the build fails when the network service, its extension or the web remote is not in the package
-for f in "AmF X1 Network.exe" "AmF X1 Network.dll" "AmF X1.exe" AudioMixerASIO64.dll AudioMixerASIO32.dll amixos.exe Qt6Core.dll Qt6Network.dll platforms/qwindows.dll web/remote/index.html web/node/node.exe web/nginx/nginx.exe web/nginx/conf/mime.types web/nginx/conf/nginx.conf.in web/start-web-stack.cmd web/stop-web-stack.cmd web/bridge/bridge/server.js web/bridge/engine/node/index.js web/bridge/package.json licenses/NODEJS-LICENSE.txt licenses/NGINX-LICENSE.txt; do
+# SIZE: the main setup stays under 25 MB. Our own programs lose their symbol tables (strip, no exe packer: packers trip virus scanners);
+# the QML type descriptions (*.qmltypes, for tooling only), the QML tooling plugin and the NativeStyle controls (only the Windows / macOS
+# styles use them; the console runs Fusion, which falls back to Basic) are left out.
+for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Diagnostics.exe" "AmF X1 Plugin Builder.exe"; do [ -f "$D/$p" ] && x86_64-w64-mingw32-strip --strip-all "$D/$p"; done
+for p in "AmF X1 Network.dll" "AmF X1 Hybrid.dll" amix_soxr.dll; do [ -f "$D/$p" ] && x86_64-w64-mingw32-strip --strip-unneeded "$D/$p"; done
+find "$D/AMFB Plugin Shell.vst3" -name '*.vst3' -type f -exec x86_64-w64-mingw32-strip --strip-unneeded {} \; 2>/dev/null || true
+find "$D/qml" -name '*.qmltypes' -delete; rm -rf "$D/qml/QtQuick/tooling" "$D/qml/QtQuick/NativeStyle" "$D/qml/QtQuick/Controls/designer"
+# AmF X1 EXTRAS: a separate setup (install/windows/amfx1-extras.nsi) into the same folder. It carries the Plug-in Builder and its VST3 shell, the
+# Hybrid program and extension, the WEB STACK (web\: Node.js, nginx, the bridge, the browser remote page) with their licences, and the Steinberg
+# ASIO usage guidelines (a 4.7 MB PDF; the licensing agreement and the change list stay with the driver). The console finds each of them
+# missing on its own and shows "Install AmF X1 Extras" (TOOLS menu, NETWORK page, the store) instead of failing.
+E="$OUT/$NAME-extras"; rm -rf "$E"; mkdir -p "$E/licenses" "$E/drivers/asio"
+for f in "AmF X1 Plugin Builder.exe" "AMFB Plugin Shell.vst3" "AmF X1 Hybrid.exe" "AmF X1 Hybrid.dll" web; do [ -e "$D/$f" ] && mv "$D/$f" "$E/"; done
+[ -f "$D/drivers/asio/Steinberg ASIO Usage Guidelines.pdf" ] && mv "$D/drivers/asio/Steinberg ASIO Usage Guidelines.pdf" "$E/drivers/asio/"
+for f in NODEJS-LICENSE.txt NGINX-LICENSE.txt NGINX-zlib-LICENSE.txt NGINX-PCRE-LICENCE.txt NGINX-OpenSSL-LICENSE.txt WEB-STACK-SOURCES.txt; do [ -f "$D/licenses/$f" ] && mv "$D/licenses/$f" "$E/licenses/"; done
+# PACKAGE CHECK (core): the console, the network service and its extension, Diagnostics, both ASIO drivers and the Qt runtime; none of the extras
+for f in amixos.exe "AmF X1 Network.exe" "AmF X1 Network.dll" "AmF X1.exe" "AmF X1 Diagnostics.exe" AudioMixerASIO64.dll AudioMixerASIO32.dll Qt6Core.dll Qt6Network.dll platforms/qwindows.dll qml/QtQuick/Controls/Fusion/qmldir qml/QtQuick/Controls/Basic/qmldir; do
   [ -s "$D/$f" ] || { echo "PACKAGE CHECK: $f is missing from $D"; exit 1; }; done
-grep -q '/api/' "$D/web/remote/index.html" || { echo "PACKAGE CHECK: web/remote/index.html is not the browser remote"; exit 1; }
+for f in "AmF X1 Plugin Builder.exe" "AMFB Plugin Shell.vst3" "AmF X1 Hybrid.exe" "AmF X1 Hybrid.dll" web; do [ -e "$D/$f" ] && { echo "PACKAGE CHECK: $f belongs to the extras, not to $D"; exit 1; }; done
 x86_64-w64-mingw32-objdump -p "$D/AmF X1 Network.exe" | grep -qiE "DLL Name: (Qt6Network|ws2_32)\.dll" || { echo "PACKAGE CHECK: AmF X1 Network.exe has no network imports"; exit 1; }
-x86_64-w64-mingw32-objdump -p "$D/AmF X1 Network.exe" | sed -n 's/.*DLL Name: //p' | while read -r l; do case "$l" in [Qq]t6*|amix_*|av*|sw*) [ -f "$D/$l" ] || { echo "PACKAGE CHECK: AmF X1 Network.exe needs $l, not in the package"; exit 1; };; esac; done
+for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Diagnostics.exe"; do x86_64-w64-mingw32-objdump -p "$D/$p" | sed -n 's/.*DLL Name: //p' | while read -r l; do case "$l" in [Qq]t6*|amix_*|av*|sw*|lib*) [ -f "$D/$l" ] || { echo "PACKAGE CHECK: $p needs $l, not in the package"; exit 1; };; esac; done; done
+# PACKAGE CHECK (extras): the Plug-in Builder with its shell, Hybrid and the web stack
+for f in "AmF X1 Plugin Builder.exe" "AMFB Plugin Shell.vst3/Contents" "AmF X1 Hybrid.exe" "AmF X1 Hybrid.dll" web/remote/index.html web/node/node.exe web/nginx/nginx.exe web/nginx/conf/mime.types web/nginx/conf/nginx.conf.in web/start-web-stack.cmd web/stop-web-stack.cmd web/bridge/bridge/server.js web/bridge/engine/node/index.js web/bridge/package.json licenses/NODEJS-LICENSE.txt licenses/NGINX-LICENSE.txt; do
+  [ -e "$E/$f" ] || { echo "PACKAGE CHECK: $f is missing from $E"; exit 1; }; done
+grep -q '/api/' "$E/web/remote/index.html" || { echo "PACKAGE CHECK: web/remote/index.html is not the browser remote"; exit 1; }
+for p in "AmF X1 Plugin Builder.exe" "AmF X1 Hybrid.exe"; do x86_64-w64-mingw32-objdump -p "$E/$p" | sed -n 's/.*DLL Name: //p' | while read -r l; do case "$l" in [Qq]t6*|lib*) [ -f "$D/$l" ] || { echo "PACKAGE CHECK: $p needs $l, not in the core package"; exit 1; };; esac; done; done
 NODE_LIST="$(node "$ROOT/scripts/require-closure.js" "$ROOT/bridge/server.js")" || exit 1
-for f in $NODE_LIST; do [ -f "$D/web/bridge/$f" ] || { echo "PACKAGE CHECK: the bridge needs $f, not in web/bridge"; exit 1; }; done
-echo "package check: network service, extension, web remote and web stack present"
+for f in $NODE_LIST; do [ -f "$E/web/bridge/$f" ] || { echo "PACKAGE CHECK: the bridge needs $f, not in web/bridge"; exit 1; }; done
+echo "package check: core (console, network service, extension, Diagnostics, ASIO 64 + 32) and extras (Plug-in Builder, shell, Hybrid, web stack) present"
 cat > "$D/README.txt" <<TXT
 AmF X1 by AMFB Audio $VER - Windows x64
   amixos.exe            the console (Qt 6 Quick): start this
@@ -110,7 +130,8 @@ AmF X1 by AMFB Audio $VER - Windows x64
   AudioMixerASIO32.dll  the 32-bit ASIO driver (32-bit host programs): register as administrator with  %WINDIR%\\SysWOW64\\regsvr32.exe AudioMixerASIO32.dll
   drivers\\asio\\         the Steinberg ASIO licence, usage guidelines and change list
   licenses\\              third-party licences and the additional terms
-  web\\                   the WEB STACK (off unless switched on): web\\nginx (nginx for Windows), web\\node (Node.js), web\\bridge, web\\remote, start-web-stack.cmd / stop-web-stack.cmd
+  AmF X1 Extras         a separate setup (AmF-X1-Extras-$VER-setup.exe) into this folder: the Plug-in Builder and its VST3 shell, AmF X1 Hybrid,
+                        the WEB STACK (web\\: nginx, Node.js, the bridge, the browser remote) and the Steinberg ASIO usage guidelines
   Qt6*.dll, platforms\\, imageformats\\, qml\\   the Qt $HOSTQT runtime (MinGW build) the console needs; keep them next to amixos.exe
 Data goes to %APPDATA%\\AMFB Audio\\AmF X1, cache to %LOCALAPPDATA%\\AMFB Audio\\AmF X1 (docs/install-layout.md). Unsigned: sign with scripts/sign-windows.js.
 TXT
@@ -119,8 +140,9 @@ TXT
 # from a certificate authority is the way that warning goes away. No certificate is made here and nothing is switched off on the PC.
 if [ -n "${AMFX1_SIGN_PFX:-}" ]; then
   echo "== signing with the certificate in AMFX1_SIGN_PFX"
-  ( cd "$OUT/$NAME" && for f in amixos.exe "AmF X1.exe" "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Diagnostics.exe" "AmF X1 Plugin Builder.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll" amix_soxr.dll AudioMixerASIO64.dll AudioMixerASIO32.dll; do [ -f "$f" ] && node "$ROOT/scripts/sign-windows.js" "$f"; done )
+  for dir in "$OUT/$NAME" "$E"; do ( cd "$dir" && for f in amixos.exe "AmF X1.exe" "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Diagnostics.exe" "AmF X1 Plugin Builder.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll" amix_soxr.dll AudioMixerASIO64.dll AudioMixerASIO32.dll; do [ -f "$f" ] && node "$ROOT/scripts/sign-windows.js" "$f"; done ); done
 else
   echo "== NOT SIGNED: no AMFX1_SIGN_PFX. Windows will show its protection screen for this build until it is signed (docs/windows-defender.md)."
 fi
 (cd "$OUT" && rm -f "$NAME.zip" && zip -q -r -9 "$NAME.zip" "$NAME" && sha256sum "$NAME.zip" > "$NAME.zip.sha256" && ls -la "$NAME.zip" && cat "$NAME.zip.sha256")
+(cd "$OUT" && rm -f "$NAME-extras.zip" && zip -q -r -9 "$NAME-extras.zip" "$NAME-extras" && sha256sum "$NAME-extras.zip" > "$NAME-extras.zip.sha256" && ls -la "$NAME-extras.zip")

@@ -2607,5 +2607,10 @@
 "Sign-in cancelled or refused.",
 "Port 43117 is in use: close what uses it and try again.",
 "The Spotify sign-in ended: sign in again.",
-"Spotify refused: play / pause / next need Spotify Premium."
+"Spotify refused: play / pause / next need Spotify Premium.",
+"Install AmF X1 Extras (Plug-in Builder)…",
+"Install AmF X1 Extras (AmF-X1-Extras setup) for the Plug-in Builder, the plug-in shell, Hybrid and the web stack.",
+"WEB STACK (nginx + Node.js): Install AmF X1 Extras to use it.",
+"not installed: Install AmF X1 Extras",
+"The plug-in shell is not installed next to the console: Install AmF X1 Extras to export."
 ]
