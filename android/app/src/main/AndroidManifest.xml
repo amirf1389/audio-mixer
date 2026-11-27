@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />   <!-- AUTO UPDATES: Android asks the user to confirm every install -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <queries>   <!-- PLAY: the music apps' own launch intents (text names only) -->
+        <package android:name="com.aspiro.tidal" /><package android:name="com.spotify.music" /><package android:name="deezer.android.app" />
+    </queries>
     <application android:resizeableActivity="true" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:theme="@style/Theme.AmFX1" android:supportsRtl="true" android:networkSecurityConfig="@xml/network_security_config">
         <activity android:name=".HomeActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
@@ -30,6 +33,11 @@
         <activity android:name=".StreamPlayerActivity" android:exported="false" android:hardwareAccelerated="true" />
         <activity android:name=".SettingsActivity" android:exported="false" android:label="@string/settings" />
         <activity android:name=".RemoteActivity" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" android:exported="false" android:label="@string/remote_title" />
+        <activity android:name=".MediaActivity" android:exported="false" />
+        <!-- PLAY: lets Android list the phone's media sessions (no notification is read, nothing is recorded) -->
+        <service android:name=".MediaListener" android:label="@string/play_listener_label" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
         <receiver android:name=".AppUpdater$InstallResult" android:exported="false" />
     </application>
 </manifest>

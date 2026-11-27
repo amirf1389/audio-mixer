@@ -19,14 +19,17 @@ object Nav {
     enum class Tab(val label: Int, val glyph: String, val target: Class<out Activity>) {
         HOME(R.string.nav_home, "⌂", HomeActivity::class.java), MIXER(R.string.nav_mixer, "☰", RemoteActivity::class.java),
         TOOLS(R.string.nav_tools, "♪", ToolsActivity::class.java), SETTINGS(R.string.nav_settings, "⚙", SettingsActivity::class.java),
-        PLAYERS(R.string.nav_players, "▶", StreamPlayerActivity::class.java)
+        PLAYERS(R.string.nav_players, "▶", StreamPlayerActivity::class.java), PLAY(R.string.nav_play, "♫", MediaActivity::class.java),
+        DEVICES(R.string.nav_devices, "⇄", DevicesActivity::class.java)
     }
     // AmF X1 MIXER (the separate app, package ...mixer): the phone's own mixer without the console remote. Its bar is MIXER · PLAYERS ·
     // TOOLS · SETTINGS, the MIXER tab is always THIS PHONE, and there is no THIS PHONE / CONSOLE switch.
     @Volatile var standaloneForTests: Boolean? = null   // how a test becomes the AmF X1 Mixer app (tests run under the main app name)
     fun standalone(c: android.content.Context) = standaloneForTests ?: isStandalonePackage(c.packageName)
     fun isStandalonePackage(pkg: String) = pkg.endsWith(".mixer")
-    fun tabs(standalone: Boolean): List<Tab> = if (standalone) listOf(Tab.MIXER, Tab.PLAYERS, Tab.TOOLS, Tab.SETTINGS) else listOf(Tab.HOME, Tab.MIXER, Tab.TOOLS, Tab.SETTINGS)
+    // NEW STRUCTURE (docs/android-wireframes.md): MIX · PLAY · TOOLS · DEVICES · SETTINGS in the Mixer app; HOME · MIX · PLAY · TOOLS · SETTINGS in
+    // AmF X1 (DEVICES is a HOME tile there). The web PLAYERS page is reached from PLAY.
+    fun tabs(standalone: Boolean): List<Tab> = if (standalone) listOf(Tab.MIXER, Tab.PLAY, Tab.TOOLS, Tab.DEVICES, Tab.SETTINGS) else listOf(Tab.HOME, Tab.MIXER, Tab.PLAY, Tab.TOOLS, Tab.SETTINGS)
     // DUAL MODE MIXER: one MIXER with two modes, THIS PHONE (the standalone mixer: the phone's own sound) and CONSOLE (the remote of the
     // Windows console). The MIXER tab opens the mode used last; the bar at the top of each switches to the other.
     fun phoneMode(a: android.content.Context) = standalone(a) || Prefs.remote(a).getString("mixerMode", "console") == "phone"
@@ -63,13 +66,14 @@ object Nav {
         for (t in tabs(standalone(a)).filter { Features.tabOn(Prefs.remote(a), it) }) {   // FEATURES: TOOLS / PLAYERS can be switched off
             val on = t == current
             bar.addView(LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; contentDescription = a.getString(t.label)
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setOnClickListener { go(a, if (t == Tab.MIXER) mixerTarget(a) else t.target) }
+                minimumHeight = (48 * d).toInt(); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setOnClickListener { go(a, if (t == Tab.MIXER) mixerTarget(a) else t.target) }
                 addView(TextView(a).apply { text = t.glyph; textSize = 18f; setTextColor(a.getColor(if (on) R.color.md_on_secondary_container else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; includeFontPadding = false
                     background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 16 * d; setColor(if (on) a.getColor(R.color.md_secondary_container) else Color.TRANSPARENT) }
                     layoutParams = LinearLayout.LayoutParams((64 * d).toInt(), (32 * d).toInt()) })
-                addView(TextView(a).apply { text = a.getString(t.label); textSize = 13f; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
+                addView(TextView(a).apply { text = a.getString(t.label); textSize = 12f; maxLines = 1; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
                     typeface = Typeface.create(if (on) "sans-serif-medium" else "sans-serif", Typeface.NORMAL); letterSpacing = 0.03f }) })
         }
+        if (a !is LocalMixerActivity && Features.isOn(Prefs.remote(a), "streaming")) root.addView(NowPlaying.bar(a))   // NOW PLAYING (only while a phone app plays)
         if (a !is LocalMixerActivity) root.addView(QuickMaster.bar(a)); root.addView(bar);   // QUICK MASTER: every screen but the phone mixer (its master strip is there)
         fitSystemBars(root); fitBar(a, bar); return root
     }
@@ -77,7 +81,7 @@ object Nav {
     private fun fitBar(a: Activity, bar: LinearLayout) {
         val land = a.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE; val d = a.resources.displayMetrics.density
         val pad = ((if (land) 3 else 12) * d).toInt(); bar.setPadding(0, pad, 0, pad)
-        for (i in 0 until bar.childCount) (bar.getChildAt(i) as? LinearLayout)?.let { tab -> if (tab.childCount > 1) tab.getChildAt(1).visibility = if (land) View.GONE else View.VISIBLE }
+        for (i in 0 until bar.childCount) (bar.getChildAt(i) as? LinearLayout)?.let { tab -> tab.minimumHeight = if (land) 0 else (48 * d).toInt(); if (tab.childCount > 1) tab.getChildAt(1).visibility = if (land) View.GONE else View.VISIBLE }
     }
     /** after the phone was turned (for the screens that stay open through a turn) */
     fun fit(a: Activity) { (a.window.decorView.findViewWithTag<View>("navBar") as? LinearLayout)?.let { fitBar(a, it) } }

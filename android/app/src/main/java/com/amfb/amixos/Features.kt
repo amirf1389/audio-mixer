@@ -43,7 +43,7 @@ object Features {
     fun tileOn(p: SharedPreferences, tileId: String): Boolean { val f = all.firstOrNull { tileId in it.tiles } ?: return true; return isOn(p, f.id) }
     fun tileOn(c: Context, tileId: String) = tileOn(prefs(c), tileId)
     /** the bottom bar: TOOLS and PLAYERS follow their parts; HOME, MIXER and SETTINGS always stay (SETTINGS is how parts come back) */
-    fun tabOn(p: SharedPreferences, t: Nav.Tab): Boolean = when (t) { Nav.Tab.TOOLS -> isOn(p, "tools"); Nav.Tab.PLAYERS -> isOn(p, "streaming"); else -> true }
+    fun tabOn(p: SharedPreferences, t: Nav.Tab): Boolean = when (t) { Nav.Tab.TOOLS -> isOn(p, "tools"); Nav.Tab.PLAYERS, Nav.Tab.PLAY -> isOn(p, "streaming"); Nav.Tab.DEVICES -> isOn(p, "devices"); else -> true }
     /** the remote's TOOLS list */
     fun toolOn(p: SharedPreferences, t: RemoteTools.Tool): Boolean = when (t) {
         RemoteTools.Tool.DCA -> isOn(p, "dca"); RemoteTools.Tool.SPATIAL -> isOn(p, "spatial"); RemoteTools.Tool.EFFECTS, RemoteTools.Tool.PLUGINS -> isOn(p, "plugins")

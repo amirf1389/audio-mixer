@@ -2,7 +2,7 @@
   "product": "audio-mixer",
   "version": "1.26.0.0",
   "channel": "stable",
-  "released": "2026-11-26",
+  "released": "2026-11-27",
   "notes": [],
   "features": [
     {
@@ -274,8 +274,8 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.26.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.26.0.0-setup.exe",
-      "size": 55183204,
-      "sha256": "2bd23897d1a02985d41cbd1d0bd7cd7a4fc8e21fc62de5c7812998d0ca95cfe0"
+      "size": 55184127,
+      "sha256": "a0ac3ec29cd3dbe81db74afaefba3076eb16ef42b05ad1ae23340352ff312dc1"
     }
   },
   "plugins": [],

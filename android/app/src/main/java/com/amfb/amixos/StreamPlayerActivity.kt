@@ -43,7 +43,7 @@ class StreamPlayerActivity : FitActivity() {
         holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = getDrawable(R.drawable.card_bg); setPadding(8, 8, 8, 8) }
         box.addView(holder, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         box.addView(TextView(this).apply { text = getString(R.string.players_note); setTextColor(getColor(R.color.dim)); textSize = 11f; setPadding(0, 16, 0, 0); contentDescription = "playerNote" })
-        setContentView(Nav.wrap(this, box, Nav.Tab.PLAYERS)); paintChips()
+        setContentView(Nav.wrap(this, box, Nav.Tab.PLAY)); paintChips()
         Prefs.local(this).getString("playerLink_" + service.name, "")?.takeIf { it.isNotBlank() }?.let { field.setText(it) }
     }
     private fun paintChips() {
