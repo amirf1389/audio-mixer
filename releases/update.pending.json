@@ -274,8 +274,8 @@
     "win-x64-exe": {
       "name": "AmF-X1-1.26.0.0-setup.exe",
       "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.26.0.0-setup.exe",
-      "size": 55184127,
-      "sha256": "a0ac3ec29cd3dbe81db74afaefba3076eb16ef42b05ad1ae23340352ff312dc1"
+      "size": 55207807,
+      "sha256": "e196c9e22ee08bef71685bef95006aee4b74810c6d5334ba54d3f19292124a6a"
     }
   },
   "plugins": [],

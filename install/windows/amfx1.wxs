@@ -45,6 +45,9 @@
             <Component Id="ca0f5e4a30c82ebc2df5a" Guid="5B511CFB-232B-5DCF-BB27-FBB39996229F" Win64="yes">
               <File Id="fa0f5e4a30c82ebc2df5a" Name="AmF X1.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1.exe" KeyPath="yes"/>
             </Component>
+            <Component Id="c7bc8d28fd0461e093c21" Guid="7EDF2CC1-4965-5451-8848-2D9E93CCF7AC" Win64="yes">
+              <File Id="f7bc8d28fd0461e093c21" Name="AudioMixerASIO32.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AudioMixerASIO32.dll" KeyPath="yes"/>
+            </Component>
             <Component Id="cd6d053368f4e8fbb5be3" Guid="C6CFAFBC-5286-55C9-841A-58D4287A4136" Win64="yes">
               <File Id="fd6d053368f4e8fbb5be3" Name="AudioMixerASIO64.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AudioMixerASIO64.dll" KeyPath="yes"/>
             </Component>
@@ -113,9 +116,6 @@
             </Component>
             <Directory Id="d7d11bbbad26e21561551" Name="drivers">
               <Directory Id="dc9446667d01c168e952e" Name="asio">
-                <Component Id="c382b3954f4dbaa6d507b" Guid="D2DEE9B7-7DB9-5632-AFF8-086C2983CEF2" Win64="yes">
-                  <File Id="f382b3954f4dbaa6d507b" Name="AudioMixerASIO32.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/drivers/asio/AudioMixerASIO32.dll" KeyPath="yes"/>
-                </Component>
                 <Component Id="cc94cabefe3911b6211a1" Guid="76CFED08-0888-5387-8D44-47C071F2201D" Win64="yes">
                   <File Id="fc94cabefe3911b6211a1" Name="LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/drivers/asio/LICENSE.txt" KeyPath="yes"/>
                 </Component>
@@ -1011,6 +1011,7 @@
       <ComponentRef Id="c432b0f27bfeab2664413"/>
       <ComponentRef Id="c70b169448ad9bd43ca15"/>
       <ComponentRef Id="ca0f5e4a30c82ebc2df5a"/>
+      <ComponentRef Id="c7bc8d28fd0461e093c21"/>
       <ComponentRef Id="cd6d053368f4e8fbb5be3"/>
       <ComponentRef Id="c0398ccd0f49298b10a3d"/>
       <ComponentRef Id="c316a47c1a7a4ce0eb968"/>
@@ -1033,7 +1034,6 @@
       <ComponentRef Id="cfa85f0fd114b677bb9af"/>
       <ComponentRef Id="c2edc8d65019d2ddb862b"/>
       <ComponentRef Id="c61738d2e847ae51a41c6"/>
-      <ComponentRef Id="c382b3954f4dbaa6d507b"/>
       <ComponentRef Id="cc94cabefe3911b6211a1"/>
       <ComponentRef Id="ce62b834ef92407a6aa07"/>
       <ComponentRef Id="cc1f8c7d1039bfcd548a2"/>
