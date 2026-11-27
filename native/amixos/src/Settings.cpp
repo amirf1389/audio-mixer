@@ -67,7 +67,7 @@ bool Settings::restoreJournal() {
 }
 bool Settings::startWithWindowsAvailable() const {
 #ifdef _WIN32
-  return true;
+  return !bg::packaged();   // packaged: the StartupTask in the manifest, switched in Windows Settings > Apps > Startup
 #else
   return false;
 #endif

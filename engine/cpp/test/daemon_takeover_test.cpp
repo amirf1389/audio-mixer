@@ -96,6 +96,11 @@ int main() {
     CHECK(d.stateVersion() > v0 && d.state()["feedback"]["count"].asInt() == 1);
     for (int k = 0; k < 20; ++k) { std::this_thread::sleep_for(std::chrono::milliseconds(20)); d.feedbackCheck(); }
     CHECK(d.feedbackJson()["count"].asInt() == 1); }   // muted: not counted again
+  // ---- the seed carries each strip's PAN (it used to be lost behind a comment): 0.5 stays 0.5, out-of-range is clamped, absent keeps centre
+  { { std::ofstream f(seed); f << R"({"strips":[{"name":"GTR","db":0,"pan":0.5},{"name":"KEYS","db":0,"pan":-3},{"name":"VOX","db":0}]})"; }
+    am::Daemon::Options o; o.token = "0123456789abcdef0123"; o.strips = 3; am::Daemon d(o); std::string err;
+    CHECK(d.loadSeed(seed, err));
+    CHECK(std::fabs(strip(d, 0)["pan"].asNumber(9) - 0.5) < 1e-9 && std::fabs(strip(d, 1)["pan"].asNumber(9) + 1.0) < 1e-9 && std::fabs(strip(d, 2)["pan"].asNumber(9)) < 1e-9); }
   std::remove(seed.c_str());
   std::printf("daemon takeover: ok\n");
   return 0;

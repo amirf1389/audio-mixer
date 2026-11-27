@@ -265,7 +265,7 @@ function rotary(label,lo,hi,val,def,fmtK,onV,log){const k=document.createElement
  k.onwheel=e=>{e.preventDefault();set(of(Math.max(0,Math.min(1,pos(v)-Math.sign(e.deltaY)*0.02))),true)};
  k.ondblclick=()=>{buzz();set(def,true)};k.setAttribute("role","slider");k.setAttribute("aria-label",label);show();
  k.update=nv=>{if(drag!==k&&Math.abs(nv-v)>0.01){v=nv;show()}};return k}
-const dbK=v=>(v>0?"+":"")+v.toFixed(1),hzK=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+"k":Math.round(v)+"";
+const panK=v=>{v=Math.round(v);return v===0?"C":(v<0?"L":"R")+Math.abs(v)};const dbK=v=>(v>0?"+":"")+v.toFixed(1),hzK=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+"k":Math.round(v)+"";
 function stripKnobs(i,s){const w=document.createElement("div");w.className="ks";const t=Object.assign({low:0,mid:0,midHz:1000,high:0,on:true},s.tone||{});s.tone=t;
  const tone=()=>send("t"+i,{op:"tone",strip:i,low:t.low,mid:t.mid,midHz:t.midHz,high:t.high,on:t.on});
  const g=rotary("GAIN",-24,24,s.trim||0,0,dbK,v=>{s.trim=v;send("tr"+i,{op:"trim",strip:i,db:v})});g.style.setProperty("--kc","var(--amber)");
@@ -283,7 +283,8 @@ function build(){const box=$("#strips");box.textContent="";els.length=0;if(!stat
   if(onM){const m=document.createElement("button");m.textContent="M";m.className="m"+(mute?" on":"");m.onclick=()=>{buzz();const on=!m.classList.contains("on");m.classList.toggle("on",on);onM(on)};ms.appendChild(m)}
   if(onS){const s=document.createElement("button");s.textContent="S";s.className="s"+(solo?" on":"");s.onclick=()=>{buzz();const on=!s.classList.contains("on");s.classList.toggle("on",on);onS(on)};ms.appendChild(s)}
   if(onM&&opt.knobs&&!dca){c.ks=stripKnobs(from+els.length,state.strips[from+els.length]);c.insertBefore(c.ks,c.querySelector(".fz"))}
-  box.appendChild(c);f.onpointerdown=()=>{drag=f};return {ks:c.ks,bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
+  if(onM&&!dca){const si=from+els.length,st=state.strips[si];c.pk=rotary("PAN",-100,100,Math.round((st.pan||0)*100),0,panK,v=>{st.pan=Math.round(v)/100;send("p"+si,{op:"pan",strip:si,pan:st.pan})});c.pk.classList.add("pan");c.insertBefore(c.pk,c.querySelector(".fz"))}
+  box.appendChild(c);f.onpointerdown=()=>{drag=f};return {pk:c.pk,ks:c.ks,bar:c.querySelector(".mt i"),f,d,nm:c.querySelector(".nm"),m:ms.querySelector(".m"),s:ms.querySelector(".s")}};
  for(let i=from;i<to;++i){const s=state.strips[i];els.push(Object.assign({i},add((opt.num?(i+1)+" · ":"")+(s.name||("CH "+(i+1))),s.db,s.mute,s.solo,v=>{s.db=v;send("g"+i,{op:"gain",strip:i,db:v})},on=>{s.mute=on;send("m"+i,{op:"mute",strip:i,on})},on=>{s.solo=on;send("s"+i,{op:"solo",strip:i,on})})))}
  // DCA GROUP CHANNELS: each group in use is a strip after the channels (its fader moves its members' level, not their faders)
  dEls.length=0;for(const g of (state.dcas||[])){if(!g.members||!g.members.length)continue;const e=add("DCA "+g.id+" · "+g.name+" ("+g.members.length+")",g.db,g.mute,false,v=>{g.db=v;send("d"+g.id,{op:"dca",group:g.id,db:v})},on=>{g.mute=on;send("dm"+g.id,{op:"dca",group:g.id,mute:on})},null,false,true);e.g=g.id;dEls.push(e)}
@@ -296,7 +297,7 @@ function apply(s){if(!s||!s.strips)return;if(!state||s.strips.length!==state.str
  for(const e of dEls){const g=(s.dcas||[]).find(x=>x.id===e.g);if(!g)continue;if(free(e.f)){const p=Math.round(dbToPos(g.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(g.db)}}if(e.m)e.m.classList.toggle("on",!!g.mute)}
  for(const e of els){const x=e.i<0?s.master:s.strips[e.i];if(!x)continue;
   if(free(e.f)){const p=Math.round(dbToPos(x.db)*1000);if(Math.abs(e.f.value-p)>2){e.f.value=p;e.d.textContent=fmt(x.db)}}
-  if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo);if(e.ks)e.ks.upd(x)}}
+  if(e.i>=0){const n=(opt.num?(e.i+1)+" · ":"")+(x.name||("CH "+(e.i+1)));if(e.nm.textContent!==n)e.nm.textContent=n;if(e.m)e.m.classList.toggle("on",!!x.mute);if(e.s)e.s.classList.toggle("on",!!x.solo);if(e.ks)e.ks.upd(x);if(e.pk)e.pk.update(Math.round((x.pan||0)*100))}}
  state=s;synced=Date.now();panels();setSt("connected · live sync")}
 // ---- METER BRIDGE: every channel (peak bar, RMS under it, a peak-hold line, a clip light that stays until reset) and the master L / R
 const BR={hold:[],holdT:[],clip:[],mHold:-120,mHoldT:0,mClip:false};
@@ -475,7 +476,7 @@ function channel(){if(!state||!state.strips.length)return;cur=Math.max(0,Math.mi
  if(free($("#chName")))$("#chName").value=s.name||"";
  $("#chM").classList.toggle("on",!!s.mute);$("#chS").classList.toggle("on",!!s.solo);
  hslider("#chDb","#chDbT",s.db,v=>{s.db=v;send("g"+cur,{op:"gain",strip:cur,db:v})});
- const pan=$("#chPan");if(free(pan)){pan.value=Math.round((s.pan||0)*100)}const pt=v=>v===0?"C":(v<0?"L":"R")+Math.abs(v);$("#chPanT").textContent=pt(+pan.value);pan.oninput=()=>{$("#chPanT").textContent=pt(+pan.value);s.pan=pan.value/100;send("p"+cur,{op:"pan",strip:cur,pan:s.pan})};pan.onpointerdown=()=>{drag=pan};
+ const pan=$("#chPan");if(free(pan)){pan.value=Math.round((s.pan||0)*100)}const pt=v=>v===0?"C":(v<0?"L":"R")+Math.abs(v);$("#chPanT").textContent=pt(+pan.value);pan.oninput=()=>{$("#chPanT").textContent=pt(+pan.value);s.pan=pan.value/100;send("p"+cur,{op:"pan",strip:cur,pan:s.pan})};pan.onpointerdown=()=>{drag=pan};pan.ondblclick=()=>{pan.value=0;pan.oninput()};
  const tr=$("#chTrim");{const x=state&&state.strips[cur];if(x&&x.trim!=null&&free(tr))p.trim=x.trim}if(free(tr))tr.value=Math.round(p.trim*10);$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";tr.oninput=()=>{p.trim=tr.value/10;$("#chTrimT").textContent=(p.trim>0?"+":"")+p.trim.toFixed(1)+" dB";keep();send("t"+cur,{op:"trim",strip:cur,db:p.trim})};
  const dl=$("#chDelay");if(free(dl))dl.value=p.delay;$("#chDelayT").textContent=p.delay+" ms";dl.oninput=()=>{p.delay=+dl.value;$("#chDelayT").textContent=p.delay+" ms";keep();send("d"+cur,{op:"delay",strip:cur,ms:p.delay})};
  const pol=$("#chPol");pol.classList.add("amb");pol.classList.toggle("on",!!p.pol);pol.onclick=()=>{p.pol=!p.pol;pol.classList.toggle("on",p.pol);keep();buzz();send("pol"+cur,{op:"polarity",strip:cur,on:p.pol})};

@@ -3,6 +3,7 @@
 #include <memory>
 #include <QRegularExpression>
 #include "paths/paths.hpp"
+#include "Background.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -48,6 +49,7 @@ bool Update::canInstall() const {
 #endif
 }
 bool Update::installAndRestart() {
+  if (packaged()) return false;
   if (!canInstall()) { set(state_, "nothing to install: download the update first (this works on Windows; on other systems open the download folder)"); return false; }
   QFile f(downloaded_); if (!f.open(QIODevice::ReadOnly)) { set("error", "cannot open the downloaded setup"); return false; }
   QCryptographicHash h(QCryptographicHash::Sha256); h.addData(&f); f.close();
@@ -187,7 +189,9 @@ bool Update::applyManifest(const QString& text) {
   if (cmp > 0) set("available", QStringLiteral("%1 %2 (%3) is available; this is %4").arg(latest_, channel_, released_, current_)); else set("upToDate", QStringLiteral("this %1 is current (manifest %2)").arg(current_, latest_));
   return true;
 }
+bool Update::packaged() const { return bg::packaged(); }
 void Update::check() {
+  if (packaged()) { set("upToDate", "installed from the Microsoft Store: updates come through the Store"); return; }
   const QString u = url(); if (!sourceAllowed(u)) { set("error", "the manifest URL is not on one of the project's hosts"); return; }
   set("checking", "reading " + u);
   QNetworkRequest req{QUrl(u)}; req.setTransferTimeout(15000); req.setHeader(QNetworkRequest::UserAgentHeader, "AmF-X1-console");
@@ -195,6 +199,7 @@ void Update::check() {
   connect(r, &QNetworkReply::finished, this, [this, r] { r->deleteLater(); if (r->error() != QNetworkReply::NoError) { set("error", "cannot read the manifest: " + r->errorString()); return; } applyManifest(QString::fromUtf8(r->readAll())); });
 }
 void Update::download() {
+  if (packaged()) { set("upToDate", "installed from the Microsoft Store: updates come through the Store"); return; }
   if (file_.isEmpty()) { set("error", "no file for this platform in the manifest"); return; }
   const QString u = file_["url"].toString(); if (!am::upd::hostAllowed(u.toStdString()) && !(am::upd::localManifest(u.toStdString()) && am::upd::localManifest(url().toStdString()))) { set("error", "the download URL is not on one of the project's hosts"); return; }
   const QString dir = QString::fromStdString(am::paths::downloadsDir()); const QString dest = dir + "/" + QFileInfo(file_["name"].toString()).fileName();

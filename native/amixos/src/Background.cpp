@@ -14,15 +14,26 @@ CloseAction decideClose(bool keepInTray, bool trayShown, bool noticeShown) {
 QString runCommand(const QString& exe) { return QStringLiteral("\"%1\" --background").arg(QDir::toNativeSeparators(exe)); }
 
 #ifdef _WIN32
+}  // namespace bg
+#include <windows.h>
+namespace bg {
+bool packaged() {
+  using Fn = LONG(WINAPI*)(UINT32*, PWSTR);   // kernel32 (Windows 8+), looked up so older SDK headers still build
+  static const int v = [] { auto f = reinterpret_cast<Fn>(reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetCurrentPackageFullName")));
+    if (!f) return 0; UINT32 n = 0; return f(&n, nullptr) == ERROR_INSUFFICIENT_BUFFER ? 1 : 0; }();
+  return v == 1;
+}
 static const char* kRunKey = "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 static const char* kRunName = "AmF X1";
 bool startWithWindows() { QSettings r(QString::fromLatin1(kRunKey), QSettings::NativeFormat); return r.contains(QString::fromLatin1(kRunName)); }
 bool setStartWithWindows(bool on, const QString& exe) {
+  if (packaged()) return false;   // the MSIX StartupTask (Settings > Apps > Startup) replaces the Run key
   QSettings r(QString::fromLatin1(kRunKey), QSettings::NativeFormat);
   if (on) r.setValue(QString::fromLatin1(kRunName), runCommand(exe)); else r.remove(QString::fromLatin1(kRunName));
   r.sync(); return r.status() == QSettings::NoError;
 }
 #else
+bool packaged() { return false; }
 bool startWithWindows() { return false; }
 bool setStartWithWindows(bool, const QString&) { return false; }
 #endif
