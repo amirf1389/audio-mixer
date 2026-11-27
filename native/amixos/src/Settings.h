@@ -22,6 +22,7 @@ class Settings : public QObject {
   Q_PROPERTY(bool confirmDestructive READ confirmDestructive WRITE setConfirmDestructive NOTIFY changed)
   Q_PROPERTY(bool tooltips READ tooltips WRITE setTooltips NOTIFY changed)
   Q_PROPERTY(bool hideFromCapture READ hideFromCapture WRITE setHideFromCapture NOTIFY changed)   // HIDE FROM SCREENSHOTS & SCREEN SHARING (Windows, CaptureGuard.h): on by default (also blocks OBS / TikTok LIVE Studio), applies at once
+  Q_PROPERTY(bool extrasInstalled READ extrasInstalled CONSTANT)   // AmF X1 EXTRAS (a separate setup): the Plug-in Builder, its VST3 shell, Hybrid and the web stack; without it the console offers "Install AmF X1 Extras"
   Q_PROPERTY(bool captureOverridden READ captureOverridden CONSTANT)   // AMIX_ALLOW_CAPTURE=1 (the repository's tooling): the setting is kept but not applied
   Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY changed)
   Q_PROPERTY(QString colorTheme READ colorTheme WRITE setColorTheme NOTIFY changed)   // the colour theme: "" (the console's own), chocolate, ocean, forest, plum, cockpit
@@ -114,6 +115,7 @@ class Settings : public QObject {
   Q_INVOKABLE int addVstDir(const QString& dir);      // adds and rescans; returns the plug-in count
   Q_INVOKABLE int removeVstDir(const QString& dir);
   Q_INVOKABLE int rescanVst();
+  bool extrasInstalled() const;
   Q_INVOKABLE bool openPluginBuilder();   // starts "AmF X1 Plugin Builder" next to the console (a separate program); its exports show up here after RESCAN
   Q_INVOKABLE bool openDiagnostics();     // the separate AmF X1 Diagnostics program (speakers, headphones, microphones, drivers)
   Q_INVOKABLE QString vstUserFolder();                // the console's own plug-in folder (<data>/vst): created, and saved among the scanned folders, the first time it is asked for

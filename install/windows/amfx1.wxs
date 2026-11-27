@@ -12,23 +12,8 @@
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLDIR" Name="AmF X1">
-            <Directory Id="dcb8910ca0090cf9ec924" Name="AMFB Plugin Shell.vst3">
-              <Directory Id="d4930419bdbc27f72a805" Name="Contents">
-                <Directory Id="d5f5e1a9592f04ae52f29" Name="x86_64-win">
-                  <Component Id="ce695db6965bb260f0b73" Guid="B1413274-A6A5-50BD-84C3-61E63897B7B2" Win64="yes">
-                    <File Id="fe695db6965bb260f0b73" Name="AMFB Plugin Shell.vst3" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AMFB Plugin Shell.vst3/Contents/x86_64-win/AMFB Plugin Shell.vst3" KeyPath="yes"/>
-                  </Component>
-                </Directory>
-              </Directory>
-            </Directory>
             <Component Id="c882a604fa40ad52ab8f8" Guid="8F2C3006-86C2-539F-BDA8-677F4F170237" Win64="yes">
               <File Id="f882a604fa40ad52ab8f8" Name="AmF X1 Diagnostics.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1 Diagnostics.exe" KeyPath="yes"/>
-            </Component>
-            <Component Id="c9293d0b4ab642d2bd6c0" Guid="8B5EDE8F-2B10-5AD0-8020-15FE439AB345" Win64="yes">
-              <File Id="f9293d0b4ab642d2bd6c0" Name="AmF X1 Hybrid.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1 Hybrid.dll" KeyPath="yes"/>
-            </Component>
-            <Component Id="ce035142717cf7cd3cda0" Guid="7078A410-7688-543A-84C5-7B1E31CF7D9F" Win64="yes">
-              <File Id="fe035142717cf7cd3cda0" Name="AmF X1 Hybrid.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1 Hybrid.exe" KeyPath="yes"/>
             </Component>
             <Component Id="ce2c59e42ea593af9856a" Guid="684DBACD-1164-5E10-8E22-78E1EE546929" Win64="yes">
               <File Id="fe2c59e42ea593af9856a" Name="AmF X1 My Account.url" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1 My Account.url" KeyPath="yes"/>
@@ -38,9 +23,6 @@
             </Component>
             <Component Id="c432b0f27bfeab2664413" Guid="714EAD02-8670-5A81-BC22-7D9C06D32891" Win64="yes">
               <File Id="f432b0f27bfeab2664413" Name="AmF X1 Network.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1 Network.exe" KeyPath="yes"/>
-            </Component>
-            <Component Id="c70b169448ad9bd43ca15" Guid="FD857EFF-5F31-5415-8A4F-E8FA77FF6884" Win64="yes">
-              <File Id="f70b169448ad9bd43ca15" Name="AmF X1 Plugin Builder.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1 Plugin Builder.exe" KeyPath="yes"/>
             </Component>
             <Component Id="ca0f5e4a30c82ebc2df5a" Guid="5B511CFB-232B-5DCF-BB27-FBB39996229F" Win64="yes">
               <File Id="fa0f5e4a30c82ebc2df5a" Name="AmF X1.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/AmF X1.exe" KeyPath="yes"/>
@@ -125,9 +107,6 @@
                 <Component Id="cc1f8c7d1039bfcd548a2" Guid="ADB6B34F-37A0-5D08-B459-74E729686AD1" Win64="yes">
                   <File Id="fc1f8c7d1039bfcd548a2" Name="Steinberg ASIO Licensing Agreement.pdf" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/drivers/asio/Steinberg ASIO Licensing Agreement.pdf" KeyPath="yes"/>
                 </Component>
-                <Component Id="c87bbe76251a4be024fe3" Guid="66618FDE-52C8-5446-8207-6F6F35E566F4" Win64="yes">
-                  <File Id="f87bbe76251a4be024fe3" Name="Steinberg ASIO Usage Guidelines.pdf" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/drivers/asio/Steinberg ASIO Usage Guidelines.pdf" KeyPath="yes"/>
-                </Component>
                 <Component Id="c75d2873f159aedf6b194" Guid="0E47ABB0-72B6-58BF-B06C-B24B0414341E" Win64="yes">
                   <File Id="f75d2873f159aedf6b194" Name="changes.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/drivers/asio/changes.txt" KeyPath="yes"/>
                 </Component>
@@ -166,29 +145,11 @@
               <Component Id="cd24dd9e033bb615a5762" Guid="97421125-9B19-526D-8BDF-5AF98BD269C0" Win64="yes">
                 <File Id="fd24dd9e033bb615a5762" Name="FFMPEG-SOURCE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/FFMPEG-SOURCE.txt" KeyPath="yes"/>
               </Component>
-              <Component Id="c19ac44da1ac594dc3dd2" Guid="0F0EC9BD-6D27-5BE7-9DF0-D05BE1ABBCC8" Win64="yes">
-                <File Id="f19ac44da1ac594dc3dd2" Name="NGINX-LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/NGINX-LICENSE.txt" KeyPath="yes"/>
-              </Component>
-              <Component Id="ca423b758d85bfb2d7e03" Guid="9264265B-48CE-55B7-9145-495928DDD365" Win64="yes">
-                <File Id="fa423b758d85bfb2d7e03" Name="NGINX-OpenSSL-LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/NGINX-OpenSSL-LICENSE.txt" KeyPath="yes"/>
-              </Component>
-              <Component Id="c8bb35a84e2d288dd81c6" Guid="6D468780-2286-5098-A542-12C73B23F09B" Win64="yes">
-                <File Id="f8bb35a84e2d288dd81c6" Name="NGINX-PCRE-LICENCE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/NGINX-PCRE-LICENCE.txt" KeyPath="yes"/>
-              </Component>
-              <Component Id="c5c1182b7f0bc87cf4c93" Guid="53311F13-AF83-5916-A5FB-3B2298FE0BCD" Win64="yes">
-                <File Id="f5c1182b7f0bc87cf4c93" Name="NGINX-zlib-LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/NGINX-zlib-LICENSE.txt" KeyPath="yes"/>
-              </Component>
-              <Component Id="c5fe32226dddd454cb6e9" Guid="D20B8A72-8520-5B45-905B-785211B5276A" Win64="yes">
-                <File Id="f5fe32226dddd454cb6e9" Name="NODEJS-LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/NODEJS-LICENSE.txt" KeyPath="yes"/>
-              </Component>
               <Component Id="c04c907bafc7535a328b0" Guid="8AA81E75-F8CE-51A2-A484-D39EAB058DBA" Win64="yes">
                 <File Id="f04c907bafc7535a328b0" Name="THIRD-PARTY-SOURCES.md" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/THIRD-PARTY-SOURCES.md" KeyPath="yes"/>
               </Component>
               <Component Id="ce2888cffccc6e27d9962" Guid="6BBE9939-4B45-5F10-A391-96948B587E49" Win64="yes">
                 <File Id="fe2888cffccc6e27d9962" Name="VST3-SDK-LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/VST3-SDK-LICENSE.txt" KeyPath="yes"/>
-              </Component>
-              <Component Id="cbf35efbe244d85175405" Guid="2DF95E4E-6C5D-5DFC-8F94-7D356439C526" Win64="yes">
-                <File Id="fbf35efbe244d85175405" Name="WEB-STACK-SOURCES.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/WEB-STACK-SOURCES.txt" KeyPath="yes"/>
               </Component>
               <Component Id="ccd228c919090118d016f" Guid="534322B1-EB33-53D9-8CFF-6A37325E972B" Win64="yes">
                 <File Id="fcd228c919090118d016f" Name="resonance-audio-LICENSE.txt" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/licenses/resonance-audio-LICENSE.txt" KeyPath="yes"/>
@@ -207,17 +168,11 @@
                   <Component Id="c53fda319c475ca969750" Guid="7C8B5251-303D-5E5D-B8E0-38B2C6BB4B1E" Win64="yes">
                     <File Id="f53fda319c475ca969750" Name="modelsplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/Models/modelsplugin.dll" KeyPath="yes"/>
                   </Component>
-                  <Component Id="c20eace123f74f3312812" Guid="E8DF224D-5005-5199-8CD4-FE1CE4078CDD" Win64="yes">
-                    <File Id="f20eace123f74f3312812" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/Models/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="cba410c63f06966b9064e" Guid="F2DC03EC-9C1C-5E4A-A9D5-168D0E9E27A2" Win64="yes">
                     <File Id="fba410c63f06966b9064e" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/Models/qmldir" KeyPath="yes"/>
                   </Component>
                 </Directory>
                 <Directory Id="d0932847f5b77a734f0d0" Name="WorkerScript">
-                  <Component Id="c751f272edc7025b46b1b" Guid="E9BF3F55-2036-51B5-8B57-FD719FCA6336" Win64="yes">
-                    <File Id="f751f272edc7025b46b1b" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/WorkerScript/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="c3e18d7e374ab87886e12" Guid="761D9F4B-970C-5A48-9447-1FD04A7B6E16" Win64="yes">
                     <File Id="f3e18d7e374ab87886e12" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/WorkerScript/qmldir" KeyPath="yes"/>
                   </Component>
@@ -225,9 +180,6 @@
                     <File Id="f0b9e1c46b9c30dc628f1" Name="workerscriptplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/WorkerScript/workerscriptplugin.dll" KeyPath="yes"/>
                   </Component>
                 </Directory>
-                <Component Id="c58855d5df7213ed0bdbd" Guid="55DBF393-14E0-5C20-AC58-9A42759DD293" Win64="yes">
-                  <File Id="f58855d5df7213ed0bdbd" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/plugins.qmltypes" KeyPath="yes"/>
-                </Component>
                 <Component Id="cdb673dd712ad30438214" Guid="8EC7964F-D79D-5421-8AD4-CD327FE68E4A" Win64="yes">
                   <File Id="fdb673dd712ad30438214" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQml/qmldir" KeyPath="yes"/>
                 </Component>
@@ -431,9 +383,6 @@
                       <File Id="fd68cadb47541996327d1" Name="WeekNumberColumn.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Basic/WeekNumberColumn.qml" KeyPath="yes"/>
                     </Component>
                     <Directory Id="dd47969f0353791b347fa" Name="impl">
-                      <Component Id="c201fdfa1b9cf5b90bd1a" Guid="618C118C-1711-51F3-82DF-35AFA1DC0F56" Win64="yes">
-                        <File Id="f201fdfa1b9cf5b90bd1a" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Basic/impl/plugins.qmltypes" KeyPath="yes"/>
-                      </Component>
                       <Component Id="c611e6be45ccda6d77679" Guid="0994ABAC-5A9F-5F75-A6B9-C38CD795127C" Win64="yes">
                         <File Id="f611e6be45ccda6d77679" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Basic/impl/qmldir" KeyPath="yes"/>
                       </Component>
@@ -441,9 +390,6 @@
                         <File Id="fe25e28ac163e328287d5" Name="qtquickcontrols2basicstyleimplplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Basic/impl/qtquickcontrols2basicstyleimplplugin.dll" KeyPath="yes"/>
                       </Component>
                     </Directory>
-                    <Component Id="c65ce65bc510b4d3603f1" Guid="C55C2A51-26EE-5B8E-8554-0DA8C16CAAD6" Win64="yes">
-                      <File Id="f65ce65bc510b4d3603f1" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Basic/plugins.qmltypes" KeyPath="yes"/>
-                    </Component>
                     <Component Id="c6522133f734e970bf46d" Guid="0D892A0D-EA74-5C7D-BAF1-A1703BDF4EF8" Win64="yes">
                       <File Id="f6522133f734e970bf46d" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Basic/qmldir" KeyPath="yes"/>
                     </Component>
@@ -624,9 +570,6 @@
                       <Component Id="c2d47b15457058014a3cf" Guid="3C0849F7-DE01-57FD-AD43-1E1E68F69ADE" Win64="yes">
                         <File Id="f2d47b15457058014a3cf" Name="SwitchIndicator.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Fusion/impl/SwitchIndicator.qml" KeyPath="yes"/>
                       </Component>
-                      <Component Id="c2dbca80bf767bee95a30" Guid="31AA57CF-6708-574B-9D4D-E52EE7F99B84" Win64="yes">
-                        <File Id="f2dbca80bf767bee95a30" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Fusion/impl/plugins.qmltypes" KeyPath="yes"/>
-                      </Component>
                       <Component Id="cf9d3e0ffbe8ecd86b06a" Guid="0D69AAEF-461A-5149-A378-42D7CFF701DE" Win64="yes">
                         <File Id="ff9d3e0ffbe8ecd86b06a" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Fusion/impl/qmldir" KeyPath="yes"/>
                       </Component>
@@ -634,9 +577,6 @@
                         <File Id="f00beed871adb463059da" Name="qtquickcontrols2fusionstyleimplplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Fusion/impl/qtquickcontrols2fusionstyleimplplugin.dll" KeyPath="yes"/>
                       </Component>
                     </Directory>
-                    <Component Id="c3560c234260273b2cd04" Guid="3C9F4C24-230F-5726-9150-3ED0FE5DBB11" Win64="yes">
-                      <File Id="f3560c234260273b2cd04" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Fusion/plugins.qmltypes" KeyPath="yes"/>
-                    </Component>
                     <Component Id="c31f657f10fbf3ebcd21c" Guid="4EC25BEE-B22F-5239-A168-010F86FBBAB7" Win64="yes">
                       <File Id="f31f657f10fbf3ebcd21c" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/Fusion/qmldir" KeyPath="yes"/>
                     </Component>
@@ -645,9 +585,6 @@
                     </Component>
                   </Directory>
                   <Directory Id="d5a8e7f4fe7d720ff9191" Name="impl">
-                    <Component Id="cea902d544ec37f643f73" Guid="2407FCC5-39C0-5693-9173-E62CA10F8C50" Win64="yes">
-                      <File Id="fea902d544ec37f643f73" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/impl/plugins.qmltypes" KeyPath="yes"/>
-                    </Component>
                     <Component Id="c8e4fde6583c9b36217b6" Guid="D138C47E-83DF-591A-B19B-FEE5DC364FE8" Win64="yes">
                       <File Id="f8e4fde6583c9b36217b6" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/impl/qmldir" KeyPath="yes"/>
                     </Component>
@@ -655,9 +592,6 @@
                       <File Id="f8229225861eb1a8e16de" Name="qtquickcontrols2implplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/impl/qtquickcontrols2implplugin.dll" KeyPath="yes"/>
                     </Component>
                   </Directory>
-                  <Component Id="ce5c95b7df83c033096ef" Guid="EC3F9B6B-8E1C-5702-AC93-DFBD13624153" Win64="yes">
-                    <File Id="fe5c95b7df83c033096ef" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="c6eb02df4781e68e3ebed" Guid="8AC21B70-CD89-57EA-8632-0191829F1277" Win64="yes">
                     <File Id="f6eb02df4781e68e3ebed" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Controls/qmldir" KeyPath="yes"/>
                   </Component>
@@ -666,9 +600,6 @@
                   </Component>
                 </Directory>
                 <Directory Id="d1b11ec915a5fedc484bc" Name="Layouts">
-                  <Component Id="c87cb4c47757ebc1958d9" Guid="C62ED674-484E-5769-B387-C3AA7B3DDE04" Win64="yes">
-                    <File Id="f87cb4c47757ebc1958d9" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Layouts/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="cece2d8430540375d769c" Guid="0B759036-7BF4-59DA-98C6-A3DE4DB5DCD9" Win64="yes">
                     <File Id="fece2d8430540375d769c" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Layouts/qmldir" KeyPath="yes"/>
                   </Component>
@@ -676,65 +607,7 @@
                     <File Id="f3a84e773038d87417796" Name="qquicklayoutsplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Layouts/qquicklayoutsplugin.dll" KeyPath="yes"/>
                   </Component>
                 </Directory>
-                <Directory Id="d4905b05348345d3909c3" Name="NativeStyle">
-                  <Directory Id="dd1502a8b35b44aec6e25" Name="controls">
-                    <Component Id="c497db4364c7388ad6124" Guid="6A1BB02E-F2D6-5C93-84E4-165F4EE9047B" Win64="yes">
-                      <File Id="f497db4364c7388ad6124" Name="DefaultButton.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultButton.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c9b77b533787ef1218932" Guid="79184A44-C191-5CAE-A7B4-61CD01D09D46" Win64="yes">
-                      <File Id="f9b77b533787ef1218932" Name="DefaultCheckBox.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultCheckBox.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="cfca5dee28f90e44b0f1f" Guid="1A7989A7-7303-5769-86E5-7824EDA7C88F" Win64="yes">
-                      <File Id="ffca5dee28f90e44b0f1f" Name="DefaultComboBox.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultComboBox.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="cf9f34bbde614cbd3661c" Guid="66EEAEC4-5B28-5519-B73E-B007E9E22F53" Win64="yes">
-                      <File Id="ff9f34bbde614cbd3661c" Name="DefaultDial.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultDial.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c7e6cea1af090a76f21f5" Guid="32208B3F-7867-5460-9C93-CE29C4FF98BC" Win64="yes">
-                      <File Id="f7e6cea1af090a76f21f5" Name="DefaultFrame.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultFrame.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c9438766ff36a2937614f" Guid="089D09B5-368C-5DAF-B0EA-13D3B9DE3DD8" Win64="yes">
-                      <File Id="f9438766ff36a2937614f" Name="DefaultGroupBox.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultGroupBox.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c64b5794254e5cfe9366b" Guid="7DF871B4-DA63-557A-86F2-31EA081A0882" Win64="yes">
-                      <File Id="f64b5794254e5cfe9366b" Name="DefaultProgressBar.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultProgressBar.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c46764bb42aa32e3e2b0c" Guid="FEFED736-8100-5A39-A329-392B1D0E1CCD" Win64="yes">
-                      <File Id="f46764bb42aa32e3e2b0c" Name="DefaultRadioButton.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultRadioButton.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="caf388cc3a9d0caf361a8" Guid="014708AC-4438-59EC-9C86-6D661EB90E9E" Win64="yes">
-                      <File Id="faf388cc3a9d0caf361a8" Name="DefaultScrollBar.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultScrollBar.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c741cb36ef9599e4a848a" Guid="7C4D12FA-6282-5A0C-9274-A9BCD4A2AE42" Win64="yes">
-                      <File Id="f741cb36ef9599e4a848a" Name="DefaultSlider.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultSlider.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="cb1e617c558a1ae7dd0d3" Guid="6344C17F-C04C-5B70-AC97-69C7DDAD2CCE" Win64="yes">
-                      <File Id="fb1e617c558a1ae7dd0d3" Name="DefaultSpinBox.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultSpinBox.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c902089c56ee584e215b5" Guid="0C3C4E33-CED0-56E1-905B-C079F59E9DD9" Win64="yes">
-                      <File Id="f902089c56ee584e215b5" Name="DefaultTextArea.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultTextArea.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="cbef60b1f93652d24f9c2" Guid="03D44443-CC99-5DC9-A633-2EE78AA3044A" Win64="yes">
-                      <File Id="fbef60b1f93652d24f9c2" Name="DefaultTextField.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultTextField.qml" KeyPath="yes"/>
-                    </Component>
-                    <Component Id="c7304992653db63bdaa2f" Guid="7D691A03-18BF-58B4-BE35-54EDC71F0110" Win64="yes">
-                      <File Id="f7304992653db63bdaa2f" Name="DefaultTreeViewDelegate.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/controls/DefaultTreeViewDelegate.qml" KeyPath="yes"/>
-                    </Component>
-                  </Directory>
-                  <Component Id="cba61f5e30eb375cd475d" Guid="C15AD867-1F8B-5BC5-AFF1-07E0BCD266CC" Win64="yes">
-                    <File Id="fba61f5e30eb375cd475d" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ce7f892504d6be79cc0f1" Guid="F9EAB391-80B2-5875-B5B3-DB2290081B4E" Win64="yes">
-                    <File Id="fe7f892504d6be79cc0f1" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/qmldir" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c2c7ef33aed42d187a784" Guid="FE0089F8-9746-506C-AFC1-8DF7B8265C7C" Win64="yes">
-                    <File Id="f2c7ef33aed42d187a784" Name="qtquickcontrols2nativestyleplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/NativeStyle/qtquickcontrols2nativestyleplugin.dll" KeyPath="yes"/>
-                  </Component>
-                </Directory>
                 <Directory Id="d8cf878b5f500a5d784e5" Name="Shapes">
-                  <Component Id="c0d23097007d1ff822982" Guid="A9F6C0B1-106D-550D-826D-07A67644C31A" Win64="yes">
-                    <File Id="f0d23097007d1ff822982" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Shapes/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="c3620bd6fa94167a31dfd" Guid="27ED3DBE-91A1-56F2-88F8-7CE4F10336EE" Win64="yes">
                     <File Id="f3620bd6fa94167a31dfd" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Shapes/qmldir" KeyPath="yes"/>
                   </Component>
@@ -743,9 +616,6 @@
                   </Component>
                 </Directory>
                 <Directory Id="db0c890c8c09cd4abec44" Name="Templates">
-                  <Component Id="c665d04970223f698d19d" Guid="97904874-92A5-539F-A314-80386B46F77D" Win64="yes">
-                    <File Id="f665d04970223f698d19d" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Templates/plugins.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="cc7dd13564be1ee481ac3" Guid="BE33613A-0D32-56FD-ADCC-A82B264BD234" Win64="yes">
                     <File Id="fc7dd13564be1ee481ac3" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Templates/qmldir" KeyPath="yes"/>
                   </Component>
@@ -757,57 +627,16 @@
                   <Component Id="c369e940f9133293e6cf1" Guid="6072B0F1-E418-546E-9F07-1788645B90DB" Win64="yes">
                     <File Id="f369e940f9133293e6cf1" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Window/qmldir" KeyPath="yes"/>
                   </Component>
-                  <Component Id="c740c3204c00d77e3a07f" Guid="1015EE19-FDEB-5AD3-9C2E-778B4A2406AA" Win64="yes">
-                    <File Id="f740c3204c00d77e3a07f" Name="quickwindow.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Window/quickwindow.qmltypes" KeyPath="yes"/>
-                  </Component>
                   <Component Id="c5f724281f6d710758e30" Guid="42C14C84-E0C3-56C7-9755-CB0CC5F161F8" Win64="yes">
                     <File Id="f5f724281f6d710758e30" Name="quickwindowplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/Window/quickwindowplugin.dll" KeyPath="yes"/>
                   </Component>
                 </Directory>
-                <Component Id="c44258a68e21d71f04bc8" Guid="146C71E2-060D-5B8B-8B89-CD9AE59126E2" Win64="yes">
-                  <File Id="f44258a68e21d71f04bc8" Name="plugins.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/plugins.qmltypes" KeyPath="yes"/>
-                </Component>
                 <Component Id="c63f4e32516c525362013" Guid="4E4BDB7B-3C68-5E70-B8D7-A1446C20EA26" Win64="yes">
                   <File Id="f63f4e32516c525362013" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/qmldir" KeyPath="yes"/>
                 </Component>
                 <Component Id="c2863f74768bea82de746" Guid="5B16B74D-430E-5EC2-84F4-590C8239A009" Win64="yes">
                   <File Id="f2863f74768bea82de746" Name="qtquick2plugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/qtquick2plugin.dll" KeyPath="yes"/>
                 </Component>
-                <Directory Id="d7074886ffcd0d21d31bb" Name="tooling">
-                  <Component Id="c24c27f82f620b50195b8" Guid="82E5A3FC-4FDB-58B5-A40E-FE519421E513" Win64="yes">
-                    <File Id="f24c27f82f620b50195b8" Name="Component.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Component.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c7cdda6178f94e4a067ba" Guid="F197B7DA-D2B8-549B-A105-1F59AD63ABD4" Win64="yes">
-                    <File Id="f7cdda6178f94e4a067ba" Name="Enum.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Enum.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c6baa8ae9fcf74a594ec2" Guid="55609833-5F80-5597-8E53-7E50EB0B5228" Win64="yes">
-                    <File Id="f6baa8ae9fcf74a594ec2" Name="Member.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Member.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c09d2095c8918c2a13d33" Guid="1F549C35-92C2-5ADA-A055-3A22712F376C" Win64="yes">
-                    <File Id="f09d2095c8918c2a13d33" Name="Method.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Method.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c88a722f7b17a342db9bc" Guid="53B8E009-EA2B-54EE-8F87-1B70BD1689BB" Win64="yes">
-                    <File Id="f88a722f7b17a342db9bc" Name="Module.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Module.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c5126fd089902d3e1816f" Guid="05D7A4EC-788F-5573-BC3A-2EFD2EC11E03" Win64="yes">
-                    <File Id="f5126fd089902d3e1816f" Name="Parameter.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Parameter.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ca49bc7e32f0ebed32c48" Guid="7593155F-4A84-5207-84A4-DF6EF4673D79" Win64="yes">
-                    <File Id="fa49bc7e32f0ebed32c48" Name="Property.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Property.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cf373bc42a922a90e7833" Guid="FE40292C-E0DD-5CA1-818D-6D771E46602F" Win64="yes">
-                    <File Id="ff373bc42a922a90e7833" Name="Signal.qml" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/Signal.qml" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ca1378d4f199ef949fc46" Guid="423AD063-85B7-50AF-9C0B-4A78FFD2180F" Win64="yes">
-                    <File Id="fa1378d4f199ef949fc46" Name="qmldir" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/qmldir" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c70d97998f96c14f69fc9" Guid="607B04C5-186D-57D2-B596-E1A9BAB837E8" Win64="yes">
-                    <File Id="f70d97998f96c14f69fc9" Name="quicktooling.qmltypes" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/quicktooling.qmltypes" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cc01de9488cc95a632bcc" Guid="60A24622-A0ED-5574-A691-0F3BF607851E" Win64="yes">
-                    <File Id="fc01de9488cc95a632bcc" Name="quicktoolingplugin.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/qml/QtQuick/tooling/quicktoolingplugin.dll" KeyPath="yes"/>
-                  </Component>
-                </Directory>
               </Directory>
             </Directory>
             <Component Id="c300fe2cdf1ea722b27f1" Guid="4587B608-1FF8-54F2-94F3-FBF6C5706552" Win64="yes">
@@ -821,176 +650,6 @@
                 <File Id="ff6e7d0ed92e1bf87283e" Name="qschannelbackend.dll" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/tls/qschannelbackend.dll" KeyPath="yes"/>
               </Component>
             </Directory>
-            <Directory Id="dca84d1343b96baa8137c" Name="web">
-              <Directory Id="d5a0c622209a63e215871" Name="bridge">
-                <Directory Id="d433d05e45814d68d6d81" Name="bridge">
-                  <Component Id="cc40260978d6b52f505df" Guid="C870C485-3F18-5A7F-A57E-83BC3D27942C" Win64="yes">
-                    <File Id="fc40260978d6b52f505df" Name="asio-lock.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/asio-lock.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cbdf48eada221da711f9e" Guid="9759C21E-1F2A-5E1B-901E-92BB777F0E5F" Win64="yes">
-                    <File Id="fbdf48eada221da711f9e" Name="asio-probe.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/asio-probe.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cfedc62e7b305ee685372" Guid="41DA4194-F3C9-5E0A-A531-1C757F173B02" Win64="yes">
-                    <File Id="ffedc62e7b305ee685372" Name="audify.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/audify.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ceeba82ab41acb29b2055" Guid="E4D98287-6985-533F-B1AD-6362519D2D04" Win64="yes">
-                    <File Id="feeba82ab41acb29b2055" Name="bluetooth.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/bluetooth.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ca9dc6117fd4101b8d671" Guid="BF7B3F13-20BE-5B9B-83F8-735CB52358AC" Win64="yes">
-                    <File Id="fa9dc6117fd4101b8d671" Name="catalog.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/catalog.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c386a09ca56668d24855c" Guid="6BC5EF3B-1B1F-5481-8041-803EFF3471BC" Win64="yes">
-                    <File Id="f386a09ca56668d24855c" Name="control.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/control.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cc77b97e84c00f08c8d3e" Guid="F71C6DBF-E602-5405-8451-00EE7973F046" Win64="yes">
-                    <File Id="fc77b97e84c00f08c8d3e" Name="detect.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/detect.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c75ea9807442a1cc30458" Guid="7477516E-1D70-534F-8738-23D2F61A1045" Win64="yes">
-                    <File Id="f75ea9807442a1cc30458" Name="diagnostics.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/diagnostics.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cc4ba5cf066ceef750d13" Guid="789B6FD9-DB6D-5A5F-8238-1AB17F3B0D63" Win64="yes">
-                    <File Id="fc4ba5cf066ceef750d13" Name="driver-lock.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/driver-lock.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cab3f874e246e11a421cc" Guid="F559ACE2-A71F-5270-912A-D4484D684F6F" Win64="yes">
-                    <File Id="fab3f874e246e11a421cc" Name="duplex.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/duplex.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c608b0bb8c945afc0f271" Guid="E517A363-59A6-5E86-A7CE-5BC432E13C33" Win64="yes">
-                    <File Id="f608b0bb8c945afc0f271" Name="edition.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/edition.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cf8d4533a8bf413792cb5" Guid="FD090268-34CD-5044-81F0-5096853175C9" Win64="yes">
-                    <File Id="ff8d4533a8bf413792cb5" Name="hw-match.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/hw-match.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cbea7d2322d2ea40c334e" Guid="C650B15A-FFA9-5B80-8490-D598B20D6E92" Win64="yes">
-                    <File Id="fbea7d2322d2ea40c334e" Name="input-guard.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/input-guard.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cb37b8828e5f4de443832" Guid="5CC646EB-A393-5107-A9A0-76735D33FCC9" Win64="yes">
-                    <File Id="fb37b8828e5f4de443832" Name="input.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/input.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c6f82cfac2f0d703db0df" Guid="D3A447D0-6A98-56B2-9CA6-1A9824502CAB" Win64="yes">
-                    <File Id="f6f82cfac2f0d703db0df" Name="inserts.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/inserts.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c79db2510a112a02027b1" Guid="7EFBECD1-A033-55B5-BFF1-7C2DF0EAF551" Win64="yes">
-                    <File Id="f79db2510a112a02027b1" Name="interfaces.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/interfaces.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c35660819a5bb081a2726" Guid="09FB8670-5B6A-5D80-915B-A7415EE6CB72" Win64="yes">
-                    <File Id="f35660819a5bb081a2726" Name="levels.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/levels.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c12fb5616a5de73a8e510" Guid="0780971F-1BB6-5E6E-A12B-07BB3D3BA5F8" Win64="yes">
-                    <File Id="f12fb5616a5de73a8e510" Name="license-client.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/license-client.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c27d253b5322ae1ddf9c6" Guid="E7BB52BB-7D60-5751-8C16-12D3BA716EF1" Win64="yes">
-                    <File Id="f27d253b5322ae1ddf9c6" Name="license-public.json" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/license-public.json" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c5d392fe9b04d72f3013a" Guid="4E3904C2-AF77-5325-8CBA-F306270D5118" Win64="yes">
-                    <File Id="f5d392fe9b04d72f3013a" Name="license.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/license.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c15c09367cf6715d19e95" Guid="7F0F0BB8-3A5D-5C5A-8EC8-681F9AA988E2" Win64="yes">
-                    <File Id="f15c09367cf6715d19e95" Name="native-engine.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/native-engine.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ce58ab5bb59560c481030" Guid="F288D916-C92A-5A70-B336-3013C9BAAEFF" Win64="yes">
-                    <File Id="fe58ab5bb59560c481030" Name="nowplaying.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/nowplaying.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c9e31e55898b3dd3d1a80" Guid="227FF601-46A4-57AE-81E5-D3CFC063F1FB" Win64="yes">
-                    <File Id="f9e31e55898b3dd3d1a80" Name="osdetect.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/osdetect.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c42ca3e9e02d1190cef51" Guid="DE0F9881-FE65-5DDE-882F-4060DDF280FB" Win64="yes">
-                    <File Id="f42ca3e9e02d1190cef51" Name="output.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/output.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c0ad7020d7bcf4aafe1e5" Guid="3A6A186A-96FC-5147-8A8B-0FD509A80760" Win64="yes">
-                    <File Id="f0ad7020d7bcf4aafe1e5" Name="pluginhost.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/pluginhost.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cff73250c8c15acb7764f" Guid="E4ABAFE3-8EAD-5B42-8FBC-1A6AD8E989ED" Win64="yes">
-                    <File Id="fff73250c8c15acb7764f" Name="plugins.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/plugins.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cd0d24811b82f32815170" Guid="2B8A138C-6867-5FEB-9E8A-D8D0DA2BDF73" Win64="yes">
-                    <File Id="fd0d24811b82f32815170" Name="portaudio.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/portaudio.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c29576196afc795a04ebe" Guid="FDDD1AD0-A760-5118-988B-90627D83E603" Win64="yes">
-                    <File Id="f29576196afc795a04ebe" Name="power.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/power.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ca1e787471221df8afb67" Guid="C04DF1B4-6BBD-528E-A122-42394377590C" Win64="yes">
-                    <File Id="fa1e787471221df8afb67" Name="sdk.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/sdk.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c7f4de04d0f0b55bca6cc" Guid="B4392232-3EE8-57BF-B011-77E27225000C" Win64="yes">
-                    <File Id="f7f4de04d0f0b55bca6cc" Name="security.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/security.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c358c09437d52d7ba5061" Guid="DC00557C-7E8A-544F-AA81-BC113642EBA0" Win64="yes">
-                    <File Id="f358c09437d52d7ba5061" Name="server.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/server.js" KeyPath="yes"/>
-                  </Component>
-                  <Directory Id="d31a67c9ebf5af91910fa" Name="sim">
-                    <Component Id="c715610a155c985516b5d" Guid="EF1B2549-16BC-570A-A1D7-9A7FEB335F7F" Win64="yes">
-                      <File Id="f715610a155c985516b5d" Name="index.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/sim/index.js" KeyPath="yes"/>
-                    </Component>
-                  </Directory>
-                  <Component Id="c1519a86fc65df7fe6967" Guid="378607FD-F808-5922-B6E3-65A5C0AEA7C5" Win64="yes">
-                    <File Id="f1519a86fc65df7fe6967" Name="streams.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/streams.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c30e576e46552f6656f97" Guid="1E88325E-8595-507B-8C32-DB296E78D679" Win64="yes">
-                    <File Id="f30e576e46552f6656f97" Name="sysaudio.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/sysaudio.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="cd401efaeaab2cbe96e89" Guid="685CB70B-A16A-54CE-9664-D95EF9686185" Win64="yes">
-                    <File Id="fd401efaeaab2cbe96e89" Name="universal.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/universal.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c4bfad71975e0883647a0" Guid="D9CC7204-D15F-5149-B325-5AF320B8FF2F" Win64="yes">
-                    <File Id="f4bfad71975e0883647a0" Name="update.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/update.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c26879fbde3de6942fc3e" Guid="D804BE5E-C941-5254-8BC0-58141A505096" Win64="yes">
-                    <File Id="f26879fbde3de6942fc3e" Name="virtual.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/virtual.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c6622581556a2db265e49" Guid="B243BED0-4CFF-5DE2-B167-49E9905171BD" Win64="yes">
-                    <File Id="f6622581556a2db265e49" Name="volume.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/volume.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="ccf03d70e10008742faf9" Guid="A4318435-61D1-58B6-B714-4C67DAD2E9A0" Win64="yes">
-                    <File Id="fcf03d70e10008742faf9" Name="wasapi-exclusive.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/wasapi-exclusive.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c8dff5426933bb0d7b215" Guid="B835189D-4C82-50AF-8804-74F423A5456C" Win64="yes">
-                    <File Id="f8dff5426933bb0d7b215" Name="winnative.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/winnative.js" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="caa60e07757d31a751a97" Guid="6D8A4F40-0BE5-53A3-8A17-1F679B47F573" Win64="yes">
-                    <File Id="faa60e07757d31a751a97" Name="ws.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/bridge/ws.js" KeyPath="yes"/>
-                  </Component>
-                </Directory>
-                <Directory Id="d3cd62a5bc8ea3d01e33e" Name="engine">
-                  <Directory Id="de00184371eb1ea38a4c5" Name="node">
-                    <Component Id="c27fb84bb9135ce0b3818" Guid="91574075-738A-5A6D-9041-FDD6E2BC6C93" Win64="yes">
-                      <File Id="f27fb84bb9135ce0b3818" Name="index.js" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/engine/node/index.js" KeyPath="yes"/>
-                    </Component>
-                  </Directory>
-                </Directory>
-                <Component Id="cdb3ac2a941c837b75d1c" Guid="4C3EAF7F-C991-5732-85C6-793080B90F8A" Win64="yes">
-                  <File Id="fdb3ac2a941c837b75d1c" Name="package.json" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/bridge/package.json" KeyPath="yes"/>
-                </Component>
-              </Directory>
-              <Directory Id="d0cf53bde50280c44dcca" Name="nginx">
-                <Directory Id="dc669e1645ecc7f216392" Name="conf">
-                  <Component Id="ca58110f5ef464dfa80e9" Guid="8F7645CD-6509-5E9E-8DE7-2ED6F1F37573" Win64="yes">
-                    <File Id="fa58110f5ef464dfa80e9" Name="mime.types" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/nginx/conf/mime.types" KeyPath="yes"/>
-                  </Component>
-                  <Component Id="c71430a4cc0b545532073" Guid="D6FAECAE-AD50-5383-BB85-4A8056457D4C" Win64="yes">
-                    <File Id="f71430a4cc0b545532073" Name="nginx.conf.in" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/nginx/conf/nginx.conf.in" KeyPath="yes"/>
-                  </Component>
-                </Directory>
-                <Component Id="cfd0a77d97d6dfffc7e72" Guid="7264D262-B934-58D6-B032-5A337DDAE5D2" Win64="yes">
-                  <File Id="ffd0a77d97d6dfffc7e72" Name="nginx.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/nginx/nginx.exe" KeyPath="yes"/>
-                </Component>
-              </Directory>
-              <Directory Id="d0ff69920fcda1d47fde4" Name="node">
-                <Component Id="c87da0b9f35fe66ac4908" Guid="E87DD69A-49D7-56F0-85B5-FCA363204EF4" Win64="yes">
-                  <File Id="f87da0b9f35fe66ac4908" Name="node.exe" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/node/node.exe" KeyPath="yes"/>
-                </Component>
-              </Directory>
-              <Directory Id="dda6d6caf15d0d7af1529" Name="remote">
-                <Component Id="cbde0a88ca663ac8773d5" Guid="BCD9DF25-31D1-566F-B0BF-A5BAEC6A9F35" Win64="yes">
-                  <File Id="fbde0a88ca663ac8773d5" Name="index.html" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/remote/index.html" KeyPath="yes"/>
-                </Component>
-              </Directory>
-              <Component Id="cb53388869ff37b4ec492" Guid="F3ABC520-713E-5F41-8620-37AC3E2BC904" Win64="yes">
-                <File Id="fb53388869ff37b4ec492" Name="start-web-stack.cmd" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/start-web-stack.cmd" KeyPath="yes"/>
-              </Component>
-              <Component Id="c9907bcc99fe938332894" Guid="CC716ACB-D30D-503B-BBE8-6B2830BB2B4B" Win64="yes">
-                <File Id="f9907bcc99fe938332894" Name="stop-web-stack.cmd" Source="/home/user/audio-mixer/dist/windows/AmF-X1-1.26.0.0-windows-x64/web/stop-web-stack.cmd" KeyPath="yes"/>
-              </Component>
-            </Directory>
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
@@ -1002,14 +661,10 @@
       </Directory>
     </Directory>
     <Feature Id="Main" Title="AmF X1" Level="1">
-      <ComponentRef Id="ce695db6965bb260f0b73"/>
       <ComponentRef Id="c882a604fa40ad52ab8f8"/>
-      <ComponentRef Id="c9293d0b4ab642d2bd6c0"/>
-      <ComponentRef Id="ce035142717cf7cd3cda0"/>
       <ComponentRef Id="ce2c59e42ea593af9856a"/>
       <ComponentRef Id="c63e77df86afce85ae393"/>
       <ComponentRef Id="c432b0f27bfeab2664413"/>
-      <ComponentRef Id="c70b169448ad9bd43ca15"/>
       <ComponentRef Id="ca0f5e4a30c82ebc2df5a"/>
       <ComponentRef Id="c7bc8d28fd0461e093c21"/>
       <ComponentRef Id="cd6d053368f4e8fbb5be3"/>
@@ -1037,7 +692,6 @@
       <ComponentRef Id="cc94cabefe3911b6211a1"/>
       <ComponentRef Id="ce62b834ef92407a6aa07"/>
       <ComponentRef Id="cc1f8c7d1039bfcd548a2"/>
-      <ComponentRef Id="c87bbe76251a4be024fe3"/>
       <ComponentRef Id="c75d2873f159aedf6b194"/>
       <ComponentRef Id="cfabf7952def61bd3d26f"/>
       <ComponentRef Id="cc33a92299a69a5abdc90"/>
@@ -1049,23 +703,14 @@
       <ComponentRef Id="cfd3ab351ab98d9f375d0"/>
       <ComponentRef Id="ca5ba83a910f921fe359a"/>
       <ComponentRef Id="cd24dd9e033bb615a5762"/>
-      <ComponentRef Id="c19ac44da1ac594dc3dd2"/>
-      <ComponentRef Id="ca423b758d85bfb2d7e03"/>
-      <ComponentRef Id="c8bb35a84e2d288dd81c6"/>
-      <ComponentRef Id="c5c1182b7f0bc87cf4c93"/>
-      <ComponentRef Id="c5fe32226dddd454cb6e9"/>
       <ComponentRef Id="c04c907bafc7535a328b0"/>
       <ComponentRef Id="ce2888cffccc6e27d9962"/>
-      <ComponentRef Id="cbf35efbe244d85175405"/>
       <ComponentRef Id="ccd228c919090118d016f"/>
       <ComponentRef Id="c3ffd709fe0b1fa1a8cce"/>
       <ComponentRef Id="c53fda319c475ca969750"/>
-      <ComponentRef Id="c20eace123f74f3312812"/>
       <ComponentRef Id="cba410c63f06966b9064e"/>
-      <ComponentRef Id="c751f272edc7025b46b1b"/>
       <ComponentRef Id="c3e18d7e374ab87886e12"/>
       <ComponentRef Id="c0b9e1c46b9c30dc628f1"/>
-      <ComponentRef Id="c58855d5df7213ed0bdbd"/>
       <ComponentRef Id="cdb673dd712ad30438214"/>
       <ComponentRef Id="c6c5ef221624819694f24"/>
       <ComponentRef Id="c71ea6f505131b838c3e6"/>
@@ -1132,10 +777,8 @@
       <ComponentRef Id="cea37aecbdeea8e433a2b"/>
       <ComponentRef Id="c4cbcf1adcca2493636dc"/>
       <ComponentRef Id="cd68cadb47541996327d1"/>
-      <ComponentRef Id="c201fdfa1b9cf5b90bd1a"/>
       <ComponentRef Id="c611e6be45ccda6d77679"/>
       <ComponentRef Id="ce25e28ac163e328287d5"/>
-      <ComponentRef Id="c65ce65bc510b4d3603f1"/>
       <ComponentRef Id="c6522133f734e970bf46d"/>
       <ComponentRef Id="cf197a6b8bbbda938e25e"/>
       <ComponentRef Id="c589a30409a5682e16f86"/>
@@ -1195,114 +838,27 @@
       <ComponentRef Id="c47579995813ef4285ded"/>
       <ComponentRef Id="c05912472cae3516d5d44"/>
       <ComponentRef Id="c2d47b15457058014a3cf"/>
-      <ComponentRef Id="c2dbca80bf767bee95a30"/>
       <ComponentRef Id="cf9d3e0ffbe8ecd86b06a"/>
       <ComponentRef Id="c00beed871adb463059da"/>
-      <ComponentRef Id="c3560c234260273b2cd04"/>
       <ComponentRef Id="c31f657f10fbf3ebcd21c"/>
       <ComponentRef Id="c81b30781d9fbb13bb45d"/>
-      <ComponentRef Id="cea902d544ec37f643f73"/>
       <ComponentRef Id="c8e4fde6583c9b36217b6"/>
       <ComponentRef Id="c8229225861eb1a8e16de"/>
-      <ComponentRef Id="ce5c95b7df83c033096ef"/>
       <ComponentRef Id="c6eb02df4781e68e3ebed"/>
       <ComponentRef Id="c6392381bf50925e7b0c1"/>
-      <ComponentRef Id="c87cb4c47757ebc1958d9"/>
       <ComponentRef Id="cece2d8430540375d769c"/>
       <ComponentRef Id="c3a84e773038d87417796"/>
-      <ComponentRef Id="c497db4364c7388ad6124"/>
-      <ComponentRef Id="c9b77b533787ef1218932"/>
-      <ComponentRef Id="cfca5dee28f90e44b0f1f"/>
-      <ComponentRef Id="cf9f34bbde614cbd3661c"/>
-      <ComponentRef Id="c7e6cea1af090a76f21f5"/>
-      <ComponentRef Id="c9438766ff36a2937614f"/>
-      <ComponentRef Id="c64b5794254e5cfe9366b"/>
-      <ComponentRef Id="c46764bb42aa32e3e2b0c"/>
-      <ComponentRef Id="caf388cc3a9d0caf361a8"/>
-      <ComponentRef Id="c741cb36ef9599e4a848a"/>
-      <ComponentRef Id="cb1e617c558a1ae7dd0d3"/>
-      <ComponentRef Id="c902089c56ee584e215b5"/>
-      <ComponentRef Id="cbef60b1f93652d24f9c2"/>
-      <ComponentRef Id="c7304992653db63bdaa2f"/>
-      <ComponentRef Id="cba61f5e30eb375cd475d"/>
-      <ComponentRef Id="ce7f892504d6be79cc0f1"/>
-      <ComponentRef Id="c2c7ef33aed42d187a784"/>
-      <ComponentRef Id="c0d23097007d1ff822982"/>
       <ComponentRef Id="c3620bd6fa94167a31dfd"/>
       <ComponentRef Id="c10951af6f760c74a2d5e"/>
-      <ComponentRef Id="c665d04970223f698d19d"/>
       <ComponentRef Id="cc7dd13564be1ee481ac3"/>
       <ComponentRef Id="c0747c30407b8121bddbf"/>
       <ComponentRef Id="c369e940f9133293e6cf1"/>
-      <ComponentRef Id="c740c3204c00d77e3a07f"/>
       <ComponentRef Id="c5f724281f6d710758e30"/>
-      <ComponentRef Id="c44258a68e21d71f04bc8"/>
       <ComponentRef Id="c63f4e32516c525362013"/>
       <ComponentRef Id="c2863f74768bea82de746"/>
-      <ComponentRef Id="c24c27f82f620b50195b8"/>
-      <ComponentRef Id="c7cdda6178f94e4a067ba"/>
-      <ComponentRef Id="c6baa8ae9fcf74a594ec2"/>
-      <ComponentRef Id="c09d2095c8918c2a13d33"/>
-      <ComponentRef Id="c88a722f7b17a342db9bc"/>
-      <ComponentRef Id="c5126fd089902d3e1816f"/>
-      <ComponentRef Id="ca49bc7e32f0ebed32c48"/>
-      <ComponentRef Id="cf373bc42a922a90e7833"/>
-      <ComponentRef Id="ca1378d4f199ef949fc46"/>
-      <ComponentRef Id="c70d97998f96c14f69fc9"/>
-      <ComponentRef Id="cc01de9488cc95a632bcc"/>
       <ComponentRef Id="c300fe2cdf1ea722b27f1"/>
       <ComponentRef Id="c1f1ae6453ead175bac48"/>
       <ComponentRef Id="cf6e7d0ed92e1bf87283e"/>
-      <ComponentRef Id="cc40260978d6b52f505df"/>
-      <ComponentRef Id="cbdf48eada221da711f9e"/>
-      <ComponentRef Id="cfedc62e7b305ee685372"/>
-      <ComponentRef Id="ceeba82ab41acb29b2055"/>
-      <ComponentRef Id="ca9dc6117fd4101b8d671"/>
-      <ComponentRef Id="c386a09ca56668d24855c"/>
-      <ComponentRef Id="cc77b97e84c00f08c8d3e"/>
-      <ComponentRef Id="c75ea9807442a1cc30458"/>
-      <ComponentRef Id="cc4ba5cf066ceef750d13"/>
-      <ComponentRef Id="cab3f874e246e11a421cc"/>
-      <ComponentRef Id="c608b0bb8c945afc0f271"/>
-      <ComponentRef Id="cf8d4533a8bf413792cb5"/>
-      <ComponentRef Id="cbea7d2322d2ea40c334e"/>
-      <ComponentRef Id="cb37b8828e5f4de443832"/>
-      <ComponentRef Id="c6f82cfac2f0d703db0df"/>
-      <ComponentRef Id="c79db2510a112a02027b1"/>
-      <ComponentRef Id="c35660819a5bb081a2726"/>
-      <ComponentRef Id="c12fb5616a5de73a8e510"/>
-      <ComponentRef Id="c27d253b5322ae1ddf9c6"/>
-      <ComponentRef Id="c5d392fe9b04d72f3013a"/>
-      <ComponentRef Id="c15c09367cf6715d19e95"/>
-      <ComponentRef Id="ce58ab5bb59560c481030"/>
-      <ComponentRef Id="c9e31e55898b3dd3d1a80"/>
-      <ComponentRef Id="c42ca3e9e02d1190cef51"/>
-      <ComponentRef Id="c0ad7020d7bcf4aafe1e5"/>
-      <ComponentRef Id="cff73250c8c15acb7764f"/>
-      <ComponentRef Id="cd0d24811b82f32815170"/>
-      <ComponentRef Id="c29576196afc795a04ebe"/>
-      <ComponentRef Id="ca1e787471221df8afb67"/>
-      <ComponentRef Id="c7f4de04d0f0b55bca6cc"/>
-      <ComponentRef Id="c358c09437d52d7ba5061"/>
-      <ComponentRef Id="c715610a155c985516b5d"/>
-      <ComponentRef Id="c1519a86fc65df7fe6967"/>
-      <ComponentRef Id="c30e576e46552f6656f97"/>
-      <ComponentRef Id="cd401efaeaab2cbe96e89"/>
-      <ComponentRef Id="c4bfad71975e0883647a0"/>
-      <ComponentRef Id="c26879fbde3de6942fc3e"/>
-      <ComponentRef Id="c6622581556a2db265e49"/>
-      <ComponentRef Id="ccf03d70e10008742faf9"/>
-      <ComponentRef Id="c8dff5426933bb0d7b215"/>
-      <ComponentRef Id="caa60e07757d31a751a97"/>
-      <ComponentRef Id="c27fb84bb9135ce0b3818"/>
-      <ComponentRef Id="cdb3ac2a941c837b75d1c"/>
-      <ComponentRef Id="ca58110f5ef464dfa80e9"/>
-      <ComponentRef Id="c71430a4cc0b545532073"/>
-      <ComponentRef Id="cfd0a77d97d6dfffc7e72"/>
-      <ComponentRef Id="c87da0b9f35fe66ac4908"/>
-      <ComponentRef Id="cbde0a88ca663ac8773d5"/>
-      <ComponentRef Id="cb53388869ff37b4ec492"/>
-      <ComponentRef Id="c9907bcc99fe938332894"/>
       <ComponentRef Id="StartMenuShortcut"/>
     </Feature>
   </Product>
