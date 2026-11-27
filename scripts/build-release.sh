@@ -20,7 +20,7 @@ B="$(tr -d ' \n' < android/build-number.txt)"
 rm -f releases/android/AmF-X1-*-android*.apk
 cp android/app/build/outputs/apk/release/app-release*.apk "releases/android/AmF-X1-$VER-b$B-android$T.apk"
 cp android/mixer/build/outputs/apk/release/mixer-release*.apk "releases/android/AmF-X1-Mixer-$VER-b$B-android$T.apk"
-(cd releases/android && sha256sum *.apk *.aar > SHA256SUMS.txt)
+(cd releases/android && sha256sum $(ls *.apk *.aar 2>/dev/null) > SHA256SUMS.txt)
 ls -la releases/windows/*.exe releases/windows/*.zip releases/android/*.apk
 echo "== update manifest (unsigned; the vendor signs it)"
 node scripts/make-update.js --prepare
