@@ -49,7 +49,7 @@ Item {
         y: fader.pos(fader.value)
         Behavior on y { enabled: fader.remoteHot && !drag.pressed; NumberAnimation { duration: 70; easing.type: Easing.OutQuad } }   // smooth between remote updates
         width: 26; height: 40; radius: 4
-        gradient: Gradient { GradientStop { position: 0; color: "#3a4150" } GradientStop { position: 0.5; color: "#1c222d" } GradientStop { position: 1; color: "#2a3140" } }
+        gradient: Gradient { GradientStop { position: 0; color: Theme.capTop } GradientStop { position: 0.5; color: Theme.capMid } GradientStop { position: 1; color: Theme.capBottom } }
         border.color: drag.pressed ? Theme.orange : fader.remoteHot ? Theme.cyan : Theme.line; border.width: fader.remoteHot ? 2 : 1
         Rectangle { visible: fader.remoteHot; anchors.centerIn: parent; width: parent.width + 10; height: parent.height + 10; radius: 7; color: "transparent"; border.color: Theme.cyan; border.width: 2; opacity: 0.45; z: -1 }   // the glow of a remote hand
         Rectangle { anchors.centerIn: parent; width: parent.width - 6; height: fader.unity ? 3 : 2; radius: 1; color: fader.unity ? Theme.emerald : fader.tint }   // green at exactly 0 dB
