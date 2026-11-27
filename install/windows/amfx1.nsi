@@ -225,16 +225,18 @@ Section "ASIO driver (lets other programs reach the console)" SecAsio
   ; the DLL stays in the program folder; it is registered in place (the program's --install-driver does the same)
   ExecWait '"$INSTDIR\AmF X1.exe" --install-driver'
 SectionEnd
-; PHONE REMOTE OVER WI-FI: without an inbound rule Windows Firewall drops the phones' connections to port 8765 (the console's NETWORK ->
-; PHONE REMOTE service), often without asking. The rules are as narrow as the service itself: TCP 8765 only, these two programs only,
+; PHONE REMOTE OVER WI-FI: without an inbound rule Windows Firewall drops the phones' connections to the remote port (the console's NETWORK ->
+; PHONE REMOTE service), often without asking. The rules are as narrow as the service itself: TCP, these two programs only,
 ; PRIVATE networks only (home / studio Wi-Fi, never public), and only from the local subnet. The uninstaller removes them.
-Section "Phone remote over Wi-Fi (Windows Firewall rule: private network, port 8765)" SecFirewall
+Section "Phone remote over Wi-Fi (Windows Firewall rule: this network only, the remote port set in SETTINGS)" SecFirewall
+  ; ANY REMOTE PORT: the port is chosen in SETTINGS (1024-65535, default 8765) by a console that runs without admin rights and cannot
+  ; edit the firewall, so the rule is bound to the two programs (and this subnet) instead of one port: a changed port keeps working.
   ; EVERY NETWORK PROFILE, THIS SUBNET ONLY: Windows marks many home Wi-Fi networks "Public"; a rule for "Private" alone then let no phone
   ; in (the phone app found the console but never synced). Still only addresses of this network (localsubnet), and the service answers
   ; private addresses only and wants the paired token or the minute's PIN.
   nsExec::Exec 'netsh advfirewall firewall delete rule name="AmF X1 Phone Remote"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private,public,domain remoteip=localsubnet program="$INSTDIR\amixos.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP localport=8765 profile=private,public,domain remoteip=localsubnet program="$INSTDIR\AmF X1 Network.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP profile=private,public,domain remoteip=localsubnet program="$INSTDIR\amixos.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="AmF X1 Phone Remote" dir=in action=allow protocol=TCP profile=private,public,domain remoteip=localsubnet program="$INSTDIR\AmF X1 Network.exe" description="AmF X1: phones and tablets on this network reach the console remote (token or PIN needed)"'
 SectionEnd
 Section "-Restart after an update"
   StrCmp $Restart "1" 0 +2
