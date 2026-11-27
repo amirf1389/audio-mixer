@@ -39,7 +39,13 @@ cp "$(find "$B" -name "amix_soxr.dll" | head -1)" "$D/"   # libsoxr (LGPL 2.1): 
 cp "$ROOT/management/windows/AmF X1 My Account.url" "$D/"   # MY ACCOUNT: the customer page of the licence server (management/customer); the vendor MANAGER never ships
 # our own programs must not lean on the C++ runtime DLLs of the Qt kit (an older libstdc++-6.dll lacks symbols the compiler here uses)
 for p in amixos.exe "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll"; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
-if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe" "$D/AudioMixerASIO32.dll"; fi
+if [ -f "$ROOT/releases/windows/AmF X1.exe" ]; then cp "$ROOT/releases/windows/AmF X1.exe" "$ROOT/releases/windows/AudioMixerASIO64.dll" "$D/"; else node "$ROOT/scripts/build-native.js" --out "$D" >/dev/null; rm -f "$D/AmF X1 (32-bit).exe"; fi
+# THE 32-BIT ASIO DRIVER (for 32-bit host programs): built here from source with i686-w64-mingw32 next to the 64-bit one. The setup registers
+# it with Windows' 32-bit regsvr32 (SysWOW64), which writes the 32-bit registry view; no 32-bit helper program is shipped for that.
+command -v i686-w64-mingw32-g++ >/dev/null || { echo "i686-w64-mingw32-g++ is needed for the 32-bit ASIO driver (apt install g++-mingw-w64-i686)"; exit 1; }
+node -e 'require(process.argv[1]).buildAsio("x86", process.argv[2])' "$ROOT/scripts/build-drivers.js" "$D" >/dev/null
+for p in AudioMixerASIO64.dll AudioMixerASIO32.dll; do if x86_64-w64-mingw32-objdump -p "$D/$p" | grep -qiE "DLL Name: (libstdc.*|libgcc_s.*|libwinpthread.*)"; then echo "$p needs a compiler runtime DLL: link it statically"; exit 1; fi; done
+file "$D/AudioMixerASIO32.dll" | grep -q "PE32 executable (DLL).*Intel 80386" || { echo "AudioMixerASIO32.dll is not a 32-bit (i386) DLL"; exit 1; }
 for l in Qt6Core Qt6Gui Qt6Widgets Qt6Network Qt6OpenGL Qt6Qml Qt6QmlModels Qt6QmlWorkerScript Qt6Quick Qt6QuickControls2 Qt6QuickControls2Impl Qt6QuickTemplates2 Qt6QuickLayouts Qt6QuickShapes libgcc_s_seh-1 libstdc++-6 libwinpthread-1; do cp "$KIT/bin/$l.dll" "$D/"; done
 for l in Qt6QuickControls2Fusion Qt6QuickControls2FusionStyleImpl; do [ -f "$KIT/bin/$l.dll" ] && cp "$KIT/bin/$l.dll" "$D/"; done   # the Fusion style (the console uses it: palette-driven, dark)
 # FFmpeg (LGPL 2.1+, decoders only, built by scripts/third_party/build-ffmpeg.sh windows): separate DLLs next to the program, opened at run
@@ -56,9 +62,8 @@ rm -rf "$D/qml/QtQuick/Controls/Imagine" "$D/qml/QtQuick/Controls/Material" "$D/
 # QML modules the console never imports and whose Qt libraries are not shipped (they could not load anyway): left out of the package
 rm -rf "$D/qml/Qt/test" "$D/qml/Qt/labs" "$D/qml/QtQuick/Dialogs" "$D/qml/QtQuick/LocalStorage" "$D/qml/QtQml/XmlListModel"
 printf '[Paths]\nPrefix = .\nPlugins = .\nQml2Imports = qml\n' > "$D/qt.conf"; cp "$ROOT/LICENSE" "$D/" 2>/dev/null || true
-# the driver folder and its documents travel with the program: the 32-bit ASIO DLL, the Steinberg ASIO licence / usage guidelines / change list, third-party licences
+# the driver folder and its documents travel with the program: the Steinberg ASIO licence / usage guidelines / change list, third-party licences
 mkdir -p "$D/drivers/asio" "$D/licenses"
-[ -f "$ROOT/releases/windows/AudioMixerASIO32.dll" ] && cp "$ROOT/releases/windows/AudioMixerASIO32.dll" "$D/drivers/asio/"
 for f in "LICENSE.txt" "Steinberg ASIO Licensing Agreement.pdf" "Steinberg ASIO Usage Guidelines.pdf" "changes.txt"; do [ -f "$ROOT/$f" ] && cp "$ROOT/$f" "$D/drivers/asio/"; done
 cp "$ROOT/drivers/asio/sdk/README.txt" "$D/drivers/asio/SDK-HEADERS.txt" 2>/dev/null || true; cp "$ROOT/drivers/vst3/sdk/LICENSE.txt" "$D/licenses/VST3-SDK-LICENSE.txt" 2>/dev/null || true
 cp "$ROOT"/licenses/* "$D/licenses/" 2>/dev/null || true; cp "$ROOT/Additional Terms & Conditions" "$D/licenses/Additional Terms and Conditions.txt" 2>/dev/null || true
@@ -87,7 +92,7 @@ cp "$ROOT/engine/cpp/app/daemon/remote_page.html" "$D/web/remote/index.html"
 for f in "$ROOT"/bridge/*.js "$ROOT/bridge/license-public.json"; do case "$(basename "$f")" in test.js|audit.js|mail.js|flexasio.js) ;; *) cp "$f" "$D/web/bridge/bridge/";; esac; done
 cp "$ROOT"/bridge/sim/*.js "$D/web/bridge/bridge/sim/"; cp "$ROOT/engine/node/index.js" "$D/web/bridge/engine/node/"; cp "$ROOT/package.json" "$D/web/bridge/"
 # PACKAGE CHECK: the build fails when the network service, its extension or the web remote is not in the package
-for f in "AmF X1 Network.exe" "AmF X1 Network.dll" amixos.exe Qt6Core.dll Qt6Network.dll platforms/qwindows.dll web/remote/index.html web/node/node.exe web/nginx/nginx.exe web/nginx/conf/mime.types web/nginx/conf/nginx.conf.in web/start-web-stack.cmd web/stop-web-stack.cmd web/bridge/bridge/server.js web/bridge/engine/node/index.js web/bridge/package.json licenses/NODEJS-LICENSE.txt licenses/NGINX-LICENSE.txt; do
+for f in "AmF X1 Network.exe" "AmF X1 Network.dll" "AmF X1.exe" AudioMixerASIO64.dll AudioMixerASIO32.dll amixos.exe Qt6Core.dll Qt6Network.dll platforms/qwindows.dll web/remote/index.html web/node/node.exe web/nginx/nginx.exe web/nginx/conf/mime.types web/nginx/conf/nginx.conf.in web/start-web-stack.cmd web/stop-web-stack.cmd web/bridge/bridge/server.js web/bridge/engine/node/index.js web/bridge/package.json licenses/NODEJS-LICENSE.txt licenses/NGINX-LICENSE.txt; do
   [ -s "$D/$f" ] || { echo "PACKAGE CHECK: $f is missing from $D"; exit 1; }; done
 grep -q '/api/' "$D/web/remote/index.html" || { echo "PACKAGE CHECK: web/remote/index.html is not the browser remote"; exit 1; }
 x86_64-w64-mingw32-objdump -p "$D/AmF X1 Network.exe" | grep -qiE "DLL Name: (Qt6Network|ws2_32)\.dll" || { echo "PACKAGE CHECK: AmF X1 Network.exe has no network imports"; exit 1; }
@@ -102,7 +107,8 @@ AmF X1 by AMFB Audio $VER - Windows x64
   AmF X1 Diagnostics.exe  the system check: speakers, headphones, microphones, ASIO drivers, a report
   AmF X1 Network.exe    the engine as a local HTTP / WebSocket service for the Android remote (binds 127.0.0.1)
   AudioMixerASIO64.dll  the ASIO driver: register from an administrator prompt with  "AmF X1.exe" --install-driver
-  drivers\\asio\\         the 32-bit ASIO driver DLL and the Steinberg ASIO licence, usage guidelines and change list
+  AudioMixerASIO32.dll  the 32-bit ASIO driver (32-bit host programs): register as administrator with  %WINDIR%\\SysWOW64\\regsvr32.exe AudioMixerASIO32.dll
+  drivers\\asio\\         the Steinberg ASIO licence, usage guidelines and change list
   licenses\\              third-party licences and the additional terms
   web\\                   the WEB STACK (off unless switched on): web\\nginx (nginx for Windows), web\\node (Node.js), web\\bridge, web\\remote, start-web-stack.cmd / stop-web-stack.cmd
   Qt6*.dll, platforms\\, imageformats\\, qml\\   the Qt $HOSTQT runtime (MinGW build) the console needs; keep them next to amixos.exe
@@ -113,7 +119,7 @@ TXT
 # from a certificate authority is the way that warning goes away. No certificate is made here and nothing is switched off on the PC.
 if [ -n "${AMFX1_SIGN_PFX:-}" ]; then
   echo "== signing with the certificate in AMFX1_SIGN_PFX"
-  ( cd "$OUT/$NAME" && for f in amixos.exe "AmF X1.exe" "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Diagnostics.exe" "AmF X1 Plugin Builder.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll" amix_soxr.dll; do [ -f "$f" ] && node "$ROOT/scripts/sign-windows.js" "$f"; done )
+  ( cd "$OUT/$NAME" && for f in amixos.exe "AmF X1.exe" "AmF X1 Network.exe" "AmF X1 Hybrid.exe" "AmF X1 Diagnostics.exe" "AmF X1 Plugin Builder.exe" "AmF X1 Network.dll" "AmF X1 Hybrid.dll" amix_soxr.dll AudioMixerASIO64.dll AudioMixerASIO32.dll; do [ -f "$f" ] && node "$ROOT/scripts/sign-windows.js" "$f"; done )
 else
   echo "== NOT SIGNED: no AMFX1_SIGN_PFX. Windows will show its protection screen for this build until it is signed (docs/windows-defender.md)."
 fi

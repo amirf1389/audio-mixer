@@ -224,6 +224,9 @@ SectionEnd
 Section "ASIO driver (lets other programs reach the console)" SecAsio
   ; the DLL stays in the program folder; it is registered in place (the program's --install-driver does the same)
   ExecWait '"$INSTDIR\AmF X1.exe" --install-driver'
+  ; the 32-bit driver for 32-bit host programs: Windows' 32-bit regsvr32 registers it in the 32-bit registry view (WOW6432Node)
+  IfFileExists "$WINDIR\SysWOW64\regsvr32.exe" 0 +2
+  ExecWait '"$WINDIR\SysWOW64\regsvr32.exe" /s "$INSTDIR\AudioMixerASIO32.dll"'
 SectionEnd
 ; PHONE REMOTE OVER WI-FI: without an inbound rule Windows Firewall drops the phones' connections to the remote port (the console's NETWORK ->
 ; PHONE REMOTE service), often without asking. The rules are as narrow as the service itself: TCP, these two programs only,
@@ -246,6 +249,8 @@ Section "Uninstall"
   Call un.CloseConsole   ; before anything is removed: a console left running would write its settings back on quit
   Call un.FreeAll
   ExecWait '"$INSTDIR\AmF X1.exe" --uninstall-driver'
+  IfFileExists "$INSTDIR\AudioMixerASIO32.dll" 0 +2
+  ExecWait '"$WINDIR\SysWOW64\regsvr32.exe" /u /s "$INSTDIR\AudioMixerASIO32.dll"'
   nsExec::Exec 'netsh advfirewall firewall delete rule name="AmF X1 Phone Remote"'   ; the phone remote's firewall rules go with the program
   Delete "$DESKTOP\AmF X1.lnk"
   Delete "$DESKTOP\AmF X1 Diagnostics.lnk"

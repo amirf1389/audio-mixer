@@ -17,7 +17,10 @@ package folder holds private-looking files (*.pem, *.key, *.pfx, *.p12, *.jks, *
 - **Windows Firewall rule** (TCP, local subnet, programs amixos.exe and "AmF X1 Network.exe") and **ASIO driver registration**
   (`"AmF X1.exe" --install-driver`). Both need deferred custom actions (netsh / the program run elevated, and their rollback and
   uninstall counterparts), which wixl does not support reliably. Instead:
-  - ASIO: register the driver from the app's own SETTINGS, run as administrator.
+  - ASIO: the MSI installs both drivers, AudioMixerASIO64.dll (64-bit hosts) and AudioMixerASIO32.dll (32-bit hosts), but
+    registers neither. Register both (64-bit and 32-bit) from the app's own SETTINGS, run as administrator. By hand from an
+    administrator prompt: `"AmF X1.exe" --install-driver` for the 64-bit one and
+    `%WINDIR%\SysWOW64\regsvr32.exe "<install folder>\AudioMixerASIO32.dll"` for the 32-bit one (32-bit registry view).
   - Firewall: Windows asks to allow the program the first time the phone remote listens; accept it for private networks.
 - The NSIS setup stays the full installer; it is unchanged.
 
