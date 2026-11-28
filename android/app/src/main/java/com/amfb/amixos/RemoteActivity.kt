@@ -39,6 +39,8 @@ class RemoteActivity : FitActivity() {
     private var client: DaemonClient? = null
     private var stream: DaemonClient.MeterStream? = null
     private var state: ConsoleState? = null
+    private var bank = RemoteBanks.ALL          // 1.27 BANK SELECTOR: the layer of strips shown (ALL CH by default)
+    private var bankRow: LinearLayout? = null
     private val faders = ArrayList<FaderView>()
         private val dbLabels = ArrayList<TextView>()
     private lateinit var status: TextView
@@ -129,6 +131,8 @@ class RemoteActivity : FitActivity() {
         hintView = TextView(this).apply { text = getString(R.string.tap_hint); setTextColor(Color.parseColor("#C2C7CF")); textSize = 11f; contentDescription = "remoteHint" }
         root.addView(hintView); fitOrientation()
         // THE CONSOLE: channel strips side by side (scroll sideways), the master strip fixed on the right
+        bankRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; contentDescription = "remoteBanks" }
+        root.addView(HorizontalScrollView(this).apply { addView(bankRow) })
         val desk = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         strips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         desk.addView(android.widget.HorizontalScrollView(this).apply { addView(strips); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f) })
@@ -224,7 +228,11 @@ class RemoteActivity : FitActivity() {
         // COMPACT: five channels across upright (eight on its side), the keys 40 dp tall with text that shrinks instead of being cut
         val dens = resources.displayMetrics.density
         val big = Prefs.bigFaders(this); val stripW = if (big) compactStripWidthFor(resources.displayMetrics.widthPixels, compactAcrossFor(resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE), dens) else ConsoleUi.dp(this, KNOB_STRIP_DP)
-        for (st in s.strips.take(Prefs.stripCount(this))) {
+        bankRow?.let { row -> row.removeAllViews(); val n = minOf(s.strips.size, Prefs.stripCount(this))
+            if (n > 16) for ((b, label) in RemoteBanks.keys(n)) row.addView(Button(this).apply { text = label; contentDescription = "bank$b"; isSelected = bank == b
+                setTextColor(if (bank == b) Color.parseColor("#FBBF24") else Color.WHITE); minHeight = ConsoleUi.dp(this@RemoteActivity, 44f)
+                setOnClickListener { bank = b; state?.let { buildStrips(it) } } }) }
+        for (st in s.strips.take(Prefs.stripCount(this)).filter { RemoteBanks.inBank(bank, it.id) }) {
             val tint = colors[(st.id / 8) % colors.size]
             val col = ConsoleUi.strip(this, tint, stripW)
             val name = TextView(this).apply { text = ConsoleUi.title(st.id, st.name); setTextColor(Color.WHITE); textSize = 10f; gravity = Gravity.CENTER; minLines = 2; maxLines = 2; typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -533,6 +541,8 @@ class RemoteActivity : FitActivity() {
     internal fun muteGroupsPanel(c: DaemonClient?): View {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16); setBackgroundColor(Color.parseColor("#1D2024")) }
         val store = getSharedPreferences("muteGroups", MODE_PRIVATE); val n = (state?.strips?.size ?: Prefs.stripCount(this)).coerceAtLeast(1)
+        val shared = state?.muteGroups.orEmpty()
+        if (c != null && shared.isNotEmpty()) return consoleMuteGroups(c, box, shared, n)
         fun refresh() {
             box.removeAllViews()
             box.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.mute_groups_note); setTextColor(Color.parseColor("#C2C7CF")); textSize = 12f; setPadding(0, 0, 0, 12) }))
@@ -552,6 +562,31 @@ class RemoteActivity : FitActivity() {
             }
         }
         refresh(); return box
+    }
+
+    /** 1.27 MUTE GROUPS held by the console: the same eight groups as the console's ASSIGN page. MUTE presses the group on the console
+     *  (every remote sees it); EDIT picks its channels and buses. */
+    private fun consoleMuteGroups(c: DaemonClient, box: LinearLayout, start: List<com.amfb.amixos.remote.MuteGroupState>, n: Int): View {
+        var groups = start
+        fun send(cmd: Map<String, Any?>) { io.execute { runCatching { c.op(cmd); val ns = c.state(); ui.post { state = ns; groups = ns.muteGroups; refreshMg(box, c, groups, n, ::send) } }.onFailure { ui.post { status.text = getString(R.string.failed, it.message ?: "") } } } }
+        refreshMg(box, c, groups, n, ::send); return box
+    }
+    private fun refreshMg(box: LinearLayout, c: DaemonClient, groups: List<com.amfb.amixos.remote.MuteGroupState>, n: Int, send: (Map<String, Any?>) -> Unit) {
+        box.removeAllViews()
+        box.addView(TextView(this).apply { text = getString(R.string.mute_groups_console_note); setTextColor(Color.parseColor("#C2C7CF")); textSize = 12f; setPadding(0, 0, 0, 12) })
+        for (g in groups) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            row.addView(Button(this).apply { text = g.name; contentDescription = "mgMute${g.id}"; minHeight = ConsoleUi.dp(this@RemoteActivity, 48f); setTextColor(if (g.mute) Color.parseColor("#EF4444") else Color.WHITE)
+                setOnClickListener { send(RemoteOps.muteGroup(g.id, !g.mute)) } })
+            row.addView(TextView(this).apply { text = getString(R.string.mute_group_sources, g.strips.size + g.buses.size); setTextColor(Color.parseColor("#7FD8E8")); typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f; setPadding(16, 0, 16, 0)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
+            row.addView(Button(this).apply { text = getString(R.string.mute_group_edit); textSize = 11f; setOnClickListener {
+                val names = ((0 until n).map { i -> String.format("CH %02d  %s", i + 1, state?.strips?.getOrNull(i)?.name.orEmpty()) } + (0 until 8).map { "AUX ${it + 1}" } + (0 until 8).map { "FX ${it + 1}" }).toTypedArray()
+                val sel = BooleanArray(names.size) { if (it < n) it in g.strips else (it - n) in g.buses }
+                AlertDialog.Builder(this@RemoteActivity).setTitle(g.name).setMultiChoiceItems(names, sel) { _, w, ch -> sel[w] = ch }
+                    .setPositiveButton(android.R.string.ok) { _, _ -> send(RemoteOps.assign(g.id, (0 until n).filter { sel[it] }, (0 until 16).filter { sel[n + it] })) }.setNegativeButton(android.R.string.cancel, null).show() } })
+            box.addView(row)
+        }
     }
 
     /** SCENES on the phone: SAVE takes the console's mix as it is now (levels, pan, mute, solo, names, master, buses); RECALL sends it back.
@@ -839,6 +874,23 @@ class RemoteActivity : FitActivity() {
         row.addView(ToggleButton(this).apply { textOn = "MONO"; textOff = "mono"; text = "mono"; setOnCheckedChangeListener { _, on -> mono = on; push() } })
         row.addView(ToggleButton(this).apply { textOn = "MUTED"; textOff = "mute"; text = "mute"; setOnCheckedChangeListener { _, on -> mute = on; push() } })
         box.addView(row)
+        // 1.27: OUTPUT A / B / A+B, PHONES, TALKBACK (level, destination) and CLEAR SOLO
+        val st0 = state
+        val outRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        RemoteOps.OUT_LABELS.forEachIndexed { i, l -> outRow.addView(Button(this).apply { text = l; contentDescription = "monOut$i"; setTextColor(if ((st0?.monOut ?: 0) == i) Color.parseColor("#34D399") else Color.WHITE)
+            setOnClickListener { io.execute { runCatching { c.op(RemoteOps.monitorOut(i)) } }; for (k in 0 until outRow.childCount) (outRow.getChildAt(k) as Button).setTextColor(if (k == i) Color.parseColor("#34D399") else Color.WHITE) } }) }
+        box.addView(outRow)
+        val ph = TextView(this).apply { text = getString(R.string.phones_level, DaemonClient.fmtDb(st0?.phonesDb ?: 0.0)) }; box.addView(ph)
+        box.addView(SeekBar(this).apply { max = 700; progress = (((st0?.phonesDb ?: 0.0) + 60) * 10).toInt(); setOnSeekBarChangeListener(change { p -> val d = p / 10.0 - 60; ui.post { ph.text = getString(R.string.phones_level, DaemonClient.fmtDb(d)) }; c.op(RemoteOps.phones(d)) }) })
+        var talk = st0?.talkback ?: com.amfb.amixos.remote.Talkback()
+        fun sendTalk() { val t = talk; io.execute { runCatching { c.op(RemoteOps.talkback(t.on, t.db, t.dest)) } } }
+        val tRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        tRow.addView(ToggleButton(this).apply { textOn = getString(R.string.talkback_on); textOff = getString(R.string.talkback); isChecked = talk.on; contentDescription = "talkback"; setOnCheckedChangeListener { _, on -> talk = talk.copy(on = on); sendTalk() } })
+        tRow.addView(Button(this).apply { text = getString(R.string.talk_to, RemoteOps.destLabel(talk.dest)); setOnClickListener { val opts = (0..16).map { RemoteOps.destLabel(it) }.toTypedArray()
+            AlertDialog.Builder(this@RemoteActivity).setItems(opts) { _, w -> talk = talk.copy(dest = w); text = getString(R.string.talk_to, opts[w]); sendTalk() }.show() } })
+        box.addView(tRow)
+        box.addView(SeekBar(this).apply { max = 700; progress = ((talk.db + 60) * 10).toInt(); setOnSeekBarChangeListener(change { p -> talk = talk.copy(db = p / 10.0 - 60); c.op(RemoteOps.talkback(talk.on, talk.db, talk.dest)) }) })
+        box.addView(Button(this).apply { text = getString(R.string.clear_solo); setOnClickListener { val ids = state?.strips?.filter { it.solo }?.map { it.id }.orEmpty(); io.execute { runCatching { ids.forEach { c.solo(it, false) } } } } })
         AlertDialog.Builder(this).setTitle(R.string.monitor).setView(box).setPositiveButton(android.R.string.ok, null).show()
     }
     private fun localIp(): String? = runCatching {

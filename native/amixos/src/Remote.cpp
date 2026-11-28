@@ -84,7 +84,7 @@ void Remote::writeSeed() {
   baseSet_ = consoleSettings();   // the service starts with the console's settings too
   QVariantList racks; const QVariantList ss = engine_->stripState();   // and with the console's plug-ins (with their state): they keep sounding
   for (int i = 0; i < ss.size(); ++i) { const QVariantList r = engine_->remoteRack(i); if (r.isEmpty()) continue; racks << QVariantMap{{"strip", i}, {"name", ss[i].toMap().value("name")}, {"plugins", r}}; }
-  baseDca_ = dcaSync(engine_->dcaState()); feedbackSeen_ = 0; feedbackNote_.clear();   // the DCA groups go in the seed (they hold strips silent from the first block)
+  baseDca_ = dcaSync(engine_->dcaState()); baseMg_.clear(); feedbackSeen_ = 0; feedbackNote_.clear();   // the DCA groups go in the seed (they hold strips silent from the first block)
   racksV_ = 0; masterV_ = 0; baseMast_ = mastNow(); baseIn_ = engine_->inputRoutes(); baseOut_ = engine_->outputRoutes(); baseRacks_.clear(); for (int i = 0; i < ss.size(); ++i) baseRacks_[i] = rackJson(i);
   if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write(QJsonDocument::fromVariant(QVariantMap{{"strips", l}, {"master", QVariantMap{{"db", baseMaster_}, {"mute", baseMute_}}}, {"settings", baseSet_}, {"racks", racks}, {"masterChain", engine_->masterChainSeed()}, {"routes", QVariantMap{{"in", baseIn_}, {"out", baseOut_}}}, {"dcas", baseDca_}}).toJson(QJsonDocument::Compact));
 }
@@ -160,6 +160,10 @@ void Remote::syncTick() {
     const QVariantList now = dcaSync(engine_->dcaState());
     for (int g = 0; g < now.size(); ++g) if (g >= baseDca_.size() || now[g] != baseDca_[g]) { QVariantMap c = now[g].toMap(); c["op"] = "dca"; c["group"] = g + 1; post(c); }
     baseDca_ = now; }
+  {   // MUTE GROUPS moved on the console (mute, name, colour, members): out to the service
+    const QVariantList now = mgNow();
+    for (int g = 0; g < now.size(); ++g) if (g >= baseMg_.size() || now[g] != baseMg_[g]) { QVariantMap c = now[g].toMap(); c["op"] = "muteGroup"; c["group"] = g + 1; post(c); }
+    baseMg_ = now; }
   if (moved(engine_->masterDb(), baseMaster_)) { baseMaster_ = engine_->masterDb(); post({{"op", "master"}, {"db", baseMaster_}}); }
   if (engine_->masterMuted() != baseMute_) { baseMute_ = engine_->masterMuted(); post({{"op", "master"}, {"mute", baseMute_}}); }   // MASTER MUTE out (the fader's own value is not re-sent with it)
   { const QVariantMap cs = consoleSettings();   // a setting changed on the console goes out (numbers compared with a small tolerance)
@@ -204,6 +208,16 @@ void Remote::syncTick() {
           for (const QVariant& x : was) if (!want.contains(x)) engine_->setDca(x.toInt(), 0);
           for (const QVariant& x : want) engine_->setDca(x.toInt(), g + 1); } }
       baseDca_ = dcaSync(engine_->dcaState()); }
+    if (!baseMg_.isEmpty() && o.contains("muteGroups")) {   // a remote pressed a MUTE GROUP or changed its members: onto the console
+      const QVariantList rg = o.value("muteGroups").toList();
+      for (int g = 0; g < rg.size() && g < baseMg_.size(); ++g) { const QVariantMap r = rg[g].toMap(), b = baseMg_[g].toMap();
+        if (r.value("mute").toBool() != b.value("mute").toBool()) engine_->setMuteGroupActive(g + 1, r.value("mute").toBool());
+        if (r.value("name").toString() != b.value("name").toString() && !r.value("name").toString().isEmpty()) engine_->setMuteGroupName(g + 1, r.value("name").toString());
+        if (r.value("color").toInt() != b.value("color").toInt()) engine_->setMuteGroupColor(g + 1, r.value("color").toInt());
+        for (const char* key : {"strips", "buses"}) { const QVariantList was = b.value(key).toList(), want = r.value(key).toList(); if (was == want) continue; const bool bus = key[0] == 'b';
+          for (const QVariant& x : was) if (!want.contains(x)) { if (bus) engine_->setBusMuteGroup(x.toInt(), g + 1, false); else engine_->setMuteGroupMember(x.toInt(), g + 1, false); }
+          for (const QVariant& x : want) { if (bus) engine_->setBusMuteGroup(x.toInt(), g + 1, true); else engine_->setMuteGroupMember(x.toInt(), g + 1, true); } } }
+      baseMg_ = mgNow(); }
     v_ = o.value("v").toULongLong(); const QVariantList l = o.value("strips").toList(); int n = 0;
     for (int i = 0; i < l.size() && i < base_.size(); ++i) { const QVariantMap m = l[i].toMap(); SyncStrip& b = base_[i];
       const double db = m.value("db").toDouble(), pan = m.value("pan").toDouble(); const bool mu = m.value("mute").toBool(), so = m.value("solo").toBool(); const QString nm = m.value("name").toString();
@@ -512,3 +526,9 @@ void Remote::stopWebStack() {
   if (bridge_.state() != QProcess::NotRunning) { bridge_.kill(); bridge_.waitForFinished(1000); }
   emit webStackChanged();
 }
+
+// MUTE GROUPS in the service's shape: {mute, name, color, strips, buses}
+QVariantList Remote::mgNow() const {
+  QVariantList out; for (const QVariant& v : engine_->muteGroupState()) { const QVariantMap m = v.toMap();
+    out << QVariantMap{{"mute", m.value("active")}, {"name", m.value("name")}, {"color", m.value("color")}, {"strips", m.value("members")}, {"buses", m.value("buses")}}; }
+  return out; }

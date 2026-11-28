@@ -27,7 +27,7 @@ extern "C" {
 #define AMIX_API_VERSION 8   // 8: ASIO driver info, buffer choice, amix_asio_open, amix_device_list; 2: 16 buses (8 AUX + 8 FX); 4: 360 audio; 5: network audio (AES67) and MIDI; 6: high-resolution audio (amix_hires.h); 7: ASIO details, latency, block callback
 #define AMIX_MAX_STRIPS 32
 #define AMIX_MAX_BUSES 16
-#define AMIX_MAX_INSERTS 5   /* 4 rack slots + 1 (the phone mixer keeps its channel EQ in the last) */
+#define AMIX_MAX_INSERTS 9   /* 4 rack slots + 1 (the phone mixer keeps its channel EQ in slot 4) + 4 STUDIO send effects (slots 5-8, 1.27) */
 
 typedef struct amix_meter { double peak, rms, hold; uint32_t clips; double comp_gr_db, gate_db, in_peak; } amix_meter;   /* linear 0..1+, dB for the reductions */
 typedef struct amix_levels {

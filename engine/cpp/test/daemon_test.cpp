@@ -243,6 +243,19 @@ int main() {
     { const Value g = d.state()["dcas"].at(1); CHECK(g["id"].asInt() == 2 && g["db"].asNumber() == 10 && g["mute"].asBool() && g["name"].asString() == "VOICES" && g["color"].asInt() == 3 && g["members"].size() == 2); }
     CHECK(d.state()["dcas"].size() == 8 && d.state()["dcas"].at(0)["name"].asString() == "DCA 1");
     CHECK(ctl("{\"op\":\"dca\",\"group\":9,\"db\":0}") == 400);
+    // MUTE GROUPS (1.27): strips and buses, bounds checked, duplicates and out-of-range members dropped, SOURCES counted
+    CHECK(ctl("{\"op\":\"muteGroup\",\"group\":3,\"mute\":true,\"name\":\"DRUMS-AND-PERCUSSION-LONG\",\"color\":12,\"strips\":[0,1,1,999,-2],\"buses\":[2,40]}") == 200);
+    { const Value g = d.state()["muteGroups"].at(2); CHECK(g["id"].asInt() == 3 && g["mute"].asBool() && g["name"].asString().size() == 16 && g["color"].asInt() == 7 && g["strips"].size() == 2 && g["buses"].size() == 1 && g["sources"].asInt() == 3); }
+    CHECK(d.state()["muteGroups"].size() == 8 && d.state()["muteGroups"].at(0)["name"].asString() == "MUTE 1");
+    CHECK(ctl("{\"op\":\"muteGroup\",\"group\":0}") == 400 && ctl("{\"op\":\"muteGroup\",\"group\":9,\"mute\":true}") == 400);
+    CHECK(ctl("{\"op\":\"muteGroup\",\"group\":3,\"mute\":false}") == 200 && !d.state()["muteGroups"].at(2)["mute"].asBool());
+    // TALKBACK and the MONITOR output A / B / A+B and PHONES level, clamped
+    CHECK(ctl("{\"op\":\"talkback\",\"on\":true,\"db\":40,\"dest\":5}") == 200);
+    { const Value t = d.state()["talkback"]; CHECK(t["on"].asBool() && t["db"].asNumber() == 10 && t["dest"].asInt() == 5); }
+    CHECK(ctl("{\"op\":\"talkback\",\"dest\":17}") == 400 && ctl("{\"op\":\"talkback\",\"dest\":-1}") == 400);
+    CHECK(ctl("{\"op\":\"monitor\",\"out\":2,\"phonesDb\":-99,\"dim\":true,\"mono\":true}") == 200);
+    { const Value m = d.state()["monitor"]; CHECK(m["out"].asInt() == 2 && m["phonesDb"].asNumber() == -60 && m["dim"].asBool() && m["mono"].asBool()); }
+    CHECK(ctl("{\"op\":\"monitor\",\"out\":3}") == 400);
     CHECK(ctl("{\"op\":\"dca\",\"group\":3,\"winVol\":true}") == 200 && d.state()["dcas"].at(2)["winVol"].asBool() && d.state()["dcaLimit"].asInt() == 8);
     { am::Daemon::Options po; po.port = 0; po.token = o.token; po.strips = 8; po.plan = "PRO"; po.tokenStore = "daemon_test.pro.tokens.json"; std::remove(po.tokenStore.c_str()); am::Daemon pd(po);
       std::string e1, e2; bool k1 = false, k2 = false; const Value a = Value::parse("{\"op\":\"dca\",\"group\":4,\"db\":-3}", k1), b = Value::parse("{\"op\":\"dca\",\"group\":5,\"db\":-3}", k2);   // DCA GROUPS BY EDITION: PRO has four

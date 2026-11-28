@@ -127,6 +127,10 @@ qt_add_qml_module(amixos
         qml/DynCurve.qml
         qml/SendToPage.qml
         qml/GroupFadersPage.qml
+        qml/AssignPage.qml
+        qml/TopStatus.qml
+        qml/BankColumn.qml
+        qml/MonitorDesk.qml
         qml/DcaStrip.qml
         qml/DcaPanels.qml
         qml/ScenesPage.qml

@@ -40,7 +40,7 @@ ApplicationWindow {
     // WARM-UP: a few seconds after start, every page's QML is compiled in the background (nothing is created, so no page starts a scan
     // or a service): the first click on any page then costs only building it, not compiling it too.
     property var warmQueue: ["AccessPage", "AccountPage", "AcousticsPage", "AdminPage", "AiMixPage", "ArrangePage", "BluetoothPage", "CalibratePage", "CascadePage", "CloudPage",
-        "CompressorPage", "ConnectionsPage", "DelayPage", "DiagnosticsPage", "EffectsPage", "EngineControlPage", "FramePage", "GatePage", "GroupFadersPage", "HelpPage",
+        "CompressorPage", "ConnectionsPage", "DelayPage", "DiagnosticsPage", "EffectsPage", "EngineControlPage", "FramePage", "GatePage", "GroupFadersPage", "AssignPage", "HelpPage",
         "LevelsPage", "LicensePage", "LiveSourcesPage", "LoudnessPage", "MasteringPage", "MediaPage", "MicEqPage", "MixerPage", "NetworkPage", "PhasePage", "PluginsPage",
         "PresetsPage", "RoutingPage", "RtaEqPage", "SamplesPage", "ScenesPage", "ScorePage", "AmpPage", "AssistantPage", "StorePage", "SendToPage", "SettingsPage", "SoundCardPage", "SpatialPage", "TonePage", "ToolsPage", "WaveformPage"]
     property var warmKeep: []
@@ -61,7 +61,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "fluid"; value: !graphics.lowPower }    // BATTERY: solid panels, no sheen
     Binding { target: Theme; property: "motion"; value: !graphics.lowPower }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
-    Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
+    Binding { target: Theme; property: "accent"; value: { const p = root.pageById[root.current]; return p ? Theme.groupColor(p.group) : Theme.orange } }
     Aurora { anchors.fill: parent; z: -1; visible: Theme.glass; motion: Theme.glass && settings.colorMotion && graphics.heavyEffects; accent: Theme.accent }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
@@ -91,7 +91,11 @@ ApplicationWindow {
     Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
     function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; clearPages(); touchPage(c); if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: root.softRestart() }
-    function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
+    // THE PAGE LIST as one plain JS array, read once: engine.pages is a C++ list, and every index into it (engine.pages[i]) fetched the
+    // whole list again; the accent and the title walk it on every page switch
+    readonly property var pageList: { const ps = engine.pages, out = []; for (let i = 0; i < ps.length; ++i) out.push(ps[i]); return out }
+    readonly property var pageById: { const m = {}; for (let i = 0; i < pageList.length; ++i) m[pageList[i].id] = pageList[i]; return m }
+    function pageOf(id) { return pageById[id] || pageList[0] }
 
     // ZOOM IN / OUT: the whole console is drawn larger or smaller at once (no restart), keeping its layout; the window size stays
     readonly property real liveZoom: settings.liveZoom
@@ -111,7 +115,7 @@ ApplicationWindow {
         // Ctrl + wheel anywhere on the console zooms too
         WheelHandler { acceptedModifiers: Qt.ControlModifier; enabled: !root.setupLocked; onWheel: (e) => { if (e.angleDelta.y > 0) settings.zoomIn(); else if (e.angleDelta.y < 0) settings.zoomOut(); zoomToast.show() } }
         Rectangle {   // header
-            Layout.fillWidth: true; implicitHeight: 52; color: Theme.chrome
+            Layout.fillWidth: true; implicitHeight: 60; color: Theme.chrome
             Songket { anchors.bottom: parent.bottom; width: parent.width; height: 7; unit: 14 }   // the songket band under the header
             RowLayout {
                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.bottomMargin: 6; spacing: 12
@@ -188,6 +192,8 @@ ApplicationWindow {
                         MItem { text: i18n.t("Licence and account", i18n.lang); onTriggered: root.current = "acct" } }
                 }
                 Item { Layout.fillWidth: true }
+                TopStatus { visible: root.width >= 1400; compact: root.width < 1800; title: i18n.t(root.pageOf(root.current).text || "", i18n.lang); onGo: function (id) { root.current = id }
+                    onSaid: function (t) { root.say(t) } }   // 1.27: page title, LOCK, clock, scene LOAD / SAVE, network
                 Rectangle { implicitWidth: statusText.implicitWidth + 20; implicitHeight: 24; radius: 12; color: engine.running ? Qt.rgba(0.063, 0.725, 0.506, 0.15) : Qt.rgba(0.984, 0.749, 0.141, 0.12); border.color: engine.running ? Theme.emerald : Theme.amber
                     Text { id: statusText; anchors.centerIn: parent; text: engine.running ? i18n.t("ENGINE ON • ", i18n.lang) + engine.backend.toUpperCase() : i18n.t("ENGINE OFF", i18n.lang); color: engine.running ? Theme.emerald : Theme.amber; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                     objectName: "enginePill"
@@ -279,7 +285,7 @@ ApplicationWindow {
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:sound") } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
-            NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? engine.pages : engine.pages.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
+            NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? root.pageList : root.pageList.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 id: pageArea; objectName: "pageArea"
@@ -307,7 +313,7 @@ ApplicationWindow {
                 function pageComponent(id) {
                     switch (id) {
                     case "home": return homeC; case "frame": return frameC; case "delay": return delayC; case "cloud": return cloudC; case "cascade": return cascadeC; case "mixer": return null; case "dsp": return toneC; case "rtaeq": return rtaEqC; case "bluetooth": return bluetoothC; case "io": return connC;
-                    case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "streaming": return streamingC; case "update": return updateC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "protools": return proToolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
+                    case "meter": return levelsC; case "score": return scoreC; case "amp": return ampC; case "assistant": return assistantC; case "store": return storeC; case "streaming": return streamingC; case "update": return updateC; case "lufs": return loudC; case "sys": return settingsC; case "dyn": return compC; case "gate": return gateC; case "bus": return sendC; case "dca": return dcaC; case "assign": return assignC; case "scenes": return scenesC; case "presets": return presetsC; case "routing": return routingC; case "renew": return licenseC; case "arrange": return arrangeC; case "fx": return fxC; case "osc": return oscC; case "phase": return phaseC; case "miceq": return miceqC; case "live": return liveC; case "tools": return toolsC; case "protools": return proToolsC; case "calib": return calibC; case "boot": return bootC; case "help": return helpC; case "acct": return acctC; case "access": return accessC; case "admin": return adminC; case "ai": return aiC; case "engctl": return engctlC; case "plugins": return pluginsC; case "network": return networkC; case "media": return mediaC; case "samples": return samplesC; case "asio": return soundC; case "acoustics": return acousticsC; case "master": return masteringC; case "surround": return spatialC; default: return comingC
                     }
                 }
                 // BUILDING A PAGE: never an empty page area. Until the page is ready (the MIXER too, the longest to build) its name shows with
@@ -349,6 +355,7 @@ ApplicationWindow {
                 Component { id: gateC; GatePage {} }
                 Component { id: sendC; SendToPage {} }
                 Component { id: dcaC; GroupFadersPage {} }
+                Component { id: assignC; AssignPage {} }
                 Component { id: scenesC; ScenesPage {} }
                 Component { id: presetsC; PresetsPage {} }
                 Component { id: routingC; RoutingPage {} }

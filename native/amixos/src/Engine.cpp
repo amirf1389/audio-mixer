@@ -387,7 +387,7 @@ QVariantList Engine::dcaState() const {
 }
 QVariantList Engine::muteGroupState() const {
   QVariantList l;
-  for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = muteGroups_[g].name; m["active"] = muteGroups_[g].active; QVariantList mem; for (int i = 0; i < kStrips; ++i) if ((strips_[static_cast<std::size_t>(i)].muteGroups >> g) & 1u) mem << i; m["members"] = mem; l << m; }
+  for (int g = 0; g < kGroups; ++g) { QVariantMap m; m["index"] = g + 1; m["name"] = muteGroups_[g].name; m["active"] = muteGroups_[g].active; m["color"] = muteGroups_[g].color; QVariantList bm; for (int k = 0; k < kBuses; ++k) if ((buses_[k].muteGroups >> g) & 1u) bm << k; m["buses"] = bm; QVariantList mem; for (int i = 0; i < kStrips; ++i) if ((strips_[static_cast<std::size_t>(i)].muteGroups >> g) & 1u) mem << i; m["members"] = mem; l << m; }
   return l;
 }
 void Engine::setDca(int i, int g) { if (i < 0 || i >= kStrips) return; if (g > dcaLimit()) return; strips_[static_cast<std::size_t>(i)].dca = std::clamp(g, 0, kGroups); pushStrip(i); pushLoud(i); if (rt_ && duckUi_.on) rt_->setDuckRole(i, duckRole(i)); stripsTouched(); emit groupsChanged(); emit loudChanged(); }
@@ -480,7 +480,15 @@ void Engine::applyAutoDca(bool muteSilent) {
   autoProp_.clear(); pushDuck(); stripsTouched(); emit groupsChanged(); emit duckChanged(); emit autoDcaChanged();
 }
 void Engine::setMuteGroupMember(int i, int g, bool member) { if (i < 0 || i >= kStrips || g < 1 || g > kGroups) return; unsigned& m = strips_[static_cast<std::size_t>(i)].muteGroups; if (member) m |= 1u << (g - 1); else m &= ~(1u << (g - 1)); pushStrip(i); stripsTouched(); emit groupsChanged(); }
-void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].active = on; for (int i = 0; i < kStrips; ++i) pushStrip(i); stripsTouched(); emit groupsChanged(); }
+void Engine::setMuteGroupActive(int g, bool on) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].active = on; for (int i = 0; i < kStrips; ++i) pushStrip(i); if (rt_) for (int k = 0; k < kBuses; ++k) rt_->setBusMute(k, buses_[k].mute || busGroupMuted(k)); stripsTouched(); emit groupsChanged(); }
+bool Engine::busGroupMuted(int k) const { if (k < 0 || k >= kBuses) return false; for (int g = 0; g < kGroups; ++g) if ((buses_[k].muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
+void Engine::setBusMuteGroup(int k, int g, bool member) { if (k < 0 || k >= kBuses || g < 1 || g > kGroups) return; unsigned& m = buses_[k].muteGroups; if (member) m |= 1u << (g - 1); else m &= ~(1u << (g - 1)); if (rt_) rt_->setBusMute(k, buses_[k].mute || busGroupMuted(k)); emit groupsChanged(); emit busesChanged(); }
+void Engine::setMuteGroupName(int g, const QString& n) { if (g < 1 || g > kGroups) return; const QString t = n.trimmed().left(16); muteGroups_[g - 1].name = t.isEmpty() ? QStringLiteral("MUTE %1").arg(g) : t; emit groupsChanged(); }
+void Engine::setMuteGroupColor(int g, int c) { if (g < 1 || g > kGroups) return; muteGroups_[g - 1].color = std::clamp(c, 0, 7); emit groupsChanged(); }
+void Engine::setMonitorOut(int o) { monOut_ = std::clamp(o, 0, 2); emit monitorChanged(); }
+void Engine::setPhonesDb(double db) { if (!std::isfinite(db)) return; phonesDb_ = std::clamp(db, -60.0, 10.0); emit monitorChanged(); }
+void Engine::setTalkback(bool on, double db, int dest) { talk_.on = on; if (std::isfinite(db)) talk_.db = std::clamp(db, -60.0, 10.0); talk_.dest = std::clamp(dest, 0, 16); emit monitorChanged(); }
+void Engine::setMasterSel(const QString& s) { static const QRegularExpression ok(QStringLiteral("^(MAIN|M[1-4]|B([1-9]|1[0-6]))$")); if (!ok.match(s).hasMatch()) return; masterSel_ = s; emit monitorChanged(); }
 // effective = the strip's own fader + its DCA's fader (in dB), muted when the strip, its DCA or an active mute group it belongs to is muted
 double Engine::effectiveDb(int i) const { if (i < 0 || i >= kStrips) return -60; const StripUi& s = strips_[static_cast<std::size_t>(i)]; const double g = s.dca > 0 && !dcas_[s.dca - 1].winVol ? dcas_[s.dca - 1].db : 0; return std::clamp(s.db + g, -60.0, 10.0); }
 bool Engine::effectiveMute(int i) const { if (i < 0 || i >= kStrips) return true; if (i >= licensedChannels_) return true; const StripUi& s = strips_[static_cast<std::size_t>(i)]; if (s.mute) return true; if (s.dca > 0 && dcas_[s.dca - 1].mute && !dcas_[s.dca - 1].winVol) return true; for (int g = 0; g < kGroups; ++g) if ((s.muteGroups >> g) & 1u && muteGroups_[g].active) return true; return false; }
@@ -1178,7 +1186,7 @@ void Engine::copyEqToAll(int i) {
   for (int j = 0; j < kStrips; ++j) { if (j == i) continue; for (int b = 0; b < am::dsp::kEqBands; ++b) { const auto& e = src.eq[static_cast<std::size_t>(b)]; setEq(j, b, static_cast<int>(e.type), e.freq, e.q, e.gainDb); } setCrossover(j, static_cast<int>(src.xoverType), src.hpOrder, src.hpFreq, src.lpOrder, src.lpFreq); }
 }
 QVariantList Engine::lissajous(int points) { std::vector<float> lr; scope_.pairs(points, lr); QVariantList l; l.reserve(static_cast<int>(lr.size())); for (float v : lr) l << v; return l; }
-QVariantMap Engine::monitor() const { QVariantMap m; m["source"] = mon_.source; m["db"] = mon_.db; m["dim"] = mon_.dim; m["mono"] = mon_.mono; m["mute"] = mon_.mute; m["sync"] = mon_.sync;
+QVariantMap Engine::monitor() const { QVariantMap m; m["out"] = monOut_; m["phonesDb"] = phonesDb_; m["talkOn"] = talk_.on; m["talkDb"] = talk_.db; m["talkDest"] = talk_.dest; m["masterSel"] = masterSel_; m["source"] = mon_.source; m["db"] = mon_.db; m["dim"] = mon_.dim; m["mono"] = mon_.mono; m["mute"] = mon_.mute; m["sync"] = mon_.sync;
   m["dual"] = mon_.dual; m["sourceB"] = mon_.sourceB; m["blend"] = mon_.blend; m["listen"] = mon_.listen; m["aiEq"] = monEq_.mode == am::measure::MonitorEqMode::AiAuto; m["eqMode"] = static_cast<int>(monEq_.mode);
   QVariantList f; for (const auto& x : monEq_.filters) { QVariantMap e; e["freq"] = x.freq; e["q"] = x.q; e["gainDb"] = x.gainDb; f << e; } m["eqFilters"] = f; return m; }
 void Engine::pushMonitorEq() {
@@ -1291,7 +1299,7 @@ void Engine::factoryReset() {
   factoryLayout();
   for (int k = 0; k < kBuses; ++k) { if (rt_) rt_->setBusProcessor(k, nullptr); if (buses_[k].fx) { fxGraveyard_.push_back(std::move(buses_[k].fx)); graveTimer_.start(); } buses_[k] = BusUi{}; buses_[k].name = k < 8 ? QStringLiteral("AUX %1").arg(k + 1) : QStringLiteral("FX %1").arg(k - 7); } width_ = 1.0;
   for (DcaUi& d : dcas_) d = DcaUi{}; for (int g = 0; g < kGroups; ++g) dcas_[g].name = QStringLiteral("DCA %1").arg(g + 1); duckUi_ = DuckUi{}; pushDuck(); loudUi_ = LoudUi{}; pushLoudAll(); emit loudChanged(); autoProp_.clear();
-  for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
+  for (MuteGroupUi& m : muteGroups_) m = MuteGroupUi{}; for (BusUi& bu : buses_) bu.muteGroups = 0; for (int g = 0; g < kGroups; ++g) muteGroups_[g].name = QStringLiteral("MUTE %1").arg(g + 1);
   masterDb_ = 0; masterLim_ = true; masterCeil_ = -0.5; masterRel_ = 100; mp_ = am::MasterChain::Params(); masterPreset_.clear(); mon_ = MonitorUi{}; monOff_ = 0; monEq_ = am::measure::MonitorEqMode{}; if (rt_) { rt_->setMonitorDual(false, 1, 0.5, 0); pushMonitorEq(); } for (int o = 0; o < 64; ++o) { ampUi_[o].clear(); if (rt_) rt_->setAmp(o, am::AmpParams{}); } for (int i = 0; i < kStrips; ++i) inRoute_[i] = i; for (int o = 0; o < kOutputs; ++o) outRoute_[o] = am::Runtime::defaultOutputSource(o);
   for (SceneUi& x : scenes_) x = SceneUi{}; currentScene_ = -1; recallSafe_.reset(); userPresets_.clear(); selected_ = 0; clipboard_.reset(); history_.clear(); histPos_ = -1; abOther_ = QJsonObject(); abSlot_ = "A";
   graveTimer_.start(); if (rt_) pushAll(); save(); history_.push_back(consoleJson()); histPos_ = 0;
@@ -2012,7 +2020,7 @@ QVariantList Engine::pages() const {
   static const P k[] = {
     {"START", "home", "HOME", "⌂", true},
     {"MIX", "mixer", "MIXER", "☰", true}, {"MIX", "arrange", "ARRANGE", "≡", true}, {"MIX", "dsp", "TONE (EQ)", "∿", true}, {"MIX", "rtaeq", "RTA EQ", "◭", true}, {"MIX", "master", "MASTERING", "◈", true}, {"MIX", "dyn", "COMPRESSOR", "⩏", true}, {"MIX", "gate", "NOISE GATE", "▣", true},
-    {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "delay", "DELAY", "⧗", true}, {"MIX", "surround", "360 AUDIO", "◍", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true},
+    {"MIX", "fx", "EFFECTS", "✨", true}, {"MIX", "delay", "DELAY", "⧗", true}, {"MIX", "surround", "360 AUDIO", "◍", true}, {"MIX", "bus", "SEND TO", "⇉", true}, {"MIX", "dca", "GROUP FADERS", "☷", true}, {"MIX", "assign", "MUTE GROUPS", "⊘", true},
     {"ROUTE", "io", "CONNECTIONS", "⚡", true}, {"ROUTE", "routing", "ROUTING", "⎇", true}, {"ROUTE", "frame", "I/O FRAME", "▦", true}, {"ROUTE", "amp", "AMP / SYSTEM", "⏚", true},
     {"METER", "meter", "LEVELS", "▓", true}, {"METER", "score", "SOUND SCORE", "★", true}, {"METER", "lufs", "LOUDNESS", "◎", true}, {"METER", "osc", "WAVEFORM", "∽", true}, {"METER", "phase", "PHASE", "☯", true}, {"METER", "acoustics", "ACOUSTICS", "⌇", true},
     {"SOURCE", "media", "STREAM & MEDIA", "▶", true}, {"SOURCE", "streaming", "STREAMING LINKS", "🔗", true}, {"SOURCE", "live", "LIVE SOURCES", "☉", true}, {"SOURCE", "ai", "AI MIX", "◇", true}, {"SOURCE", "assistant", "AI ASSISTANT", "✦", true}, {"SOURCE", "store", "STORE", "⬡", true}, {"SOURCE", "engctl", "ENGINE CONTROL", "⚡", true}, {"SOURCE", "tools", "TOOLS", "⚒", true}, {"SOURCE", "protools", "PRO TOOLS", "◉", true}, {"SOURCE", "plugins", "PLUGINS", "⬡", true}, {"SOURCE", "samples", "SAMPLES", "▦", true},
@@ -2020,7 +2028,9 @@ QVariantList Engine::pages() const {
     {"SYSTEM", "update", "SOFTWARE UPDATE", "⟳", true}, {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
-  QVariantList l; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; l << m; }
+  // built once (the table is fixed): QML reads this property per element (a sequence reference reloads it on every index), and the window's
+  // bindings on the open page (the accent, the title) walked it on every page switch: ~55 maps rebuilt per access, tens of ms per switch
+  static const QVariantList l = [] { QVariantList r; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; r << m; } return r; }();
   return l;
 }
 
@@ -2196,7 +2206,7 @@ QJsonObject Engine::consoleJson() const {
   const int nSave = std::min(kStrips, std::max(shownStrips(), keepStrips_)); QJsonArray arr; for (int i = 0; i < nSave; ++i) arr << stripJson(strips_[static_cast<std::size_t>(i)]);
   QJsonArray buses; for (const BusUi& b : buses_) { QJsonObject o; o["name"] = b.name; o["db"] = b.db; o["returnDb"] = b.returnDb; o["mute"] = b.mute; o["fx"] = b.fxKind; o["fxMix"] = b.fxMix; o["fxBypass"] = b.fxBypass; QJsonObject fv; for (const auto& [id, v] : b.fxValues) fv[id] = v; o["fxValues"] = fv; buses << o; }
   QJsonArray dcas; for (const DcaUi& d : dcas_) { QJsonObject o; o["name"] = d.name; o["db"] = d.db; o["mute"] = d.mute; o["color"] = d.color; o["winVol"] = d.winVol; dcas << o; }
-  QJsonArray mgs; for (const MuteGroupUi& g : muteGroups_) { QJsonObject o; o["name"] = g.name; o["active"] = g.active; mgs << o; }
+  QJsonArray mgs; for (int gi = 0; gi < kGroups; ++gi) { const MuteGroupUi& g = muteGroups_[gi]; QJsonObject o; o["name"] = g.name; o["active"] = g.active; o["color"] = g.color; QJsonArray bm; for (int k = 0; k < kBuses; ++k) if ((buses_[k].muteGroups >> gi) & 1u) bm << k; o["buses"] = bm; mgs << o; }
   QJsonObject root; root["strips"] = arr; root["buses"] = buses; root["dcas"] = dcas; root["muteGroups"] = mgs; root["masterDb"] = masterDb_; root["masterRel"] = masterRel_; { QJsonObject pg; QJsonArray eq; for (const auto& b : mp_.eq) { QJsonObject e; e["type"] = static_cast<int>(b.type); e["freq"] = b.freq; e["q"] = b.q; e["gain"] = b.gainDb; eq.append(e); } pg["eq"] = eq; pg["eqOn"] = mp_.eqOn; pg["mastering"] = QJsonObject::fromVariantMap(mastering()); root["program"] = pg; } root["masterLim"] = masterLim_; root["masterCeil"] = masterCeil_; root["autoLevelOn"] = autoOn_; root["autoLevelTarget"] = autoTarget_; root["autoLevelMax"] = autoMax_; root["width"] = width_; root["ducker"] = duckJson(); root["loudness"] = loudJson(); root["v"] = 2;
   QJsonObject mon; mon["source"] = mon_.source; mon["db"] = mon_.db; mon["dim"] = mon_.dim; mon["mono"] = mon_.mono; mon["mute"] = mon_.mute; mon["sync"] = mon_.sync; root["monitor"] = mon; { QJsonArray amps; for (int o = 0; o < 64; ++o) if (!ampUi_[o].isEmpty()) { QJsonObject a = QJsonObject::fromVariantMap(ampUi_[o]); a["out"] = o; amps << a; } root["amps"] = amps; }
   QJsonArray ir; for (int i = 0; i < nSave; ++i) ir << inRoute_[i]; QJsonArray orr; for (int o = 0; o < kOutputs; ++o) orr << outRoute_[o]; root["inputRoutes"] = ir; root["outputRoutes"] = orr;
@@ -2217,7 +2227,7 @@ void Engine::applyConsoleJson(const QJsonObject& root, bool respectSafe) {
     buses_[k].fxKind = o.value("fx").toString(); buses_[k].fxMix = std::clamp(o.value("fxMix").toDouble(1), 0.0, 1.0); buses_[k].fxBypass = o.value("fxBypass").toBool(); buses_[k].fxValues.clear(); const QJsonObject fv = o.value("fxValues").toObject(); for (auto it = fv.begin(); it != fv.end(); ++it) buses_[k].fxValues[it.key()] = std::clamp(it.value().toDouble(), 0.0, 1.0); makeBusFx(k); }
   const QJsonArray dcas = root.value("dcas").toArray(); for (int g = 0; g < kGroups && g < dcas.size(); ++g) { const QJsonObject o = dcas[g].toObject(); if (o.contains("name")) dcas_[g].name = o.value("name").toString().left(16); dcas_[g].db = std::clamp(o.value("db").toDouble(0), -60.0, 10.0); dcas_[g].mute = o.value("mute").toBool(); dcas_[g].color = std::clamp(o.value("color").toInt(0), 0, 7); dcas_[g].winVol = o.value("winVol").toBool(); }
   duckFromJson(root.value("ducker").toObject()); loudFromJson(root.value("loudness").toObject());
-  const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); }
+  for (BusUi& bu : buses_) bu.muteGroups = 0; const QJsonArray mgs = root.value("muteGroups").toArray(); for (int g = 0; g < kGroups && g < mgs.size(); ++g) { const QJsonObject o = mgs[g].toObject(); if (o.contains("name")) muteGroups_[g].name = o.value("name").toString().left(16); muteGroups_[g].active = o.value("active").toBool(); muteGroups_[g].color = std::clamp(o.value("color").toInt(0), 0, 7); const QJsonArray bm = o.value("buses").toArray(); for (const QJsonValue& v : bm) { const int k = v.toInt(-1); if (k >= 0 && k < kBuses) buses_[k].muteGroups |= 1u << g; } }
   for (int i = 0; i < kStrips; ++i) for (int k = 0; k < kPluginSlots; ++k) { PluginUi& p = strips_[static_cast<std::size_t>(i)].plugins[k]; if (isVstKind(p.kind) && !p.vst) loadVst(i, k); else if (p.vst) { if (!p.state.isEmpty()) p.vst->setState(p.state.toStdString()); p.vst->setBypass(p.bypass); } }
   if (rt_) { for (auto& s : strips_) s.dsp.setSampleRate(s.dsp.sampleRate()); pushAll(); }
   stripsTouched(); emit busesChanged(); emit groupsChanged();

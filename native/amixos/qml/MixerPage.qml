@@ -66,6 +66,33 @@ Item {
     // EDIT LAYOUT: what the mixer shows and how wide a strip is. One JSON text in the settings; anything missing or odd in it falls back to the
     // layout the console ships with, so a damaged setting can never hide the faders (they are not in the list at all).
     property bool editing: false
+    // 1.27 LAYERS (the bank column at the left) and the strip MOVE mode
+    property string bankLayer: "ch1"
+    property bool allCh: false
+    property bool moving: false
+    property int moveFrom: -1
+    function pickLayer(l) {
+        bankLayer = l; moving = false; moveFrom = -1
+        if (l === "ch1" || l === "ch2" || l === "ch3") { allCh = false; sendView = 0; bank = l === "ch1" ? 0 : l === "ch2" ? 1 : 2 }
+        else if (l === "allch" || l === "all") { sendView = 0; if (big) allCh = true; else { allCh = false; bank = 2 } if (l === "all") { monitorPanel = true } }
+        else if (l === "aux") { allCh = false; sendView = 1 }
+        else if (l === "bus") go("bus"); else if (l === "main") go("routing"); else if (l === "dca") go("dca")
+    }
+    // MOVE: the first tap picks a strip, the second swaps it with the strip tapped (name, colour, fader, pan, mute, input)
+    function moveTap(i) {
+        if (moveFrom < 0) { moveFrom = i; return }
+        const a = moveFrom, b = i; moveFrom = -1; if (a === b) return
+        const sa = engine.stripLite(a), sb = engine.stripLite(b), ra = engine.inputRoutes[a], rb = engine.inputRoutes[b]
+        engine.setName(a, sb.name); engine.setName(b, sa.name); engine.setColor(a, sb.color); engine.setColor(b, sa.color)
+        engine.setGain(a, sb.db); engine.setGain(b, sa.db); engine.setPan(a, sb.pan); engine.setPan(b, sa.pan); engine.setMute(a, sb.mute); engine.setMute(b, sa.mute)
+        if (ra !== undefined && rb !== undefined) { engine.setInputRoute(a, rb); engine.setInputRoute(b, ra) }
+        const ic = Object.assign({}, lay.icons || {}), t = ic[a]; ic[a] = ic[b]; ic[b] = t; setLay("icons", ic)
+    }
+    // the strip's kind (an icon on its name plate): set by a click on the icon, else guessed from the name
+    readonly property var kinds: ["mic", "inst", "fx", "phones"]
+    function stripKind(i, name) { const ic = lay.icons || {}; if (ic[i] !== undefined && ic[i] !== null) return kinds[ic[i]]; const n = (name || "").toLowerCase()
+        return /gtr|guitar|bass|key|piano|synth|inst|di\b/.test(n) ? "inst" : /fx|rev|delay|echo|ret/.test(n) ? "fx" : /iem|phone|mon|hp/.test(n) ? "phones" : "mic" }
+    function cycleKind(i, name) { const ic = Object.assign({}, lay.icons || {}); ic[i] = (kinds.indexOf(stripKind(i, name)) + 1) % kinds.length; setLay("icons", ic) }
     readonly property var layDefault: ({ stripW: 124, rec: true, auto: true, fx: true, eq: true, phase: true, easy: true, masterVu: true })
     readonly property var lay: { const d = Object.assign({}, layDefault); let o = {}; try { o = JSON.parse(settings.mixerLayout || "{}") || {} } catch (e) { o = {} }
         for (const k in d) { if (k === "stripW") { const w = Number(o.stripW); if (isFinite(w) && w >= 96 && w <= 180) d.stripW = Math.round(w) } else if (typeof o[k] === "boolean") d[k] = o[k] } return d }
@@ -537,6 +564,10 @@ Item {
         }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
+            BankColumn { Layout.fillHeight: true; current: page.bankLayer; editing: page.editing; moving: page.moving
+                onPick: function (l) { page.pickLayer(l) }
+                onToggleEdit: page.editing = !page.editing
+                onToggleMove: { page.moving = !page.moving; page.moveFrom = -1 } }
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; radius: Theme.radius; color: Theme.card; border.color: Theme.line; clip: true
                 Flickable {
@@ -553,7 +584,7 @@ Item {
                                 id: stripItem
                                 clip: true   // nothing of a strip draws over its neighbour (popups and menus open in the overlay, not here)
                                 readonly property int stripIdx: index
-                                readonly property bool inBank: (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank   // not the effective visibility: hiding the page must not collapse every strip to 0 wide and re-lay the row on re-open
+                                readonly property bool inBank: page.allCh || (!page.big && page.bank === 2) || Math.floor(index / 16) === page.bank   // not the effective visibility: hiding the page must not collapse every strip to 0 wide and re-lay the row on re-open
                                 visible: inBank
                                 width: inBank ? (page.sendView ? 124 : page.lay.stripW) : 0
                                 height: strips.height
@@ -569,13 +600,17 @@ Item {
                                 Component.onCompleted: if (visible) built = true
                                 Loader { anchors.fill: parent; active: stripItem.built; sourceComponent: Component { Item {
                                 Rectangle { anchors.fill: parent; radius: 6; color: selected ? Theme.ov(0.06) : (index % 2 ? Theme.ov(0.025) : (Theme.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.05))); border.color: selected ? Theme.ink : Theme.lineSoft; border.width: selected ? 1.5 : 1
-                                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onPressed: function (m) { engine.selectedStrip = index; if (m.button === Qt.RightButton) { page.openStripMenu(index); m.accepted = true } else m.accepted = false } } }
+                                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; onPressed: function (m) { engine.selectedStrip = index; if (page.moving && m.button === Qt.LeftButton) { page.moveTap(index); m.accepted = true; return } if (m.button === Qt.RightButton) { page.openStripMenu(index); m.accepted = true } else m.accepted = false } } }
                                 // THE STRIP'S OWN COLOUR: a soft wash from the top (stronger on the selected strip) and a lit cap
                                 Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 6
                                     gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, stripItem.selected ? 0.42 : 0.26) } GradientStop { position: 0.30; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, stripItem.selected ? 0.14 : 0.07) } GradientStop { position: 0.75; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, 0.04) } GradientStop { position: 1; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, stripItem.selected ? 0.14 : 0.08) } } }
                                 Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 1; height: 5; radius: 3; color: sc
                                     Rectangle { anchors.top: parent.bottom; anchors.left: parent.left; anchors.right: parent.right; height: 10; gradient: Gradient { GradientStop { position: 0; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, 0.45) } GradientStop { position: 1; color: "transparent" } } } }
                                 Rectangle { anchors.fill: parent; radius: 6; color: "transparent"; border.width: 1; border.color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, 0.9); visible: stripItem.selected }
+                                // MOVE: the whole strip takes the tap (first: the strip to move, lit; second: where it goes)
+                                Rectangle { anchors.fill: parent; z: 9; radius: 6; visible: page.moving; color: page.moveFrom === index ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.30) : Qt.rgba(0, 0, 0, 0.18); border.color: Theme.cyan; border.width: page.moveFrom === index ? 2 : 1
+                                    Text { anchors.centerIn: parent; text: page.moveFrom < 0 ? i18n.t("PICK", i18n.lang) : page.moveFrom === index ? i18n.t("MOVING", i18n.lang) : i18n.t("HERE", i18n.lang); color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: page.moveTap(index) } }
                                 // beyond the licence: the strip is muted in the engine and shown locked; a click opens LICENSE
                                 Rectangle { anchors.fill: parent; z: 10; radius: 6; color: Qt.rgba(0, 0, 0, 0.72); visible: index >= engine.licensedChannels
                                     ColumnLayout { anchors.centerIn: parent; spacing: 6
@@ -587,8 +622,11 @@ Item {
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 4; anchors.topMargin: 6; spacing: 3
                                     // THE NAME PLATE: the channel number and its name, large, on the channel's own colour
-                                    Rectangle { Layout.fillWidth: true; implicitHeight: 22; radius: 4; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, st && st.effectiveMute ? 0.30 : 0.92)
-                                        Text { id: chNum; anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: index + 1; color: "#0b0f14"; opacity: 0.7; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
+                                    // 1.27: a coloured tab: the strip's kind (mic / instrument / FX / headphones; click to change), its number, its name
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 32; radius: Theme.radiusS; color: Qt.rgba(stripItem.sc.r, stripItem.sc.g, stripItem.sc.b, st && st.effectiveMute ? 0.30 : 0.92)
+                                        Icon { id: kindIc; objectName: "stripKind" + index; anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; width: 16; height: 16; name: page.stripKind(index, st ? st.name : ""); color: "#0b0f14"
+                                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: page.cycleKind(index, st ? st.name : "") } }
+                                        Text { id: chNum; anchors.left: kindIc.right; anchors.leftMargin: 3; anchors.verticalCenter: parent.verticalCenter; text: index + 1; color: "#0b0f14"; opacity: 0.7; font.family: Theme.mono; font.pixelSize: 8; font.bold: true }
                                         TextInput { anchors.left: chNum.right; anchors.leftMargin: 3; anchors.right: parent.right; anchors.rightMargin: 3; anchors.verticalCenter: parent.verticalCenter; clip: true; text: st ? st.name : ""; color: "#0b0f14"; font.family: Theme.sans; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; selectByMouse: true; onEditingFinished: engine.setName(index, text); onActiveFocusChanged: if (activeFocus) engine.selectedStrip = index } }
                                     // INPUT: which device input feeds this strip (click: pick another, or none)
                                     Rectangle { visible: page.showInput; Layout.fillWidth: true; implicitHeight: 14; radius: 3; color: Qt.rgba(0.2, 0.9, 0.5, 0.12); border.color: inPop.visible ? Theme.emerald : "transparent"
@@ -729,7 +767,9 @@ Item {
                                                     Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 1; height: Math.min(1, Math.max(0, -(mt ? mt.compGrDb : 0) / 24)) * (parent.height - 2); radius: 1; color: Theme.amber } } }
                                             Text { Layout.alignment: Qt.AlignHCenter; text: i18n.t("IN  OUT GR", i18n.lang); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 6 } }
                                         Fader { objectName: "stripFader"; showLevels: false; numbers: true; tint: stripItem.sc; Layout.fillHeight: true; readonly property bool riding: !!(st && st.loudRide); value: st ? st.db + (riding && mt ? mt.rideDb : 0) : 0; ghost: riding && mt && Math.abs(mt.rideDb) > 0.05 ? st.db : NaN; badge: !st || !(st.loudRide || st.loudGate) || !mt ? "" : mt.rideGateDb < -0.01 ? "OFF" : mt.rideSusp ? "HOLD" : st.loudRide ? "AUTO" : ""; remoteHot: remote.touched(index, remote.pulse); inDb: mt ? mt.inDb : -120; outDb: mt ? mt.peakDb : -120; clip: mt ? mt.clip : false; onMoved: function (db) { engine.setGain(index, db) } } }
-                                    Text { Layout.alignment: Qt.AlignHCenter; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
+                                    // 1.27: the fader's value in a readout box, wide enough for "-60.0 (-55.0)"
+                                    Rectangle { objectName: "stripDb" + index; Layout.fillWidth: true; implicitHeight: 24; radius: Theme.radiusS; color: Theme.deep; border.color: Theme.lineSoft
+                                        Text { anchors.centerIn: parent; text: Theme.dbText(st ? st.db : 0) + (st && st.dca > 0 && st.effectiveDb !== st.db ? " (" + Theme.dbText(st.effectiveDb) + ")" : ""); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 12; font.bold: true } }
                                     // groups and sends readout
                                     RowLayout { visible: page.showGroups && !page.simple; Layout.alignment: Qt.AlignHCenter; spacing: 2
                                         Rectangle { visible: st && st.dca > 0; implicitWidth: 22; implicitHeight: 11; radius: 2; color: Qt.rgba(0.984, 0.749, 0.141, 0.2); Text { anchors.centerIn: parent; text: "D" + (st ? st.dca : 0); color: Theme.amber; font.family: Theme.mono; font.pixelSize: 6; font.bold: true } }
@@ -951,6 +991,8 @@ Item {
                 ModKey { Layout.fillWidth: true; implicitHeight: 28; label: page.mon.mute ? "MONITOR MUTED" : "MUTE"; tint: Theme.danger; litText: "#fff"; lit: page.mon.mute; onClicked: engine.setMonitor(page.mon.source, page.mon.db, page.mon.dim, page.mon.mono, !page.mon.mute) }
                 Text { Layout.fillWidth: true; text: i18n.t("After the master meters: the show is not affected", i18n.lang); color: Theme.dim; font.family: Theme.mono; font.pixelSize: 6; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter }
             }
+            // 1.27 MONITOR DESK: the right-hand column (about 18 % of the page): listening keys, PHONES, TALKBACK, CLR SOLO, the master strip
+            MonitorDesk { visible: page.monitorPanel; Layout.fillHeight: true; Layout.preferredWidth: Math.max(200, Math.round(page.width * 0.18 / 8) * 8); tick: page.tick }
         }
     }
 }

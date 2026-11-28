@@ -6,7 +6,7 @@
 //        open {backend,in,out,rate,frames,inChannels,outChannels} | stop | gain {strip,db} | pan {strip,pan} | mute {strip,on} | solo {strip,on}
 //        name {strip,name} | master {db} | limiter {on,ceilingDb} | send {strip,bus,db,pre} | busLevel {bus,db} | busMute {bus,on} | busReturn {bus,db}
 //        eq {strip,band,type,freq,q,gainDb} | delay {strip,ms} | polarity {strip,on} | compressor {strip,on,thresholdDb,ratio,kneeDb,attackMs,releaseMs,makeupDb}
-//        gate {strip,on,thresholdDb,rangeDb,attackMs,holdMs,releaseMs} | monitor {source,db,dim,mono,mute} | inRoute {strip,input} | outRoute {out,source} | trim {strip,db} | clearClips
+//        gate {strip,on,thresholdDb,rangeDb,attackMs,holdMs,releaseMs} | monitor {source,db,dim,mono,mute,out,phonesDb} | muteGroup {group,mute,name,color,strips,buses} | talkback {on,db,dest} | inRoute {strip,input} | outRoute {out,source} | trim {strip,db} | clearClips
 //   GET  /api/tokens              the named tokens, without their secrets (master token)
 //   POST /api/tokens              {"name":..,"role":"control"|"view","days":N} makes one and returns it once (master token)
 //   POST /api/tokens/revoke       {"id":..} (master token)
@@ -148,7 +148,7 @@ class Daemon {
   // 100 Hz .. 8 kHz, HIGH shelf 10 kHz, ±15 dB each, the engine's bands 10..12), kept here so every remote shows them
   // groupMute / groupDb: what the console's DCA group and MUTE GROUPS do to the strip on top of its own fader and MUTE (the console
   // sends them: op "group", and the seed): a strip the console holds silent through its DCA stays silent while the service plays
-  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; bool groupMute = false; double groupDb = 0;
+  struct Strip { std::string name; double db = 0, pan = 0; bool mute = false, solo = false; double trim = 0, low = 0, mid = 0, midHz = 1000, high = 0; bool toneOn = true; bool groupMute = false; double groupDb = 0; bool mgMute = false;
     struct Band { int type = 0; double freq = 1000, q = 0.707, gain = 0; };   // the channel's parametric EQ, bands 0..7 (type: dsp::FilterType)
     Band eq[8]; };
   void pushTone(Runtime& rt, int i) const;
@@ -156,6 +156,12 @@ class Daemon {
   struct Bus { double db = 0, returnDb = -60; bool mute = false; };
   // DCA GROUP CHANNELS as the console has them (the console applies them to its own mix; the service keeps them so every remote shows the
   // same group strips, and a remote's move of one reaches the console): id 1..8, members = strip numbers
+  // MUTE GROUPS (1.27): eight groups held here for every remote; members are strips and buses, a group's MUTE mutes all of them
+  struct MuteGroup { std::string name; bool mute = false; int color = 0; std::vector<int> strips, buses; };
+  MuteGroup mgs_[8];
+  struct Talkback { bool on = false; double db = -10; int dest = 0; } talk_;   // TALKBACK: level and destination (0 MAIN, 1..16 bus)
+  int monOut_ = 0; double phonesDb_ = 0;   // MONITOR output A / B / A+B (0..2), PHONES level
+  void applyMuteGroupsLocked();
   struct Dca { std::string name; double db = 0; bool mute = false; int color = 0; std::vector<int> members; bool winVol = false; };   // winVol: the console's WINDOWS VOLUME switch (the group drives the Windows slider)
   int dcaLimit() const;   // DCA GROUPS BY EDITION: the plan the console passed (BASIC 1, PRO 4, STUDIO and up 8)
   struct Monitor { int source = 0; double db = 0; bool dim = false, mono = false, mute = false; bool dual = false; int sourceB = 1; double blend = 0.5; int listen = 0; } mon_;   // dual*: DUAL LISTEN (A + B in the control room)

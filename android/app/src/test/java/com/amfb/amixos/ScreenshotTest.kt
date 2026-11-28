@@ -236,6 +236,20 @@ class ScreenshotTest {
         v.measure(View.MeasureSpec.makeMeasureSpec(2673, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1233, View.MeasureSpec.EXACTLY)); v.layout(0, 0, 2673, 1233)
         val b = Bitmap.createBitmap(2673, 1233, Bitmap.Config.ARGB_8888); v.draw(Canvas(b)); FileOutputStream(File(out, "phone-mixer-landscape.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+    @Test fun studioPortrait() {   // 1.27 STUDIO: web panel above, MIC 1 / MIC 2 / BROWSER / PLAYER / MASTER below
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.local(ctx).edit().putString("section", "studio").putFloat("db0", -6f).putFloat("db1", -12f).putFloat("send_0_reverb", 0.4f).putBoolean("ins_mic1_0", true).putBoolean("ins_master_1", true).commit()
+        val v = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get().window.decorView.rootView
+        v.measure(View.MeasureSpec.makeMeasureSpec(1233, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2673, View.MeasureSpec.EXACTLY)); v.layout(0, 0, 1233, 2673)
+        val b = Bitmap.createBitmap(1233, 2673, Bitmap.Config.ARGB_8888); v.draw(Canvas(b)); FileOutputStream(File(out, "studio-portrait.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+    @Test @Config(qualifiers = "w891dp-h411dp-land-xxhdpi") fun studioLandscape() {
+        val ctx = org.robolectric.RuntimeEnvironment.getApplication()
+        Prefs.local(ctx).edit().putString("section", "studio").putFloat("studioShare", 0.3f).putFloat("db0", -6f).commit()
+        val v = Robolectric.buildActivity(LocalMixerActivity::class.java).setup().get().window.decorView.rootView
+        v.measure(View.MeasureSpec.makeMeasureSpec(2673, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1233, View.MeasureSpec.EXACTLY)); v.layout(0, 0, 2673, 1233)
+        val b = Bitmap.createBitmap(2673, 1233, Bitmap.Config.ARGB_8888); v.draw(Canvas(b)); FileOutputStream(File(out, "studio-landscape.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
     @Test fun mixerAppWithPlayersStrip() {   // the AmF X1 Mixer app: the PLAYERS channel beside the inputs
         Nav.standaloneForTests = true
         try { val ctx = org.robolectric.RuntimeEnvironment.getApplication()

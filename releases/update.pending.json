@@ -1,10 +1,27 @@
 {
   "product": "audio-mixer",
-  "version": "1.26.1.0",
+  "version": "1.27.0.0",
   "channel": "stable",
   "released": "2026-11-28",
   "notes": [],
   "features": [
+    {
+      "version": "1.27.0.0",
+      "date": "2026-11-28",
+      "title": "1.27.0.0: mute groups page, fader layers, monitor desk with talkback",
+      "items": [
+        "NEW · ASSIGN · MUTE GROUPS: eight mute groups on one page, each with a name, a colour, a big MUTE key and a SOURCES count; channels and now the AUX and FX buses too, in collapsible sections",
+        "NEW · LAYERS on the mixer: a bank column at the left (CH 1-16, 17-32, 33-40, ALL CH, AUX, BUSES, MAIN / MATRIX, DCA, ALL) with the strip modes EDIT and MOVE (swap two strips)",
+        "NEW · STRIPS: a coloured name tab with the strip's kind (mic, instrument, FX, headphones), its number and a dB readout box under the fader",
+        "NEW · MONITOR DESK on the right of the mixer: DIM, MONO, MUTE, output A / B / A+B, PHONES, TALKBACK with level and destination, CLR SOLO, and a master strip for MAIN LR, M1-M4 or B1-B16 with COMP / INS lamps",
+        "NEW · TOP BAR: the page title, LOCK, the sample rate and clock, scene LOAD / SAVE and the network state; SECTIONS on the rail (HOME, MIX, EFFECTS, METERS, ROUTING, SETUP, MONITOR, ASSIGN)",
+        "NEW · REMOTES: the phone remote has the bank keys, the console's mute groups and the monitor section with talkback; the browser remote has the console mute groups, output A / B, phones and talkback",
+        "NEW · PHONE MIXER STUDIO: a web panel (folded upright, drag to open) above MIC 1, MIC 2, BROWSER, PLAYER and MASTER strips with ECHO / REVERB / HARMONIZER / CHORUS sends, master returns, three inserts each, and a status line (rate, inputs, route, buffer latency, underruns, CPU)",
+        "NEW · FADER SOURCES on the phone mixer: each strip picks its source (phone, USB or headset input, the player, or other apps' audio through Android's own playback capture, live only, never recorded); fader-start from -inf plays or un-mutes, -inf pauses or mutes; an INFO line over each fader",
+        "NEW · BROWSER REMOTE redesigned: one accent, left section tabs on wide screens, a light / dark key, a connection dot, larger keys; every function kept",
+        "IMPROVED · Android: a slimmer bottom bar, so the faders get more of the screen"
+      ]
+    },
     {
       "version": "1.26.1.0",
       "date": "2026-11-28",
@@ -283,10 +300,10 @@
   ],
   "files": {
     "win-x64-exe": {
-      "name": "AmF-X1-1.26.1.0-setup.exe",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.26.1.0-setup.exe",
-      "size": 21004333,
-      "sha256": "8b22220d7ff9e55afd08d9172cf929d11425830d4ad117c5a7250a28343c5d06"
+      "name": "AmF-X1-1.27.0.0-setup.exe",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.27.0.0-setup.exe",
+      "size": 21043893,
+      "sha256": "4e961445fe920f95cb4d632030ab7edded99ef6d4c8e782c27913b731f6294df"
     }
   },
   "plugins": [],

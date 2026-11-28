@@ -21,6 +21,26 @@ Rectangle {
             id: col
             width: parent.width
             topPadding: 8
+            // SECTIONS (1.27): the eight places a mix engineer goes most, one key each (icon + word, 52 px high), above the full page list.
+            // Each opens an existing page (MONITOR opens the MIXER, where the monitor column sits); the key of the section in use is lit.
+            readonly property var sections: [["HOME", "home", "home"], ["MIX", "mixer", "mixer"], ["EFFECTS", "fx", "fx"], ["METERS", "meter", "meter"],
+                ["ROUTING", "routing", "routing"], ["SETUP", "sys", "sys"], ["MONITOR", "mixer", "monitor"], ["ASSIGN", "assign", "assign"]]
+            Repeater {
+                model: col.sections
+                delegate: Rectangle {
+                    objectName: "section_" + modelData[0]
+                    readonly property bool lit: rail.current === modelData[1] && (modelData[0] !== "MONITOR")
+                    width: col.width - 10; x: 5; height: 52; radius: Theme.radiusS
+                    color: lit ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22) : (sh.hovered ? Theme.ov(0.06) : "transparent")
+                    border.color: lit ? Theme.accent : "transparent"
+                    Column { anchors.centerIn: parent; spacing: 4
+                        Icon { anchors.horizontalCenter: parent.horizontalCenter; width: 20; height: 20; name: modelData[2]; color: parent.parent.lit ? Theme.accent : Theme.muted }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: i18n.t(modelData[0], i18n.lang); color: parent.parent.lit ? Theme.ink : Theme.muted; font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1 } }
+                    HoverHandler { id: sh; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: rail.picked(modelData[1]) }
+                }
+            }
+            Rectangle { width: col.width - 20; x: 10; height: 1; color: Theme.lineSoft }
             Repeater {
                 model: rail.pages
                 delegate: Column {
