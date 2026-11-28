@@ -616,7 +616,7 @@ json::Value Daemon::state() const {
     for (int g = 0; g < 8; ++g) { const Dca& d = dcas_[g]; json::Value v = json::Value::object(); v.set("id", g + 1); v.set("name", d.name.empty() ? "DCA " + std::to_string(g + 1) : d.name); v.set("db", d.db); v.set("mute", d.mute); v.set("color", d.color); v.set("winVol", d.winVol); v.set("locked", g + 1 > dcaLimit());
       json::Value m = json::Value::array(); for (int x : d.members) m.push(x); v.set("members", m); dcas.push(v); }
     o.set("dcas", dcas); o.set("dcaLimit", dcaLimit()); }
-  json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("mute", masterMute_); m.set("dim", masterDim_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); o.set("master", m);
+  json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("mute", masterMute_); m.set("dim", masterDim_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); m.set("limReleaseMs", limRelease_); o.set("master", m);
   o.set("settings", settingsJson());
   o.set("apps", appsJson()); o.set("appsAvailable", appLayer_ && appLayer_->available());
   json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); o.set("monitor", mo);
@@ -651,6 +651,7 @@ json::Value Daemon::meters() const {
   o.set("strips", strips);
   json::Value master = json::Value::object();
   master.set("l", num(s.master[0].pk)); master.set("r", num(s.master[1].pk)); master.set("rms", num(0.5 * (s.master[0].rms + s.master[1].rms))); master.set("clip", static_cast<double>(s.master[0].clipN + s.master[1].clipN));
+  master.set("limGr", num(-rt_->limiterReductionDb())); master.set("compGr", num(-master_.reductionDb())); master.set("deess", num(-master_.deessReductionDb()));   // FX+ master GR meters (<= 0 dB)
   o.set("master", master);
   json::Value buses = json::Value::array(); for (int k = 0; k < kMaxBuses; ++k) buses.push(num(s.buses[k].pk)); o.set("buses", buses);
   json::Value loud = json::Value::object(); loud.set("m", num(s.momentary)); loud.set("s", num(s.shortTerm)); loud.set("i", num(s.integrated)); loud.set("lra", num(s.lra)); loud.set("tp", num(s.truePeak)); o.set("loudness", loud);
@@ -763,7 +764,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     pushSettings(*rt); loadRacks(*rt); rt->setTap(guard_.get());   // the FEEDBACK GUARD sees the strips first, then hands the block to the RTA
     ++rtGen_;   // the guard starts afresh on this device
     mp_.fs = rt->sampleRate(); master_.set(mp_); rt->setMasterProcessor(&master_);   // the console's RTA EQ and mastering, as handed over
-    rt->setLimiter(limiter_, ceiling_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen);
+    rt->setLimiter(limiter_, ceiling_, limRelease_); rt->setMonitor(mon_.source, mon_.db, mon_.dim, mon_.mono, mon_.mute); rt->setMonitorDual(mon_.dual, mon_.sourceB, mon_.blend, mon_.listen);
     pads_.prepare(rt->sampleRate()); rt->setExtraSource(&pads_);   // the SAMPLE PADS, at this device's rate
     initRoutes(); for (int i = 0; i < opt_.strips; ++i) rt->setInputRoute(i, inRoute_[i]); for (int o = 0; o < Runtime::kMaxOutputs; ++o) rt->setOutputRoute(o, outRoute_[o]);   // the routing as kept
     rt->setNetInput(&mic_); if (micStrip_ >= 0 && micStrip_ < opt_.strips) rt->setInputRoute(micStrip_, Runtime::kNetInBase);   // the PHONE MIC keeps its strip on a new device
@@ -824,6 +825,8 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (cmd.has("on")) mp_.on = cmd["on"].asBool(mp_.on);
     num("low", mp_.lowDb, -12, 12); num("air", mp_.airDb, -12, 12); num("thr", mp_.thrDb, -40, 0); num("ratio", mp_.ratio, 1, 20); num("attack", mp_.attackMs, 0.1, 200);
     num("release", mp_.releaseMs, 10, 2000); num("makeup", mp_.makeupDb, 0, 18); num("drive", mp_.drive, 0, 1); num("gain", mp_.gainDb, -12, 12);
+    if (cmd.has("compOn")) mp_.compOn = cmd["compOn"].asBool(mp_.compOn); if (cmd.has("deessOn")) mp_.deessOn = cmd["deessOn"].asBool(mp_.deessOn);   // FX+ on the master
+    num("deessThr", mp_.deessThrDb, -60, 0); num("deessMax", mp_.deessMaxDb, 0, 24);
     if (cmd.has("preset")) { masterPreset_ = cmd["preset"].asString(); if (masterPreset_.size() > 40) masterPreset_.resize(40); }   // a preset by NAME: the console applies its values and sends them here
     master_.set(mp_); ++masterV_; ++version_; return ok; }
   if (op == "rack") {   // the console's rack of one strip, as it is now (a plug-in added, removed, a knob turned in its window, bypass):
@@ -899,7 +902,9 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
       winVol_ = lv; if (rt_) applyMaster(*rt_); }
     else { err = "unknown setting " + k; return {}; }
     return ok; }
-  if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0); if (rt_) rt_->setLimiter(limiter_, ceiling_); return ok; }
+  if (op == "limiter") { limiter_ = cmd["on"].asBool(true); ceiling_ = clampDb(cmd["ceilingDb"].asNumber(-0.5), -20, 0);
+    if (cmd.has("releaseMs")) limRelease_ = std::max(5.0, std::min(2000.0, cmd["releaseMs"].asNumber(100)));   // FX+ master LIMITER release
+    if (rt_) rt_->setLimiter(limiter_, ceiling_, limRelease_); ++version_; return ok; }
   if (op == "send") { if (!strip(s) || !bus(b)) return {}; if (!need()) return {}; rt_->setSend(s, b, clampDb(cmd["db"].asNumber(-120)), cmd["pre"].asBool(false)); return ok; }
   if (op == "dca") {   // a DCA group strip: {group 1..8, db, mute, name, color, members}; every field optional but the group
     const int g = cmd["group"].asInt(0); if (g < 1 || g > 8) { err = "group: 1..8"; return {}; }
@@ -929,16 +934,26 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
   }
   if (op == "delay") { if (!strip(s) || !need()) return {}; rt_->setDelayMs(s, std::max(0.0, std::min(500.0, cmd["ms"].asNumber(0)))); return ok; }
   if (op == "polarity") { if (!strip(s) || !need()) return {}; rt_->setPolarity(s, cmd["on"].asBool()); return ok; }
+  // FX+ (every strip's dynamics, from the phones): each number is held inside its range here, whatever a remote sends
+  auto lim = [&](const char* k, double def, double lo, double hi) { const double v = cmd[k].asNumber(def); return std::isfinite(v) ? std::max(lo, std::min(hi, v)) : def; };
   if (op == "compressor") {
     if (!strip(s) || !need()) return {};
-    rt_->setCompressor(s, cmd["on"].asBool(), clampDb(cmd["thresholdDb"].asNumber(-18), -60, 0), std::max(1.0, std::min(20.0, cmd["ratio"].asNumber(3))), std::max(0.0, std::min(24.0, cmd["kneeDb"].asNumber(6))),
-                       std::max(0.1, cmd["attackMs"].asNumber(10)), std::max(5.0, cmd["releaseMs"].asNumber(100)), clampDb(cmd["makeupDb"].asNumber(0), 0, 24));
+    rt_->setCompressor(s, cmd["on"].asBool(), lim("thresholdDb", -18, -60, 0), lim("ratio", 3, 1, 20), lim("kneeDb", 6, 0, 24),
+                       lim("attackMs", 10, 0.1, 500), lim("releaseMs", 100, 5, 5000), lim("makeupDb", 0, 0, 24));
     return ok;
   }
   if (op == "gate") {
     if (!strip(s) || !need()) return {};
-    rt_->setGate(s, cmd["on"].asBool(), clampDb(cmd["thresholdDb"].asNumber(-40), -80, 0), clampDb(cmd["rangeDb"].asNumber(-80), -120, 0), std::max(0.1, cmd["attackMs"].asNumber(1)), std::max(0.0, cmd["holdMs"].asNumber(50)), std::max(5.0, cmd["releaseMs"].asNumber(100)));
+    rt_->setGate(s, cmd["on"].asBool(), lim("thresholdDb", -40, -80, 0), lim("rangeDb", -80, -90, 0), lim("attackMs", 1, 0.1, 500), lim("holdMs", 50, 0, 2000), lim("releaseMs", 100, 5, 5000));
     return ok;
+  }
+  if (op == "channelLimiter") {   // FX+ LIMITER on one strip: {strip, on, ceilingDb -20..0, releaseMs 5..2000}
+    if (!strip(s) || !need()) return {};
+    rt_->setChannelLimiter(s, cmd["on"].asBool(), lim("ceilingDb", -1, -20, 0), lim("releaseMs", 80, 5, 2000)); return ok;
+  }
+  if (op == "deesser") {   // FX+ DE-ESSER on one strip: {strip, on, thresholdDb -60..0, maxDb 0..24, freqHz 1000..16000}
+    if (!strip(s) || !need()) return {};
+    rt_->setDeEsser(s, cmd["on"].asBool(), lim("thresholdDb", -24, -60, 0), lim("maxDb", 8, 0, 24), lim("freqHz", 5000, 1000, 16000)); return ok;
   }
   if (op == "monitor") {   // control room: source 0 master, 1..8 bus; level, dim, mono, mute (after the master meters)
     mon_.source = std::max(0, std::min(kMaxBuses, cmd["source"].asInt(mon_.source))); if (cmd.has("db")) mon_.db = clampDb(cmd["db"].asNumber(0), -60, 10);

@@ -78,6 +78,9 @@ object PluginFace {
         val params = (json["params"] as? List<Map<String, Any?>>).orEmpty()
         val values = LinkedHashMap<String, Double>().apply { if (json.containsKey("mix")) put("mix", (json["mix"] as? Number)?.toDouble() ?: 1.0); params.forEach { put(it["id"].toString(), (it["value"] as? Number)?.toDouble() ?: 0.0) } }
         pill(c.getString(R.string.fx_presets)) { presetMenu(c, kind, params, values, host) }
+        // A / B on every face: the knobs as they are now are kept as one side, the other side's knobs come back (first time: the same)
+        val abKey = "abside:" + kind + ":" + (json["uiKey"]?.toString() ?: slot.toString())
+        pill(c.getString(if (store(c).getBoolean("$abKey:b", false)) R.string.fx_ab_b else R.string.fx_ab_a)) { abSwap(c, abKey, values, host) }
         pill("✕") { host.remove(); host.changed() }
         face.addView(bar)
         if (kind == "wshape") WShape.section(c, params, values["mix"] ?: 1.0, st, host, "ab:" + (json["uiKey"]?.toString() ?: slot.toString()))?.let { face.addView(it) }   // the curve, AUTO W, A / B, ear training, STEREO / MID / SIDE, presets
@@ -96,6 +99,15 @@ object PluginFace {
         }
         face.addView(grid)
         return face
+    }
+
+    /** the A / B store of one face: "id=v;id=v" for the side not heard; values held in 0..1 */
+    fun abEncode(v: Map<String, Double>): String = v.entries.joinToString(";") { it.key + "=" + (if (it.value.isFinite()) it.value.coerceIn(0.0, 1.0) else 0.0) }
+    fun abDecode(s: String?): Map<String, Double> = s.orEmpty().split(';').filter { '=' in it }.mapNotNull { e -> e.substringAfter('=').toDoubleOrNull()?.takeIf { it.isFinite() }?.let { e.substringBefore('=') to it.coerceIn(0.0, 1.0) } }.toMap()
+    fun abSwap(c: Context, key: String, now: Map<String, Double>, host: Host) {
+        val st = store(c); val other = abDecode(st.getString("$key:other", null)).ifEmpty { now }
+        st.edit().putString("$key:other", abEncode(now)).putBoolean("$key:b", !st.getBoolean("$key:b", false)).apply()
+        other.forEach { (id, v) -> if (id in now) host.set(id, v) }; host.changed()
     }
 
     private fun presetMenu(c: Context, kind: String, params: List<Map<String, Any?>>, values: Map<String, Double>, host: Host) {

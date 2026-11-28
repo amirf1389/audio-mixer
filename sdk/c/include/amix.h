@@ -65,6 +65,16 @@ AMIX_API void        amix_mixer_set_duck_role(amix_mixer*, int strip, int role);
 AMIX_API double      amix_mixer_duck_gain_db(const amix_mixer*);   /* the targets' gain now, <= 0 dB */
 AMIX_API void        amix_mixer_set_master(amix_mixer*, double db);
 AMIX_API void        amix_mixer_set_limiter(amix_mixer*, int on, double ceiling_db, double release_ms);
+/* FX+ DYNAMICS (per strip, strip -1 = the master): v holds AMIX_DYN_VALUES numbers, each held in its range:
+   [0] comp on, [1] threshold dB -60..0, [2] ratio 1..20, [3] knee dB 0..24, [4] attack ms 0.1..500, [5] release ms 5..5000, [6] makeup dB 0..24,
+   [7] limiter on, [8] ceiling dB -20..0, [9] limiter release ms 5..2000, [10] gate on, [11] gate threshold dB -80..0, [12] range dB -90..0,
+   [13] gate attack ms 0.1..500, [14] hold ms 0..2000, [15] gate release ms 5..5000, [16] de-esser on, [17] de-ess threshold dB -60..0,
+   [18] de-ess max dB 0..24, [19] de-ess frequency Hz 1000..16000. The master takes the compressor (stereo linked, no knee), the limiter
+   (the master limiter) and the de-esser; its gate is ignored. Returns 0, -1 for a bad strip or too few values. */
+#define AMIX_DYN_VALUES 20
+AMIX_API int         amix_mixer_set_dynamics(amix_mixer*, int strip, const double* v, int n);
+/* out[0] compressor, out[1] limiter, out[2] gate, out[3] de-esser reduction now, each <= 0 dB. Returns 0 or -1. */
+AMIX_API int         amix_mixer_dynamics_gr(const amix_mixer*, int strip, double* out4);
 AMIX_API void        amix_mixer_set_send(amix_mixer*, int strip, int bus, double db, int pre);
 AMIX_API void        amix_mixer_set_bus_level(amix_mixer*, int bus, double db);
 AMIX_API void        amix_mixer_set_bus_return(amix_mixer*, int bus, double db);

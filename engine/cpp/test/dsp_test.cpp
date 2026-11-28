@@ -1,4 +1,6 @@
 // A mix OS channel DSP: numbers a filter designer would check.  dsp_test   (exit 0 = all good)
+#include <algorithm>
+#include <utility>
 #include "audiomixer/dsp.hpp"
 
 #include <cmath>
@@ -67,6 +69,13 @@ int main() {
   // 7. a band above Nyquist or at 0 Hz is ignored, never NaN
   { Channel ch(fs); ch.setEqBand(0, {FilterType::Peaking, 30000, 1, 6}); ch.setEqBand(1, {FilterType::LowPass, 0, 1, 0}); float v[4] = {1, 1, 1, 1}; ch.process(v, 4); CHECK(std::isfinite(v[3]) && near(v[3], 1, 1e-6), "impossible bands = identity"); }
   // 8. compressor: 4:1 above a -20 dB threshold -> a -6 dB sine comes out near -16.5 dB; below the threshold untouched; knee is continuous; GR reported
+  { // FX+ DE-ESSER: a loud 8 kHz tone is pulled down, a 200 Hz tone of the same level passes
+    auto run = [&](double f) { Channel ch(fs); ch.setDeEsser(true, -30, 12, 5000); std::vector<float> x(9600); for (std::size_t i = 0; i < x.size(); ++i) x[i] = static_cast<float>(0.5 * std::sin(2 * 3.14159265358979 * f * i / fs));
+      ch.process(x.data(), x.size()); double pk = 0; for (std::size_t i = 4800; i < x.size(); ++i) pk = std::max(pk, std::fabs(static_cast<double>(x[i]))); return std::make_pair(pk, ch.deesser().reductionDb()); };
+    const auto hi = run(8000), lo = run(200);
+    CHECK(hi.first < 0.35 && hi.second > 3 && hi.second <= 12, "de-esser pulls the sibilant band down, at most maxDb");
+    CHECK(lo.first > 0.45, "de-esser leaves the low band");
+    Channel off(fs); off.setDeEsser(false, -30, 12, 5000); CHECK(!off.active(), "de-esser off = inactive"); }
   { Channel ch(fs); ch.setCompressor(true, -20, 4, 0, 1, 50, 0);
     const double out = sineGainDb(ch, fs, 1000) ; (void)out;   // the helper uses a full-scale sine: -20 + 20/4 = -15 dB
     CHECK(near(out, -15, 0.3), "compressor 4:1 on a 0 dB sine -> -15 dB");

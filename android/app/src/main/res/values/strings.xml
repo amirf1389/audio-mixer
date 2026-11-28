@@ -617,4 +617,30 @@
     <string name="mic_denied">The microphone permission was not given, so the phone mic cannot start.</string>
     <string name="mic_denied_settings">The microphone permission is turned off for this app. Turn it on in the app\'s settings to use the phone mic.</string>
     <string name="mic_open_settings">Open settings</string>
+    <!-- FX+ : every channel's dynamics under its fader -->
+    <string name="fxp_button">FX+</string>
+    <string name="fxp_title">FX+ · %1$s</string>
+    <string name="fxp_comp">COMPRESSOR</string>
+    <string name="fxp_limiter">LIMITER</string>
+    <string name="fxp_gate">GATE</string>
+    <string name="fxp_deesser">DE-ESSER</string>
+    <string name="fxp_threshold">THRESHOLD</string>
+    <string name="fxp_ratio">RATIO</string>
+    <string name="fxp_knee">KNEE</string>
+    <string name="fxp_attack">ATTACK</string>
+    <string name="fxp_release">RELEASE</string>
+    <string name="fxp_makeup">MAKEUP</string>
+    <string name="fxp_ceiling">CEILING</string>
+    <string name="fxp_range">RANGE</string>
+    <string name="fxp_hold">HOLD</string>
+    <string name="fxp_amount">AMOUNT</string>
+    <string name="fxp_freq">FREQ</string>
+    <string name="fxp_a">A</string>
+    <string name="fxp_b">B</string>
+    <string name="fxp_copy">COPY TO OTHER</string>
+    <string name="fxp_eq">EQ</string>
+    <string name="fxp_reset">RESET</string>
+    <string name="fx_ab">A / B</string>
+    <string name="fx_ab_a">A</string>
+    <string name="fx_ab_b">B</string>
 </resources>

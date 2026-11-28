@@ -22,6 +22,9 @@
 #include <array>
 #include <mutex>
 #include "audiomixer/runtime.hpp"
+#include "audiomixer/master_chain.hpp"
+#include <algorithm>
+#include <cmath>
 #include "license/license.hpp"
 #include "paths/paths.hpp"
 
@@ -41,9 +44,13 @@ std::int64_t nowMs() { return std::chrono::duration_cast<std::chrono::millisecon
 // The audio thread only try-locks: a block that meets an edit in progress plays without its inserts, it never waits.
 struct amix_mixer {
   am::Mixer mixer; std::vector<float> silence; int frames = 0; double fs;
+  // FX+ DYNAMICS: one channel strip's dynamics per strip (before the inserts), the master's compressor / de-esser in a MasterChain
+  std::mutex dynM; std::vector<am::dsp::Channel> dyn; std::vector<am::dsp::ChannelParams> dynPending; std::atomic<unsigned> dynV{0}; unsigned dynApplied = 0;
+  std::vector<std::array<std::atomic<double>, 4>> gr; am::MasterChain chain;
   std::mutex fxM; std::vector<std::array<std::unique_ptr<am::fx::Effect>, AMIX_MAX_INSERTS>> fx;   // [strip] ... [strips] = the master
   std::vector<std::vector<float>> work; std::vector<float> scratch;
-  explicit amix_mixer(int n, double rate) : mixer(n, rate), fs(rate), fx(static_cast<std::size_t>(n) + 1) {}
+  explicit amix_mixer(int n, double rate) : mixer(n, rate), fs(rate), dyn(static_cast<std::size_t>(n), am::dsp::Channel(rate)), dynPending(static_cast<std::size_t>(n)), gr(static_cast<std::size_t>(n) + 1), fx(static_cast<std::size_t>(n) + 1) {
+    for (auto& g : gr) for (auto& v : g) v.store(0); am::MasterChain::Params p; p.fs = rate; p.eqOn = false; p.on = false; chain.set(p); mixer.setMasterProcessor(&chain); }
   std::unique_ptr<am::fx::Effect>* slot(int strip, int s) { const int k = strip < 0 ? mixer.strips() : strip; if (k < 0 || k > mixer.strips() || s < 0 || s >= AMIX_MAX_INSERTS) return nullptr; return &fx[static_cast<std::size_t>(k)][static_cast<std::size_t>(s)]; }
 };
 // the C block callback as a Runtime tap (the SDK's own; the network sender has its own slot)
@@ -102,16 +109,42 @@ int amix_mixer_process(amix_mixer* m, const float* const* in, int frames, float*
   if (frames > m->frames) {   // grows only on the first larger block (the native loop calls with its fixed maximum first)
     m->silence.assign(static_cast<std::size_t>(frames), 0.f); m->scratch.assign(static_cast<std::size_t>(frames), 0.f); m->work.assign(static_cast<std::size_t>(n), std::vector<float>(static_cast<std::size_t>(frames), 0.f)); m->frames = frames; }
   const float* ins[AMIX_MAX_STRIPS]; for (int s = 0; s < n; ++s) ins[s] = (in && in[s]) ? in[s] : m->silence.data();
+  { const unsigned v = m->dynV.load(); if (v != m->dynApplied && m->dynM.try_lock()) { for (int s = 0; s < n; ++s) m->dyn[static_cast<std::size_t>(s)].set(m->dynPending[static_cast<std::size_t>(s)]); m->dynM.unlock(); m->dynApplied = v; } }
+  bool dynOn[AMIX_MAX_STRIPS] = {};
+  for (int s = 0; s < n; ++s) { am::dsp::Channel& c = m->dyn[static_cast<std::size_t>(s)]; dynOn[s] = in && in[s] && c.active(); if (!dynOn[s]) continue;   // FX+ first: gate, compressor, de-esser, limiter
+    float* w = m->work[static_cast<std::size_t>(s)].data(); std::copy(in[s], in[s] + frames, w); c.process(w, static_cast<std::size_t>(frames)); ins[s] = w;
+    auto& g = m->gr[static_cast<std::size_t>(s)]; g[0].store(c.compressor().gainReductionDb()); g[1].store(c.limiterGainReductionDb()); g[2].store(c.gate().gainDb()); g[3].store(-c.deesser().reductionDb()); }
   std::unique_lock<std::mutex> lk(m->fxM, std::try_to_lock);
   if (lk.owns_lock()) for (int s = 0; s < n; ++s) {   // strip inserts: the strip's signal through each effect (stereo effects: left kept, a mono strip)
     bool any = false; for (const auto& e : m->fx[static_cast<std::size_t>(s)]) if (e && !e->bypass()) { any = true; break; }
     if (!any || !in || !in[s]) continue;
-    float* w = m->work[static_cast<std::size_t>(s)].data(); std::copy(in[s], in[s] + frames, w);
+    float* w = m->work[static_cast<std::size_t>(s)].data(); if (!dynOn[s]) std::copy(in[s], in[s] + frames, w);
     for (const auto& e : m->fx[static_cast<std::size_t>(s)]) if (e && !e->bypass()) { std::copy(w, w + frames, m->scratch.data()); e->process(w, m->scratch.data(), static_cast<std::size_t>(frames)); }
     ins[s] = w; }
   m->mixer.process(ins, static_cast<std::size_t>(frames), outL, outR);
+  { auto& g = m->gr[static_cast<std::size_t>(n)]; g[0].store(-m->chain.reductionDb()); g[1].store(-m->mixer.limiterReductionDb()); g[2].store(0); g[3].store(-m->chain.deessReductionDb()); }
   if (lk.owns_lock()) for (const auto& e : m->fx[static_cast<std::size_t>(n)]) if (e && !e->bypass()) e->process(outL, outR, static_cast<std::size_t>(frames));   // the master rack
   return frames;
+}
+int amix_mixer_set_dynamics(amix_mixer* m, int strip, const double* v, int n) {
+  if (!m || !v || n < AMIX_DYN_VALUES || strip < -1 || strip >= m->mixer.strips()) return -1;
+  auto c = [&](int i, double lo, double hi, double def) { const double x = v[i]; return std::isfinite(x) ? std::max(lo, std::min(hi, x)) : def; };
+  auto on = [&](int i) { return std::isfinite(v[i]) && v[i] != 0.0; };
+  if (strip < 0) {   // the master: compressor and de-esser in the chain, the limiter is the master limiter
+    am::MasterChain::Params p = m->chain.params(); p.fs = m->fs; p.eqOn = false; p.toneOn = false; p.satOn = false; p.analog = false; p.bassMonoOn = false; p.exciterOn = false; p.compMix = 1;
+    p.compOn = on(0); p.thrDb = c(1, -60, 0, -12); p.ratio = c(2, 1, 20, 2); p.attackMs = c(4, 0.1, 500, 30); p.releaseMs = c(5, 5, 5000, 200); p.makeupDb = c(6, 0, 24, 0);
+    p.deessOn = on(16); p.deessThrDb = c(17, -60, 0, -24); p.deessMaxDb = c(18, 0, 24, 8); p.on = p.compOn || p.deessOn; m->chain.set(p);
+    m->mixer.setLimiter(on(7), c(8, -20, 0, -0.5), c(9, 5, 2000, 100)); return 0; }
+  am::dsp::ChannelParams p;
+  p.compOn = on(0); p.compThresholdDb = c(1, -60, 0, -20); p.compRatio = c(2, 1, 20, 4); p.compKneeDb = c(3, 0, 24, 6); p.compAttackMs = c(4, 0.1, 500, 10); p.compReleaseMs = c(5, 5, 5000, 100); p.compMakeupDb = c(6, 0, 24, 0);
+  p.limiterOn = on(7); p.limiterCeilDb = c(8, -20, 0, -1); p.limiterReleaseMs = c(9, 5, 2000, 80);
+  p.gateOn = on(10); p.gateThresholdDb = c(11, -80, 0, -50); p.gateRangeDb = c(12, -90, 0, -80); p.gateAttackMs = c(13, 0.1, 500, 1); p.gateHoldMs = c(14, 0, 2000, 50); p.gateReleaseMs = c(15, 5, 5000, 100);
+  p.deessOn = on(16); p.deessThresholdDb = c(17, -60, 0, -24); p.deessMaxDb = c(18, 0, 24, 8); p.deessFreqHz = c(19, 1000, 16000, 5000);
+  { std::lock_guard<std::mutex> g(m->dynM); m->dynPending[static_cast<std::size_t>(strip)] = p; } m->dynV.fetch_add(1); return 0;
+}
+int amix_mixer_dynamics_gr(const amix_mixer* m, int strip, double* out) {
+  if (!m || !out || strip < -1 || strip >= m->mixer.strips()) return -1;
+  const auto& g = m->gr[static_cast<std::size_t>(strip < 0 ? m->mixer.strips() : strip)]; for (int i = 0; i < 4; ++i) out[i] = std::min(0.0, g[static_cast<std::size_t>(i)].load()); return 0;
 }
 char* amix_fx_catalog_json(void) {
   std::string j = "["; bool first = true; for (const auto& [k, nm] : am::fx::catalog()) { j += (first ? "" : ",") + std::string("{\"kind\":") + jstr(k) + ",\"name\":" + jstr(nm) + "}"; first = false; }

@@ -87,6 +87,18 @@ int main() {
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mute\",\"strip\":3,\"on\":true}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"busLevel\",\"bus\":1,\"db\":-3}", auth, status, body) && status == 200);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"compressor\",\"strip\":2,\"on\":true,\"thresholdDb\":-20,\"ratio\":4}", auth, status, body) && status == 200);
+  // FX+: the strip's limiter and de-esser, the gate, the master limiter's release and the master compressor / de-esser; wild numbers are held in range
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"compressor\",\"strip\":2,\"on\":true,\"thresholdDb\":-999,\"ratio\":1e9,\"attackMs\":1e12,\"releaseMs\":-5,\"kneeDb\":99,\"makeupDb\":99}", auth, status, body) && status == 200);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"channelLimiter\",\"strip\":2,\"on\":true,\"ceilingDb\":-3,\"releaseMs\":50}", auth, status, body) && status == 200);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"channelLimiter\",\"strip\":99,\"on\":true}", auth, status, body) && status == 400);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"deesser\",\"strip\":2,\"on\":true,\"thresholdDb\":-30,\"maxDb\":500,\"freqHz\":1}", auth, status, body) && status == 200);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"deesser\",\"strip\":-1,\"on\":true}", auth, status, body) && status == 400);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gate\",\"strip\":2,\"on\":true,\"thresholdDb\":-50,\"holdMs\":1e9}", auth, status, body) && status == 200);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"limiter\",\"on\":true,\"ceilingDb\":-1,\"releaseMs\":99999}", auth, status, body) && status == 200);
+  CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"mastering\",\"compOn\":true,\"deessOn\":true,\"deessThr\":-900,\"deessMax\":6}", auth, status, body) && status == 200);
+  { CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/state", "", {}, status, body) && status == 200); bool fk = false; const Value fs = Value::parse(body, fk);
+    CHECK(fk && fs["master"]["limReleaseMs"].asNumber() == 2000 && fs["master"]["ceilingDb"].asNumber() == -1); }
+  { CHECK(am::httpd::Client::request("127.0.0.1", port, "GET", "/api/meters", "", auth, status, body) && status == 200); CHECK(body.find("\"limGr\"") != std::string::npos && body.find("\"compGr\"") != std::string::npos); }
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"gain\",\"strip\":99,\"db\":0}", auth, status, body) && status == 400);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "{\"op\":\"nope\"}", auth, status, body) && status == 400);
   CHECK(am::httpd::Client::request("127.0.0.1", port, "POST", "/api/control", "not json", auth, status, body) && status == 400);

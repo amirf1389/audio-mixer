@@ -42,6 +42,11 @@ JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setDuckRole(JNIEnv*, jclass, 
 JNIEXPORT jdouble JNICALL Java_com_amfb_amixos_Engine_duckGainDb(JNIEnv*, jclass, jlong h) { return amix_mixer_duck_gain_db(mixerOf(h)); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setSolo(JNIEnv*, jclass, jlong h, jint s, jboolean on) { amix_mixer_set_solo(mixerOf(h), s, on ? 1 : 0); }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setMaster(JNIEnv*, jclass, jlong h, jdouble db) { amix_mixer_set_master(mixerOf(h), db); }
+// FX+ DYNAMICS: AMIX_DYN_VALUES doubles in (see amix.h), four reductions out (<= 0 dB); strip -1 = the master
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_setDynamics(JNIEnv* env, jclass, jlong h, jint strip, jdoubleArray v) {
+  if (!v || env->GetArrayLength(v) < AMIX_DYN_VALUES) return -1; double b[AMIX_DYN_VALUES]; env->GetDoubleArrayRegion(v, 0, AMIX_DYN_VALUES, b); return amix_mixer_set_dynamics(mixerOf(h), strip, b, AMIX_DYN_VALUES); }
+JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_dynamicsGr(JNIEnv* env, jclass, jlong h, jint strip, jdoubleArray out) {
+  if (!out || env->GetArrayLength(out) < 4) return -1; double b[4] = {0, 0, 0, 0}; const int r = amix_mixer_dynamics_gr(mixerOf(h), strip, b); env->SetDoubleArrayRegion(out, 0, 4, b); return r; }
 JNIEXPORT void JNICALL Java_com_amfb_amixos_Engine_setLimiter(JNIEnv*, jclass, jlong h, jboolean on, jdouble ceil, jdouble rel) { amix_mixer_set_limiter(mixerOf(h), on ? 1 : 0, ceil, rel); }
 // inputs: one FloatArray per strip (null = silence); out: a FloatArray of 2 * frames, interleaved L R. Returns frames processed.
 JNIEXPORT jint JNICALL Java_com_amfb_amixos_Engine_process(JNIEnv* env, jclass, jlong h, jobjectArray inputs, jint frames, jfloatArray out) {
