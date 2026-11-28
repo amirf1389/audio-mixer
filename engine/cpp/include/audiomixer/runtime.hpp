@@ -81,6 +81,12 @@ struct DeviceInfo {
   std::string trust;                 // ASIO: "signed" | "unsigned" | "invalid signature" | "unknown" (Authenticode of the verified driver DLL)
   std::string clsid, dllPath;        // ASIO: the registered CLSID and the verified DLL (shown; never accepted back as input)
   bool faulted = false;              // ASIO: the driver crashed or hung earlier in this run and is not loaded again
+  // WASAPI (endpoint_type.hpp): the bus and type Windows reports for the endpoint, the badge the lists show, the USB Audio Class,
+  // the container (one physical device: a USB headset's speaker and microphone share it), the word lengths it takes exclusively
+  std::string endpointType, badge, bus, uac, container;
+  bool preferExclusive = false;
+  std::vector<int> bitDepths;        // 16 / 24 / 32 (integer), -32 (float): exclusive mode at the mix rate; empty = not probed
+  std::string duplexWith;            // a USB device's other endpoint (its capture id on the render entry, and back): opened together
 };
 // WINDOWS SOUND (the system's own volume of the default output, through the documented endpoint-volume interface: no driver, no registry):
 // read and set its mute. Used so that the master fader at -inf also silences what Windows itself plays. false on other systems or on failure.
@@ -99,7 +105,7 @@ int digitalOutputPair(const std::vector<std::string>& outputNames);
 // EVERY AUDIO ENDPOINT of the system, whatever its state: what listDevices leaves out because it cannot be opened now (headphones on an
 // empty jack, a microphone switched off in Windows' Sound settings) is listed here with the reason, for DIAGNOSTICS. Windows: WASAPI
 // active + unplugged + disabled (not-present ghosts are left out); other systems: the active devices of listDevices().
-struct EndpointInfo { std::string id, name, flow /* "out" | "in" */, state /* active | unplugged | disabled */, kind; int channels = 0; double rate = 0; bool isDefault = false; };
+struct EndpointInfo { std::string id, name, flow /* "out" | "in" */, state /* active | unplugged | disabled */, kind, endpointType, badge; int channels = 0; double rate = 0; bool isDefault = false; };
 std::vector<EndpointInfo> listEndpoints();
 std::vector<DeviceInfo> listDevices(bool probeAsio = true);   // probeAsio false: ASIO drivers are listed from the registry without loading them (2 in / 2 out assumed): the list a hung driver cannot block
                        // every device of every backend built in ("null" last)

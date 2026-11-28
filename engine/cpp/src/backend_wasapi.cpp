@@ -21,6 +21,7 @@
 #include "audiomixer/sysopt.hpp"
 #include "audiomixer/app_sound.hpp"
 #include "audiomixer/device_watch.hpp"
+#include "audiomixer/endpoint_type.hpp"
 #include "backends.hpp"
 
 namespace am {
@@ -60,6 +61,44 @@ void storeSample(BYTE* p, float x, const Sample& s) {
 
 template <class T> void release(T*& p) { if (p) { p->Release(); p = nullptr; } }
 std::string hr(const char* what, HRESULT r) { char b[96]; std::snprintf(b, sizeof b, "%s failed (0x%08lx)", what, static_cast<unsigned long>(r)); return b; }
+
+// USB AUDIO (endpoint_type.hpp): the bus of an endpoint and its container (one physical device), read from its property store
+const PROPERTYKEY kPkEnumerator = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 24};
+const PROPERTYKEY kPkFriendly = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 14};
+const PROPERTYKEY kPkInterface = {{0x026E516E, 0xB814, 0x414B, {0x83, 0xCD, 0x85, 0x6D, 0x6F, 0xEF, 0x48, 0x22}}, 2};
+const PROPERTYKEY kPkContainer = {{0x8C7ED206, 0x3F8A, 0x4827, {0xB3, 0xAB, 0xAE, 0x9E, 0x1F, 0xAE, 0xFC, 0x6C}}, 2};
+std::string narrow(const wchar_t* w) {
+  if (!w) return {};
+  const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+  if (n <= 1) return {};
+  std::string o(static_cast<std::size_t>(n - 1), '\0'); WideCharToMultiByte(CP_UTF8, 0, w, -1, &o[0], n, nullptr, nullptr); return o;
+}
+struct EpFacts { am::ep::Class cls; GUID container{}; bool hasContainer = false; };
+EpFacts endpointFacts(IMMDevice* d, bool capture) {
+  EpFacts f; if (!d) return f; IPropertyStore* ps = nullptr; if (FAILED(d->OpenPropertyStore(STGM_READ, &ps)) || !ps) return f;
+  am::ep::Props p; p.capture = capture; PROPVARIANT v;
+  PropVariantInit(&v); if (SUCCEEDED(ps->GetValue(kPkEnumerator, &v)) && v.vt == VT_LPWSTR) p.enumerator = narrow(v.pwszVal); PropVariantClear(&v);
+  PropVariantInit(&v); if (SUCCEEDED(ps->GetValue(kPkFriendly, &v)) && v.vt == VT_LPWSTR) p.name = narrow(v.pwszVal); PropVariantClear(&v);
+  PropVariantInit(&v); if (SUCCEEDED(ps->GetValue(kPkInterface, &v)) && v.vt == VT_LPWSTR) p.interfaceName = narrow(v.pwszVal); PropVariantClear(&v);
+  PropVariantInit(&v); if (SUCCEEDED(ps->GetValue(kPkContainer, &v)) && v.vt == VT_CLSID && v.puuid) { f.container = *v.puuid; f.hasContainer = true; } PropVariantClear(&v);
+  ps->Release(); f.cls = am::ep::classifyEndpoint(p); return f;
+}
+std::string endpointIdOf(IMMDevice* d) { LPWSTR w = nullptr; std::string id; if (d && SUCCEEDED(d->GetId(&w))) { id = narrow(w); CoTaskMemFree(w); } return id; }
+// the capture endpoint of the same USB device as the render endpoint `outId` ("" when it has none): a USB headset, mixer or interface in + out together
+std::string usbCaptureSibling(IMMDeviceEnumerator* en, const std::string& outId) {
+  if (outId.empty() || outId == "-") return {};
+  const int n = MultiByteToWideChar(CP_UTF8, 0, outId.c_str(), -1, nullptr, 0); if (n <= 0) return {};
+  std::vector<wchar_t> w(static_cast<std::size_t>(n), L'\0'); MultiByteToWideChar(CP_UTF8, 0, outId.c_str(), -1, w.data(), n);
+  IMMDevice* od = nullptr; if (FAILED(en->GetDevice(w.data(), &od)) || !od) return {};
+  const EpFacts of = endpointFacts(od, false); od->Release();
+  if (!of.cls.usb || !of.hasContainer) return {};
+  IMMDeviceCollection* col = nullptr; std::string found;
+  if (FAILED(en->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &col)) || !col) return {};
+  UINT c = 0; col->GetCount(&c);
+  for (UINT i = 0; i < c && found.empty(); ++i) { IMMDevice* d = nullptr; if (FAILED(col->Item(i, &d)) || !d) continue;
+    const EpFacts f = endpointFacts(d, true); if (f.cls.usb && f.hasContainer && IsEqualGUID(f.container, of.container)) found = endpointIdOf(d); d->Release(); }
+  col->Release(); return found;
+}
 
 // PROCESS LOOPBACK ("loopback:system"): everything Windows plays except this program's own process tree. The parameter block of
 // audioclientactivationparams.h (Windows SDK 10.0.20348; not in mingw-w64), declared here exactly as documented.
@@ -116,6 +155,10 @@ class WasapiBackend : public Backend {
     if (FAILED(r)) { err = hr("device enumerator", r); return false; }
     const bool wantOut = cfg.outChannels > 0 && cfg.outDevice != "-", wantIn = cfg.inChannels > 0 && cfg.inDevice != "-";
     bool ok = true;
+    note_.clear(); exOut_ = exIn_ = false;
+    // USB DUPLEX: the output is a USB device with its own microphone / inputs and no input was chosen: both sides of that one device
+    // open together (one clock, one format), instead of Windows' default microphone beside the USB output
+    if (wantOut && wantIn && cfg_.inDevice.empty()) { const std::string sib = usbCaptureSibling(en, cfg_.outDevice); if (!sib.empty()) { cfg_.inDevice = sib; note_ = "USB duplex: in + out on one device"; } }
     loopback_ = wantIn && cfg.inDevice.rfind("loopback:", 0) == 0;              // the input is what Windows plays on a render endpoint (app audio: a player, a browser, a streaming app)
     captureEvent_ = wantIn && !wantOut && !loopback_;                          // an input-only stream is clocked by the capture event; a loopback stream signals none, it is polled
     if (wantOut) ok = client(en, eRender, cfg.outChannels, &out_, &render_, nullptr, &sOut_, err);
@@ -155,7 +198,7 @@ class WasapiBackend : public Backend {
   static std::string name(const Sample& f) { return std::to_string(f.valid ? f.valid : f.bits) + (f.isFloat ? "-bit float" : "-bit integer"); }
   double inputSilentSeconds() const override { return capture_ && !loopback_ ? static_cast<double>(silentFrames_.load()) / (cfg_.sampleRate > 0 ? cfg_.sampleRate : 48000.0) : 0.0; }
   std::string sampleFormat() const override {
-    const std::string mode = cfg_.exclusive ? " (WASAPI exclusive)" : " (WASAPI shared: Windows converts)";
+    const std::string mode = (exOut_ || exIn_ ? " (WASAPI exclusive)" : " (WASAPI shared: Windows converts)") + (note_.empty() ? std::string() : " · " + note_);
     const std::string in = in_ ? name(sIn_) : "", out = out_ ? name(sOut_) : "";
     if (!in.empty() && in == out) return in + mode;
     return (in.empty() ? "" : "in " + in) + (in.empty() || out.empty() ? "" : " · ") + (out.empty() ? "" : "out " + out) + mode;
@@ -196,31 +239,51 @@ class WasapiBackend : public Backend {
       r = (*ac)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY | evt, dur, 0, &f.Format, nullptr);
       if (FAILED(r)) { err = hr("Initialize", r); return false; }
     } else {
-      // take control: the first format the device accepts exclusively, at exactly the requested rate and channel count
-      static const Sample kFloatFirst[] = { {true, 32, 32}, {false, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
-      static const Sample kIntFirst[] = { {false, 32, 32}, {true, 32, 32}, {false, 32, 24}, {false, 24, 24}, {false, 16, 16} };
-      const auto& kBase = cfg_.preferInt32 ? kIntFirst : kFloatFirst;
-      std::vector<Sample> kTry(std::begin(kBase), std::end(kBase));   // a word length the user asked for goes first; the rest stay as the fallback
-      if (cfg_.bits != 0) { const Sample want = cfg_.bits == -32 ? Sample{true, 32, 32} : cfg_.bits == 32 ? Sample{false, 32, 32} : cfg_.bits == 24 ? Sample{false, 24, 24} : Sample{false, 16, 16};
-        kTry.insert(kTry.begin(), want); }
-      bool found = false; WAVEFORMATEXTENSIBLE f;
-      for (const Sample& t : kTry) { f = makeFormat(ch, cfg_.sampleRate, t); if ((*ac)->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &f.Format, nullptr) == S_OK) { *used = t; found = true; break; } }
-      if (!found) { dev->Release(); err = "exclusive mode: the device accepts none of float32 / int32 / int24 / int16 at " + std::to_string(static_cast<long>(cfg_.sampleRate)) + " Hz with " + std::to_string(ch) + " channels (is \"Allow applications to take exclusive control of this device\" on, and no other program holding it?)"; return false; }
-      REFERENCE_TIME defP = 0, minP = 0; (*ac)->GetDevicePeriod(&defP, &minP);
-      REFERENCE_TIME dur = static_cast<REFERENCE_TIME>(cfg_.frames / cfg_.sampleRate * 1e7); if (dur < minP) dur = minP;
-      r = (*ac)->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, evt, dur, dur, &f.Format, nullptr);
-      if (r == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {                              // the device wants whole hardware buffers: ask again with the size it reports
-        UINT32 n = 0; (*ac)->GetBufferSize(&n); (*ac)->Release(); *ac = nullptr;
-        if (SUCCEEDED(dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(ac)))) {
-          dur = static_cast<REFERENCE_TIME>(1e7 * static_cast<double>(n) / cfg_.sampleRate + 0.5);
-          r = (*ac)->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, evt, dur, dur, &f.Format, nullptr);
+      // take control: the first format the device accepts exclusively at exactly the requested rate and channel count, asked in the order of
+      // am::ep::exclusiveCandidates (the user's word length, the device's own mix format, then the ladder). A USB device that refuses
+      // (exclusive switched off, held by another program, no format at this rate, another block size) goes on in SHARED mode, said in the status line.
+      const EpFacts facts = endpointFacts(dev, flow == eCapture); const bool usbDev = facts.cls.usb;
+      am::ep::Fmt native{false, 0, 0};
+      { WAVEFORMATEX* mf = nullptr; if (SUCCEEDED((*ac)->GetMixFormat(&mf)) && mf) { const bool ext = mf->wFormatTag == WAVE_FORMAT_EXTENSIBLE && mf->cbSize >= 22;
+          const WAVEFORMATEXTENSIBLE* xf = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(mf);
+          native.isFloat = mf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT || (ext && IsEqualGUID(xf->SubFormat, kFloatSubFormat)); native.bits = mf->wBitsPerSample; native.valid = ext ? xf->Samples.wValidBitsPerSample : mf->wBitsPerSample; if (native.valid == 0) native.valid = native.bits;
+          if (native.bits != 16 && native.bits != 24 && native.bits != 32) native.valid = 0;
+          CoTaskMemFree(mf); } }
+      const std::vector<am::ep::Fmt> kTry = am::ep::exclusiveCandidates(cfg_.bits, native, cfg_.preferInt32);
+      WAVEFORMATEXTENSIBLE f; bool found = false;
+      const am::ep::Fmt got = am::ep::negotiate(kTry, [&](const am::ep::Fmt& t) { f = makeFormat(ch, cfg_.sampleRate, Sample{t.isFloat, static_cast<WORD>(t.bits), static_cast<WORD>(t.valid)}); return (*ac)->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &f.Format, nullptr) == S_OK; }, found);
+      std::string why;
+      if (found) {
+        *used = Sample{got.isFloat, static_cast<WORD>(got.bits), static_cast<WORD>(got.valid)}; f = makeFormat(ch, cfg_.sampleRate, *used);
+        REFERENCE_TIME defP = 0, minP = 0; (*ac)->GetDevicePeriod(&defP, &minP);
+        REFERENCE_TIME dur = static_cast<REFERENCE_TIME>(cfg_.frames / cfg_.sampleRate * 1e7); if (dur < minP) dur = minP;
+        r = (*ac)->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, evt, dur, dur, &f.Format, nullptr);
+        if (r == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {                              // the device wants whole hardware buffers: ask again with the size it reports
+          UINT32 n = 0; (*ac)->GetBufferSize(&n); (*ac)->Release(); *ac = nullptr;
+          if (SUCCEEDED(dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(ac)))) {
+            dur = static_cast<REFERENCE_TIME>(1e7 * static_cast<double>(n) / cfg_.sampleRate + 0.5);
+            r = (*ac)->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, evt, dur, dur, &f.Format, nullptr);
+          } else r = E_FAIL;
         }
+        if (FAILED(r)) why = hr("Initialize (exclusive)", r) + (r == AUDCLNT_E_DEVICE_IN_USE ? ": another program holds the device" : r == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED ? ": exclusive mode is switched off for this device in the Windows sound settings" : "");
+        // an exclusive, event-driven stream is handed over one whole device buffer at a time: when the device grants another size than the
+        // block asked for, the loop below could never fill it (silence, or every write refused). Say so instead of opening a dead stream.
+        else { UINT32 gotN = 0; if (SUCCEEDED((*ac)->GetBufferSize(&gotN)) && gotN != cfg_.frames) why = "exclusive mode: this device works in blocks of " + std::to_string(gotN) + " frames at this rate, not " + std::to_string(cfg_.frames) + ". Set the buffer to " + std::to_string(gotN) + " frames, or use shared mode."; }
+      } else why = "exclusive mode: the device accepts none of float32 / int32 / int24 / int16 at " + std::to_string(static_cast<long>(cfg_.sampleRate)) + " Hz with " + std::to_string(ch) + " channels (is \"Allow applications to take exclusive control of this device\" on, and no other program holding it?)";
+      if (!why.empty() && usbDev) {   // USB: on in shared mode, cleanly (a fresh client; the refused one is let go)
+        if (*ac) { (*ac)->Release(); *ac = nullptr; }
+        r = dev->Activate(kIidAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(ac));
+        if (SUCCEEDED(r)) { *used = Sample(); WAVEFORMATEXTENSIBLE sf = makeFormat(ch, cfg_.sampleRate, Sample()); const REFERENCE_TIME sd = static_cast<REFERENCE_TIME>(cfg_.frames * 3.0 / cfg_.sampleRate * 1e7);
+          r = (*ac)->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY | evt, sd, 0, &sf.Format, nullptr); }
+        dev->Release();
+        if (FAILED(r)) { err = why + "; shared mode too: " + hr("Initialize", r); return false; }
+        const std::string n = (flow == eRender ? "out: " : "in: ") + am::ep::sharedFallbackNote(why); note_ = note_.empty() ? n : note_ + " · " + n;
+      } else {
+        dev->Release();
+        if (!why.empty()) { err = why; return false; }
+        (flow == eRender ? exOut_ : exIn_) = true;
+        if (usbDev) { const std::string n = std::string("USB AUDIO ") + (flow == eRender ? "out" : "in") + " exclusive"; note_ = note_.empty() ? n : note_ + " · " + n; }
       }
-      dev->Release();
-      if (FAILED(r)) { err = hr("Initialize (exclusive)", r) + (r == AUDCLNT_E_DEVICE_IN_USE ? ": another program holds the device" : r == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED ? ": exclusive mode is switched off for this device in the Windows sound settings" : ""); return false; }
-      // an exclusive, event-driven stream is handed over one whole device buffer at a time: when the device grants another size than the
-      // block asked for, the loop below could never fill it (silence, or every write refused). Say so instead of opening a dead stream.
-      { UINT32 got = 0; if (SUCCEEDED((*ac)->GetBufferSize(&got)) && got != cfg_.frames) { err = "exclusive mode: this device works in blocks of " + std::to_string(got) + " frames at this rate, not " + std::to_string(cfg_.frames) + ". Set the buffer to " + std::to_string(got) + " frames, or use shared mode."; return false; } }
     }
     r = flow == eRender && !loop ? (*ac)->GetService(kIidRenderClient, reinterpret_cast<void**>(rc)) : (*ac)->GetService(kIidCaptureClient, reinterpret_cast<void**>(cc));   // a loopback reads the render endpoint through a CAPTURE client (asking it for a render client into a null pointer was the "GetService failed (0x80004003)" of APP AUDIO)
     if (FAILED(r)) { err = hr("GetService", r); return false; }
@@ -249,7 +312,7 @@ class WasapiBackend : public Backend {
         if (lostBy(pr)) break;
       }
       UINT32 pad = 0, room = bufFrames;
-      if (out_ && cfg_.exclusive) room = bufFrames;   // exclusive: each event wants the whole buffer (the padding has no meaning there)
+      if (out_ && exOut_) room = bufFrames;   // exclusive: each event wants the whole buffer (the padding has no meaning there)
       else if (out_) { const HRESULT pr = out_->GetCurrentPadding(&pad); if (lostBy(pr)) break; room = SUCCEEDED(pr) && pad <= bufFrames ? bufFrames - pad : 0; }
       else if (!out_) room = ci > 0 ? static_cast<UINT32>(fifo_[0].size() / cfg_.frames * cfg_.frames) : cfg_.frames;   // input only: every whole block the capture side has delivered (this loop used to start with room = 0, the callback never ran)
       while (room >= cfg_.frames && !stop_) {
@@ -275,7 +338,7 @@ class WasapiBackend : public Backend {
   void closeAll() { release(render_); release(capture_); release(out_); release(in_); if (ev_) { CloseHandle(ev_); ev_ = nullptr; } }
   DeviceConfig cfg_; AudioCallback cb_; IAudioClient *out_ = nullptr, *in_ = nullptr; IAudioRenderClient* render_ = nullptr; IAudioCaptureClient* capture_ = nullptr; HANDLE ev_ = nullptr; Sample sOut_, sIn_;
   std::vector<std::vector<float>> inBuf_, outBuf_; std::vector<const float*> inp_; std::vector<float*> outp_; std::vector<Fifo> fifo_;
-  bool captureEvent_ = false, loopback_ = false; std::thread thread_; std::atomic<bool> stop_{false}, lost_{false}; std::atomic<std::uint64_t> xruns_{0}, silentFrames_{0};
+  bool captureEvent_ = false, loopback_ = false, exOut_ = false, exIn_ = false; std::string note_; std::thread thread_; std::atomic<bool> stop_{false}, lost_{false}; std::atomic<std::uint64_t> xruns_{0}, silentFrames_{0};
 };
 }  // namespace
 std::unique_ptr<Backend> makeWasapiBackend() { return std::make_unique<WasapiBackend>(); }

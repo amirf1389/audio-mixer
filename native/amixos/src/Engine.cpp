@@ -223,6 +223,9 @@ void Engine::refreshDevices() {
     { static const QStringList wired{"digital", "line", "interface", "dac", "wrapper", "virtual", "app"};   // a cable or a converter: a brand in the name ("JBL", "Bose", "wireless") does not make it Bluetooth
       m["bluetooth"] = d.kind == "bluetooth" || (!wired.contains(m["kind"].toString()) && looksBluetooth(m["name"].toString())); } m["enabled"] = deviceEnabled(m["backend"].toString(), m["id"].toString());
     QVariantList rates; for (double r : d.sampleRates) rates << r; m["sampleRates"] = rates;
+    // USB AUDIO and the other device types: the badge on CONNECTIONS / SOUND CARD, the bus, the exclusive word lengths, the duplex partner
+    m["type"] = QString::fromStdString(d.endpointType); m["badge"] = QString::fromStdString(d.badge); m["bus"] = QString::fromStdString(d.bus); m["uac"] = QString::fromStdString(d.uac);
+    m["preferExclusive"] = d.preferExclusive; m["duplexWith"] = QString::fromStdString(d.duplexWith); { QVariantList bd; for (int b : d.bitDepths) bd << b; m["bitDepths"] = bd; }
     // IN USE: held in exclusive mode (by another program, or this console) or the ASIO driver this console runs on: listed, never hidden
     const bool ours = rt_ && d.backend == curBackend_ && (d.id == curOut_ || d.id == curIn_);
     if (ours && d.backend == "asio") { if (devIn_ > 0) m["inChannels"] = devIn_; if (devOut_ > 0) m["outChannels"] = devOut_; }

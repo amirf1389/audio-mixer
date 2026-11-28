@@ -2612,5 +2612,21 @@
 "Install AmF X1 Extras (AmF-X1-Extras setup) for the Plug-in Builder, the plug-in shell, Hybrid and the web stack.",
 "WEB STACK (nginx + Node.js): Install AmF X1 Extras to use it.",
 "not installed: Install AmF X1 Extras",
-"The plug-in shell is not installed next to the console: Install AmF X1 Extras to export."
+"The plug-in shell is not installed next to the console: Install AmF X1 Extras to export.",
+"IN + OUT",
+"DEVICE TYPES",
+"No USB, digital, Bluetooth, virtual or network sound card found.",
+" bit",
+"exclusive recommended",
+"USB AUDIO",
+"S/PDIF",
+"HDMI",
+"DISPLAYPORT",
+"BT A2DP",
+"BT HANDS-FREE",
+"THUNDERBOLT",
+"PCIE",
+"VIRTUAL",
+"NETWORK AUDIO",
+"WEBCAM"
 ]

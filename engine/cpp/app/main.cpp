@@ -71,7 +71,11 @@ int main(int argc, char** argv) {
       std::printf("%s{\"backend\":%s,\"id\":%s,\"name\":%s,\"inChannels\":%d,\"outChannels\":%d,\"defaultRate\":%.0f,\"sampleRates\":[",
                   i ? "," : "", text(d.backend).c_str(), text(d.id).c_str(), text(d.name).c_str(), d.inChannels, d.outChannels, d.defaultRate);
       for (std::size_t k = 0; k < d.sampleRates.size(); ++k) std::printf("%s%.0f", k ? "," : "", d.sampleRates[k]);
-      std::printf("],\"defaultIn\":%s,\"defaultOut\":%s,\"kind\":\"%s\"}", d.defaultIn ? "true" : "false", d.defaultOut ? "true" : "false", d.kind.c_str());
+      std::printf("],\"defaultIn\":%s,\"defaultOut\":%s,\"kind\":\"%s\"", d.defaultIn ? "true" : "false", d.defaultOut ? "true" : "false", d.kind.c_str());
+      // USB AUDIO and the other device types (endpoint_type.hpp): the badge, the bus, the word lengths it takes exclusively, its duplex partner
+      std::printf(",\"type\":%s,\"badge\":%s,\"bus\":%s,\"uac\":%s,\"preferExclusive\":%s,\"duplexWith\":%s,\"bitDepths\":[", text(d.endpointType).c_str(), text(d.badge).c_str(), text(d.bus).c_str(), text(d.uac).c_str(), d.preferExclusive ? "true" : "false", text(d.duplexWith).c_str());
+      for (std::size_t k = 0; k < d.bitDepths.size(); ++k) std::printf("%s%d", k ? "," : "", d.bitDepths[k]);
+      std::printf("]}");
     }
     std::printf("]\n");
     return 0;
