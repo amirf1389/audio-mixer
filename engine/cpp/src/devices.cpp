@@ -16,6 +16,7 @@
 #include "audiomixer/driver_intel.hpp"
 #include "audiomixer/app_sound.hpp"
 #include "audiomixer/device_watch.hpp"
+#include "audiomixer/endpoint_type.hpp"
 #include <algorithm>
 #include <mutex>
 #ifdef _WIN32
@@ -103,6 +104,31 @@ std::string utf8(const wchar_t* w) {
   return s;
 }
 
+// THE BUS AND THE ADAPTER of an endpoint (endpoint_type.hpp): what its property store says of the device node behind it. Every key is
+// optional (a virtual cable or an older driver has fewer); a missing one stays empty and the classification falls back to the name.
+const PROPERTYKEY kEnumeratorName = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 24};    // PKEY_Device_EnumeratorName
+const PROPERTYKEY kHardwareIds = {{0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}}, 3};       // PKEY_Device_HardwareIds
+const PROPERTYKEY kInstanceId = {{0x78C34FC8, 0x104A, 0x4ACA, {0x9E, 0xA4, 0x52, 0x4D, 0x52, 0x99, 0x6E, 0x57}}, 256};     // PKEY_Device_InstanceId
+const PROPERTYKEY kInterfaceName = {{0x026E516E, 0xB814, 0x414B, {0x83, 0xCD, 0x85, 0x6D, 0x6F, 0xEF, 0x48, 0x22}}, 2};    // PKEY_DeviceInterface_FriendlyName
+const PROPERTYKEY kContainerId = {{0x8C7ED206, 0x3F8A, 0x4827, {0xB3, 0xAB, 0xAE, 0x9E, 0x1F, 0xAE, 0xFC, 0x6C}}, 2};      // PKEY_Device_ContainerId
+std::string propText(IPropertyStore* ps, const PROPERTYKEY& k) {
+  PROPVARIANT v; PropVariantInit(&v); std::string o;
+  if (SUCCEEDED(ps->GetValue(k, &v))) {
+    if (v.vt == VT_LPWSTR && v.pwszVal) o = utf8(v.pwszVal);
+    else if (v.vt == (VT_VECTOR | VT_LPWSTR) && v.calpwstr.pElems) for (ULONG i = 0; i < v.calpwstr.cElems && i < 16; ++i) { if (!o.empty()) o += ' '; o += utf8(v.calpwstr.pElems[i]); }
+    else if (v.vt == VT_CLSID && v.puuid) { char b[64]; const GUID& g = *v.puuid; std::snprintf(b, sizeof b, "{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", static_cast<unsigned long>(g.Data1), g.Data2, g.Data3, g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7]); o = b; }
+  }
+  PropVariantClear(&v); return o;
+}
+void readEndpointProps(IPropertyStore* ps, ep::Props& p, std::string& container) {
+  p.enumerator = propText(ps, kEnumeratorName); p.hardwareIds = propText(ps, kHardwareIds); p.instanceId = propText(ps, kInstanceId);
+  p.interfaceName = propText(ps, kInterfaceName); container = propText(ps, kContainerId);
+}
+void applyClass(DeviceInfo& info, const ep::Class& c, const std::string& container) {
+  info.endpointType = c.type; info.badge = c.badge; info.bus = c.bus; info.uac = c.uac; info.preferExclusive = c.preferExclusive;
+  info.container = container == "{00000000-0000-0000-ffff-ffffffffffff}" ? std::string() : container;   // the "no container" id of built-in devices
+}
+
 std::string endpointId(IMMDevice* d) {
   LPWSTR w = nullptr; std::string id;
   if (SUCCEEDED(d->GetId(&w))) { id = utf8(w); CoTaskMemFree(w); }
@@ -139,7 +165,7 @@ void addWasapi(std::vector<DeviceInfo>& out) {
     for (UINT i = 0; i < n; ++i) {
       IMMDevice* d = nullptr;
       if (FAILED(col->Item(i, &d))) continue;
-      DeviceInfo info; info.backend = "wasapi"; info.id = endpointId(d); int form = -1;
+      DeviceInfo info; info.backend = "wasapi"; info.id = endpointId(d); int form = -1; ep::Props epp; std::string container;
       int sCh = 2; DWORD sRate = 48000; bool gotFmt = false;
       IPropertyStore* ps = nullptr;
       if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) {
@@ -147,7 +173,7 @@ void addWasapi(std::vector<DeviceInfo>& out) {
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &v)) && v.vt == VT_LPWSTR) info.name = utf8(v.pwszVal);
         PropVariantClear(&v); PropVariantInit(&v);
         if (SUCCEEDED(ps->GetValue(kFormFactor, &v)) && v.vt == VT_UI4) form = static_cast<int>(v.ulVal);
-        PropVariantClear(&v); if (flow == eCapture) gotFmt = storeFormat(ps, sCh, sRate); ps->Release();
+        PropVariantClear(&v); if (flow == eCapture) gotFmt = storeFormat(ps, sCh, sRate); readEndpointProps(ps, epp, container); ps->Release();
       }
       int ch = 2;
       if (flow == eCapture) { if (gotFmt) ch = sCh; info.defaultRate = gotFmt ? sRate : 48000; info.sampleRates.push_back(static_cast<double>(info.defaultRate)); }
@@ -175,6 +201,16 @@ void addWasapi(std::vector<DeviceInfo>& out) {
             }
             if (ok) info.sampleRates.push_back(static_cast<double>(r));
           }
+          // the word lengths it takes exclusively at its own rate (USB DACs: often 16 / 24 only, or 32-bit integer only)
+          for (const int w : {16, 24, 32, -32}) {
+            const ep::Fmt t = ep::fromWordLength(w); WAVEFORMATEXTENSIBLE x{}; x.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE; x.Format.nChannels = f->nChannels; x.Format.nSamplesPerSec = f->nSamplesPerSec;
+            x.Format.wBitsPerSample = static_cast<WORD>(t.bits); x.Format.nBlockAlign = static_cast<WORD>(f->nChannels * t.bits / 8); x.Format.nAvgBytesPerSec = f->nSamplesPerSec * x.Format.nBlockAlign;
+            x.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX); x.Samples.wValidBitsPerSample = static_cast<WORD>(t.valid);
+            x.dwChannelMask = f->nChannels == 1 ? SPEAKER_FRONT_CENTER : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+            static const GUID kPcm2 = {0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}, kFloat2 = {0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};
+            x.SubFormat = t.isFloat ? kFloat2 : kPcm2;
+            if (ac->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &x.Format, nullptr) == S_OK) info.bitDepths.push_back(w);
+          }
           CoTaskMemFree(f);
         }
         ac->Release();
@@ -183,6 +219,7 @@ void addWasapi(std::vector<DeviceInfo>& out) {
       else { info.inChannels = ch; info.defaultIn = info.id == def; }
       if (info.name.empty()) info.name = info.id;
       info.kind = classifyDevice("wasapi", info.name, form, flow == eCapture);
+      epp.name = info.name; epp.formFactor = form; epp.capture = flow == eCapture; applyClass(info, ep::classifyEndpoint(epp), container);
       out.push_back(info);
       if (flow == eRender) {   // APP AUDIO: the same endpoint as an INPUT in loopback mode = everything Windows plays on it (a music player, a browser, a streaming app)
         DeviceInfo lb; lb.backend = "wasapi"; lb.id = "loopback:" + info.id; lb.name = "App audio: what plays on " + info.name; lb.inChannels = ch; lb.defaultRate = info.defaultRate; lb.kind = "app"; out.push_back(lb); }
@@ -191,6 +228,9 @@ void addWasapi(std::vector<DeviceInfo>& out) {
     col->Release();
   }
   en->Release();
+  // USB DUPLEX: the speaker and the microphone of one USB device (same container) know each other, so both are opened together
+  for (DeviceInfo& a : out) if (a.backend == "wasapi" && a.bus == "usb" && !a.container.empty() && a.outChannels > 0)
+    for (DeviceInfo& b : out) if (&a != &b && b.backend == "wasapi" && b.bus == "usb" && b.container == a.container && b.inChannels > 0 && b.id.rfind("loopback:", 0) != 0) { a.duplexWith = b.id; b.duplexWith = a.id; break; }
 }
 
 
@@ -206,18 +246,19 @@ std::vector<EndpointInfo> wasapiEndpoints() {
     for (UINT i = 0; i < n; ++i) {
       IMMDevice* d = nullptr; if (FAILED(col->Item(i, &d)) || !d) continue;
       EndpointInfo e; e.id = endpointId(d); e.flow = flow == eRender ? "out" : "in"; DWORD st = 0; d->GetState(&st);
-      e.state = st == DEVICE_STATE_ACTIVE ? "active" : st == DEVICE_STATE_UNPLUGGED ? "unplugged" : "disabled"; int form = -1;
+      e.state = st == DEVICE_STATE_ACTIVE ? "active" : st == DEVICE_STATE_UNPLUGGED ? "unplugged" : "disabled"; int form = -1; ep::Props epp;
       IPropertyStore* ps = nullptr;
       if (SUCCEEDED(d->OpenPropertyStore(STGM_READ, &ps))) { PROPVARIANT pv; PropVariantInit(&pv);
         if (SUCCEEDED(ps->GetValue(kFriendlyName, &pv)) && pv.vt == VT_LPWSTR) e.name = utf8(pv.pwszVal);
         PropVariantClear(&pv); PropVariantInit(&pv);
         if (SUCCEEDED(ps->GetValue(kFormFactor, &pv)) && pv.vt == VT_UI4) form = static_cast<int>(pv.ulVal);
-        PropVariantClear(&pv); if (flow == eCapture) { int c = 0; DWORD r = 0; if (storeFormat(ps, c, r)) { e.channels = c; e.rate = r; } } ps->Release(); }
+        PropVariantClear(&pv); if (flow == eCapture) { int c = 0; DWORD r = 0; if (storeFormat(ps, c, r)) { e.channels = c; e.rate = r; } } std::string cont; readEndpointProps(ps, epp, cont); ps->Release(); }
       if (st == DEVICE_STATE_ACTIVE && flow == eRender) { IAudioClient* ac = nullptr;   // only an active endpoint can say its format
         if (SUCCEEDED(d->Activate(kIidClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&ac)))) { WAVEFORMATEX* f = nullptr;
           if (SUCCEEDED(ac->GetMixFormat(&f)) && f) { e.channels = f->nChannels; e.rate = f->nSamplesPerSec; CoTaskMemFree(f); } ac->Release(); } }
       if (e.name.empty()) e.name = e.id;
       e.kind = classifyDevice("wasapi", e.name, form, flow == eCapture); e.isDefault = e.id == def;
+      { epp.name = e.name; epp.formFactor = form; epp.capture = flow == eCapture; const ep::Class c = ep::classifyEndpoint(epp); e.endpointType = c.type; e.badge = c.badge; }
       v.push_back(e); d->Release();
     }
     col->Release();

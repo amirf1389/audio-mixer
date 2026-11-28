@@ -2,6 +2,17 @@
  "_": "The feature feed: newest first. scripts/make-update.js embeds it in the signed update.json; the console shows a NEW badge for entries newer than the version last looked at. Edit with tools/release-manager.html (opened from disk, never put on the website) or by hand, then run node scripts/make-update.js.",
  "features": [
   {
+   "version": "1.26.1.0",
+   "date": "2026-11-28",
+   "title": "1.26.1.0: USB audio in WASAPI exclusive mode, more device types with badges",
+   "items": [
+    "NEW · USB AUDIO: USB Audio Class sound cards (UAC1 / UAC2: USB DACs, USB mixers and interfaces, USB headsets and microphones) are told by the bus Windows reports and labelled USB AUDIO, with their class and the word lengths they take",
+    "NEW · USB in WASAPI exclusive mode: the device's own format first (16 / 24 / 32 bit, 44.1 to 384 kHz as the device answers); when exclusive mode is refused the stream goes on in shared mode and the status line says why",
+    "NEW · USB DUPLEX: a USB device with an output and an input opens both together (one clock) when no other input is chosen; unplugging it stops the stream cleanly",
+    "NEW · DEVICE TYPES with badges on CONNECTIONS and SOUND CARD: S/PDIF (optical / coaxial), HDMI, DisplayPort, Bluetooth A2DP and HANDS-FREE, Thunderbolt, PCIe cards, virtual cables, network audio (Dante / AVB / AES67) and webcams, each with sensible defaults"
+   ]
+  },
+  {
    "version": "1.26.0.0",
    "date": "2026-11-24",
    "title": "1.26.0.0: keeps running in the tray, continuous auto-save, system effects in the latency advice",

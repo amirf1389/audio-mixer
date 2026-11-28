@@ -47,6 +47,18 @@ Item {
                     Btn { label: engine.running ? i18n.t("STOP", i18n.lang) : i18n.t("START", i18n.lang); on: true; onColor: engine.running ? Theme.danger : Theme.emerald; onClicked: engine.running ? engine.stop() : settings.startLastDevice() } } }
             // SYSTEM EFFECTS (APOs), READ ONLY: per Windows endpoint, whether the maker's enhancements (Realtek, Dolby, DTS, Waves, Nahimic ...) are
             // active; they can colour the sound and add latency. Nothing is changed here: the button opens the Windows Sound control panel.
+            // DEVICE TYPES: every WASAPI endpoint with what Windows says it is (the bus first, then the name): USB AUDIO with its class and the
+            // word lengths it takes exclusively, digital cables, Bluetooth profiles, Thunderbolt / PCIe cards, virtual cables, network audio, webcams
+            Card { Layout.columnSpan: 2; objectName: "typeCard"; id: typeCard
+                readonly property var list: { engine.devices; return (engine.devices || []).filter(d => (d.badge ?? "") !== "") }
+                Head { text: i18n.t("DEVICE TYPES", i18n.lang) }
+                Note { visible: typeCard.list.length === 0; color: Theme.muted; text: i18n.t("No USB, digital, Bluetooth, virtual or network sound card found.", i18n.lang) }
+                Repeater { model: typeCard.list
+                    delegate: RowLayout { Layout.fillWidth: true; spacing: 8
+                        Rectangle { objectName: "typeBadge"; implicitWidth: tbT.implicitWidth + 12; implicitHeight: 18; radius: 5; color: modelData.bus === "usb" ? Theme.emerald : Theme.amber
+                            Text { id: tbT; anchors.centerIn: parent; text: i18n.t(modelData.badge, i18n.lang); color: "#000"; font.family: Theme.mono; font.pixelSize: 8; font.bold: true } }
+                        Text { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.ink; font.family: Theme.mono; font.pixelSize: 9
+                            text: (modelData.inChannels > 0 ? i18n.t("IN", i18n.lang) : i18n.t("OUT", i18n.lang)) + "  " + modelData.name + ((modelData.uac ?? "") !== "" ? "  ·  " + modelData.uac : "") + ((modelData.bitDepths ?? []).length ? "  ·  " + modelData.bitDepths.map(b => b === -32 ? "32f" : String(b)).join(" / ") + i18n.t(" bit", i18n.lang) : "") + ((modelData.duplexWith ?? "") !== "" ? "  ·  " + i18n.t("IN + OUT", i18n.lang) : "") + (modelData.preferExclusive ? "  ·  " + i18n.t("exclusive recommended", i18n.lang) : "") } } } }
             Card { Layout.columnSpan: 2; objectName: "apoCard"; id: apoCard
                 property var eps: []
                 function scan() { apoCard.eps = engine.systemEffects() }

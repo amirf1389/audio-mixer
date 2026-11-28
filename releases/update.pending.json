@@ -1,10 +1,21 @@
 {
   "product": "audio-mixer",
-  "version": "1.26.0.0",
+  "version": "1.26.1.0",
   "channel": "stable",
-  "released": "2026-11-27",
+  "released": "2026-11-28",
   "notes": [],
   "features": [
+    {
+      "version": "1.26.1.0",
+      "date": "2026-11-28",
+      "title": "1.26.1.0: USB audio in WASAPI exclusive mode, more device types with badges",
+      "items": [
+        "NEW · USB AUDIO: USB Audio Class sound cards (UAC1 / UAC2: USB DACs, USB mixers and interfaces, USB headsets and microphones) are told by the bus Windows reports and labelled USB AUDIO, with their class and the word lengths they take",
+        "NEW · USB in WASAPI exclusive mode: the device's own format first (16 / 24 / 32 bit, 44.1 to 384 kHz as the device answers); when exclusive mode is refused the stream goes on in shared mode and the status line says why",
+        "NEW · USB DUPLEX: a USB device with an output and an input opens both together (one clock) when no other input is chosen; unplugging it stops the stream cleanly",
+        "NEW · DEVICE TYPES with badges on CONNECTIONS and SOUND CARD: S/PDIF (optical / coaxial), HDMI, DisplayPort, Bluetooth A2DP and HANDS-FREE, Thunderbolt, PCIe cards, virtual cables, network audio (Dante / AVB / AES67) and webcams, each with sensible defaults"
+      ]
+    },
     {
       "version": "1.26.0.0",
       "date": "2026-11-24",
@@ -272,10 +283,10 @@
   ],
   "files": {
     "win-x64-exe": {
-      "name": "AmF-X1-1.26.0.0-setup.exe",
-      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.26.0.0-setup.exe",
-      "size": 55207807,
-      "sha256": "e196c9e22ee08bef71685bef95006aee4b74810c6d5334ba54d3f19292124a6a"
+      "name": "AmF-X1-1.26.1.0-setup.exe",
+      "url": "https://raw.githubusercontent.com/amirf1389/audio-mixer/main/releases/windows/AmF-X1-1.26.1.0-setup.exe",
+      "size": 20998924,
+      "sha256": "ca82ada0728bb0edfa0b4fecc4257d273409c8a4a1f5254e67eb33a9e26221aa"
     }
   },
   "plugins": [],

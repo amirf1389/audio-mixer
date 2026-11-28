@@ -1,6 +1,6 @@
 # AmF X1 Windows MSI (Microsoft Store, MSI submission)
 
-Build: `scripts/build-msi.sh 1.26.0.0` (needs `wixl` from msitools). It walks `dist/windows/AmF-X1-<VERSION>-windows-x64/`,
+Build: `scripts/build-msi.sh 1.26.1.0` (needs `wixl` from msitools). It walks `dist/windows/AmF-X1-<VERSION>-windows-x64/`,
 writes `install/windows/amfx1.wxs` and builds `releases/windows/AmF-X1-<VERSION>-x64.msi`. It refuses to build when the
 package folder holds private-looking files (*.pem, *.key, *.pfx, *.p12, *.jks, *.keystore, .env*, *token*, *secret*, *.log, settings*.json).
 
@@ -11,7 +11,7 @@ package folder holds private-looking files (*.pem, *.key, *.pfx, *.p12, *.jks, *
 - MajorUpgrade: installing a newer version removes the older one; installing an older version over a newer one is blocked.
 - Start Menu shortcut "AmF X1" -> `amixos.exe`. Registry `HKLM\Software\AMFB Audio\AmF X1` (InstallDir, Version), as the NSIS setup.
 - Apps & features: Publisher AMFB Audio, DisplayVersion, icon from amixos.exe, no Modify / no Repair (uninstall only).
-- No dialogs: `msiexec /i AmF-X1-1.26.0.0-x64.msi /qn` installs silently.
+- No dialogs: `msiexec /i AmF-X1-1.26.1.0-x64.msi /qn` installs silently.
 
 ## Left out on purpose (compared with install/windows/amfx1.nsi)
 - **Windows Firewall rule** (TCP, local subnet, programs amixos.exe and "AmF X1 Network.exe") and **ASIO driver registration**
@@ -27,7 +27,7 @@ package folder holds private-looking files (*.pem, *.key, *.pfx, *.p12, *.jks, *
 ## Partner Center fields
 - App type: **MSI** (EXE or MSI app).
 - Package URL: a versioned HTTPS URL that never changes content, e.g.
-  `https://<host>/releases/AmF-X1-1.26.0.0-x64.msi` (a new URL for every version).
+  `https://<host>/releases/AmF-X1-1.26.1.0-x64.msi` (a new URL for every version).
 - Architecture: **x64**. Language: English.
 - Installer parameters: none needed; the Store runs MSI packages silently with `/qn` automatically.
 - Return codes (standard MSI, the Store knows them):
@@ -43,10 +43,10 @@ package folder holds private-looking files (*.pem, *.key, *.pfx, *.p12, *.jks, *
 | 112 | Disk full |
 
 ## Hosting
-The 1.26.0.0 MSI is about 107 MB, over GitHub's 100 MB per-file limit for git, so it is not committed. Publish it as a release
+The 1.26.1.0 MSI is about 107 MB, over GitHub's 100 MB per-file limit for git, so it is not committed. Publish it as a release
 asset (or on any HTTPS host) at the versioned URL above, with its SHA-256.
 
 ## Signing
 The Store requires the MSI (and ideally the EXEs inside it) to be signed with a code-signing certificate that chains to a
-trusted root. The owner signs it on their machine, e.g. `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a AmF-X1-1.26.0.0-x64.msi`
+trusted root. The owner signs it on their machine, e.g. `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a AmF-X1-1.26.1.0-x64.msi`
 (or `osslsigncode` on Linux). No certificate or key is in this repository and none must be added.

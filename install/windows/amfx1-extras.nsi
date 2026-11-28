@@ -2,7 +2,7 @@
 ; of the installed AmF X1 (HKLM\Software\AMFB Audio\AmF X1, InstallDir): the Plug-in Builder and its VST3 shell, AmF X1 Hybrid (program and
 ; extension), the WEB STACK (web\: nginx, Node.js, the bridge, the browser remote) and the Steinberg ASIO usage guidelines. Its own
 ; uninstaller (Uninstall AmF X1 Extras.exe) and its own entry in Apps & features; uninstalling AmF X1 removes the extras with it.
-;   makensis -DVERSION=1.26.0.0 -DSRC=dist\windows\AmF-X1-1.26.0.0-windows-x64-extras -DOUT=releases\windows\AmF-X1-Extras-1.26.0.0-setup.exe install\windows\amfx1-extras.nsi
+;   makensis -DVERSION=1.26.1.0 -DSRC=dist\windows\AmF-X1-1.26.1.0-windows-x64-extras -DOUT=releases\windows\AmF-X1-Extras-1.26.1.0-setup.exe install\windows\amfx1-extras.nsi
 ; RETURN CODES (as the main setup): 0 success, 1 cancelled, 2 failure (also: AmF X1 is not installed), 1618 another AmF X1 setup is running,
 ; 112 not enough disk space, 3010 installed but a restart is needed. Silent: /S.
 Unicode true
