@@ -254,6 +254,15 @@ pages.push(page({
 <tr><td>Desktop shell (optional)</td><td>Electron</td><td>A native window and tray around the same page and bridge.</td></tr>
 <tr><td>Mobile</td><td>Android (Java, Jetpack Compose), iOS (Swift)</td><td>The same page with an on-device engine.</td></tr>
 </tbody></table></div></div></section>
+<section class="block" id="iot"><div class="wrap">
+<h2>IoT SDK: ESP32, Arduino, ESP-IDF</h2>
+<p class="sub">Build your own hardware controllers for AmF X1: pots and motor faders, mute buttons with LEDs, rotary encoders, LED meters and tally lights. The <code>AmFX1</code> Arduino library and the <code>amfx1</code> ESP-IDF component pair with the console's PIN and connect to the AmF X1 Network service over Wi-Fi or Ethernet. On your local network they move faders, mute, solo, pan and the master, show the meters and recall scenes. They need no third-party library.</p>
+<pre><code>AmFX1 console("192.168.1.50");
+console.pair("123456", "Desk");   // once; then console.begin(token) from NVS
+console.setFader(1, -6.0);
+console.setMute(2, true);</code></pre>
+<p class="sub mt">Source, examples and wiring: <a href="${REPO}/tree/main/sdk/iot" rel="noopener">sdk/iot</a> and <a href="${REPO}/blob/main/docs/iot-sdk.md" rel="noopener">docs/iot-sdk.md</a>.</p>
+</div></section>
 <section class="block" id="api"><div class="wrap">
 <h2>Local API (127.0.0.1 only)</h2>
 <p class="sub">The bridge listens on <code>http://127.0.0.1:8765</code> on your own computer and is not reachable from the network. Actions need the app's own page: other websites can read status only, never change settings or open audio streams.</p>
