@@ -173,6 +173,7 @@ class Runtime {
   void setChannelLimiter(int strip, bool on, double ceilingDb, double releaseMs);
   void setCompressor(int strip, bool on, double thresholdDb, double ratio, double kneeDb, double attackMs, double releaseMs, double makeupDb);
   void setGate(int strip, bool on, double thresholdDb, double rangeDb, double attackMs, double holdMs, double releaseMs);
+  void setDeEsser(int strip, bool on, double thresholdDb, double maxDb, double freqHz);   // FX+ DE-ESSER per strip
   // AUX SENDS (am::Mixer buses): bus k's stereo output goes to output channels 2 + 2k and 3 + 2k when the device has them
   void setSend(int strip, int bus, double db, bool pre);
   void setBusLevel(int bus, double db);

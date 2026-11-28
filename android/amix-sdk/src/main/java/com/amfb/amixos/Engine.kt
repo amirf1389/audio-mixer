@@ -18,6 +18,10 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     fun setSolo(strip: Int, on: Boolean) = setSolo(handle, strip, on)
     fun setMaster(db: Double) = setMaster(handle, db)
     fun setLimiter(on: Boolean, ceilingDb: Double = -0.5, releaseMs: Double = 100.0) = setLimiter(handle, on, ceilingDb, releaseMs)
+    /** FX+ DYNAMICS: [DYN_VALUES] numbers (compressor, limiter, gate, de-esser; see amix.h), strip -1 = the master. 0 = ok. */
+    fun setDynamics(strip: Int, values: DoubleArray): Int = if (values.size < DYN_VALUES) -1 else setDynamics(handle, strip, values)
+    /** [compressor, limiter, gate, de-esser] reduction now, each <= 0 dB */
+    fun dynamicsGr(strip: Int): DoubleArray = DoubleArray(4).also { dynamicsGr(handle, strip, it) }
 
     /** Mixes one block: inputs[s] is strip s (null = silence). Returns interleaved stereo of 2 * frames samples. */
     fun process(inputs: Array<FloatArray?>, frames: Int): FloatArray {
@@ -66,6 +70,9 @@ class Engine(strips: Int, val sampleRate: Double) : AutoCloseable {
     companion object {
         const val MAX_FRAMES = 4096
         const val MAX_INSERTS = 4
+        const val DYN_VALUES = 20
+        @JvmStatic private external fun setDynamics(handle: Long, strip: Int, v: DoubleArray): Int
+        @JvmStatic private external fun dynamicsGr(handle: Long, strip: Int, out: DoubleArray): Int
         /** the slot past the rack where the phone mixer keeps each channel's 3-band EQ (the native side has MAX_INSERTS + 1 slots) */
         const val EQ_SLOT = 4
         /** [{"kind","name"}]: every effect the inserts take */

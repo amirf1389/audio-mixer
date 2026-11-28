@@ -46,7 +46,7 @@ std::unique_ptr<Backend> createBackend(const std::string& name) {
   return nullptr;
 }
 
-enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis, kRide, kRideTouch, kAutoLimits, kMonDual, kMonEqOn, kMonEqF };
+enum Op { kGain, kPan, kMute, kSolo, kMaster, kLimiter, kClipDb, kClear, kEq, kDelay, kPolarity, kXover, kChLimiter, kComp, kGate, kSend, kBusLevel, kBusMute, kBusReturn, kMonitor, kInRoute, kOutRoute, kTrim, kPeakHold, kBusFx, kWidth, kAutomix, kAutoLevel, kOutBits, kProfReset, kDcBlock, kAnalogCh, kSpatial, kMasterFx, kAutoPol, kAmp, kAmpEq, kOutTrim, kFast, kDuck, kDuckRole, kAnalysis, kRide, kRideTouch, kAutoLimits, kMonDual, kMonEqOn, kMonEqF, kDeess };
 
 Runtime::Runtime(int strips) : mixer_(strips, 48000) { std::memset(&pub_, 0, sizeof pub_); }
 Runtime::~Runtime() { stop(); backend_.reset(); }   // the backend (and its threads) goes before the buffers its callback writes into
@@ -123,6 +123,7 @@ void Runtime::setCrossover(int s, dsp::XoverType t, int hpO, double hpF, int lpO
 void Runtime::setChannelLimiter(int s, bool on, double ceil, double rel) { Cmd c{kChLimiter, s, ceil, rel, 0}; c.b = on ? 1 : 0; post(c); }
 void Runtime::setCompressor(int s, bool on, double thr, double ratio, double knee, double att, double rel, double makeup) { Cmd c{kComp, s, thr, ratio, knee}; c.b = on ? 1 : 0; c.w = att; c.v = rel; c.u = makeup; post(c); }
 void Runtime::setGate(int s, bool on, double thr, double range, double att, double hold, double rel) { Cmd c{kGate, s, thr, range, att}; c.b = on ? 1 : 0; c.w = hold; c.v = rel; post(c); }
+void Runtime::setDeEsser(int s, bool on, double thr, double maxDb, double f) { Cmd c{kDeess, s, thr, maxDb, f}; c.b = on ? 1 : 0; post(c); }
 void Runtime::setSend(int s, int b, double db, bool pre) { Cmd c{kSend, s, db, pre ? 1.0 : 0.0, 0}; c.b = b; post(c); }
 void Runtime::setBusLevel(int b, double db) { post({kBusLevel, b, db, 0, 0}); }
 void Runtime::setBusMute(int b, bool on) { post({kBusMute, b, on ? 1.0 : 0.0, 0, 0}); }
@@ -228,6 +229,7 @@ void Runtime::onBlock(const float* const* in, float* const* out, std::size_t fra
       case kChLimiter: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setLimiter(c.b != 0, c.x, c.y); break;
       case kComp: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setCompressor(c.b != 0, c.x, c.y, c.z, c.w, c.v, c.u); break;
       case kGate: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setGate(c.b != 0, c.x, c.y, c.z, c.w, c.v); break;
+      case kDeess: if (c.a >= 0 && c.a < static_cast<int>(ch_.size())) ch_[static_cast<std::size_t>(c.a)].setDeEsser(c.b != 0, c.x, c.y, c.z); break;
       case kSend: mixer_.setSend(c.a, c.b, c.x, c.y != 0); break;
       case kBusLevel: mixer_.setBusLevel(c.a, c.x); break;
       case kBusMute: mixer_.setBusMute(c.a, c.x != 0); break;

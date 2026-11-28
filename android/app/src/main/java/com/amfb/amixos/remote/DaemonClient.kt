@@ -60,6 +60,8 @@ class DaemonClient(val ep: Endpoint) {
     fun streaming(): Map<String, Any?> = getObj("/api/streaming")
     @Suppress("UNCHECKED_CAST") fun streamingCmd(cmd: String): Map<String, Any?> { require(cmd in com.amfb.amixos.MediaHub.consoleCmds) { "unknown command" }; return MiniJson.parse(request("POST", "/api/streaming/cmd", MiniJson.stringify(mapOf("cmd" to cmd)))) as Map<String, Any?> }
     fun meters(): Meters = parseMeters(getObj("/api/meters"))
+    /** the meters as the console writes them (FX+ reads the gain reductions from it) */
+    fun metersRaw(): Map<String, Any?> = getObj("/api/meters")
     companion object {
         /** FIND THE CONSOLE: ask every address of this phone's /24 network for /api/status on the port (in parallel, short timeouts).
          *  Returns "address  name version" for each console that answers; nothing is sent but a GET of the public status. */

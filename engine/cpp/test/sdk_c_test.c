@@ -31,6 +31,18 @@ int main(void) {
   { const float* in2[4] = {tone, tone, NULL, NULL}; amix_mixer_set_mute(m, 0, 0); amix_mixer_set_ducker(m, 1, -40, -12, 20, 300, 600, 0); amix_mixer_set_duck_role(m, 1, 1); amix_mixer_set_duck_role(m, 0, 2);
     for (int k = 0; k < 40; ++k) amix_mixer_process(m, in2, 256, outL, outR); CHECK(amix_mixer_duck_gain_db(m) < -11.5);
     amix_mixer_set_ducker(m, 0, -40, -12, 20, 300, 600, 0); amix_mixer_process(m, in2, 256, outL, outR); CHECK(amix_mixer_duck_gain_db(m) == 0.0); }
+  /* FX+ DYNAMICS: a hard compressor on strip 0 shows gain reduction; the limiter holds the ceiling; wild values are held in range */
+  { amix_mixer* d = amix_mixer_create(2, 48000.0); CHECK(d); const float* in3[2] = {tone, NULL}; double v[AMIX_DYN_VALUES] = {0}, gr[4];
+    v[0] = 1; v[1] = -30; v[2] = 1e9; v[3] = 0; v[4] = 1; v[5] = 50; v[6] = 0; v[7] = 1; v[8] = -12; v[9] = 50; v[19] = 1e30;
+    CHECK(amix_mixer_set_dynamics(d, 0, v, AMIX_DYN_VALUES) == 0); CHECK(amix_mixer_set_dynamics(d, 5, v, AMIX_DYN_VALUES) == -1); CHECK(amix_mixer_set_dynamics(d, 0, v, 3) == -1);
+    amix_mixer_set_limiter(d, 0, -0.5, 100); float p2 = 0;
+    for (int k = 0; k < 40; ++k) { amix_mixer_process(d, in3, 256, outL, outR); if (k > 30) for (int i = 0; i < 256; ++i) if (fabsf(outL[i]) > p2) p2 = fabsf(outL[i]); }
+    CHECK(amix_mixer_dynamics_gr(d, 0, gr) == 0 && gr[0] < -3.0 && gr[0] >= -60.0); CHECK(p2 < 0.2f);
+    double mv[AMIX_DYN_VALUES] = {0}; mv[0] = 1; mv[1] = -40; mv[2] = 8; mv[4] = 5; mv[5] = 100; mv[7] = 1; mv[8] = -6; mv[9] = 100;
+    CHECK(amix_mixer_set_dynamics(d, -1, mv, AMIX_DYN_VALUES) == 0); v[0] = 0; v[7] = 0; amix_mixer_set_dynamics(d, 0, v, AMIX_DYN_VALUES);
+    for (int k = 0; k < 40; ++k) amix_mixer_process(d, in3, 256, outL, outR);
+    CHECK(amix_mixer_dynamics_gr(d, -1, gr) == 0 && gr[0] < -1.0); CHECK(amix_mixer_dynamics_gr(d, 9, gr) == -1);
+    amix_mixer_destroy(d); }
   amix_mixer_destroy(m);
   amix_rt* rt = amix_rt_create(8); CHECK(rt);
   amix_config cfg; memset(&cfg, 0, sizeof cfg); cfg.backend = "null"; cfg.in_device = ""; cfg.out_device = ""; cfg.sample_rate = 48000; cfg.frames = 128; cfg.in_channels = 2; cfg.out_channels = 2;

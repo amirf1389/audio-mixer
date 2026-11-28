@@ -133,10 +133,10 @@ class LocalMixerActivity : FitActivity() {
     private var land = false
     private fun pairKeys(col: LinearLayout) { if (!land || col.childCount < 2) return
         // the keys at the bottom of the strip (FX, EQ, MUTE: up to three) side by side in one row
-        val ks = ArrayList<View>(); while (ks.size < 3 && col.childCount > 0 && col.getChildAt(col.childCount - 1) is PadButton) { ks.add(0, col.getChildAt(col.childCount - 1)); col.removeViewAt(col.childCount - 1) }
+        val ks = ArrayList<View>(); while (ks.size < 4 && col.childCount > 0 && col.getChildAt(col.childCount - 1) is PadButton) { ks.add(0, col.getChildAt(col.childCount - 1)); col.removeViewAt(col.childCount - 1) }
         if (ks.isEmpty()) return
         col.addView(LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL
-            for (k in ks) { if (ks.size > 2 && k is android.widget.TextView) k.setPadding(2, 0, 2, 0); addView(k, LinearLayout.LayoutParams(0, keyH(76), 1f).apply { setMargins(2, 4, 2, 4) }) } }) }
+            for (k in ks) { if (ks.size > 2 && k is android.widget.TextView) { k.setPadding(2, 0, 2, 0); if (ks.size > 3) k.textSize = 10f }; addView(k, LinearLayout.LayoutParams(0, keyH(76), 1f).apply { setMargins(2, 4, 2, 4) }) } }) }
     private fun inChannels() = prefs().getInt("inChannels", 1).takeIf { it in INPUT_MODES } ?: 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -279,17 +279,18 @@ class LocalMixerActivity : FitActivity() {
         if (!master) col.addView(full(eqKey(s)))
         if (master) {
             col.addView(full(PadButton(this, getString(R.string.lm_limit), ConsoleUi.GREEN, 12f).apply { on = p.getBoolean("limiter", true)
-                setOnClickListener { val v = !p.getBoolean("limiter", true); p.edit().putBoolean("limiter", v).apply(); engine?.setLimiter(v, -0.5, 100.0); on = v } }))
+                setOnClickListener { val v = !p.getBoolean("limiter", true); p.edit().putBoolean("limiter", v).apply(); fxModel(-1).set(FxPlus.LIMIT.onIndex, if (v) 1.0 else 0.0); on = v } }))
             if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_limit_at); setTextColor(dim); textSize = 9f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 6) })
             col.addView(full(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { contentDescription = "masterMute"; on = p.getBoolean("masterMute", false)
                 setOnClickListener { setMasterMute(!p.getBoolean("masterMute", false)) } }.also { masterMuteKey = it }))
+            col.addView(full(fxPlusKey(-1)))
         } else {
             val defPan = if (two) (if (s == 0) -1f else 1f) else 0f
             if (!land) col.addView(KnobView(this, color).apply { value = p.getFloat("pan$s", defPan); layoutParams = LinearLayout.LayoutParams(if (compact) ConsoleUi.dp(this@LocalMixerActivity, RemoteActivity.PAN_DP) else 150, LinearLayout.LayoutParams.WRAP_CONTENT)
                 onChange = { v -> p.edit().putFloat("pan$s", v).apply(); engine?.setPan(s, v.toDouble()) } })
             col.addView(full(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f).apply { on = p.getBoolean("mute$s", false)
                 contentDescription = "mute_$s"; setOnClickListener { val v = !p.getBoolean("mute$s", false); p.edit().putBoolean("mute$s", v).apply(); applyLevel(engine, s); on = v } }))
-            col.addView(full(soloKeyView(s)))
+            col.addView(full(soloKeyView(s))); col.addView(full(fxPlusKey(s)))
         }
         pairKeys(col)
         val key = if (master) "masterDb" else "db$s"; val readout = ConsoleUi.dbReadout(this)
@@ -408,6 +409,19 @@ class LocalMixerActivity : FitActivity() {
             engine?.let { e -> for (slot in 0 until Engine.MAX_INSERTS) { val f = c.slots.getOrNull(slot); e.insert(s, slot, f?.kind ?: ""); f?.params?.forEach { (id, v) -> e.insertSet(s, slot, id, v) } } } }
         render()
     }
+    // ---- FX+ : a channel's (input s, deck 100 + d, master -1) compressor, limiter, gate and de-esser in the engine, from a key under its fader
+    private var fxDialog: android.app.AlertDialog? = null
+    private fun fxStrips(ch: Int): List<Int> = if (ch < 0) listOf(-1) else chStrips(ch)
+    internal fun fxModel(ch: Int): FxPlusModel { val p = prefs(); val fresh = !p.contains("fxp:l:$ch:A")
+        return FxPlusModel(p, "l:$ch", ch < 0) { v -> engine?.let { e -> fxStrips(ch).forEach { t -> e.setDynamics(t, v) } }; fxPlusKeys[ch]?.on = FxPlus.anyOn(v, ch < 0) }
+            .also { if (fresh && ch < 0 && !p.getBoolean("limiter", true)) it.set(FxPlus.LIMIT.onIndex, 0.0) } }
+    private val fxPlusKeys = HashMap<Int, PadButton>()
+    private fun fxPlusKey(ch: Int) = PadButton(this, getString(R.string.fxp_button), ConsoleUi.CYAN, 12f).apply { contentDescription = if (ch < 0) "fxPlusMaster" else "fxPlus_$ch"
+        on = FxPlus.anyOn(FxPlus.decode(prefs().getString("fxp:l:$ch:A", null), ch < 0), ch < 0); setOnClickListener { showFxPlus(ch) } }.also { fxPlusKeys[ch] = it }
+    internal fun showFxPlus(ch: Int) {
+        fxDialog?.dismiss(); val title = when { ch < 0 -> getString(R.string.lm_master); ch >= 100 -> deckName(ch - 100); else -> getString(R.string.lm_channel, ch + 1, "").trim() }
+        fxDialog = FxPlusPanel.show(this, getString(R.string.fxp_title, title), fxModel(ch), if (ch < 0) null else ({ fxDialog?.dismiss(); showEq(ch) })) { cb -> engine?.let { cb(it.dynamicsGr(fxStrips(ch).first())) } }
+    }
     private fun applyAll(e: Engine) {
         val p = prefs(); val two = inChannels() == 2
         for (s in 0 until INPUTS) { e.setGain(s, p.getFloat("db$s", 0f).toDouble()); e.setPan(s, p.getFloat("pan$s", if (two && s < 2) (if (s == 0) -1f else 1f) else 0f).toDouble()); e.setMute(s, p.getBoolean("mute$s", false)) }
@@ -416,6 +430,7 @@ class LocalMixerActivity : FitActivity() {
         for (ch in (0 until INPUTS) + (0 until DECKS).map { 100 + it }) { applyLevel(e, ch); applyEq(e, ch) }   // each channel with its group fader and group mute, and its EQ
         PhoneDucker.apply(e, PhoneDucker.load(p), duckRoles())   // DUCKER: CH (voice) over the DECKS (music)
         e.setMaster(masterOut(p, 0.0)); e.setLimiter(p.getBoolean("limiter", true), -0.5, 100.0)
+        for (ch in listOf(-1) + allChannels()) if (p.contains("fxp:l:$ch:A")) { val v = FxPlus.decode(p.getString("fxp:l:$ch:A", null).takeUnless { p.getBoolean("fxp:l:$ch:ab", false) } ?: p.getString("fxp:l:$ch:B", null), ch < 0); fxStrips(ch).forEach { t -> e.setDynamics(t, v) } }   // FX+ as left
         for (s in listOf(-1) + (0 until INPUTS) + (0 until DECKS).map { deckStrip(it) }) rack(s).forEachIndexed { slot, k -> if (k.isNotEmpty()) for (t in mates(s)) if (e.insert(t, slot, k) == 0)
             p.getString(paramKey(s, slot), "").orEmpty().split(';').filter { '=' in it }.forEach { e.insertSet(t, slot, it.substringBefore('='), it.substringAfter('=').toDoubleOrNull() ?: 0.0) } }
     }
@@ -504,7 +519,7 @@ class LocalMixerActivity : FitActivity() {
     }
     override fun onResume() { super.onResume(); val e = StreamPlayerActivity.lastEmbed(this); if (e != null && miniWeb != null && miniUrl != e.url) closeMini(); miniUrl = e?.url; showMini() }
     private var miniUrl: String? = null
-    override fun onDestroy() { if (QuickMaster.listener === quickHook) QuickMaster.listener = null; stopTone(); closeMini(); deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
+    override fun onDestroy() { fxDialog?.dismiss(); fxDialog = null; if (QuickMaster.listener === quickHook) QuickMaster.listener = null; stopTone(); closeMini(); deckVideo?.close(); stopRec(); decks.forEach { it.release() }; stopAudio(); runCatching { engine?.close() }; super.onDestroy() }
 
     // ---- DECKS
     private fun loadDeck(d: Int, u: android.net.Uri, fresh: Boolean) {
@@ -726,7 +741,7 @@ class LocalMixerActivity : FitActivity() {
         box.addView(ConsoleUi.moreLine(TextView(this).apply { text = getString(R.string.lm_loud_help); setTextColor(dim); textSize = 11f; setPadding(0, 0, 0, 6) }))
         box.addView(PadButton(this, getString(if (PhoneLoudness.load(p).masterOn) R.string.lm_loud_master_on else R.string.lm_loud_master_off), ConsoleUi.GREEN, 12f).apply { on = PhoneLoudness.load(p).masterOn; contentDescription = "loudMaster"
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 84)
-            setOnClickListener { val nv = PhoneLoudness.load(p).let { it.copy(masterOn = !it.masterOn) }; PhoneLoudness.save(p, nv); if (nv.masterOn && !p.getBoolean("limiter", true)) { p.edit().putBoolean("limiter", true).apply(); engine?.setLimiter(true, -0.5, 100.0) }   // the limiter is the safety
+            setOnClickListener { val nv = PhoneLoudness.load(p).let { it.copy(masterOn = !it.masterOn) }; PhoneLoudness.save(p, nv); if (nv.masterOn && !p.getBoolean("limiter", true)) { p.edit().putBoolean("limiter", true).apply(); fxModel(-1).set(FxPlus.LIMIT.onIndex, 1.0) }   // the limiter is the safety
                 on = nv.masterOn; text = getString(if (nv.masterOn) R.string.lm_loud_master_on else R.string.lm_loud_master_off) } })
         val presets = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 6, 0, 6) }
         for ((name, t) in PhoneLoudness.presets) presets.addView(PadButton(this, getString(R.string.lm_loud_preset, name, t), cyan, 10f).apply { contentDescription = "loudPreset_$name"; on = PhoneLoudness.load(p).masterTarget == t
@@ -787,6 +802,7 @@ class LocalMixerActivity : FitActivity() {
         col.addView(key(PadButton(this, getString(R.string.lm_mute), ConsoleUi.RED, 12f)).apply { on = p.getBoolean("deckMute$d", false); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) }
             contentDescription = "deckMute_$d"; setOnClickListener { val v = !p.getBoolean("deckMute$d", false); p.edit().putBoolean("deckMute$d", v).apply(); applyLevel(engine, 100 + d); on = v } })
         col.addView(key(soloKeyView(100 + d)).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) } })
+        col.addView(key(fxPlusKey(100 + d)).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) } })
         pairKeys(col)
         val readout = ConsoleUi.dbReadout(this); fun show(db: Double) { readout.text = com.amfb.amixos.remote.DaemonClient.fmtDb(db) }
         val db0 = p.getFloat("deckDb$d", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)

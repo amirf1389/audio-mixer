@@ -139,7 +139,7 @@ class RemoteActivity : FitActivity() {
             onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
             onMove = { p -> val v = DaemonClient.posToDb(p / 1000.0); masterDb.text = DaemonClient.fmtDb(v); live.submit("master") { client?.master(v) } } }
         masterDb = ConsoleUi.dbReadout(this).apply { text = "0.0" }
-        master.addView(masterLabel); master.addView(planBadge); master.addView(masterFader); master.addView(masterDb)
+        master.addView(masterLabel); master.addView(planBadge); master.addView(masterFader); master.addView(masterDb); master.addView(fxPlusKey(-1, getString(R.string.lm_master)))
         desk.addView(master); root.addView(desk)
         setContentView(Nav.wrap(this, root, Nav.Tab.MIXER))
         pendingOpen = intent.getStringExtra("open")
@@ -248,7 +248,7 @@ class RemoteActivity : FitActivity() {
             val solo = small(ToggleButton(this).apply { textOn = "S"; textOff = "S"; isChecked = st.solo; setOnCheckedChangeListener { b, on -> b.setTextColor(if (on) Color.parseColor("#FBBF24") else Color.WHITE); if (b.tag == null) { buzz(b); io.execute { runCatching { client?.solo(st.id, on) } } } } })
             mute.setTextColor(if (st.mute) Color.parseColor("#EF4444") else Color.WHITE); solo.setTextColor(if (st.solo) Color.parseColor("#FBBF24") else Color.WHITE)
             ConsoleUi.styleToggle(mute, ConsoleUi.RED); ConsoleUi.styleToggle(solo, ConsoleUi.AMBER)
-            ms.addView(mute); ms.addView(solo); col.addView(ms)
+            ms.addView(mute); ms.addView(solo); ms.addView(fxPlusKey(st.id, ConsoleUi.title(st.id, st.name)).apply { layoutParams = LinearLayout.LayoutParams(0, ConsoleUi.dp(this@RemoteActivity, ConsoleUi.KEY_DP), 1f).apply { setMargins(2, 3, 2, 3) } }); col.addView(ms)
             val db = ConsoleUi.dbReadout(this).apply { text = DaemonClient.fmtDb(st.db) }
             val fader = FaderView(this, colors[(st.id / 8) % colors.size]).apply { progress = (DaemonClient.dbToPos(st.db) * 1000).toInt(); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f); contentDescription = "stripFader"
                 onTouchState = { t -> touching = maxOf(0, touching + if (t) 1 else -1); if (touching == 0) catchUp() }
@@ -784,6 +784,18 @@ class RemoteActivity : FitActivity() {
         listOf<View>(gain, eq, hi, mid, freq, lo).forEach { box.addView(it) }
         return box
     }
+    // ---- FX+ : the strip's (or the master's, -1) compressor, limiter, gate and de-esser on the console, from a key under its fader
+    private var fxDialog: AlertDialog? = null
+    internal fun fxPlusModel(strip: Int): FxPlusModel = FxPlusModel(Prefs.remote(this), "r:" + consoleId + ":" + strip, strip < 0) { v ->
+        val cmds = FxPlus.daemonCmds(strip, v); live.submit("fxp$strip") { cmds.forEach { cmd -> client?.control(cmd) } } }
+    private fun fxPlusKey(strip: Int, title: String): View = ConsoleUi.compact(TextView(this).apply { text = getString(R.string.fxp_button); gravity = Gravity.CENTER; setTextColor(Color.parseColor("#22D3EE")); typeface = android.graphics.Typeface.DEFAULT_BOLD
+        contentDescription = if (strip < 0) "fxPlusMaster" else "fxPlus"; background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 12f; setStroke(2, Color.parseColor("#22D3EE")) }
+        setOnClickListener { buzz(it); showFxPlus(strip, title) } }, ConsoleUi.KEY_DP, 11).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ConsoleUi.dp(this@RemoteActivity, ConsoleUi.KEY_DP)).apply { setMargins(4, 4, 4, 2) } }
+    private fun showFxPlus(strip: Int, title: String) {
+        fxDialog?.dismiss(); val m = fxPlusModel(strip)
+        fxDialog = FxPlusPanel.show(this, getString(R.string.fxp_title, title), m, if (strip < 0) null else ({ fxDialog?.dismiss(); showChannel(strip, state?.strips?.getOrNull(strip)?.name ?: "") })) { cb ->
+            val c = client ?: return@show; io.execute { val r = runCatching { FxPlus.grFromMeters(c.metersRaw(), strip) }.getOrNull() ?: return@execute; ui.post { cb(r) } } }
+    }
     private fun catchUp() { val p = pendingState ?: return; ui.postDelayed({ if (touching == 0 && pendingState === p) applyState(p) }, 400) }   // the finger lifted: what changed elsewhere meanwhile
     private fun rename(strip: Int, label: TextView) {   // long press on a strip's name
         val c = client ?: return; val box = EditText(this).apply { setText(state?.strips?.getOrNull(strip)?.name ?: ""); setSingleLine() }
@@ -834,5 +846,5 @@ class RemoteActivity : FitActivity() {
             .filterIsInstance<java.net.Inet4Address>().map { it.hostAddress }.filterNotNull().firstOrNull { it.startsWith("192.168.") || it.startsWith("10.") || Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(it) }
     }.getOrNull()
 
-    override fun onDestroy() { closing = true; syncing = false; ui.removeCallbacks(presence); ui.removeCallbacks(noticePoll); stream?.stop(); io.shutdownNow(); scanIo.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { fxDialog?.dismiss(); fxDialog = null; closing = true; syncing = false; ui.removeCallbacks(presence); ui.removeCallbacks(noticePoll); stream?.stop(); io.shutdownNow(); scanIo.shutdownNow(); super.onDestroy() }
 }

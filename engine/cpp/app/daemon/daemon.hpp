@@ -205,7 +205,7 @@ class Daemon {
   PhoneMic mic_; int micStrip_ = -1; std::atomic<long long> micAt_{0}; std::mutex micPush_;   // PHONE MIC (phone_mic.hpp): the strip it plays on (-1 off), the last chunk (unix ms)
   json::Value micJson() const;
   rec::Recorder rec_; double rate_ = 48000;   // RECORD from the remote: the master to <data>/recordings (the folder is fixed: a remote never names a path)
-  mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; Dca dcas_[8]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5;
+  mutable std::mutex m_; std::unique_ptr<Runtime> rt_; std::string backend_, lastError_; std::vector<Strip> strips_; Bus buses_[kMaxBuses]; Dca dcas_[8]; double masterDb_ = 0; bool limiter_ = true; double ceiling_ = -0.5, limRelease_ = 100;
   std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now(); std::atomic<bool> running_{false};
 };
 

@@ -225,6 +225,27 @@ class Gate {
   bool on_ = false, open_ = false; double thr_ = -50, range_ = -80, att_ = 0.1, rel_ = 0.001, det_ = 0.05, env_ = 0, g_ = 0, thrLin_ = 0.003, closeLin_ = 0.002, gLinAt_ = 1e300, gLin_ = 1; std::uint32_t holdSamples_ = 0, hold_ = 0;
 };
 
+// DE-ESSER (per channel): a first-order split at freqHz; the band above it is pulled down by how far its own level is over the threshold
+// (at most maxDb). low + g * high sums back exactly when idle. tick() per sample, real-time safe.
+class DeEsser {
+ public:
+  void set(bool on, double thresholdDb, double maxDb, double freqHz, double fs) noexcept {
+    on_ = on; thr_ = thresholdDb; max_ = maxDb < 0 ? 0 : maxDb > 24 ? 24 : maxDb; const double f = freqHz < 1000 ? 1000 : freqHz > 16000 ? 16000 : freqHz;
+    c_ = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * f / fs); att_ = 1.0 - std::exp(-1.0 / (0.001 * fs)); rel_ = 1.0 - std::exp(-1.0 / (0.06 * fs));
+  }
+  [[nodiscard]] double tick(double x) noexcept {
+    if (!on_) return x;
+    lp_ += (x - lp_) * c_; const double hi = x - lp_, a = std::fabs(hi); env_ += (a - env_) * (a > env_ ? att_ : rel_);
+    const double lvl = env_ > 1e-9 ? 20.0 * std::log10(env_) : -180.0, over = lvl - thr_; red_ = over > 0 ? (over < max_ ? over : max_) : 0.0;
+    return red_ > 0 ? lp_ + hi * std::pow(10.0, -red_ / 20.0) : x;
+  }
+  [[nodiscard]] bool on() const noexcept { return on_; }
+  [[nodiscard]] double reductionDb() const noexcept { return on_ ? red_ : 0; }   // >= 0
+  void reset() noexcept { lp_ = env_ = red_ = 0; }
+ private:
+  bool on_ = false; double thr_ = -24, max_ = 8, c_ = 0.5, att_ = 0.02, rel_ = 0.001, lp_ = 0, env_ = 0, red_ = 0;
+};
+
 struct ChannelParams {
   bool polarityInvert = false;
   double delayMs = 0;                                   // 0..50
@@ -235,6 +256,7 @@ struct ChannelParams {
   bool limiterOn = false; double limiterCeilDb = -1, limiterReleaseMs = 80;
   bool compOn = false; double compThresholdDb = -20, compRatio = 4, compKneeDb = 6, compAttackMs = 10, compReleaseMs = 100, compMakeupDb = 0;
   bool gateOn = false; double gateThresholdDb = -50, gateRangeDb = -80, gateAttackMs = 1, gateHoldMs = 50, gateReleaseMs = 100;
+  bool deessOn = false; double deessThresholdDb = -24, deessMaxDb = 8, deessFreqHz = 5000;
 };
 
 class Channel {
@@ -251,10 +273,12 @@ class Channel {
   void setLimiter(bool on, double ceilDb, double releaseMs) noexcept { p_.limiterOn = on; p_.limiterCeilDb = ceilDb; p_.limiterReleaseMs = releaseMs; lim_.set(on, ceilDb, releaseMs, fs_); }
   void setCompressor(bool on, double thr, double ratio, double knee, double att, double rel, double makeup) noexcept { p_.compOn = on; p_.compThresholdDb = thr; p_.compRatio = ratio; p_.compKneeDb = knee; p_.compAttackMs = att; p_.compReleaseMs = rel; p_.compMakeupDb = makeup; comp_.set(on, thr, ratio, knee, att, rel, makeup, fs_); }
   void setGate(bool on, double thr, double range, double att, double hold, double rel) noexcept { p_.gateOn = on; p_.gateThresholdDb = thr; p_.gateRangeDb = range; p_.gateAttackMs = att; p_.gateHoldMs = hold; p_.gateReleaseMs = rel; gate_.set(on, thr, range, att, hold, rel, fs_); }
+  void setDeEsser(bool on, double thr, double maxDb, double freqHz) noexcept { p_.deessOn = on; p_.deessThresholdDb = thr; p_.deessMaxDb = maxDb; p_.deessFreqHz = freqHz; ds_.set(on, thr, maxDb, freqHz, fs_); }
+  [[nodiscard]] const DeEsser& deesser() const noexcept { return ds_; }
   [[nodiscard]] const Compressor& compressor() const noexcept { return comp_; }
   [[nodiscard]] const Gate& gate() const noexcept { return gate_; }
   [[nodiscard]] bool active() const noexcept {
-    if (p_.polarityInvert || p_.delayMs > 0 || hp_.order() || lp_.order() || p_.limiterOn || p_.compOn || p_.gateOn) return true;
+    if (p_.polarityInvert || p_.delayMs > 0 || hp_.order() || lp_.order() || p_.limiterOn || p_.compOn || p_.gateOn || p_.deessOn) return true;
     for (const auto& b : p_.eq) if (b.type != FilterType::Off) return true;
     return false;
   }
@@ -289,6 +313,7 @@ class Channel {
       }
       if (nsec > 0) kr.cascade(sec, nsec, v, m);
       comp_.process(v, m);
+      if (ds_.on()) for (std::size_t i = 0; i < m; ++i) v[i] = ds_.tick(v[i]);
       for (std::size_t i = 0; i < m; ++i) { const double o = lim_.tick(v[i]); xs[i] = static_cast<float>(o); const double av = o < 0 ? -o : o; if (av > outPk) outPk = av; }
     }
     lastOut_ = outPk;
@@ -297,7 +322,7 @@ class Channel {
   // the whole channel's magnitude response at f (EQ + crossover), for the curves
   [[nodiscard]] double gainDbAt(double f) const noexcept { double g = hp_.gainDbAt(fs_, f) + lp_.gainDbAt(fs_, f); for (const auto& b : eq_) g += b.gainDbAt(fs_, f); return g; }
   [[nodiscard]] double limiterGainReductionDb() const noexcept { return lim_.gainReductionDb(); }
-  void reset() noexcept { for (auto& b : eq_) b.reset(); hp_.reset(); lp_.reset(); lim_.reset(); comp_.reset(); gate_.reset(); buf_.fill(0); w_ = 0; }
+  void reset() noexcept { for (auto& b : eq_) b.reset(); hp_.reset(); lp_.reset(); lim_.reset(); comp_.reset(); gate_.reset(); ds_.reset(); buf_.fill(0); w_ = 0; }
 
  private:
   void apply() noexcept {
@@ -306,6 +331,7 @@ class Channel {
     lim_.set(p_.limiterOn, p_.limiterCeilDb, p_.limiterReleaseMs, fs_);
     comp_.set(p_.compOn, p_.compThresholdDb, p_.compRatio, p_.compKneeDb, p_.compAttackMs, p_.compReleaseMs, p_.compMakeupDb, fs_);
     gate_.set(p_.gateOn, p_.gateThresholdDb, p_.gateRangeDb, p_.gateAttackMs, p_.gateHoldMs, p_.gateReleaseMs, fs_);
+    ds_.set(p_.deessOn, p_.deessThresholdDb, p_.deessMaxDb, p_.deessFreqHz, fs_);
     setDelayMs(p_.delayMs);
   }
   // designs every EQ band and lists the ones that change the sound (the only ones run per sample)
@@ -318,7 +344,7 @@ class Channel {
       if (pass) q.reset(); else eqOn_[static_cast<std::size_t>(nEqOn_++)] = i; }
   }
   double fs_ = 48000; ChannelParams p_{};
-  std::array<Biquad, kEqBands> eq_{}; Crossover hp_, lp_; Limiter lim_; Compressor comp_; Gate gate_;
+  std::array<Biquad, kEqBands> eq_{}; Crossover hp_, lp_; Limiter lim_; Compressor comp_; Gate gate_; DeEsser ds_;
   std::array<double, kMaxDelayFrames> buf_{}; std::size_t w_ = 0; double delaySamples_ = 0;
   std::size_t zeroRun_ = 0; double lastOut_ = 1.0; bool idle_ = false;
   std::array<int, kEqBands> eqOn_{}; int nEqOn_ = 0;   // the EQ bands that are run, in order   // IDLE: samples of silence in a row, the last block's output peak
