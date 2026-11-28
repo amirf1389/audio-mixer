@@ -152,14 +152,6 @@ releases/zip/
 # security audit output (node scripts/security/audit.js)
 security-report.md
 security-report.json
-# Built packages are published as GitHub Release assets, not committed (installers, zips, APKs, MSI/MSIX)
-releases/windows/*-setup.exe
-releases/windows/*.zip
-releases/windows/*.zip.sha256
+# Large or old packages stay out of git (GitHub 100 MB limit); installers and APKs under 50 MB are committed
 releases/windows/*.msi
 releases/windows/*.msix
-releases/windows/SHA256SUMS.txt
-releases/android/*.apk
-releases/android/*.aar
-releases/android/SHA256SUMS.txt
-!releases/windows/plugins/*.zip
