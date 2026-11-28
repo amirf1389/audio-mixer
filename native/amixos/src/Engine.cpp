@@ -2028,7 +2028,9 @@ QVariantList Engine::pages() const {
     {"SYSTEM", "update", "SOFTWARE UPDATE", "⟳", true}, {"SYSTEM", "presets", "PRESETS", "⬇", true}, {"SYSTEM", "sys", "SETTINGS", "⚙", true}, {"SYSTEM", "acct", "ACCOUNT", "☺", true}, {"SYSTEM", "access", "ACCESS", "⚿", true}, {"SYSTEM", "renew", "LICENSE", "★", true}, {"SYSTEM", "admin", "ADMIN", "⚑", true}, {"SYSTEM", "calib", "CALIBRATE", "⌖", true},
     {"HELP", "help", "HELP", "?", true}, {"HELP", "scenes", "SCENES", "⚐", true}, {"SYSTEM", "boot", "DIAGNOSTICS", "⏻", true},
   };
-  QVariantList l; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; l << m; }
+  // built once (the table is fixed): QML reads this property per element (a sequence reference reloads it on every index), and the window's
+  // bindings on the open page (the accent, the title) walked it on every page switch: ~55 maps rebuilt per access, tens of ms per switch
+  static const QVariantList l = [] { QVariantList r; for (const P& p : k) { QVariantMap m; m["group"] = p.group; m["id"] = p.id; m["text"] = p.text; m["icon"] = QString::fromUtf8(p.icon); m["ready"] = p.ready; r << m; } return r; }();
   return l;
 }
 

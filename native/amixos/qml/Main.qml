@@ -61,7 +61,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "fluid"; value: !graphics.lowPower }    // BATTERY: solid panels, no sheen
     Binding { target: Theme; property: "motion"; value: !graphics.lowPower }
     // THE SECTION COLOUR: the open page's group (MIX, ROUTE, METER ...) tints the aurora, the header line and the rail
-    Binding { target: Theme; property: "accent"; value: { const ps = engine.pages; for (let i = 0; i < ps.length; ++i) if (ps[i].id === root.current) return Theme.groupColor(ps[i].group); return Theme.orange } }
+    Binding { target: Theme; property: "accent"; value: { const p = root.pageById[root.current]; return p ? Theme.groupColor(p.group) : Theme.orange } }
     Aurora { anchors.fill: parent; z: -1; visible: Theme.glass; motion: Theme.glass && settings.colorMotion && graphics.heavyEffects; accent: Theme.accent }
     LayoutMirroring.childrenInherit: true
     // SOFT RESTART: the console starts over without closing: engine off, sound cards scanned again, the remembered device (or the best one) started, the page rebuilt, the boot screen shown
@@ -91,7 +91,11 @@ ApplicationWindow {
     Timer { interval: 1500; running: true; onTriggered: if (!engine.running) root.autoAudio() }   // the first page: the start-up auto start (main.cpp) had its chance; if nothing runs, try once more and tell
     function softRestart() { engine.stop(); engine.refreshDevices(); if (!settings.startLastDevice()) engine.autoStart(settings.defaultFrames); const c = root.current; root.current = "home"; root.current = c; clearPages(); touchPage(c); if (mixerEver) { mixerKeep.active = false; mixerKeep.active = true } root.bootOn = settings.bootAnimation && !noBoot }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; enabled: !root.setupLocked; onActivated: root.softRestart() }
-    function pageOf(id) { for (var i = 0; i < engine.pages.length; i++) if (engine.pages[i].id === id) return engine.pages[i]; return engine.pages[0] }
+    // THE PAGE LIST as one plain JS array, read once: engine.pages is a C++ list, and every index into it (engine.pages[i]) fetched the
+    // whole list again; the accent and the title walk it on every page switch
+    readonly property var pageList: { const ps = engine.pages, out = []; for (let i = 0; i < ps.length; ++i) out.push(ps[i]); return out }
+    readonly property var pageById: { const m = {}; for (let i = 0; i < pageList.length; ++i) m[pageList[i].id] = pageList[i]; return m }
+    function pageOf(id) { return pageById[id] || pageList[0] }
 
     // ZOOM IN / OUT: the whole console is drawn larger or smaller at once (no restart), keeping its layout; the window size stays
     readonly property real liveZoom: settings.liveZoom
@@ -281,7 +285,7 @@ ApplicationWindow {
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Qt.openUrlExternally("ms-settings:sound") } } } }
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
-            NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? engine.pages : engine.pages.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
+            NavRail { Layout.fillHeight: true; pages: settings.spatialEnabled ? root.pageList : root.pageList.filter(function (p) { return p.id !== "surround" }); current: root.current; onPicked: function (id) { root.current = id } }
             Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 id: pageArea; objectName: "pageArea"
