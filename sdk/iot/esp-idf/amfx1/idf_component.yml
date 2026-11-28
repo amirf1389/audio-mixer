@@ -1,0 +1,10 @@
+version: "1.0.0"
+description: "Control the AmF X1 mixing console over Wi-Fi or Ethernet: faders, mute, solo, pan, master, meters and scenes (C API amfx1_*)."
+url: "https://github.com/amirf1389/audio-mixer"
+license: "MIT"
+tags:
+  - audio
+  - mixer
+  - remote-control
+dependencies:
+  idf: ">=5.0"
