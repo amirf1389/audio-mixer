@@ -77,6 +77,13 @@ Canvas {
         folder: "M3 6 H9 L11 8 H21 V19 H3 Z",
         check: "M5 12 L10 17 L19 7",
         refresh: "M20 11 A8 8 0 1 0 18 17 M20 5 V11 H14",
-        lock: "M6 11 H18 V21 H6 Z M8 11 V7 A4 4 0 0 1 16 7 V11"
+        lock: "M6 11 H18 V21 H6 Z M8 11 V7 A4 4 0 0 1 16 7 V11",
+        // 1.27: the ASSIGN page (a grid with a slash: groups that silence), the strip kinds and the MONITOR section
+        assign: "M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z M14 14 H20 V20 H14 Z M3 21 L21 3",
+        mic: "M9 3 H15 V12 A3 3 0 0 1 9 12 Z M6 11 A6 6 0 0 0 18 11 M12 17 V21 M8 21 H16",
+        inst: "M15 3 L21 9 M13 5 L19 11 M17 7 L9 15 M9 15 A4 4 0 1 1 5 19 A3 3 0 0 1 9 15",
+        phones: "M4 15 A8 8 0 0 1 20 15 M4 14 H7 V20 H4 Z M17 14 H20 V20 H17 Z",
+        monitor: "M4 9 H8 L13 5 V19 L8 15 H4 Z M16 9 A4 4 0 0 1 16 15 M18 6 A8 8 0 0 1 18 18",
+        talk: "M4 5 H20 V15 H11 L7 19 V15 H4 Z M8 9 H16 M8 12 H13"
     })
 }

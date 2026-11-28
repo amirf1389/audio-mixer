@@ -80,10 +80,32 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 #nBell{margin-left:8px;font:700 10px ui-monospace,monospace;padding:3px 8px;border-radius:var(--rs);border:1px solid var(--dim);background:transparent;color:inherit}#nBell b{color:#ef4444;margin-left:4px}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;max-width:92vw;padding:9px 14px;border-radius:10px;background:#1d2026;color:#f1f5f9;border:1px solid #fbbf24;font:600 12px ui-monospace,monospace;box-shadow:0 6px 20px rgba(0,0,0,.4)}
 #nPanel{position:fixed;right:10px;top:54px;z-index:49;width:min(340px,92vw);max-height:60vh;overflow:auto;padding:10px;border-radius:10px;background:#16181c;color:#f1f5f9;border:1px solid #475569}#nPanel h3{margin:0 0 6px;font:700 11px ui-monospace,monospace;letter-spacing:2px}#nPanel li{font:11px ui-monospace,monospace;margin:4px 0;list-style:none}#nPanel ul{padding:0;margin:0}#nPanel small{color:#94a3b8;margin-right:6px}
-@media (prefers-reduced-motion:reduce){:root{--motion:0ms}}</style></head><body>
+@media (prefers-reduced-motion:reduce){:root{--motion:0ms}}
+/* 1.27 SKIN: one accent, an 8 px grid, rounded cards with fewer borders, a light option, left section tabs on wide screens */
+:root{--bg:#0e1116;--card:#161a21;--glass-top:#1a1f27;--glass-edge:transparent;--line:#252b35;--text:#eef2f6;--dim:#97a3b3;--accent:#3cc8db;--r:16px;--rs:10px;--rl:20px}
+body.light{--bg:#f3f5f8;--card:#ffffff;--glass-top:#ffffff;--line:#d9dee6;--text:#111827;--dim:#4b5563;--accent:#0e7490}
+body.light nav button.cur{background:#dbe8ee}
+body{font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:color-mix(in srgb,var(--bg) 92%,transparent);border-bottom:0;box-shadow:0 1px 0 var(--line)}
+.top{gap:8px;padding:8px 16px;min-height:56px}h1{font-size:15px;color:var(--text)}h1 i{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--red);margin-right:8px;vertical-align:1px}
+body.live h1 i{background:var(--green)}
+.card{border:0;border-radius:var(--r);padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+button,select{min-height:44px;border-radius:var(--rs);border-color:transparent}
+button.on{box-shadow:none}
+main{padding:16px 24px 40px}.grid{gap:16px}
+nav button{min-height:44px;border-radius:var(--rs);font-size:12px}nav button.cur{box-shadow:inset 3px 0 0 var(--accent)}
+#thm{min-width:44px}
+@media (min-width:1000px){
+ body.paired{display:grid;grid-template-columns:200px minmax(0,1fr);grid-template-rows:auto 1fr}
+ body.paired header{grid-column:1/3;backdrop-filter:none}body.paired #bridge{margin-left:200px}body.paired main{grid-column:2;max-width:none;margin:0;min-width:0;overflow-x:auto}
+ body.paired nav{position:fixed;top:56px;left:0;bottom:0;width:200px;z-index:3;background:var(--bg);flex-direction:column;gap:4px;padding:8px 12px;overflow-y:auto}
+ body.paired nav button{text-align:left;width:100%}
+}
+@media (max-width:600px){main{padding:8px 8px 32px}.card{padding:12px}}
+</style></head><body>
 <div id="toast" role="status" aria-live="polite" hidden></div><div id="nPanel" hidden><h3>NOTIFICATIONS</h3><ul id="nList"></ul><button id="nClear">Clear</button></div>
-<header><div class="top"><h1>AMF X1 · REMOTE</h1><span id="st">not paired</span><button id="nBell" aria-label="Notifications" title="NOTIFICATIONS: what's new, clipping, device lost / connected, CPU overload, update ready, audio loop stopped">NOTICES<b id="nCnt"></b></button></div>
-<nav id="nav"><button data-p="mix">MIXER</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL</button><button data-p="rta">RTA EQ</button><button data-p="bus">SEND TO</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">GROUP FADERS</button><button data-p="rec">RECORD</button><button data-p="str">STREAMING</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
+<header><div class="top"><h1><i id="dot" title="connection"></i>AMF X1 · REMOTE</h1><span id="st">not paired</span><button id="nBell" aria-label="Notifications" title="NOTIFICATIONS: what's new, clipping, device lost / connected, CPU overload, update ready, audio loop stopped">NOTICES<b id="nCnt"></b></button><button id="thm" aria-label="Light or dark" title="LIGHT / DARK">◐</button></div>
+<nav id="nav"><button data-p="mix">MIX</button><button data-p="mst">MASTER</button><button data-p="ch">CHANNEL · FX+</button><button data-p="rta">RTA EQ</button><button data-p="bus">SEND TO</button><button data-p="mon">MONITOR</button><button data-p="scn">SCENES</button><button data-p="pre">PRESETS</button><button data-p="grp">ASSIGN · GROUPS</button><button data-p="rec">RECORD</button><button data-p="str">STREAMING</button><button data-p="dev">DEVICES</button><button data-p="sys">STATUS</button><button data-p="set">SETTINGS</button></nav>
 <div id="bridge" hidden title="METER BRIDGE: every channel and the master, peak hold, clip lights. Tap to reset the peaks and clips."><canvas id="brC" aria-label="Meter bridge"></canvas><div class="bm"><span>MASTER PEAK</span><b id="brPk">—</b><span id="brClip"></span></div></div></header>
 <main>
 <section id="pair" class="card">
@@ -125,7 +147,14 @@ main{padding:8px 10px 24px}.top{padding:8px 12px}.card{padding:10px;border-radiu
 <div class="card"><h2>MONITOR · CONTROL ROOM</h2>
 <div class="row"><span>Source<small>what the monitor outputs play</small></span><select id="mSrc"></select></div>
 <div class="row"><span>Level <em id="mDbT" class="db"></em></span></div><input type="range" class="h" id="mDb" min="0" max="1000" aria-label="Monitor level">
-<div class="row"><span>Switches</span><span class="seg"><button id="mDim">DIM</button><button id="mMono">MONO</button><button id="mMute">MUTE</button></span></div></div>
+<div class="row"><span>Switches</span><span class="seg"><button id="mDim">DIM</button><button id="mMono">MONO</button><button id="mMute">MUTE</button></span></div>
+<div class="row"><span>Output<small>speaker set A, B or both</small></span><span class="seg" id="mOut"><button>A</button><button>B</button><button>A+B</button></span></div>
+<div class="row"><span>Phones <em id="mPhT" class="db"></em></span></div><input type="range" class="h" id="mPh" min="0" max="1000" aria-label="Phones level">
+<div class="row"><span>Solo</span><button id="mClr" class="amb">CLR SOLO</button></div></div>
+<div class="card"><h2>TALKBACK</h2>
+<div class="row"><span>Talk<small>the console's talkback key</small></span><button id="tOn" class="amb">TALKBACK</button></div>
+<div class="row"><span>To</span><select id="tDest" aria-label="Talkback destination"></select></div>
+<div class="row"><span>Level <em id="tDbT" class="db"></em></span></div><input type="range" class="h" id="tDb" min="0" max="1000" aria-label="Talkback level"></div>
 <div class="card"><h2>MASTER LIMITER</h2>
 <div class="row"><span>Limiter<small>keeps the master under the ceiling</small></span><button id="lOn">ON</button></div>
 <div class="row"><span>Ceiling <em id="lCeT" class="db"></em></span></div><input type="range" class="h" id="lCe" min="-200" max="0" step="5" aria-label="Limiter ceiling">
@@ -336,6 +365,13 @@ function monitor(){if(!state||!state.monitor)return;const m=state.monitor,sel=$(
  const M=state.master,ce=$("#lCe"),lo=$("#lOn");lo.classList.add("acc");lo.classList.toggle("on",!!M.limiter);lo.textContent=M.limiter?"ON":"OFF";
  const sendLim=()=>send("lim",{op:"limiter",on:M.limiter,ceilingDb:M.ceilingDb});lo.onclick=()=>{buzz();M.limiter=!M.limiter;lo.classList.toggle("on",M.limiter);lo.textContent=M.limiter?"ON":"OFF";sendLim()};
  if(free(ce)){ce.value=Math.round((M.ceilingDb??-.5)*10);$("#lCeT").textContent=(M.ceilingDb??-.5).toFixed(1)+" dBTP"}ce.oninput=()=>{M.ceilingDb=ce.value/10;$("#lCeT").textContent=M.ceilingDb.toFixed(1)+" dBTP";sendLim()};ce.onpointerdown=()=>{drag=ce};
+ const ob=[...$("#mOut").children];ob.forEach((b,i)=>{b.classList.add("acc");b.classList.toggle("on",(m.out||0)===i);b.onclick=()=>{buzz();m.out=i;ob.forEach((x,k)=>x.classList.toggle("on",k===i));send("monOut",{op:"monitor",out:i})}});
+ hslider("#mPh","#mPhT",m.phonesDb||0,v=>{m.phonesDb=Math.max(-60,Math.min(10,v));send("phones",{op:"monitor",phonesDb:m.phonesDb})});
+ $("#mClr").onclick=()=>{buzz();opsSeq(state.strips.filter(x=>x.solo).map(x=>({op:"solo",strip:x.id,on:false})),"solo cleared")};
+ const T=state.talkback||{on:false,db:-10,dest:0},tb=$("#tOn"),td=$("#tDest");tb.classList.toggle("on",!!T.on);tb.textContent=T.on?"TALKBACK ON":"TALKBACK";
+ if(td.options.length!==17){td.textContent="";for(let d=0;d<=16;d++){const o=document.createElement("option");o.value=d;o.textContent=d?"B"+d:"MAIN";td.appendChild(o)}}if(free(td))td.value=T.dest||0;
+ const sendTb=()=>send("talk",{op:"talkback",on:!!T.on,db:T.db,dest:T.dest|0});tb.onclick=()=>{buzz();T.on=!T.on;tb.classList.toggle("on",T.on);tb.textContent=T.on?"TALKBACK ON":"TALKBACK";sendTb()};td.onchange=()=>{T.dest=+td.value;sendTb()};
+ hslider("#tDb","#tDbT",T.db??-10,v=>{T.db=Math.max(-60,Math.min(10,v));sendTb()});
  hslider("#mMa","#mMaT",M.db,v=>{M.db=v;send("master",{op:"master",db:v});const e=els.find(x=>x.i<0);if(e){e.f.value=Math.round(dbToPos(v)*1000);e.d.textContent=fmt(v)}})}
 // ---- RTA: the live spectrum for the CHANNEL EQ graph and the RTA EQ page. The service sends it while asked (renewed every 8 s)
 let rtaF=[],rtaDb=[],rtaPk=[],rtaWanted=null,rtaSent=0;const ISO=[31.5,63,125,250,500,1000,2000,4000,8000,16000];
@@ -552,6 +588,8 @@ $("#scImport").onchange=async e=>{try{const j=JSON.parse(await e.target.files[0]
 // ---- GROUPS: four mute groups
 const gKey="groups."+location.host;let groups=ls.get(gKey,[1,2,3,4].map(n=>({name:"GROUP "+n,members:[]})));
 function drawGroups(){const box=$("#groups");box.textContent="";if(!state)return;
+ if((state.muteGroups||[]).length){const c=document.createElement("div");c.className="card";c.innerHTML='<h2>CONSOLE MUTE GROUPS<small style="display:block;font-weight:400;letter-spacing:0;color:var(--dim)">the console\'s own eight groups (ASSIGN page): every remote sees them</small></h2><div class="chips"></div>';
+  const ch=c.querySelector(".chips");for(const g of state.muteGroups){const b=document.createElement("button");b.className="chip red"+(g.mute?" on":"");b.textContent=g.name+" · "+(g.sources||0);b.onclick=()=>{buzz();g.mute=!g.mute;b.classList.toggle("on",g.mute);send("mg"+g.id,{op:"muteGroup",group:g.id,mute:g.mute})};ch.appendChild(b)}box.appendChild(c)}
  groups.forEach((g,n)=>{const c=document.createElement("div");c.className="card";c.innerHTML='<div class="bar"><input class="t nm2" maxlength="20" style="flex:1"><button class="sm mu red">MUTE</button><button class="sm un">UNMUTE</button></div><div class="chips"></div>';
   const nm=c.querySelector(".nm2");nm.value=g.name;nm.onchange=()=>{g.name=nm.value.trim()||("GROUP "+(n+1));ls.set(gKey,groups)};
   const allMuted=g.members.length&&g.members.every(i=>state.strips[i]&&state.strips[i].mute);c.querySelector(".mu").classList.toggle("on",!!allMuted);
@@ -674,4 +712,10 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden){if(token&
  if(token)return;$("#pin").value=m[1];const ua=navigator.userAgent||"";$("#who").value=/iPhone|iPad/.test(ua)?"iPhone / iPad (browser)":/Android/.test(ua)?"Android (browser)":"Browser";setSt("pairing…");$("#go").click()})();
 applyOpts();showLock();wake();show();
 </script><script>document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('.card>h2');if(h&&h.parentNode.querySelector('.row small'))h.parentNode.classList.toggle('more')});;document.querySelectorAll('p.note:not([id])').forEach(function(n){if(n.textContent.length>80){n.classList.add('clip');n.title=n.textContent;n.addEventListener('click',function(){n.classList.toggle('open')})}});</script>
-</body></html>
+<script>
+// 1.27: the light / dark choice (kept in this browser) and the connection dot
+(function(){
+ document.getElementById("thm").onclick=()=>{const want=document.body.classList.contains("light")?"DARK":"LIGHT";const b=[...document.querySelectorAll("#oTheme button")].find(x=>x.textContent===want);if(b)b.click();else document.body.classList.toggle("light")};
+ const st=document.getElementById("st"),nav=document.getElementById("nav");
+ setInterval(()=>{document.body.classList.toggle("live",/connected|live|ok|running/i.test(st.textContent)&&!/not|lost|fail/i.test(st.textContent));document.body.classList.toggle("paired",getComputedStyle(nav).display!=="none");if(innerWidth>=1000){const h=document.querySelector("header .top").offsetHeight;nav.style.top=h+"px"}else nav.style.top=""},500)})();
+</script></body></html>

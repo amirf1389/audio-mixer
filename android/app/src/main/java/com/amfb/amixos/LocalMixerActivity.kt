@@ -154,7 +154,7 @@ class LocalMixerActivity : FitActivity() {
      *  OUTPUT keys, then the desk: one strip per channel and the MASTER strip on the right, like the console's own mixer */
     fun render() {
         miniWeb?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }; miniPane = null   // the player keeps playing through a re-layout (a turn of the phone)
-        body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear()
+        body.removeAllViews(); meters.clear(); fxBtns.clear(); faders.clear(); infoViews.clear()
         val modeBar = Nav.modeBar(this, true)   // DUAL MODE: THIS PHONE | CONSOLE (upright: on top; on its side: in SETUP, so the faders get the height)
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(TextView(this).apply { text = getString(R.string.home_phone); setTextColor(accent); textSize = 14f; setTypeface(null, Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) })
@@ -165,7 +165,7 @@ class LocalMixerActivity : FitActivity() {
         land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val secKeys = LinkedHashMap<String, PadButton>()
         val secBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; tag = "sectionBar" }
-        for ((id, label) in listOf("faders" to R.string.lm_sec_faders, "media" to R.string.lm_sec_media, "tools" to R.string.lm_sec_tools, "setup" to R.string.lm_sec_setup))
+        for ((id, label) in listOf("faders" to R.string.lm_sec_faders, "studio" to R.string.lm_sec_studio, "media" to R.string.lm_sec_media, "tools" to R.string.lm_sec_tools, "setup" to R.string.lm_sec_setup))
             secKeys[id] = PadButton(this, getString(label), cyan, 12f).apply { contentDescription = "sec_$id"; layoutParams = LinearLayout.LayoutParams(0, if (land) 96 else 84, 1f).apply { setMargins(0, 0, 8, 0) } }.also { secBar.addView(it) }
         for ((tag, glyph, d) in listOf(Triple("zoomOut", "−", 1), Triple("zoomIn", "+", -1)))   // − : more channels (smaller), + : fewer (bigger)
             secBar.addView(PadButton(this, glyph, cyan, 16f).apply { contentDescription = tag; layoutParams = LinearLayout.LayoutParams(if (land) 96 else 84, if (land) 96 else 84).apply { setMargins(0, 0, 8, 0) }; setOnClickListener { stripZoom(d) } })
@@ -255,8 +255,9 @@ class LocalMixerActivity : FitActivity() {
         } else faderSection = desk
         fun scroller(t: String, v: View) = android.widget.ScrollView(this).apply { tag = t; isFillViewport = true; addView(v); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
         val toolsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; toolsSection(toolsBox)
+        val studioView = StudioView(this, studioHost).also { studio = it }.build(land).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }; body.addView(studioView)
         val mediaView = scroller("secMedia", mediaBox); val setupView = scroller("secSetup", setupBox); val toolsView = scroller("secTools", toolsBox); body.addView(mediaView); body.addView(toolsView); body.addView(setupView)
-        fun show(sec: String) { faderSection?.visibility = if (sec == "faders") View.VISIBLE else View.GONE; mediaView.visibility = if (sec == "media") View.VISIBLE else View.GONE; toolsView.visibility = if (sec == "tools") View.VISIBLE else View.GONE
+        fun show(sec: String) { faderSection?.visibility = if (sec == "faders") View.VISIBLE else View.GONE; studioView.visibility = if (sec == "studio") View.VISIBLE else View.GONE; mediaView.visibility = if (sec == "media") View.VISIBLE else View.GONE; toolsView.visibility = if (sec == "tools") View.VISIBLE else View.GONE
             setupView.visibility = if (sec == "setup") View.VISIBLE else View.GONE; for ((id, k) in secKeys) k.on = id == sec; prefs().edit().putString("section", sec).apply() }
         for ((id, k) in secKeys) k.setOnClickListener { show(id) }
         show(prefs().getString("section", "faders").takeIf { it in secKeys } ?: "faders")
@@ -265,6 +266,78 @@ class LocalMixerActivity : FitActivity() {
     /** the phone was turned: the screen is laid out again for the new shape (the sound keeps running, nothing is restarted) */
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) { super.onConfigurationChanged(newConfig); Nav.fit(this); render() }
     private val faders = HashMap<Int, FaderView>()
+    // 1.27 FADER SOURCES: the INFO header over each fader and the source picked for OTHER APPS' AUDIO while Android asks the user
+    private val infoViews = HashMap<Int, TextView>()
+    // 1.27 STUDIO section (StudioDeck.kt): web panel above, MIC 1 / MIC 2 / BROWSER / PLAYER / MASTER below, the status line
+    private var studio: StudioView? = null
+    private var cpuAt = 0L; private var wallAt = 0L; private var cpuPct = 0.0
+    internal fun statusLine(): String {
+        val st = if (loop?.path == "aaudio") runCatching { engine?.nativeState() }.getOrNull() else null
+        val now = android.os.SystemClock.elapsedRealtime(); val cpu = android.os.Process.getElapsedCpuTime()
+        if (wallAt > 0 && now - wallAt >= 500) { cpuPct = 100.0 * (cpu - cpuAt) / (now - wallAt) / Runtime.getRuntime().availableProcessors(); cpuAt = cpu; wallAt = now } else if (wallAt == 0L) { cpuAt = cpu; wallAt = now }
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val usb = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.id == (st?.getOrNull(6) ?: -1) && (it.type == AudioDeviceInfo.TYPE_USB_DEVICE || it.type == AudioDeviceInfo.TYPE_USB_HEADSET) }
+        return if (loop == null) getString(R.string.st_stopped) else StudioMap.status(st?.getOrNull(8)?.takeIf { it > 0 } ?: rate, if (Prefs.localInputOn(this)) inChannels() else 0, usb, st?.getOrNull(3) ?: frames, st?.getOrNull(2) ?: 0, st?.getOrNull(4) ?: 0, cpuPct)
+    }
+    private val studioHost = object : StudioView.Host {
+        override val engine: Engine? get() = this@LocalMixerActivity.engine
+        override fun prefs() = this@LocalMixerActivity.prefs()
+        override fun faderStart(ch: Int, a: FaderSources.Action) = this@LocalMixerActivity.faderStart(ch, a)
+        override fun applyLevel(ch: Int) { if (ch == -1) engine?.setMaster(masterOut(prefs(), masterRider.gainDb)) else applyLevel(engine, ch) }
+        override fun statusLine() = this@LocalMixerActivity.statusLine()
+    }
+    private var captureFor = -1
+    private val captureConsent = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        val ch = captureFor; captureFor = -1
+        if (r.resultCode != RESULT_OK || r.data == null || ch < 0) { status.text = getString(R.string.lm_capture_denied); return@registerForActivityResult }
+        FaderSources.bind(prefs(), ch, FaderSources.Source(FaderSources.Kind.APP, 0, getString(R.string.lm_src_apps), 48000, 2))
+        AppCapture.engine = engine; AppCapture.deck = FaderSources.appDeck(ch); AppCapture.mixRate = ::mixRate
+        AppCapture.paused = FaderSources.isOff(prefs().getFloat("deckDb${ch - 100}", 0f).toDouble())
+        decks.getOrNull(ch - 100)?.pause(); engine?.deckRoute(ch - 100, deckStrip(ch - 100))
+        startForegroundService(android.content.Intent(this, AppCaptureService::class.java).putExtra("code", r.resultCode).putExtra("data", r.data)); render() }
+    /** FADER-START: the fader of [ch] left -inf (START) or reached it (STOP) */
+    internal fun faderStart(ch: Int, a: FaderSources.Action) {
+        if (a == FaderSources.Action.NONE) return
+        val on = a == FaderSources.Action.START; val src = FaderSources.bound(prefs(), ch)
+        when (src.kind) {
+            FaderSources.Kind.DECK -> decks.getOrNull(ch - 100)?.let { if (on) it.play() else it.pause() }
+            FaderSources.Kind.APP -> AppCapture.paused = !on
+            FaderSources.Kind.NONE -> {}
+            else -> { prefs().edit().putBoolean("mute$ch", !on).apply(); applyLevel(engine, ch) }
+        }
+    }
+    private fun inputSources(): List<FaderSources.Source> {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return am.getDevices(AudioManager.GET_DEVICES_INPUTS).filter { it.type != AudioDeviceInfo.TYPE_TELEPHONY }.map { d ->
+            FaderSources.Source(FaderSources.kindOf(d.type), d.id, (d.productName?.toString()?.takeIf { it.isNotBlank() } ?: DevicesActivity.typeName(d.type)), d.sampleRates.maxOrNull() ?: 0, d.channelCounts.maxOrNull() ?: 0) }
+    }
+    /** SOURCE: what feeds the strip [ch]; permissions are asked for here, a refusal is said in plain words */
+    private fun pickSource(ch: Int) {
+        val list = FaderSources.choices(ch, if (ch >= 100) emptyList() else inputSources())
+        AlertDialog.Builder(this).setTitle(R.string.lm_source).setItems(list.map { FaderSources.icon(it.kind) + "  " + it.name }.toTypedArray()) { _, w ->
+            val src = list[w]
+            val mic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            when (FaderSources.gate(src.kind, mic, false, android.os.Build.VERSION.SDK_INT, Features.isOn(this, if (src.kind == FaderSources.Kind.APP) "streaming" else "phone"))) {
+                FaderSources.Gate.OFF -> status.text = getString(R.string.lm_src_off)
+                FaderSources.Gate.UNSUPPORTED -> status.text = getString(R.string.lm_capture_old)
+                FaderSources.Gate.NEED_MIC -> { status.text = getString(R.string.lm_src_need_mic); requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1) }
+                FaderSources.Gate.NEED_CAPTURE -> AlertDialog.Builder(this).setTitle(R.string.lm_src_apps).setMessage(R.string.lm_capture_notice_long)
+                    .setPositiveButton(R.string.lm_capture_allow) { _, _ -> captureFor = ch; captureConsent.launch(AppCapture.consentIntent(this)) }.setNegativeButton(android.R.string.cancel, null).show()
+                FaderSources.Gate.OK -> {
+                    if (ch >= 100 && FaderSources.bound(prefs(), ch).kind == FaderSources.Kind.APP) AppCapture.stop(this)
+                    FaderSources.bind(prefs(), ch, src)
+                    if (ch < 100) { prefs().edit().putInt("inDevice", src.id).apply(); restartIfRunning() }
+                    render() }
+            } }.show()
+    }
+    private fun infoText(ch: Int, levelDb: Double): String {
+        val src = FaderSources.bound(prefs(), ch)
+        val title = if (ch >= 100) prefs().getString("deckTitle${ch - 100}", null) else null
+        return FaderSources.info(src, title, if (src.kind == FaderSources.Kind.APP) AppCapture.levelDb else levelDb)
+    }
+    private fun infoHeader(ch: Int): View = TextView(this).apply { contentDescription = "srcInfo_$ch"; text = infoText(ch, -120.0); setTextColor(Color.WHITE); textSize = 9f; gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+        setPadding(4, 0, 4, if (land) 0 else 8)
+        setOnClickListener { pickSource(ch) } }.also { infoViews[ch] = it }
 
     /** one channel strip (0, 1) or the MASTER (-1), top to bottom: name, FX (the insert rack), pan knob or LIMIT, MUTE, the fader with
      *  its LED meter, the level in dB */
@@ -273,7 +346,8 @@ class LocalMixerActivity : FitActivity() {
         val color = if (master) accent else ConsoleUi.palette[(s + 1) % ConsoleUi.palette.size]
         val col = ConsoleUi.strip(this, color, 0, master).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, if (master) 1.15f else 1f).apply { setMargins(4, 0, 4, 0) } }
         col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_master) else getString(R.string.lm_channel, s + 1, if (two) (if (s == 0) "L" else "R") else "").trim(); setTextColor(if (master) accent else Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
-        if (!land) col.addView(TextView(this).apply { text = if (master) getString(R.string.lm_sub_master) else getString(if (two) R.string.lm_sub_in_n else R.string.lm_sub_in, s + 1); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        if (master) { if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_sub_master); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) }) }
+        else col.addView(infoHeader(s))   // 1.27: the INFO header (source, format, level) takes the place of the old sub-title
         fun full(v: View, h: Int = keyH()) = v.apply { if (v is android.widget.TextView) key(v); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { setMargins(6, 4, 6, 4) } }
         col.addView(full(PadButton(this, fxLabel(s), ConsoleUi.VIOLET, 12f).apply { on = rack(s).any { it.isNotEmpty() }; setOnClickListener { showRack(s) } }.also { fxBtns[s] = it }))
         if (!master) col.addView(full(eqKey(s)))
@@ -298,7 +372,7 @@ class LocalMixerActivity : FitActivity() {
         val db0 = p.getFloat(key, 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
         col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (master) engine?.setMaster(masterOut(p, masterRider.gainDb)) else { lmTouch(s); applyLevel(engine, s) } } }.also { faders[s] = it })
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; val was = p.getFloat(key, 0f).toDouble(); p.edit().putFloat(key, set.toFloat()).apply(); show(db); if (!master) faderStart(s, FaderSources.action(was, set)); if (master) engine?.setMaster(masterOut(p, masterRider.gainDb)) else { lmTouch(s); applyLevel(engine, s) } } }.also { faders[s] = it })
         col.addView(readout)
         return col
     }
@@ -514,6 +588,9 @@ class LocalMixerActivity : FitActivity() {
         val p = loop?.lastPeaks ?: return
         fun lvl(v: Float) = (((if (v > 1e-6f) 20 * Math.log10(v.toDouble()) else -120.0) + 60) / 60 * 1000).toInt().coerceIn(0, 1000)
         for (s in 0 until INPUTS) faders[s]?.apply { level = lvl(p.getOrElse(s) { 0f }); clip = p.getOrElse(s) { 0f } >= 1f }
+        fun dbOf(v: Float) = if (v > 1e-6f) 20 * Math.log10(v.toDouble()) else -120.0
+        studio?.tick(p)
+        for ((ch, tv) in infoViews) { val pk = if (ch >= 100) deckStrip(ch - 100).let { maxOf(p.getOrElse(it) { 0f }, p.getOrElse(it + 1) { 0f }) } else p.getOrElse(ch) { 0f }; tv.text = infoText(ch, dbOf(pk)) }
         for (d in 0 until DECKS) faders[100 + d]?.apply { val l = deckStrip(d); val m = maxOf(p.getOrElse(l) { 0f }, p.getOrElse(l + 1) { 0f }); level = lvl(m); clip = m >= 1f }
         faders[-1]?.apply { val m = maxOf(p.getOrElse(STRIPS) { 0f }, p.getOrElse(STRIPS + 1) { 0f }); level = lvl(m); clip = m >= 1f }
     }
@@ -795,7 +872,7 @@ class LocalMixerActivity : FitActivity() {
         val p = prefs(); val color = ConsoleUi.palette[(d + 3) % ConsoleUi.palette.size]; val l = deckStrip(d)
         val col = ConsoleUi.strip(this, color, 0, false).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { setMargins(4, 0, 4, 0) } }
         col.addView(TextView(this).apply { text = getString(R.string.lm_deck, deckName(d)); setTextColor(Color.WHITE); textSize = 14f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER })
-        if (!land) col.addView(TextView(this).apply { text = getString(R.string.lm_sub_deck); setTextColor(dim); textSize = 9f; letterSpacing = 0.1f; gravity = Gravity.CENTER; setPadding(0, 0, 0, 8) })
+        col.addView(infoHeader(100 + d))   // 1.27: the INFO header in place of the old sub-title
         col.addView(key(PadButton(this, fxLabel(l), ConsoleUi.VIOLET, 12f)).apply { on = rack(l).any { it.isNotEmpty() }; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) }
             setOnClickListener { showRack(l) } }.also { fxBtns[l] = it })   // the deck's own rack: the same effects on its left and its right
         col.addView(key(eqKey(100 + d)).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, keyH()).apply { setMargins(6, 4, 6, 4) } })
@@ -808,7 +885,7 @@ class LocalMixerActivity : FitActivity() {
         val db0 = p.getFloat("deckDb$d", 0f).toDouble(); show(if (db0 <= -60) -120.0 else db0)
         col.addView(FaderView(this, color).apply { progress = (com.amfb.amixos.remote.DaemonClient.dbToPos(if (db0 <= -60) -120.0 else db0) * 1000).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; p.edit().putFloat("deckDb$d", set.toFloat()).apply(); show(db); lmTouch(100 + d); applyLevel(engine, 100 + d) } }.also { faders[100 + d] = it })
+            onMove = { pos -> val db = com.amfb.amixos.remote.DaemonClient.posToDb(pos / 1000.0); val set = if (db <= -60) -60.0 else db; val was = p.getFloat("deckDb$d", 0f).toDouble(); p.edit().putFloat("deckDb$d", set.toFloat()).apply(); faderStart(100 + d, FaderSources.action(was, set)); show(db); lmTouch(100 + d); applyLevel(engine, 100 + d) } }.also { faders[100 + d] = it })
         col.addView(readout); return col
     }
 

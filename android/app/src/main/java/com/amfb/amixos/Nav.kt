@@ -67,10 +67,10 @@ object Nav {
             val on = t == current
             bar.addView(LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; isClickable = true; contentDescription = a.getString(t.label)
                 minimumHeight = (48 * d).toInt(); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f); setOnClickListener { go(a, if (t == Tab.MIXER) mixerTarget(a) else t.target) }
-                addView(TextView(a).apply { text = t.glyph; textSize = 18f; setTextColor(a.getColor(if (on) R.color.md_on_secondary_container else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; includeFontPadding = false
+                addView(TextView(a).apply { text = t.glyph; textSize = 16f; setTextColor(a.getColor(if (on) R.color.md_on_secondary_container else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; includeFontPadding = false
                     background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 16 * d; setColor(if (on) a.getColor(R.color.md_secondary_container) else Color.TRANSPARENT) }
-                    layoutParams = LinearLayout.LayoutParams((64 * d).toInt(), (32 * d).toInt()) })
-                addView(TextView(a).apply { text = a.getString(t.label); textSize = 12f; maxLines = 1; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (4 * d).toInt(), 0, 0)
+                    layoutParams = LinearLayout.LayoutParams((56 * d).toInt(), (24 * d).toInt()) })
+                addView(TextView(a).apply { text = a.getString(t.label); textSize = 10f; maxLines = 1; includeFontPadding = false; setTextColor(a.getColor(if (on) R.color.md_on_surface else R.color.md_on_surface_variant)); gravity = Gravity.CENTER; setPadding(0, (2 * d).toInt(), 0, 0)
                     typeface = Typeface.create(if (on) "sans-serif-medium" else "sans-serif", Typeface.NORMAL); letterSpacing = 0.03f }) })
         }
         if (a !is LocalMixerActivity && Features.isOn(Prefs.remote(a), "streaming")) root.addView(NowPlaying.bar(a))   // NOW PLAYING (only while a phone app plays)
@@ -80,7 +80,7 @@ object Nav {
     /** ON ITS SIDE the screen is short: the bar becomes a thin row of icons (no labels); upright it is the usual bar. */
     private fun fitBar(a: Activity, bar: LinearLayout) {
         val land = a.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE; val d = a.resources.displayMetrics.density
-        val pad = ((if (land) 3 else 12) * d).toInt(); bar.setPadding(0, pad, 0, pad)
+        val pad = ((if (land) 2 else 2) * d).toInt(); bar.setPadding(0, pad, 0, pad)   // 1.27: a slim bar (about 52 dp upright) so the faders get the height
         for (i in 0 until bar.childCount) (bar.getChildAt(i) as? LinearLayout)?.let { tab -> tab.minimumHeight = if (land) 0 else (48 * d).toInt(); if (tab.childCount > 1) tab.getChildAt(1).visibility = if (land) View.GONE else View.VISIBLE }
     }
     /** after the phone was turned (for the screens that stay open through a turn) */

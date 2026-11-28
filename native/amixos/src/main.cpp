@@ -436,6 +436,7 @@ int main(int argc, char* argv[]) {
     if (qEnvironmentVariableIsSet("AMIX_BENCH_BLANK")) { QQuickItem* busy = win->findChild<QQuickItem*>("pageBusy");
       QObject::connect(win, &QQuickWindow::frameSwapped, win, [win, busy] { ++framesSeen; if (win->property("current").toString().isEmpty() || win->property("pageReady").toBool()) return;
         ++emptyFrames; if (!busy || !busy->isVisible()) { ++silentEmpty; ++silentOn[win->property("current").toString()]; } }); }
+    if (const QString t = qEnvironmentVariable("AMIX_THEME"); !t.isEmpty()) settings.setColorTheme(t);   // AMIX_THEME=cockpit: the bench (and its AMIX_BUDGET_SHOTS) in that colour theme
     engine.setNullTestInput(true); engine.open("null", "", "", 48000, 256, 2, 2); win->setProperty("current", qEnvironmentVariable("AMIX_BENCH_PAGE", "mixer")); waitMs(1500);
     auto cpuMs = [] { return 1000.0 * double(std::clock()) / CLOCKS_PER_SEC; };
     if (qEnvironmentVariableIsSet("AMIX_BENCH_CPU")) {   // CPU and RAM: the process and the GUI thread (the rest is the engine and the renderer), idle (silence) and playing,

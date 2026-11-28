@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Builds the AmF X1 Windows .msi (Microsoft Store MSI submission) with wixl (msitools).
-# Usage: scripts/build-msi.sh [VERSION]   (default 1.26.1.0)
+# Usage: scripts/build-msi.sh [VERSION]   (default 1.27.0.0)
 # Writes install/windows/amfx1.wxs (generated from the package folder) and releases/windows/AmF-X1-<VERSION>-x64.msi.
 # GUIDs are uuid5 of fixed strings / relative paths, so rebuilding gives the same component GUIDs; the ProductCode depends
 # on the version, the UpgradeCode never changes.
 set -euo pipefail
-VERSION="${1:-1.26.1.0}"
+VERSION="${1:-1.27.0.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$ROOT/dist/windows/AmF-X1-$VERSION-windows-x64"
 WXS="$ROOT/install/windows/amfx1.wxs"

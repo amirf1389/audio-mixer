@@ -796,6 +796,13 @@ class Engine : public QObject {
   QVariantList classifyStrips(const std::vector<am::FeatureSummary>& f);   // the proposal from measured features (also the smoke test's way in)
   Q_INVOKABLE void setMuteGroupMember(int strip, int group, bool member);
   Q_INVOKABLE void setMuteGroupActive(int group, bool on);
+  Q_INVOKABLE void setBusMuteGroup(int bus, int group, bool member);   // 1.27: AUX / FX buses in the mute groups too
+  Q_INVOKABLE void setMuteGroupName(int group, const QString& name);
+  Q_INVOKABLE void setMuteGroupColor(int group, int color);
+  Q_INVOKABLE void setMonitorOut(int out);          // 0 A, 1 B, 2 A+B
+  Q_INVOKABLE void setPhonesDb(double db);
+  Q_INVOKABLE void setTalkback(bool on, double db, int dest);   // dest 0 MAIN, 1..16 bus
+  Q_INVOKABLE void setMasterSel(const QString& sel);             // the MONITOR column's master strip: MAIN, M1..M4, B1..B16
   Q_INVOKABLE double effectiveDb(int strip) const;
   Q_INVOKABLE bool effectiveMute(int strip) const;
   // SCENES: 16 snapshots of the whole console; RECALL SAFE strips are left alone by a recall
@@ -888,7 +895,7 @@ class Engine : public QObject {
   void factoryLayout();
   double compTargetDb_ = 6; int dynTick_ = 0;   // CH 1-2 MAIN, CH 3-4 LIVE (linked pairs), CH 5-7 RESERVE
   void applyPluginStage(int strip, const QString& kind, bool on);   // a built-in stage follows its slot
-  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
+  struct BusUi { QString name; double db = 0, returnDb = -60; bool mute = false; unsigned muteGroups = 0; QString fxKind; std::unique_ptr<am::fx::Effect> fx; double fxMix = 1; bool fxBypass = false; std::map<QString, double> fxValues; int fxPreset = 0; };
   std::vector<std::unique_ptr<am::fx::Effect>> fxGraveyard_; double width_ = 1.0; ScopeTap scope_; TapFanout taps_; Generator gen_; SourceFanout sources_; int blockFrames_ = 0; bool autoOn_ = false; double autoTarget_ = -16, autoMax_ = 12;
   void makeBusFx(int k);   // (re)creates the bus effect at the runtime's rate from kind + values and attaches it
   struct DcaUi { QString name; double db = 0; bool mute = false; int color = 0; bool winVol = false; };
@@ -898,7 +905,9 @@ class Engine : public QObject {
   struct LoudUi { bool masterOn = false; QString preset = QStringLiteral("STREAMING"); double masterTarget = -14, range = 10, up = 3, down = 6, gateThr = -50, hold = 4; QString speed = QStringLiteral("medium"); bool globalOn = false; double globalTarget = -18; LoudStripUi strips[kStrips]; } loudUi_;
   void pushLoud(int strip); void pushLoudAll(); QJsonObject loudJson() const; void loudFromJson(const QJsonObject& o);
   QVariantList autoProp_; bool autoBusy_ = false; int autoWait_ = 0;
-  struct MuteGroupUi { QString name; bool active = false; };
+  struct MuteGroupUi { QString name; bool active = false; int color = 0; };
+  struct TalkUi { bool on = false; double db = -10; int dest = 0; } talk_; int monOut_ = 0; double phonesDb_ = 0; QString masterSel_ = QStringLiteral("MAIN");   // 1.27 MONITOR section: output A/B/A+B, PHONES, TALKBACK, the right-hand master strip's source
+  bool busGroupMuted(int k) const;
   void pushStrip(int i);   // the strip's effective gain and mute (its own + DCA + mute groups) into the runtime
   static constexpr int kScenes = 16;
   struct SceneUi { QString name, at; QJsonObject data; };

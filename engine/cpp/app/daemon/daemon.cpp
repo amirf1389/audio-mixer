@@ -535,8 +535,15 @@ json::Value Daemon::routingJson() const {   // ROUTING for the phones: what feed
   for (int k = 0; k < kMaxBuses; ++k) { const std::string b = k < 8 ? "AUX " + std::to_string(k + 1) : "FX " + std::to_string(k - 7); add(Runtime::kSrcBus0L + 2 * k, b + " L", "bus"); add(Runtime::kSrcBus0L + 2 * k + 1, b + " R", "bus"); }
   o.set("sources", src); o.set("inputs", rt_ ? rt_->inputChannels() : 0); o.set("outputs", rt_ ? rt_->outputChannels() : 0); return o;
 }
+void Daemon::applyMuteGroupsLocked() {   // a strip / bus is muted by the groups while any group it is in has MUTE on
+  bool busMg[kMaxBuses] = {};
+  for (Strip& st : strips_) st.mgMute = false;
+  for (const MuteGroup& g : mgs_) { if (!g.mute) continue; for (int x : g.strips) if (x >= 0 && x < static_cast<int>(strips_.size())) strips_[static_cast<std::size_t>(x)].mgMute = true; for (int b : g.buses) if (b >= 0 && b < kMaxBuses) busMg[b] = true; }
+  if (!rt_) return;
+  for (int i = 0; i < static_cast<int>(strips_.size()); ++i) pushLevel(*rt_, i);
+  for (int b = 0; b < kMaxBuses; ++b) rt_->setBusMute(b, buses_[b].mute || busMg[b]); }
 void Daemon::pushLevel(Runtime& rt, int i) const {
-  const Strip& st = strips_[static_cast<std::size_t>(i)]; rt.setGainDb(i, clampDb(st.db + st.groupDb)); rt.setMute(i, st.mute || st.groupMute); }
+  const Strip& st = strips_[static_cast<std::size_t>(i)]; rt.setGainDb(i, clampDb(st.db + st.groupDb)); rt.setMute(i, st.mute || st.groupMute || st.mgMute); }
 json::Value Daemon::fbJsonLocked() const {
   json::Value o = json::Value::object(); o.set("count", fbCount_); o.set("strip", fbStrip_); o.set("name", fbStrip_ >= 0 && fbStrip_ < static_cast<int>(strips_.size()) ? strips_[static_cast<std::size_t>(fbStrip_)].name : std::string());
   o.set("hz", std::round(fbHz_)); o.set("db", std::round(fbDb_ * 10) / 10); o.set("at", static_cast<double>(fbAt_)); o.set("text", fbText_); o.set("on", opt_.feedbackGuard); return o; }
@@ -617,9 +624,14 @@ json::Value Daemon::state() const {
       json::Value m = json::Value::array(); for (int x : d.members) m.push(x); v.set("members", m); dcas.push(v); }
     o.set("dcas", dcas); o.set("dcaLimit", dcaLimit()); }
   json::Value m = json::Value::object(); m.set("db", masterDb_); m.set("mute", masterMute_); m.set("dim", masterDim_); m.set("limiter", limiter_); m.set("ceilingDb", ceiling_); m.set("limReleaseMs", limRelease_); o.set("master", m);
+  { json::Value a = json::Value::array();
+    for (int g = 0; g < 8; ++g) { const MuteGroup& mg = mgs_[g]; json::Value v = json::Value::object(); v.set("id", g + 1); v.set("name", mg.name.empty() ? "MUTE " + std::to_string(g + 1) : mg.name); v.set("mute", mg.mute); v.set("color", mg.color);
+      json::Value st = json::Value::array(); for (int x : mg.strips) st.push(x); v.set("strips", st); json::Value bs = json::Value::array(); for (int x : mg.buses) bs.push(x); v.set("buses", bs); v.set("sources", static_cast<int>(mg.strips.size() + mg.buses.size())); a.push(v); }
+    o.set("muteGroups", a);
+    json::Value t = json::Value::object(); t.set("on", talk_.on); t.set("db", talk_.db); t.set("dest", talk_.dest); o.set("talkback", t); }
   o.set("settings", settingsJson());
   o.set("apps", appsJson()); o.set("appsAvailable", appLayer_ && appLayer_->available());
-  json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); o.set("monitor", mo);
+  json::Value mo = json::Value::object(); mo.set("source", mon_.source); mo.set("db", mon_.db); mo.set("dim", mon_.dim); mo.set("mono", mon_.mono); mo.set("mute", mon_.mute); mo.set("dual", mon_.dual); mo.set("sourceB", mon_.sourceB); mo.set("blend", mon_.blend); mo.set("listen", mon_.listen); mo.set("out", monOut_); mo.set("phonesDb", phonesDb_); o.set("monitor", mo);
   o.set("backend", rt_ ? backend_ : ""); o.set("running", rt_ && rt_->running()); o.set("v", static_cast<double>(version_.load())); o.set("remotes", watchers_.load()); o.set("racksV", static_cast<double>(racksV_.load())); o.set("racksBy", racksFromConsole_ ? "console" : "remote");
   o.set("programEq", programEqJson()); o.set("masterV", static_cast<double>(masterV_.load())); o.set("padsVersion", bank_->version()); o.set("oneVoiceNote", ovNote_); o.set("routing", routingJson()); o.set("feedback", fbJsonLocked()); o.set("phoneMic", micJson());
   { json::Value m = json::Value::object();   // MASTERING (the master chain), in the console's own words (Engine::mastering)
@@ -919,7 +931,7 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (cmd["members"].isArray()) { d.members.clear(); const json::Value& m = cmd["members"]; for (std::size_t i = 0; i < m.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) { const int x = m.at(i).asInt(-1); if (x >= 0 && x < opt_.strips) d.members.push_back(x); } }
     return ok; }
   if (op == "busLevel") { if (!bus(b)) return {}; buses_[b].db = clampDb(cmd["db"].asNumber(0)); if (rt_) rt_->setBusLevel(b, buses_[b].db); return ok; }
-  if (op == "busMute") { if (!bus(b)) return {}; buses_[b].mute = cmd["on"].asBool(); if (rt_) rt_->setBusMute(b, buses_[b].mute); return ok; }
+  if (op == "busMute") { if (!bus(b)) return {}; buses_[b].mute = cmd["on"].asBool(); if (rt_) rt_->setBusMute(b, buses_[b].mute); applyMuteGroupsLocked(); return ok; }
   if (op == "busReturn") { if (!bus(b)) return {}; buses_[b].returnDb = clampDb(cmd["db"].asNumber(-120)); if (rt_) rt_->setBusReturn(b, buses_[b].returnDb); return ok; }
   if (op == "eq") {
     if (!strip(s)) return {};
@@ -955,10 +967,28 @@ json::Value Daemon::apply(const json::Value& cmd, std::string& err) {
     if (!strip(s) || !need()) return {};
     rt_->setDeEsser(s, cmd["on"].asBool(), lim("thresholdDb", -24, -60, 0), lim("maxDb", 8, 0, 24), lim("freqHz", 5000, 1000, 16000)); return ok;
   }
+  if (op == "muteGroup") {   // MUTE GROUPS: {group 1..8, mute, name, color 0..7, strips [...], buses [...]}; every field optional but the group
+    const int g = cmd["group"].asInt(0); if (g < 1 || g > 8) { err = "group: 1..8"; return {}; }
+    if (!dcaBucket_.take(60, 60)) { err = "too many group changes: slow down"; return {}; }
+    MuteGroup& m = mgs_[g - 1];
+    if (cmd.has("mute")) m.mute = cmd["mute"].asBool(false);
+    if (cmd.has("name")) { std::string n = cmd["name"].asString(); if (n.size() > 16) n.resize(16); m.name = n; }
+    if (cmd.has("color")) m.color = std::max(0, std::min(7, cmd["color"].asInt(0)));
+    auto list = [&](const char* k, std::vector<int>& out, int n) { const json::Value& a = cmd[k]; if (!a.isArray()) return; out.clear();
+      for (std::size_t i = 0; i < a.size() && i < static_cast<std::size_t>(kMaxStrips); ++i) { const int x = a.at(i).asInt(-1); if (x >= 0 && x < n && std::find(out.begin(), out.end(), x) == out.end()) out.push_back(x); } };
+    list("strips", m.strips, opt_.strips); list("buses", m.buses, kMaxBuses);
+    applyMuteGroupsLocked(); ++version_; return ok; }
+  if (op == "talkback") {   // TALKBACK: {on, db -60..10, dest 0 MAIN / 1..16 bus}
+    if (cmd.has("on")) talk_.on = cmd["on"].asBool(false);
+    if (cmd.has("db")) { const double d = cmd["db"].asNumber(-10); if (!std::isfinite(d)) { err = "db: a number"; return {}; } talk_.db = std::max(-60.0, std::min(10.0, d)); }
+    if (cmd.has("dest")) { const int d = cmd["dest"].asInt(-1); if (d < 0 || d > 16) { err = "dest: 0..16"; return {}; } talk_.dest = d; }
+    ++version_; return ok; }
   if (op == "monitor") {   // control room: source 0 master, 1..8 bus; level, dim, mono, mute (after the master meters)
     mon_.source = std::max(0, std::min(kMaxBuses, cmd["source"].asInt(mon_.source))); if (cmd.has("db")) mon_.db = clampDb(cmd["db"].asNumber(0), -60, 10);
     if (cmd.has("dim")) mon_.dim = cmd["dim"].asBool();
     if (cmd.has("mono")) mon_.mono = cmd["mono"].asBool();
+    if (cmd.has("out")) { const int x = cmd["out"].asInt(-1); if (x < 0 || x > 2) { err = "out: 0 A, 1 B, 2 A+B"; return {}; } monOut_ = x; }
+    if (cmd.has("phonesDb")) { const double d = cmd["phonesDb"].asNumber(0); if (!std::isfinite(d)) { err = "phonesDb: a number"; return {}; } phonesDb_ = std::max(-60.0, std::min(10.0, d)); }
     if (cmd.has("mute")) mon_.mute = cmd["mute"].asBool();
     if (cmd.has("dual")) mon_.dual = cmd["dual"].asBool();   // DUAL LISTEN: source B, blend 0..1 (A..B), listen 0 blend / 1 A / 2 B
     if (cmd.has("sourceB")) mon_.sourceB = std::max(0, std::min(kMaxBuses, cmd["sourceB"].asInt(mon_.sourceB)));

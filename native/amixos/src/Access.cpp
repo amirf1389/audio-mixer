@@ -44,7 +44,7 @@ bool Access::can(const QString& perm) const {
 }
 QString Access::permOfPage(const QString& id) const {
   static const QHash<QString, QString> k = {
-    {"dsp", "dsp"}, {"dyn", "dsp"}, {"gate", "dsp"}, {"fx", "dsp"}, {"miceq", "dsp"}, {"bus", "dsp"}, {"dca", "dsp"}, {"arrange", "dsp"}, {"tools", "dsp"},
+    {"dsp", "dsp"}, {"dyn", "dsp"}, {"gate", "dsp"}, {"fx", "dsp"}, {"miceq", "dsp"}, {"bus", "dsp"}, {"dca", "dsp"}, {"assign", "dsp"}, {"arrange", "dsp"}, {"tools", "dsp"},
     {"routing", "routing"}, {"io", "routing"}, {"live", "routing"},
     {"lufs", "loudness"},
     {"scenes", "archive"}, {"presets", "archive"},
